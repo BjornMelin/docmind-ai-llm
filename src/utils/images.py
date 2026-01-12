@@ -12,8 +12,6 @@ import os
 from contextlib import contextmanager
 from pathlib import Path
 
-from PIL.Image import Resampling  # type: ignore
-
 
 @contextmanager
 def open_image_encrypted(path: str):
@@ -74,6 +72,11 @@ def ensure_thumbnail(
     Thumbnails are stored alongside the original by default (or under ``thumb_dir``)
     and are encrypted when ``encrypt`` is true or the source image is encrypted.
     """
+    try:
+        from PIL.Image import Resampling  # type: ignore
+    except Exception as exc:  # pragma: no cover - optional dep
+        raise ImportError("Pillow is required for image operations") from exc
+
     src = Path(image_path)
     thumb_root = Path(thumb_dir) if thumb_dir is not None else src.parent
     thumb_root.mkdir(parents=True, exist_ok=True)

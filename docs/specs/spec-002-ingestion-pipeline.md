@@ -48,6 +48,16 @@ multimodal behavior and persistence invariants, see:
   - `_page_image_exports(...)` (PDF page images via PyMuPDF)
   - `_index_page_images(...)` (ArtifactStore + SigLIP + Qdrant)
 
+### Implementation version
+
+This spec describes the ingestion pipeline as implemented in commit
+`046e9d75318d305cc808e7ee9f1448cb62cb0d82`.
+Key modules:
+- `src/processing/ingestion_pipeline.py` @ `046e9d75318d305cc808e7ee9f1448cb62cb0d82`
+- `src/processing/pdf_pages.py` @ `046e9d75318d305cc808e7ee9f1448cb62cb0d82`
+- `src/persistence/artifacts.py` @ `046e9d75318d305cc808e7ee9f1448cb62cb0d82`
+- `src/retrieval/image_index.py` @ `046e9d75318d305cc808e7ee9f1448cb62cb0d82`
+
 ### Document loading (library-first)
 
 - Preferred: `llama_index.readers.file.UnstructuredReader` (when installed)
@@ -176,4 +186,3 @@ uv run ruff check . --fix
 uv run pyright
 uv run python scripts/run_tests.py --fast
 ```
-

@@ -25,6 +25,7 @@ from loguru import logger
 
 from src.config import settings
 from src.persistence.artifacts import ArtifactRef, ArtifactStore
+from src.retrieval.rrf import rrf_merge
 from src.utils.core import has_cuda_vram, resolve_device
 from src.utils.telemetry import log_jsonl
 
@@ -137,35 +138,6 @@ def _run_with_timeout(fn: Callable[[], Any], timeout_ms: int) -> Any | None:
 # removed local _has_cuda_vram wrapper; use core.has_cuda_vram directly
 
 
-def _rrf_merge(
-    lists: list[list[NodeWithScore]], k_constant: int
-) -> list[NodeWithScore]:
-    """Rank-level Reciprocal Rank Fusion over multiple reranked lists.
-
-    Args:
-        lists: List of ranked lists to merge.
-        k_constant: RRF k-constant for score calculation.
-
-    Returns:
-        list[NodeWithScore]: Fused list sorted by RRF scores.
-    """
-    scores: dict[str, tuple[float, NodeWithScore]] = {}
-    for ranked in lists:
-        for rank, nws in enumerate(ranked, start=1):
-            nid = nws.node.node_id
-            inc = 1.0 / (k_constant + rank)
-            cur = scores.get(nid)
-            if cur is None:
-                scores[nid] = (inc, nws)
-            else:
-                scores[nid] = (cur[0] + inc, cur[1])
-    fused_list = list(scores.values())
-    fused_list.sort(
-        key=lambda t: (-float(t[0]), str(getattr(t[1].node, "node_id", "")))
-    )
-    return [n for _score, n in fused_list]
-
-
 def _compute_siglip_scores(
     model: Any,
     processor: Any,
@@ -235,10 +207,11 @@ def _extract_image_paths(ns: list[NodeWithScore]) -> list[str]:
         p = ""
         # Final-release: resolve local paths from stable artifact refs rather than
         # accepting raw filesystem paths from node metadata.
-        img_id = meta.get("image_artifact_id") or meta.get("thumbnail_artifact_id")
-        img_sfx = meta.get("image_artifact_suffix") or meta.get(
-            "thumbnail_artifact_suffix"
-        )
+        img_id = meta.get("image_artifact_id")
+        img_sfx = meta.get("image_artifact_suffix")
+        if not img_id:
+            img_id = meta.get("thumbnail_artifact_id")
+            img_sfx = meta.get("thumbnail_artifact_suffix")
         if img_id:
             try:
                 if store is None:
@@ -587,7 +560,7 @@ class MultimodalReranker(BaseNodePostprocessor):
                 return nodes
         if not lists:
             return nodes[: settings.retrieval.reranking_top_k]
-        fused = _rrf_merge(lists, k_constant=int(settings.retrieval.rrf_k))
+        fused = rrf_merge(lists, k_constant=int(settings.retrieval.rrf_k))
         # De-dup and cap
         seen: set[str] = set()
         out: list[NodeWithScore] = []

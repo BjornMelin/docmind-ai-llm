@@ -43,16 +43,11 @@ def router_tool(
                     if isinstance(runtime_cfg_ctx, dict):
                         router_engine = runtime_cfg_ctx.get("router_engine")
 
-            if router_engine is None and isinstance(state, dict):
-                tools_data = state.get("tools_data")
-                if isinstance(tools_data, dict):
-                    router_engine = tools_data.get("router_engine")
-
             span.set_attribute("router.engine.available", router_engine is not None)
             if router_engine is None:
                 message = (
                     "router_tool requires 'router_engine' via ToolRuntime.context "
-                    "(preferred) or injected state tools_data."
+                    "or runtime.configurable.runtime."
                 )
                 span.set_attribute("router.success", False)
                 span.set_attribute("router.error", message)

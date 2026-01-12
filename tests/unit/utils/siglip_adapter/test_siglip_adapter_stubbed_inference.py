@@ -61,3 +61,5 @@ def test_siglip_embedding_text_and_image_with_stubbed_model() -> None:
 
     batch = emb.get_image_embeddings([img, img], batch_size=1)
     assert batch.shape == (2, 4)
+    for row in batch:
+        assert float(np.linalg.norm(row)) == pytest.approx(1.0, rel=1e-4)

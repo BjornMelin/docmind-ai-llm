@@ -78,6 +78,7 @@ def _get_memory_store() -> DocMindSqliteStore:
             "embed": LlamaIndexEmbeddingsAdapter(),
             "fields": ["content"],
         },
+        filter_fetch_cap=int(settings.chat.memory_store_filter_fetch_cap),
         cfg=settings,
     )
 
@@ -416,26 +417,24 @@ def _render_visual_search_sidebar() -> None:
             img = Image.open(up)  # type: ignore[arg-type]
             vec = embedder.get_image_embedding(img)
 
-            client = QdrantClient(**get_client_config())
-            result = client.query_points(
-                collection_name=settings.database.qdrant_image_collection,
-                query=vec.tolist(),
-                using="siglip",
-                limit=int(top_k),
-                with_payload=[
-                    "doc_id",
-                    "page_id",
-                    "page_no",
-                    "modality",
-                    "image_artifact_id",
-                    "image_artifact_suffix",
-                    "thumbnail_artifact_id",
-                    "thumbnail_artifact_suffix",
-                    "phash",
-                ],
-            )
-            with contextlib.suppress(Exception):
-                client.close()
+            with QdrantClient(**get_client_config()) as client:
+                result = client.query_points(
+                    collection_name=settings.database.qdrant_image_collection,
+                    query=vec.tolist(),
+                    using="siglip",
+                    limit=int(top_k),
+                    with_payload=[
+                        "doc_id",
+                        "page_id",
+                        "page_no",
+                        "modality",
+                        "image_artifact_id",
+                        "image_artifact_suffix",
+                        "thumbnail_artifact_id",
+                        "thumbnail_artifact_suffix",
+                        "phash",
+                    ],
+                )
 
             pts = (
                 getattr(result, "points", None) or getattr(result, "result", None) or []

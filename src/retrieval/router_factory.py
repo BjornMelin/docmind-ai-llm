@@ -150,7 +150,7 @@ def build_router_engine(
     ) as span:
         # Optional multimodal tool: fuse text hybrid + image retrieval (SigLIP).
         try:
-            enable_mm = bool(getattr(cfg.retrieval, "enable_image_retrieval", True))
+            enable_mm = bool(getattr(cfg.retrieval, "enable_image_retrieval", False))
         except Exception:  # pragma: no cover - defensive
             enable_mm = True
 

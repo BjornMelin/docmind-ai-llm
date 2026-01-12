@@ -67,5 +67,9 @@ def test_index_page_images_purges_existing_doc_points(
             purge_doc_ids={"doc-1"},
         )
 
-    mock_delete.assert_called()
+    mock_delete.assert_called_with(
+        fake_client,
+        "docmind_images",
+        doc_id="doc-1",
+    )
     assert int(meta.get("image_index.purged_points", 0)) == 7

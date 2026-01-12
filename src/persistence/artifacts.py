@@ -116,7 +116,8 @@ class ArtifactStore:
     def prune(self, *, max_total_bytes: int, min_age_seconds: int = 0) -> int:
         """Best-effort GC: delete oldest artifacts until under budget.
 
-        Returns number of deleted files.
+        Returns number of deleted files. Concurrent modifications may make the
+        byte totals approximate; failures are handled best-effort.
         """
         root = self.root
         files: list[tuple[float, int, Path]] = []

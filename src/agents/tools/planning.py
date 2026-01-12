@@ -38,7 +38,7 @@ def route_query(
         word_count = len(query.split())
 
         # Determine base complexity and strategy
-        complexity, strategy, _needs_planning, confidence = _determine_complexity(
+        complexity, strategy, needs_planning, confidence = _determine_complexity(
             query_lower, word_count
         )
 
@@ -62,7 +62,7 @@ def route_query(
         decision = {
             "strategy": strategy,
             "complexity": complexity,
-            "needs_planning": _needs_planning,
+            "needs_planning": needs_planning,
             "confidence": confidence,
             "processing_time_ms": round(processing_time * 1000, 2),
             "word_count": word_count,

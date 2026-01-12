@@ -65,3 +65,11 @@ def test_contextual_recall_returns_last_sources_when_present() -> None:
 
 def test_looks_contextual_matches_simple_pronoun_question() -> None:
     assert retrieval_tool._looks_contextual("What does that chart show?") is True
+
+
+def test_looks_contextual_returns_false_for_standalone_query() -> None:
+    assert retrieval_tool._looks_contextual("What is machine learning?") is False
+
+
+def test_looks_contextual_returns_false_for_empty_query() -> None:
+    assert retrieval_tool._looks_contextual("") is False

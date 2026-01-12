@@ -126,10 +126,18 @@ def render_session_sidebar(conn: sqlite3.Connection) -> ChatSelection:
 
         st.divider()
         st.caption("Danger zone")
-        if st.button("Purge session (hard delete)", type="primary"):
+        confirm_purge = st.checkbox(
+            "I understand this is irreversible", key="purge_confirm"
+        )
+        if st.button(
+            "Purge session (hard delete)",
+            type="primary",
+            disabled=not confirm_purge,
+        ):
             purge_session(conn, thread_id=active.thread_id)
             st.session_state.pop("chat_thread_id", None)
             st.session_state.pop("chat_resume_checkpoint_id", None)
+            st.session_state.pop("purge_confirm", None)
             st.rerun()
 
     resume = st.session_state.get("chat_resume_checkpoint_id")

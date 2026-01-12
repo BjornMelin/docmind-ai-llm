@@ -152,7 +152,13 @@ def index_page_images_siglip(
         if not isinstance(vecs, np.ndarray):
             vecs = np.asarray(vecs, dtype=np.float32)
         points: list[qmodels.PointStruct] = []
-        for r, vec in zip(batch, vecs, strict=False):
+        if len(vecs) != len(batch):
+            logger.warning(
+                "Embedding count mismatch: expected %d, got %d",
+                len(batch),
+                len(vecs),
+            )
+        for r, vec in zip(batch, vecs, strict=True):
             pid = r.point_id()
             points.append(
                 qmodels.PointStruct(

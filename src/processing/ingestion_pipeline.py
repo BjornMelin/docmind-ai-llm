@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import logging
 import os
 import time
 from collections.abc import Sequence
@@ -24,6 +23,7 @@ from llama_index.core.ingestion import IngestionCache, IngestionPipeline
 from llama_index.core.node_parser import TokenTextSplitter
 from llama_index.core.storage.docstore import SimpleDocumentStore
 from llama_index.storage.kvstore.duckdb import DuckDBKVStore
+from loguru import logger
 from opentelemetry import trace
 
 try:
@@ -46,7 +46,7 @@ from src.models.processing import (
     IngestionResult,
     ManifestSummary,
 )
-from src.persistence.artifacts import ArtifactStore
+from src.persistence.artifacts import ArtifactRef, ArtifactStore
 from src.persistence.hashing import compute_config_hash, compute_corpus_hash
 from src.processing.pdf_pages import save_pdf_page_images
 
@@ -56,7 +56,6 @@ else:
     BaseEmbedding = Any
 
 _TRACER = trace.get_tracer("docmind.ingestion")
-logger = logging.getLogger(__name__)
 
 
 def _ensure_cache_path(cfg: IngestionConfig) -> Path:
@@ -358,7 +357,7 @@ def _store_image_artifact(
     store: ArtifactStore,
     export: ExportArtifact,
     settings: Any,
-) -> tuple[Any, Path, Any | None, Path | None]:
+) -> tuple[ArtifactRef, Path, ArtifactRef | None, Path | None]:
     img_ref = store.put_file(Path(export.path))
     img_path = store.resolve_path(img_ref)
     thumb_ref = None
@@ -376,7 +375,8 @@ def _store_image_artifact(
         )
         thumb_ref = store.put_file(Path(thumb_local))
         thumb_path = store.resolve_path(thumb_ref)
-    except Exception:
+    except Exception as exc:
+        logger.debug("Thumbnail generation failed: %s", exc)
         thumb_ref = None
         thumb_path = None
     return img_ref, img_path, thumb_ref, thumb_path

@@ -344,8 +344,9 @@ def _looks_contextual(query: str) -> bool:
     import re
 
     pattern = (
-        r"\b(this|that|it|they|them|above|previous|chart|figure|diagram|table|"
+        r"\b(this|that|they|them|above|previous|chart|figure|diagram|table|"
         r"image|photo)\b"
+        r"|\bit\b(?=\s+(?:is|was|seems|refers|referring|about|in|on|of))"
     )
     return re.search(pattern, str(query), flags=re.IGNORECASE) is not None
 

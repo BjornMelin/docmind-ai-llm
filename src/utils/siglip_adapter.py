@@ -124,6 +124,15 @@ class SiglipEmbedding:
         except (AttributeError, ValueError, TypeError):
             self._dim = None
 
+    def _move_to_device(self, tensor: Any | None) -> Any | None:
+        if tensor is None:
+            return None
+        if self.device == "cuda":
+            return tensor.to("cuda")
+        if self.device == "mps":
+            return tensor.to("mps")
+        return tensor
+
     def get_image_embedding(self, image: Any) -> np.ndarray:
         """Return L2-normalized SigLIP features for a single image.
 
@@ -144,10 +153,7 @@ class SiglipEmbedding:
             pix = inputs.get("pixel_values")
             if pix is None:  # pragma: no cover - defensive
                 raise RuntimeError("SigLIP processor returned no pixel_values")
-            if self.device == "cuda":
-                pix = pix.to("cuda")
-            elif self.device == "mps":
-                pix = pix.to("mps")
+            pix = self._move_to_device(pix)
             with torch.no_grad():  # type: ignore[name-defined]
                 feats = self._model.get_image_features(pixel_values=pix)  # type: ignore[union-attr]
                 feats = feats / feats.norm(dim=-1, keepdim=True)
@@ -177,12 +183,8 @@ class SiglipEmbedding:
             )
             input_ids = inputs.get("input_ids")
             attn = inputs.get("attention_mask")
-            if self.device == "cuda":
-                input_ids = input_ids.to("cuda") if input_ids is not None else input_ids
-                attn = attn.to("cuda") if attn is not None else attn
-            elif self.device == "mps":
-                input_ids = input_ids.to("mps") if input_ids is not None else input_ids
-                attn = attn.to("mps") if attn is not None else attn
+            input_ids = self._move_to_device(input_ids)
+            attn = self._move_to_device(attn)
             with torch.no_grad():  # type: ignore[name-defined]
                 feats = self._model.get_text_features(  # type: ignore[union-attr]
                     input_ids=input_ids,
@@ -221,10 +223,7 @@ class SiglipEmbedding:
             pix = inputs.get("pixel_values")
             if pix is None:  # pragma: no cover - defensive
                 raise RuntimeError("SigLIP processor returned no pixel_values")
-            if self.device == "cuda":
-                pix = pix.to("cuda")
-            elif self.device == "mps":
-                pix = pix.to("mps")
+            pix = self._move_to_device(pix)
             with torch.no_grad():  # type: ignore[name-defined]
                 feats = self._model.get_image_features(pixel_values=pix)  # type: ignore[union-attr]
                 feats = feats / feats.norm(dim=-1, keepdim=True)
@@ -265,12 +264,8 @@ class SiglipEmbedding:
             )
             input_ids = inputs.get("input_ids")
             attn = inputs.get("attention_mask")
-            if self.device == "cuda":
-                input_ids = input_ids.to("cuda") if input_ids is not None else input_ids
-                attn = attn.to("cuda") if attn is not None else attn
-            elif self.device == "mps":
-                input_ids = input_ids.to("mps") if input_ids is not None else input_ids
-                attn = attn.to("mps") if attn is not None else attn
+            input_ids = self._move_to_device(input_ids)
+            attn = self._move_to_device(attn)
             with torch.no_grad():  # type: ignore[name-defined]
                 feats = self._model.get_text_features(  # type: ignore[union-attr]
                     input_ids=input_ids,

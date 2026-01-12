@@ -177,6 +177,11 @@ DOCMIND_PROCESSING__ENCRYPT_PAGE_IMAGES=false
 DOCMIND_IMG_AES_KEY_BASE64=
 DOCMIND_IMG_DELETE_PLAINTEXT=false
 
+Note: If enabling encryption, generate a secure 256-bit AES key:
+`python -c "import os, base64; print(base64.b64encode(os.urandom(32)).decode())"`.
+Setting `DOCMIND_IMG_DELETE_PLAINTEXT=true` removes plaintext images after
+successful encryption; `false` retains originals.
+
 # Artifact store (page images + thumbnails)
 DOCMIND_ARTIFACTS__MAX_TOTAL_MB=4096
 DOCMIND_ARTIFACTS__GC_MIN_AGE_SECONDS=3600

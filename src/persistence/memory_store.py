@@ -22,6 +22,7 @@ import contextlib
 import json
 import sqlite3
 import threading
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -51,6 +52,8 @@ from langgraph.store.base import (
     get_text_at_path,
     tokenize_path,
 )
+
+StoreOp = GetOp | PutOp | SearchOp | ListNamespacesOp
 
 # Store tables
 ITEMS_TABLE = "docmind_store_items"
@@ -101,16 +104,28 @@ def _matches_filter_clause(extracted: Any, clause_value: Any) -> bool:
                 if extracted == v:
                     return False
             elif op == "$gt":
-                if extracted is None or extracted <= v:
+                try:
+                    if extracted is None or extracted <= v:
+                        return False
+                except TypeError:
                     return False
             elif op == "$gte":
-                if extracted is None or extracted < v:
+                try:
+                    if extracted is None or extracted < v:
+                        return False
+                except TypeError:
                     return False
             elif op == "$lt":
-                if extracted is None or extracted >= v:
+                try:
+                    if extracted is None or extracted >= v:
+                        return False
+                except TypeError:
                     return False
             elif op == "$lte":
-                if extracted is None or extracted > v:
+                try:
+                    if extracted is None or extracted > v:
+                        return False
+                except TypeError:
                     return False
             else:
                 raise ValueError(f"Unsupported filter operator: {op!r}")
@@ -144,6 +159,7 @@ class DocMindSqliteStore(BaseStore):
     __slots__ = (
         "_closed",
         "_conn",
+        "_filter_fetch_cap",
         "_lock",
         "_path",
         "_tokenized_fields",
@@ -157,6 +173,7 @@ class DocMindSqliteStore(BaseStore):
         path: Path,
         *,
         index: IndexConfig | None = None,
+        filter_fetch_cap: int = 5000,
         cfg: DocMindSettings = settings,
     ) -> None:
         """Create a persistent store bound to the given SQLite DB path.
@@ -164,6 +181,7 @@ class DocMindSqliteStore(BaseStore):
         Args:
             path: SQLite database path (typically settings.chat.sqlite_path).
             index: Optional semantic search configuration (dims + embed + fields).
+            filter_fetch_cap: Max rows fetched when filtering in Python.
             cfg: DocMind settings used for data_dir validation.
         """
         if path.is_absolute():
@@ -180,15 +198,22 @@ class DocMindSqliteStore(BaseStore):
                 f"(got {self._path}, data_dir={data_dir})"
             )
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn: sqlite3.Connection = sqlite3.connect(
-            str(self._path), check_same_thread=False
-        )
-        self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA journal_mode=WAL;")
-        self._conn.execute("PRAGMA foreign_keys=ON;")
-        self._conn.execute("PRAGMA busy_timeout=5000;")
+        conn: sqlite3.Connection | None = None
+        try:
+            conn = sqlite3.connect(str(self._path), check_same_thread=False)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA foreign_keys=ON;")
+            conn.execute("PRAGMA busy_timeout=5000;")
+        except Exception:
+            if conn is not None:
+                with contextlib.suppress(Exception):
+                    conn.close()
+            raise
+        self._conn = conn
         self._lock = threading.Lock()
         self._closed = False
+        self._filter_fetch_cap = max(1, int(filter_fetch_cap))
 
         self.index_config = index.copy() if index else None
         self.embeddings = ensure_embeddings(index.get("embed")) if index else None
@@ -200,7 +225,6 @@ class DocMindSqliteStore(BaseStore):
             ]
 
         self._vec_enabled = False
-        self._closed = False
         self._setup_schema()
 
     def close(self) -> None:
@@ -234,7 +258,7 @@ class DocMindSqliteStore(BaseStore):
         self.close()
 
     # BaseStore API
-    def batch(self, ops: Any) -> list[Result]:
+    def batch(self, ops: Iterable[StoreOp]) -> list[Result]:
         """Execute a batch of store operations synchronously."""
         results: list[Result] = []
         with self._lock:
@@ -251,7 +275,7 @@ class DocMindSqliteStore(BaseStore):
                     raise TypeError(f"Unsupported op type: {type(op).__name__}")
         return results
 
-    async def abatch(self, ops: Any) -> list[Result]:
+    async def abatch(self, ops: Iterable[StoreOp]) -> list[Result]:
         """Execute a batch of store operations asynchronously."""
         return await asyncio.to_thread(self.batch, ops)
 
@@ -513,7 +537,10 @@ class DocMindSqliteStore(BaseStore):
         # Non-semantic search: return most recently updated items.
         if op.filter:
             # Apply filters in Python to avoid dynamic SQL construction.
-            fetch_limit = min(5000, requested_limit + requested_offset + 512)
+            fetch_limit = min(
+                self._filter_fetch_cap,
+                requested_limit + requested_offset + 512,
+            )
             sql_limit = fetch_limit
             sql_offset = 0
         else:
@@ -651,6 +678,13 @@ class DocMindSqliteStore(BaseStore):
     ) -> None:
         if sqlite_vec is None:
             return
+        if self.index_config:
+            dims = int(self.index_config.get("dims") or 0)
+            if dims and len(embedding) != dims:
+                raise ValueError(
+                    "Embedding dimension mismatch: "
+                    f"expected {dims}, got {len(embedding)}"
+                )
         blob = sqlite_vec.serialize_float32(embedding)
         self._conn.execute(
             """

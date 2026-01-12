@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
@@ -24,6 +25,7 @@ from qdrant_client import QdrantClient
 
 from src.config.settings import settings
 from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
+from src.retrieval.rrf import rrf_merge
 from src.utils.siglip_adapter import SiglipEmbedding
 from src.utils.storage import get_client_config
 from src.utils.telemetry import log_jsonl
@@ -126,26 +128,6 @@ class ImageSiglipRetriever:
         return nodes
 
 
-def _rrf_merge(
-    lists: list[list[NodeWithScore]], k_constant: int
-) -> list[NodeWithScore]:
-    scores: dict[str, tuple[float, NodeWithScore]] = {}
-    for ranked in lists:
-        for rank, nws in enumerate(ranked, start=1):
-            nid = nws.node.node_id
-            inc = 1.0 / (k_constant + rank)
-            cur = scores.get(nid)
-            if cur is None:
-                scores[nid] = (inc, nws)
-            else:
-                scores[nid] = (cur[0] + inc, cur[1])
-    fused_list = list(scores.values())
-    fused_list.sort(
-        key=lambda t: (-float(t[0]), str(getattr(t[1].node, "node_id", "")))
-    )
-    return [NodeWithScore(node=n.node, score=float(score)) for score, n in fused_list]
-
-
 class MultimodalFusionRetriever:
     """Fuse text hybrid retrieval with SigLIP image retrieval (rank-based RRF)."""
 
@@ -192,13 +174,16 @@ class MultimodalFusionRetriever:
     def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:
         """Retrieve fused multimodal results."""
         qtext = query.query_str if isinstance(query, QueryBundle) else str(query)
-        t0 = time.time()
+        t0 = time.perf_counter()
 
-        text_nodes = self._text.retrieve(qtext)
-        image_nodes = self._image.retrieve(qtext)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            text_future = executor.submit(self._text.retrieve, qtext)
+            image_future = executor.submit(self._image.retrieve, qtext)
+            text_nodes = text_future.result()
+            image_nodes = image_future.result()
 
         k_constant = int(getattr(settings.retrieval, "rrf_k", 60))
-        fused = _rrf_merge([text_nodes, image_nodes], k_constant=k_constant)
+        fused = rrf_merge([text_nodes, image_nodes], k_constant=k_constant)
 
         # Deduplicate by configured key (default: page_id).
         key_name = (self._dedup_key or "page_id").strip()
@@ -214,7 +199,7 @@ class MultimodalFusionRetriever:
         dedup_sorted = sorted(best.values(), key=lambda x: (-x[0], x[1].node.node_id))
         out = [nws for _score, nws in dedup_sorted[: self._fused_top_k]]
 
-        latency_ms = int((time.time() - t0) * 1000)
+        latency_ms = int((time.perf_counter() - t0) * 1000)
 
         # PII-safe telemetry-like metadata (no query text).
         with contextlib.suppress(Exception):

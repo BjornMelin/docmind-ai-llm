@@ -7,7 +7,6 @@ importable in tests while providing a reusable, typed snapshot rebuild entrypoin
 from __future__ import annotations
 
 import contextlib
-import hashlib
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -19,6 +18,7 @@ from loguru import logger
 from src.persistence.hashing import compute_config_hash, compute_corpus_hash
 from src.persistence.snapshot import SnapshotManager
 from src.persistence.snapshot_utils import current_config_dict
+from src.utils.hashing import sha256_file
 
 
 def rebuild_snapshot(
@@ -26,6 +26,7 @@ def rebuild_snapshot(
     pg_index: Any,
     settings_obj: Any,
     *,
+    embed_model: Any | None = None,
     log_export_event: Callable[[dict[str, Any]], None] | None = None,
     record_graph_export_metric: Callable[..., None] | None = None,
 ) -> Path:
@@ -35,6 +36,7 @@ def rebuild_snapshot(
         vector_index: Vector index instance (required).
         pg_index: Optional PropertyGraphIndex-like instance (may be None).
         settings_obj: Settings object with `data_dir`, `database`, and `app_version`.
+        embed_model: Optional embed model instance for version reporting.
         log_export_event: Optional callback for local JSONL telemetry emission.
         record_graph_export_metric: Optional callback for OpenTelemetry metrics.
 
@@ -78,13 +80,6 @@ def rebuild_snapshot(
         graph_dir.mkdir(parents=True, exist_ok=True)
         exports_meta: list[dict[str, Any]] = []
 
-        def _file_sha256(path: Path) -> str:
-            hasher = hashlib.sha256()
-            with path.open("rb") as handle:
-                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                    hasher.update(chunk)
-            return hasher.hexdigest()
-
         def _timestamped_export_path(out_dir: Path, extension: str) -> Path:
             ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
             candidate = out_dir / f"graph_export-{ts}.{extension}"
@@ -97,7 +92,7 @@ def rebuild_snapshot(
         def _record_export(path: Path, fmt: str, duration_ms: float) -> None:
             if not path.exists():
                 return
-            sha = _file_sha256(path)
+            sha = sha256_file(path)
             metadata = {
                 # Final-release: avoid persisting filesystem paths in durable
                 # manifest metadata.
@@ -200,11 +195,16 @@ def rebuild_snapshot(
             versions["llama_index"] = getattr(llama_index, "__version__", "unknown")
 
         embed_model_name = "unknown"
-        with contextlib.suppress(Exception):
-            service_context = getattr(vector_index, "service_context", None)
-            embed_model = getattr(service_context, "embed_model", None)
-            if embed_model is not None:
-                embed_model_name = getattr(embed_model, "model_name", "unknown")
+        if embed_model is None:
+            with contextlib.suppress(Exception):
+                from llama_index.core import Settings  # type: ignore
+
+                embed_model = getattr(Settings, "embed_model", None)
+        if embed_model is None:
+            # Fallback to private attribute as a last resort; prefer explicit args.
+            embed_model = getattr(vector_index, "_embed_model", None)
+        if embed_model is not None:
+            embed_model_name = getattr(embed_model, "model_name", "unknown")
         versions.setdefault("embed_model", embed_model_name)
         with contextlib.suppress(Exception):  # pragma: no cover
             from qdrant_client import (

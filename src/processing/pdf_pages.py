@@ -20,6 +20,7 @@ from PIL import Image  # type: ignore
 from PIL.Image import Resampling  # type: ignore
 
 from src.config import settings
+from src.persistence.artifacts import ArtifactStore
 from src.utils.security import encrypt_file, get_image_kid
 
 _PAGE_TEXT_MAX_CHARS = 8000
@@ -229,8 +230,6 @@ def pdf_pages_to_image_documents(
     docs: list[ImageDocument] = []
     # Final-release: store rendered images as content-addressed artifacts and
     # reference the jailed artifact paths in ImageDocument nodes.
-    from src.persistence.artifacts import ArtifactStore
-
     store = ArtifactStore.from_settings(settings)
 
     for i, path, _rect, phash, page_text in entries:

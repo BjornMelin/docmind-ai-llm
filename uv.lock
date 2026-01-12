@@ -1057,7 +1057,7 @@ requires-dist = [
     { name = "kuzu", marker = "extra == 'graph'", specifier = ">=0.11.3,<1.0.0" },
     { name = "langchain-core", specifier = ">=1.2.6,<2.0.0" },
     { name = "langchain-openai", specifier = ">=1.1.6,<2.0.0" },
-    { name = "langgraph", specifier = ">=1.0.5,<2.0.0" },
+    { name = "langgraph", specifier = "==1.0.5" },
     { name = "langgraph-checkpoint-sqlite", specifier = "==3.0.1" },
     { name = "langgraph-supervisor", specifier = ">=0.0.31,<0.1.0" },
     { name = "llama-cpp-python", specifier = ">=0.3.16,<0.4.0" },

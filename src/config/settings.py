@@ -157,6 +157,12 @@ class ChatConfig(BaseModel):
     """Chat memory configuration (ADR-021)."""
 
     sqlite_path: Path = Field(default=Path("./data/chat.db"))
+    memory_store_filter_fetch_cap: int = Field(
+        default=5000,
+        ge=256,
+        le=100000,
+        description="Max rows fetched for filtered memory searches before slicing.",
+    )
 
 
 class AgentConfig(BaseModel):
@@ -289,7 +295,7 @@ class RetrievalConfig(BaseModel):
     reranking_top_k: int = Field(default=5, ge=1, le=20)
     reranker_normalize_scores: bool = Field(default=True)
     enable_image_retrieval: bool = Field(
-        default=True,
+        default=False,
         description=(
             "Enable visual retrieval (SigLIP text->image) and multimodal fusion."
         ),

@@ -21,6 +21,11 @@ class LlamaIndexEmbeddingsAdapter(Embeddings):
         from llama_index.core import Settings as LISettings
 
         model = LISettings.embed_model
+        if model is None:
+            raise RuntimeError(
+                "LlamaIndex Settings.embed_model is not configured. "
+                "Initialize an embedding model before calling embed_query."
+            )
         vec = cast(Sequence[float], model.get_text_embedding(str(text)))
         return [float(x) for x in vec]
 
@@ -31,6 +36,11 @@ class LlamaIndexEmbeddingsAdapter(Embeddings):
         from llama_index.core import Settings as LISettings
 
         model = LISettings.embed_model
+        if model is None:
+            raise RuntimeError(
+                "LlamaIndex Settings.embed_model is not configured. "
+                "Initialize an embedding model before calling embed_documents."
+            )
         batch = [str(t) for t in texts]
         get_batch = getattr(model, "get_text_embedding_batch", None)
         if callable(get_batch):

@@ -358,6 +358,8 @@ class ToolFactory:
             ... )
             >>> len(tools)  # number of tools created
         """
+        from src.retrieval.multimodal_fusion import MultimodalFusionRetriever
+
         tools = []
 
         if not vector_index:
@@ -366,8 +368,6 @@ class ToolFactory:
 
         # Add hybrid fusion search if retriever is available (highest priority)
         if retriever:
-            from src.retrieval.multimodal_fusion import MultimodalFusionRetriever
-
             if isinstance(retriever, MultimodalFusionRetriever):
                 tools.append(cls.create_multimodal_search_tool(retriever))
                 logger.info("Added multimodal search tool")

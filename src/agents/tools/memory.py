@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from collections.abc import Iterable
 from typing import Any, Literal
 
 from langchain_core.runnables import RunnableConfig
@@ -55,11 +56,18 @@ def remember(
     if store is None:
         return json.dumps({"ok": False, "error": "memory store unavailable"})
     ns = _namespace_from_config(config, scope=scope)
+    tags_value: list[str] | None = None
+    if (
+        tags is not None
+        and isinstance(tags, Iterable)
+        and not isinstance(tags, (str, bytes))
+    ):
+        tags_value = list(tags)
     payload: dict[str, Any] = {
         "content": str(content),
         "kind": str(kind),
         "importance": float(importance),
-        "tags": list(tags) if isinstance(tags, list) else None,
+        "tags": tags_value,
     }
     store.put(ns, mem_id, payload, index=["content"])
     elapsed_ms = (time.perf_counter() - start) * 1000.0
@@ -151,7 +159,9 @@ class _SuppressTelemetry:
         tb: object | None,
     ) -> bool:
         if exc_type is not None:
-            logger.debug("memory tool telemetry suppressed: %s", exc_type.__name__)
+            logger.debug(
+                "memory tool telemetry suppressed: %s: %s", exc_type.__name__, exc
+            )
         return exc_type is not None and issubclass(
             exc_type, (OSError, RuntimeError, ValueError)
         )

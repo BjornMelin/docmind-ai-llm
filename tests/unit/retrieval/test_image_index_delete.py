@@ -48,6 +48,25 @@ def test_delete_page_images_for_doc_id_returns_prior_count() -> None:
     assert client.last_filter is not None
 
 
+def test_delete_page_images_for_doc_id_with_no_existing_records() -> None:
+    client = _Client(count_value=0)
+    prior = delete_page_images_for_doc_id(client, "images", doc_id="doc-1")  # type: ignore[arg-type]
+    assert prior == 0
+    assert client.delete_calls == 1
+
+
+def test_delete_page_images_for_doc_id_handles_delete_exception() -> None:
+    class _FailingClient(_Client):
+        def delete(  # type: ignore[override]
+            self, *, collection_name: str, points_selector, wait: bool = True
+        ):
+            raise RuntimeError("delete failed")
+
+    client = _FailingClient(count_value=4)
+    prior = delete_page_images_for_doc_id(client, "images", doc_id="doc-1")  # type: ignore[arg-type]
+    assert prior == 4
+
+
 def test_count_page_images_for_doc_id_best_effort() -> None:
     client = _Client(count_value=3)
     count = count_page_images_for_doc_id(client, "images", doc_id="doc-1")  # type: ignore[arg-type]

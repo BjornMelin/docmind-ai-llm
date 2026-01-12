@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
+from types import SimpleNamespace
 
 import pytest
 
-from src.config.settings import DocMindSettings
 from src.persistence.chat_db import (
     create_session,
     ensure_session_registry,
@@ -23,7 +22,7 @@ pytestmark = pytest.mark.unit
 
 
 def test_open_chat_db_anchors_relative_paths_under_data_dir(tmp_path: Path) -> None:
-    cfg = cast("DocMindSettings", type("_Cfg", (), {"data_dir": tmp_path})())
+    cfg = SimpleNamespace(data_dir=tmp_path)  # type: ignore[arg-type]
     conn = open_chat_db(Path("data/chat.db"), cfg=cfg)  # legacy default shape
     try:
         assert Path(conn.execute("PRAGMA database_list;").fetchone()[2]).exists()
@@ -36,7 +35,7 @@ def test_open_chat_db_anchors_relative_paths_under_data_dir(tmp_path: Path) -> N
 
 
 def test_session_crud_and_purge(tmp_path: Path) -> None:
-    cfg = cast("DocMindSettings", type("_Cfg", (), {"data_dir": tmp_path})())
+    cfg = SimpleNamespace(data_dir=tmp_path)  # type: ignore[arg-type]
     conn = open_chat_db(Path("chat.db"), cfg=cfg)
     try:
         ensure_session_registry(conn)
@@ -60,9 +59,17 @@ def test_session_crud_and_purge(tmp_path: Path) -> None:
         # Create minimal LangGraph tables expected by purge_session.
         conn.execute("CREATE TABLE IF NOT EXISTS writes (thread_id TEXT);")
         conn.execute("CREATE TABLE IF NOT EXISTS checkpoints (thread_id TEXT);")
+        conn.execute("CREATE TABLE IF NOT EXISTS docmind_store_vec (ns2 TEXT);")
+        conn.execute("CREATE TABLE IF NOT EXISTS docmind_store_items (ns2 TEXT);")
+        conn.execute("INSERT INTO writes (thread_id) VALUES (?);", (created.thread_id,))
+        conn.execute(
+            "INSERT INTO docmind_store_vec (ns2) VALUES (?);", (created.thread_id,)
+        )
         conn.commit()
 
         purge_session(conn, thread_id=created.thread_id)
         assert list_sessions(conn, include_deleted=True) == []
+        assert conn.execute("SELECT COUNT(*) FROM writes").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM docmind_store_vec").fetchone()[0] == 0
     finally:
         conn.close()

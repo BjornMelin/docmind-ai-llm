@@ -7,7 +7,7 @@ import hashlib
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import streamlit as st
 from loguru import logger
@@ -27,9 +27,6 @@ from src.telemetry.opentelemetry import (
 )
 from src.ui.ingest_adapter import ingest_files
 from src.utils.storage import create_vector_store
-
-if TYPE_CHECKING:  # pragma: no cover
-    pass
 
 
 def main() -> None:  # pragma: no cover - Streamlit page
@@ -98,6 +95,9 @@ def main() -> None:  # pragma: no cover - Streamlit page
                                 MultimodalFusionRetriever()
                             )
                         except Exception:  # pragma: no cover - UI best-effort
+                            logger.debug(
+                                "Multimodal retriever init failed", exc_info=True
+                            )
                             st.session_state.pop("hybrid_retriever", None)
                     if pg_index is not None:
                         st.session_state["graphrag_index"] = pg_index
@@ -405,8 +405,7 @@ def _handle_delete_upload(*, target: Path, purge_artifacts: bool) -> None:
         )
         from src.utils.storage import get_client_config
 
-        client = QdrantClient(**get_client_config())
-        try:
+        with QdrantClient(**get_client_config()) as client:
             deleted_image_points = delete_page_images_for_doc_id(
                 client,
                 settings.database.qdrant_image_collection,
@@ -472,9 +471,6 @@ def _handle_delete_upload(*, target: Path, purge_artifacts: bool) -> None:
                             store.delete(ref)
                             removed += 1
                 st.caption(f"Deleted local artifacts: {removed}")
-        finally:
-            with contextlib.suppress(Exception):
-                client.close()
     except Exception as exc:
         st.caption(f"Qdrant cleanup skipped: {type(exc).__name__}")
 

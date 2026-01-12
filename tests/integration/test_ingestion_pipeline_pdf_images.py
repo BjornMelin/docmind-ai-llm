@@ -20,24 +20,24 @@ from src.processing.ingestion_pipeline import ingest_documents_sync
 class DummyEmbedding(BaseEmbedding):
     """Deterministic embedding for pipeline construction in tests."""
 
-    def _get_text_embedding(self, text: str) -> list[float]:  # type: ignore[override]
+    def _get_text_embedding(self, text: str) -> list[float]:
         digest = hashlib.sha256(text.encode("utf-8")).digest()
         value = int.from_bytes(digest[:8], "big") / 2**64
         return [float(value)]
 
-    async def _aget_text_embedding(self, text: str) -> list[float]:  # type: ignore[override]
+    async def _aget_text_embedding(self, text: str) -> list[float]:
         return self._get_text_embedding(text)
 
-    def _get_query_embedding(self, query: str) -> list[float]:  # type: ignore[override]
+    def _get_query_embedding(self, query: str) -> list[float]:
         return self._get_text_embedding(query)
 
-    async def _aget_query_embedding(self, query: str) -> list[float]:  # type: ignore[override]
+    async def _aget_query_embedding(self, query: str) -> list[float]:
         return self._get_text_embedding(query)
 
-    def _get_text_embeddings(self, texts: list[str]) -> list[list[float]]:  # type: ignore[override]
+    def _get_text_embeddings(self, texts: list[str]) -> list[list[float]]:
         return [self._get_text_embedding(t) for t in texts]
 
-    async def _aget_text_embeddings(self, texts: list[str]) -> list[list[float]]:  # type: ignore[override]
+    async def _aget_text_embeddings(self, texts: list[str]) -> list[list[float]]:
         return [self._get_text_embedding(t) for t in texts]
 
 
@@ -67,9 +67,10 @@ def test_ingestion_pdf_images_exports_and_index_wiring(
 
     from src.config.settings import settings as app_settings
 
-    app_settings.data_dir = tmp_path
-    app_settings.cache_dir = tmp_path / "cache"
-    app_settings.cache_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(app_settings, "data_dir", tmp_path)
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(app_settings, "cache_dir", cache_dir)
 
     pdf_path = tmp_path / "doc.pdf"
     _make_pdf(pdf_path)

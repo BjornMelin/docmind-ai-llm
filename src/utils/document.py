@@ -20,10 +20,6 @@ from loguru import logger
 from src.utils.hashing import sha256_file
 
 
-def _sha256_file(path: Path) -> str:
-    return sha256_file(path)
-
-
 def _sanitize_doc_metadata(
     meta: dict[str, Any], *, source_filename: str
 ) -> dict[str, Any]:
@@ -49,6 +45,7 @@ async def load_documents_unstructured(
     call even when Unstructured is unavailable: it falls back to a plain-text
     read for UTF-8-ish inputs.
     """
+    # Async for API consistency; blocking IO is acceptable for this best-effort helper.
     from llama_index.core import Document
 
     paths = [Path(p) for p in file_paths]
@@ -64,7 +61,7 @@ async def load_documents_unstructured(
     for path in paths:
         if not path.exists():
             continue
-        doc_id = f"doc-{_sha256_file(path)[:16]}"
+        doc_id = f"doc-{sha256_file(path)[:16]}"
         if reader is not None:
             try:
                 loaded = reader.load_data(  # type: ignore[call-arg]
@@ -144,7 +141,7 @@ def get_document_info(file_path: str | Path) -> dict[str, Any]:
         "source_filename": path.name,
         "suffix": path.suffix.lower(),
         "size_bytes": int(stat.st_size),
-        "sha256": _sha256_file(path),
+        "sha256": sha256_file(path),
     }
 
 
@@ -169,10 +166,9 @@ def clear_document_cache(*, cache_dir: Path | None = None) -> None:
 def get_cache_stats(*, cache_dir: Path | None = None) -> dict[str, Any]:
     """Return basic cache directory stats (best-effort)."""
     cache_path = _resolve_ingestion_cache_dir(cache_dir)
-    cache_dir = cache_path
-    if not cache_dir.exists():
+    if not cache_path.exists():
         return {"exists": False, "files": 0, "bytes": 0}
-    files = [p for p in cache_dir.glob("**/*") if p.is_file()]
+    files = [p for p in cache_path.glob("**/*") if p.is_file()]
     return {
         "exists": True,
         "files": len(files),

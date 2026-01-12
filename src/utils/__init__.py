@@ -26,6 +26,8 @@ from .document import (
     load_documents_from_directory,
     load_documents_unstructured,
 )
+from .hashing import sha256_file
+from .images import ensure_thumbnail, open_image_encrypted
 
 # Monitoring and logging
 from .monitoring import (
@@ -38,6 +40,7 @@ from .monitoring import (
     performance_timer,
     setup_logging,
 )
+from .security import decrypt_file, encrypt_file, get_image_kid
 
 # Storage and resource management operations
 from .storage import (
@@ -60,6 +63,7 @@ from .storage import (
     sync_model_context,
     test_connection,
 )
+from .time import now_ms
 
 __all__ = [
     "async_gpu_memory_context",
@@ -71,11 +75,15 @@ __all__ = [
     "create_sync_client",
     "create_vector_store",
     "cuda_error_context",
+    "decrypt_file",
     "detect_hardware",
+    "encrypt_file",
     "ensure_spacy_model",
+    "ensure_thumbnail",
     "get_cache_stats",
     "get_collection_info",
     "get_document_info",
+    "get_image_kid",
     "get_memory_usage",
     "get_performance_monitor",
     "get_safe_gpu_info",
@@ -89,11 +97,14 @@ __all__ = [
     "managed_async_qdrant_client",
     "managed_gpu_operation",
     "model_context",
+    "now_ms",
+    "open_image_encrypted",
     "performance_timer",
     "safe_cuda_operation",
     "setup_hybrid_collection",
     "setup_hybrid_collection_async",
     "setup_logging",
+    "sha256_file",
     "sync_model_context",
     "test_connection",
     "validate_startup_configuration",
