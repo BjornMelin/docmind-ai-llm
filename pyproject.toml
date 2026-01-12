@@ -303,7 +303,7 @@ asyncio_default_fixture_loop_scope = "function"
 # Development-only dependency groups (PEP 735); not published as package metadata.
 [dependency-groups]
 dev = [
-    "ruff>=0.13.0,<0.14.0",
+    "ruff>=0.13.0,<0.15.0",
     "pyright[nodejs]>=1.1.407,<1.2.0",
     "pytest>=8.3.1,<9.0.0",
     "pytest-asyncio>=1.3.0,<2.0.0",
