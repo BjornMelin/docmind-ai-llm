@@ -40,8 +40,10 @@ def _rrf_merge(lists: list[list[Any]], k_constant: int) -> list[Any]:
     for ranked in lists:
         for rank, item in enumerate(ranked, start=1):
             node = getattr(item, "node", None)
-            nid = getattr(node, "node_id", None) or getattr(node, "id_", None) or str(
-                node
+            nid = (
+                getattr(node, "node_id", None)
+                or getattr(node, "id_", None)
+                or str(node)
             )
             inc = 1.0 / (k_constant + rank)
             cur = scores.get(str(nid))
@@ -61,7 +63,7 @@ def _rrf_merge(lists: list[list[Any]], k_constant: int) -> list[Any]:
             out.append(NodeWithScore(node=item.node, score=float(score)))
         else:
             with contextlib.suppress(Exception):
-                setattr(item, "score", float(score))
+                item.score = float(score)
             out.append(item)
     return out
 
