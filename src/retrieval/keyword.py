@@ -21,22 +21,28 @@ from typing import TYPE_CHECKING, Any
 from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 from loguru import logger
 from qdrant_client import QdrantClient
-
-try:  # optional across qdrant-client versions
-    from qdrant_client.common.client_exceptions import ResourceExhaustedResponse
-except (ImportError, AttributeError):  # pragma: no cover - older clients / shape drift
-
-    class ResourceExhaustedResponse(Exception):  # type: ignore[no-redef]  # noqa: N818
-        """Fallback for missing qdrant-client rate-limit exception."""
-
-
-if TYPE_CHECKING:  # pragma: no cover - typing only
-    from qdrant_client.http.models import QueryResponse as QdrantQueryResponse
 from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedResponse
 
 from src.retrieval.sparse_query import encode_to_qdrant
 from src.utils.storage import get_client_config
 from src.utils.telemetry import log_jsonl
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from qdrant_client.common.client_exceptions import ResourceExhaustedResponse
+else:
+    try:  # optional across qdrant-client versions
+        from qdrant_client.common.client_exceptions import ResourceExhaustedResponse
+    except (
+        ImportError,
+        AttributeError,
+    ):  # pragma: no cover - older clients / shape drift
+
+        class ResourceExhaustedResponse(Exception):  # noqa: N818
+            """Fallback for missing qdrant-client rate-limit exception."""
+
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from qdrant_client.http.models import QueryResponse as QdrantQueryResponse
 
 
 @dataclass(frozen=True)
