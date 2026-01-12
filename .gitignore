@@ -221,6 +221,10 @@ TODO.md
 # Document processing cache
 # cache/
 *.db
+*.db-wal
+*.db-shm
+*.sqlite-wal
+*.sqlite-shm
 
 # Tool caches
 .ruff_cache/
