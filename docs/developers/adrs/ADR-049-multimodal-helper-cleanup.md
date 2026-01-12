@@ -1,9 +1,9 @@
 ---
 ADR: 049
 Title: Multimodal Helper Cleanup — Remove Dead Test-only Utility From Production Package
-Status: Proposed
-Version: 1.0
-Date: 2026-01-09
+Status: Implemented
+Version: 1.1
+Date: 2026-01-12
 Supersedes:
 Superseded-by:
 Related: 037, 002
@@ -32,11 +32,13 @@ Shipping unused “toy pipeline” utilities in the production package:
 
 ### Decision Framework (≥9.0)
 
-| Option                          | Complexity (40%) | Perf (30%) | Alignment (30%) |   Total |
-| ------------------------------- | ---------------: | ---------: | --------------: | ------: |
-| **C: Delete dead code + tests** |                9 |         10 |              10 | **9.6** |
-| B: Move to eval                 |                8 |         10 |               8 |     8.8 |
-| A: Keep in prod                 |               10 |         10 |               5 |     8.5 |
+Weights: leverage 35%, application value 30%, maintenance 25%, adaptability 10%.
+
+| Option | Leverage (35%) | App Value (30%) | Maintenance (25%) | Adaptability (10%) | Total |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| **C: Delete dead code + tests (Selected)** | 9 | 9 | 10 | 9 | **9.25** |
+| B: Move to eval/tests only | 5 | 3 | 6 | 5 | 4.65 |
+| A: Keep in prod (remove TODO only) | 2 | 1 | 2 | 3 | 1.80 |
 
 ## Decision
 
@@ -44,7 +46,7 @@ We will:
 
 1. Delete `src/utils/multimodal.py` and its dedicated test suite (`tests/unit/utils/multimodal/*`) if no production code imports it.
 
-2. Update docs/architecture maps to remove references to the module.
+2. Update docs/architecture maps to remove references to the module and point to the canonical multimodal implementation (`src/models/embeddings.py`, `src/retrieval/reranking.py`, `src/utils/vision_siglip.py`).
 
 ## Consequences
 

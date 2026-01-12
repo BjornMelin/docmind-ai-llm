@@ -1,11 +1,11 @@
 ---
 ADR: 009
 Title: Document Processing Pipeline (Multimodal)
-Status: Implemented
-Version: 2.4
-Date: 2025-09-04
+Status: Superseded
+Version: 2.5
+Date: 2026-01-12
 Supersedes:
-Superseded-by:
+Superseded-by: ADR-058
 Related: 002, 003, 019, 030, 031, 034, 037
 Tags: ingestion, unstructured, chunking, multimodal
 References:
@@ -16,11 +16,34 @@ References:
 
 ## Description
 
-Adopt a hybrid, library-first document processing pipeline that extracts multimodal content (text, tables, images) using Unstructured and orchestrates chunking and caching via LlamaIndex IngestionPipeline. The pipeline emits explicit PDF page-image nodes to enable multimodal reranking (ADR‑037) and integrates with unified embeddings (ADR‑002) and adaptive retrieval (ADR‑003).
+This ADR originally described a document processing pipeline centered on Unstructured
+strategy mapping and explicit `pdf_page_image` node emission.
+
+It is **superseded** by the final-release multimodal ingestion + retrieval + persistence
+architecture in:
+
+- ADR: `docs/developers/adrs/ADR-058-final-multimodal-pipeline-and-persistence.md`
+- SPEC: `docs/specs/spec-042-final-multimodal-pipeline-and-persistence.md`
+- Guide: `docs/developers/guides/multimodal-pipeline.md`
 
 ## Context
 
 Prior processing was text-only with basic sentence splitting, limited metadata, and no systematic multimodal handling. Requirements expanded to cover PDFs, Office documents, HTML, and images; preserve document structure; and support visual reranking. We also needed predictable local performance, a single cache, and compatibility with indexing and retrieval decisions (ADR‑002/003/030/031/034).
+
+## Supersession Notes (why this ADR is no longer the source of truth)
+
+The implemented final-release pipeline differs materially from the design in this ADR:
+
+- **PDF page images** are rendered by **PyMuPDF** and stored as content-addressed
+  artifacts (`ArtifactRef(sha256,suffix)`), not persisted as raw paths or blobs.
+- Page images are indexed into a dedicated **Qdrant image collection** using SigLIP
+  embeddings, and multimodal results are returned via router tool `multimodal_search`
+  (text hybrid + SigLIP text→image fused by RRF).
+- Chat state and long-term memory are persisted via **LangGraph SQLite**, with strict
+  sanitization to prevent base64/path leakage in durable stores.
+
+If you are implementing or modifying ingestion today, use SPEC-002 (updated) for
+current ingestion wiring, and ADR-058/SPEC-042 for final-release multimodal behavior.
 
 ## Decision Drivers
 
@@ -46,7 +69,14 @@ Prior processing was text-only with basic sentence splitting, limited metadata, 
 
 ## Decision
 
-We adopt Unstructured for parsing and multimodal extraction, orchestrated by LlamaIndex IngestionPipeline for chunking and caching. The pipeline emits PDF page-image nodes (metadata.modality = "pdf_page_image") and uses strategy-based processing (hi_res, fast, ocr_only). This integrates with ADR‑002/003/030/031/034 and enables multimodal reranking (ADR‑037).
+Historical decision (superseded):
+
+We adopted Unstructured-centric parsing and chunking heuristics and proposed explicit
+`pdf_page_image` node emission for multimodal reranking.
+
+This is superseded by ADR-058, which implements a fully wired end-to-end multimodal
+pipeline including content-addressed artifacts, Qdrant image indexing, fused retrieval,
+UI rendering, and LangGraph SQLite persistence.
 
 ## High-Level Architecture
 
@@ -187,6 +217,7 @@ def test_metadata_and_modalities(document_processor, sample_pdf_path):
 
 ## Changelog
 
+- 2.5 (2026-01-12): Marked as superseded by ADR-058; updated pointers to final-release implementation.
 - 2.4 (2025-09-04): Standardized to template; added decision framework, config/tests; no behavior change
 - 2.2 (2025-09-02): Body overhauled to remove SimpleCache and dual caching; IngestionCache now backed by DuckDBKVStore with single-file DB. Related Decisions updated to ADR-031/ADR-030.
 - 2.1 (2025-09-02): Removed custom SimpleCache from pipeline; DocumentProcessor wires LlamaIndex IngestionCache with DuckDBKVStore as the single cache (no back-compat). Updated implementation notes accordingly.

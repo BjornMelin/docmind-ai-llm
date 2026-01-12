@@ -177,6 +177,9 @@ Security policy:
 - Ingestion cache is DuckDB KV store (`DOCMIND_CACHE__DIR`, `DOCMIND_CACHE__FILENAME`).
 - PDF page images are rendered via PyMuPDF; optional AES-GCM encryption with
   `DOCMIND_IMG_AES_KEY_BASE64` and `DOCMIND_IMG_DELETE_PLAINTEXT`.
+- Final-release multimodal: PDF page images and thumbnails are stored as
+  content-addressed artifacts (`ArtifactRef(sha256,suffix)`) in the local
+  ArtifactStore (default: `data/artifacts`, configurable via `DOCMIND_ARTIFACTS__*`).
 
 ## Embeddings and Retrieval
 
@@ -187,6 +190,9 @@ Security policy:
   - Named vectors must exist: `text-dense`, `text-sparse` with IDF modifier.
   - Deduplicate by `page_id` (default) or `doc_id` before final cut.
 - Enable server-side hybrid with `DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=true`.
+- Multimodal retrieval (final-release): SigLIP indexes PDF page images into a
+  dedicated Qdrant collection (`settings.database.qdrant_image_collection`) and
+  the router exposes `multimodal_search` (text hybrid + SigLIP text→image fused by RRF).
 
 ## Router and Tooling
 
@@ -227,6 +233,9 @@ DSPy (optional):
 - `manifest.meta.json` must include `index_id`, `graph_store_type`,
   `vector_store_type`, `corpus_hash`, `config_hash`, `versions`, and
   optional `graph_exports`.
+- Final-release invariant: durable stores must not persist base64 blobs or raw
+  filesystem paths. Persist `ArtifactRef` for multimodal artifacts and sanitize
+  path-like metadata to safe basenames.
 - Snapshot locking uses `portalocker` when available (fallback O_EXCL).
 - Always persist vector and graph indexes via `SnapshotManager` APIs.
 

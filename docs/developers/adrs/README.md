@@ -58,11 +58,13 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
   Scope: Optional semantic response caching (backend pluggable; offline-first)
 - **[ADR-057 — Chat Persistence + Hybrid Agentic Memory (LangGraph SQLite)](ADR-057-chat-persistence-langgraph-sqlite-hybrid-memory.md)**<br>
   Scope: Durable checkpoints, time travel/branching, and long-term memory via LangGraph store
+- **[ADR-058 — Final Multimodal Pipeline + Cognitive Persistence](ADR-058-final-multimodal-pipeline-and-persistence.md)**<br>
+  Scope: End-to-end multimodal (PDF images → retrieval → UI) + durability invariants (no blobs/paths in durable stores)
 
 ## Document Processing
 
 - **[ADR-009 — Document Processing Pipeline](ADR-009-document-processing-pipeline.md)**<br>
-  Scope: Unstructured-first chunking, parameterization, table isolation
+  Scope: Historical (superseded by ADR-058)
 
 ## Performance
 

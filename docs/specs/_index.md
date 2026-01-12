@@ -36,4 +36,5 @@
 - [spec-039-operational-metadata-sqlite-wal.md](./spec-039-operational-metadata-sqlite-wal.md)
 - [spec-040-agent-deadline-propagation-and-router-injection.md](./spec-040-agent-deadline-propagation-and-router-injection.md)
 - [spec-041-chat-persistence-agentic-memory-langgraph-sqlite.md](./spec-041-chat-persistence-agentic-memory-langgraph-sqlite.md)
+- [spec-042-final-multimodal-pipeline-and-persistence.md](./spec-042-final-multimodal-pipeline-and-persistence.md)
 - [superseded/](./superseded/)

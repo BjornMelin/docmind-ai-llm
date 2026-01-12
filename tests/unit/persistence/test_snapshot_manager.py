@@ -169,7 +169,7 @@ def test_snapshot_manager_includes_graph_exports(tmp_path: Path) -> None:
         config_hash="cafebabe",
         graph_exports=[
             {
-                "path": "graph/graph_export-20240101T000000Z.jsonl",
+                "filename": "graph_export-20240101T000000Z.jsonl",
                 "format": "jsonl",
                 "created_at": "2024-01-01T00:00:00Z",
                 "seed_count": 10,
@@ -181,6 +181,6 @@ def test_snapshot_manager_includes_graph_exports(tmp_path: Path) -> None:
     manifest_meta = json.loads(
         (snap / "manifest.meta.json").read_text(encoding="utf-8")
     )
-    assert manifest_meta["graph_exports"][0]["path"].startswith("graph/graph_export-")
+    assert manifest_meta["graph_exports"][0]["filename"].startswith("graph_export-")
     entries = list(snapshot.load_manifest_entries(snap))
     assert any(entry["content_type"] == "application/x-ndjson" for entry in entries)

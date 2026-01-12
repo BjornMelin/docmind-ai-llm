@@ -1,13 +1,11 @@
-"""Consolidated utilities package for DocMind AI.
+"""Utilities package for DocMind AI.
 
-This package contains essential utilities in 5 consolidated modules:
-- core: Essential hardware detection and validation utilities
-- document: Document loading and spaCy model management
-- storage: Database operations and resource management utilities
-- monitoring: Simple performance monitoring and logging
-- multimodal: Image and media processing utilities
+This package contains small, library-first helpers used across the app.
+Core multimodal functionality is implemented via the canonical components:
 
-The package follows KISS, DRY, YAGNI principles with library-first implementations.
+- `src/models/embeddings.py` (BGE-M3 + SigLIP)
+- `src/retrieval/reranking.py` (SigLIP visual rerank; optional ColPali)
+- `src/utils/images.py` + `src/utils/vision_siglip.py` (image I/O + SigLIP loader)
 """
 
 # Core utilities

@@ -36,6 +36,19 @@ class IngestionConfig(BaseModel):
         default=False,
         description="Encrypt rendered page images with AES-GCM when true",
     )
+    enable_image_indexing: bool = Field(
+        default=True,
+        description=(
+            "Index rendered PDF page images into the multimodal image collection "
+            "(SigLIP)."
+        ),
+    )
+    image_index_batch_size: int = Field(
+        default=8,
+        ge=1,
+        le=64,
+        description="Batch size used when embedding and indexing page images",
+    )
     cache_dir: Path | None = Field(
         default=None, description="Optional directory for LlamaIndex cache"
     )
@@ -108,7 +121,14 @@ class ExportArtifact(BaseModel):
     """Metadata describing an exported artifact (manifest entry, graph, etc.)."""
 
     name: str = Field(..., min_length=1, description="Human-readable artifact name")
-    path: Path = Field(..., description="Filesystem path to the artifact")
+    path: Path = Field(
+        ...,
+        description=(
+            "Ephemeral filesystem path to the artifact (runtime-only; excluded "
+            "from serialization to avoid persisting host paths)."
+        ),
+        exclude=True,
+    )
     content_type: str = Field(
         default="application/octet-stream",
         description="MIME type of the artifact on disk",

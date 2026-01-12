@@ -22,12 +22,15 @@ from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 from loguru import logger
 from qdrant_client import QdrantClient
 
-try:  # optional across qdrant-client versions
-    from qdrant_client.http.api_client import ResourceExhaustedResponse
-except ImportError:  # pragma: no cover - older clients
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from qdrant_client.common.client_exceptions import ResourceExhaustedResponse
+else:
+    try:  # optional across qdrant-client versions
+        from qdrant_client.common.client_exceptions import ResourceExhaustedResponse
+    except ImportError:  # pragma: no cover - older clients
 
-    class ResourceExhaustedResponse(Exception):  # noqa: N818
-        """Fallback when qdrant-client lacks ResourceExhaustedResponse."""
+        class ResourceExhaustedResponse(Exception):  # noqa: N818
+            """Fallback when qdrant-client lacks ResourceExhaustedResponse."""
 
 
 if TYPE_CHECKING:  # pragma: no cover - typing only

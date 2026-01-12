@@ -148,6 +148,49 @@ def build_router_engine(
         kg_requested=kg_requested,
         hybrid_requested=hybrid_requested,
     ) as span:
+        # Optional multimodal tool: fuse text hybrid + image retrieval (SigLIP).
+        try:
+            enable_mm = bool(getattr(cfg.retrieval, "enable_image_retrieval", True))
+        except Exception:  # pragma: no cover - defensive
+            enable_mm = True
+
+        if enable_mm:
+            try:
+                from src.retrieval.multimodal_fusion import MultimodalFusionRetriever
+                from src.retrieval.reranking import get_postprocessors as _get_pp
+
+                mm_retriever = MultimodalFusionRetriever()
+                mm_post = _get_pp(
+                    "hybrid", use_reranking=use_rerank_flag, top_n=normalized_top_k
+                )
+                mm_engine = build_retriever_query_engine(
+                    mm_retriever,
+                    mm_post,
+                    llm=the_llm,
+                    response_mode="compact",
+                    verbose=False,
+                    engine_cls=retriever_query_engine_cls,
+                )
+                tools.append(
+                    query_engine_tool_cls(
+                        query_engine=mm_engine,
+                        metadata=tool_metadata_cls(
+                            name="multimodal_search",
+                            description=(
+                                "Multimodal search (final-release): fuses text "
+                                "hybrid retrieval with visual PDF page-image "
+                                "retrieval (SigLIP). Best for visually rich PDFs "
+                                "(tables/charts/scans) and when user asks "
+                                '"what does that chart show?".'
+                            ),
+                        ),
+                    )
+                )
+            except (ValueError, TypeError, AttributeError, ImportError) as exc:
+                _warn_once(
+                    "hybrid", "Multimodal tool construction skipped", reason=str(exc)
+                )
+
         # Optional hybrid tool
         if hybrid_requested:
             try:

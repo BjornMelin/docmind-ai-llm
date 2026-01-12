@@ -59,9 +59,12 @@ Restore documentation correctness for v1 by aligning:
 
 Add a small script (or extend an existing health script) to detect doc drift:
 
-- scan non-archived docs:
+- scan **non-historical** docs:
   - include: `docs/specs/`, `docs/developers/`
-  - exclude: `docs/**/archived/`, `docs/specs/.archived/`
+  - exclude:
+    - `docs/**/archived/`, `docs/specs/.archived/`
+    - `docs/specs/prompts/completed/` (historical “completed prompts” may reference removed files)
+    - `docs/specs/prompts/` (prompt templates are not sources of truth for current module paths)
 - detect referenced paths matching `src/<path>.py`
 - assert each referenced file exists
 

@@ -45,7 +45,7 @@ def test_kg_tool_absent_when_builder_errors(monkeypatch: pytest.MonkeyPatch) -> 
     router = rf.build_router_engine(
         _Vec(), pg_index=_Pg(), settings=cfg, enable_hybrid=False
     )
-    assert get_router_tool_names(router) == ["semantic_search"]
+    assert get_router_tool_names(router) == ["semantic_search", "multimodal_search"]
 
 
 @pytest.mark.unit
@@ -78,4 +78,8 @@ def test_kg_tool_present_when_builder_ok(monkeypatch: pytest.MonkeyPatch) -> Non
     router = rf.build_router_engine(
         _Vec(), pg_index=_Pg(), settings=cfg, enable_hybrid=False
     )
-    assert set(get_router_tool_names(router)) == {"semantic_search", "knowledge_graph"}
+    assert set(get_router_tool_names(router)) == {
+        "semantic_search",
+        "multimodal_search",
+        "knowledge_graph",
+    }

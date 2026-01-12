@@ -16,12 +16,10 @@ Example:
     Using the multi-agent coordinator:
 
         from src.agents.coordinator import MultiAgentCoordinator
-        from llama_index.core.memory import ChatMemoryBuffer
-
         coordinator = MultiAgentCoordinator()
         response = coordinator.process_query(
             "Compare AI vs ML techniques",
-            context=ChatMemoryBuffer.from_defaults()
+            context=None
         )
         # response.content contains the generated text
 """
@@ -40,7 +38,6 @@ from langgraph_supervisor import create_supervisor
 from langgraph_supervisor.handoff import create_forward_message_tool
 
 # Import LlamaIndex Settings for context window access
-from llama_index.core.memory import ChatMemoryBuffer
 from llama_index.core.utils import get_tokenizer
 from loguru import logger
 from opentelemetry import metrics, trace
@@ -162,6 +159,8 @@ class MultiAgentCoordinator:
         max_agent_timeout: float = settings.agents.decision_timeout,
         tool_registry: ToolRegistry | None = None,
         use_shared_llm_client: bool | None = None,
+        checkpointer: Any | None = None,
+        store: Any | None = None,
     ):
         """Initialize multi-agent coordinator.
 
@@ -173,6 +172,10 @@ class MultiAgentCoordinator:
             max_agent_timeout: Maximum time for agent responses (seconds)
             tool_registry: Optional tool registry (primarily for testing)
             use_shared_llm_client: Override shared LlamaIndex LLM wrapper flag.
+            checkpointer: Optional LangGraph checkpointer (e.g., SqliteSaver) for
+                durable thread persistence. Defaults to in-memory saver.
+            store: Optional LangGraph BaseStore for long-term memory. When
+                provided, tools can access it via ToolRuntime/store.
         """
         configure_observability(settings)
         self.model_path = model_path
@@ -211,8 +214,9 @@ class MultiAgentCoordinator:
         self.avg_processing_time = 0.0
         self.avg_coordination_overhead = 0.0
 
-        # Create memory for state persistence
-        self.memory = InMemorySaver()
+        # Checkpointer + store (ADR-057). Defaults to in-memory for tests.
+        self.checkpointer = checkpointer or InMemorySaver()
+        self.store = store
 
         # Initialize components
         self.llm = None
@@ -296,7 +300,7 @@ class MultiAgentCoordinator:
             self._setup_complete = True
             return True
 
-        except (RuntimeError, ValueError, AttributeError) as e:
+        except (RuntimeError, ValueError, AttributeError, ImportError) as e:
             logger.error("Failed to setup coordinator: %s", e)
             return False
 
@@ -362,8 +366,10 @@ class MultiAgentCoordinator:
             # Store agents for reference
             self.agents = agents
 
-            # Compile graph with memory
-            self.compiled_graph = self.graph.compile(checkpointer=self.memory)
+            # Compile graph with checkpointer + optional store (ADR-057).
+            self.compiled_graph = self.graph.compile(
+                checkpointer=self.checkpointer, store=self.store
+            )
 
             logger.info("Agent graph setup completed successfully")
 
@@ -532,9 +538,11 @@ class MultiAgentCoordinator:
     def process_query(
         self,
         query: str,
-        context: ChatMemoryBuffer | None = None,
+        context: Any | None = None,
         settings_override: dict[str, Any] | None = None,
         thread_id: str = "default",
+        user_id: str = "local",
+        checkpoint_id: str | None = None,
     ) -> AgentResponse:
         """Process user query through multi-agent pipeline.
 
@@ -543,9 +551,11 @@ class MultiAgentCoordinator:
 
         Args:
             query: User query to process
-            context: Optional conversation context for continuity
+            context: Optional caller-provided context (not persisted).
             settings_override: Optional settings to override defaults
             thread_id: Thread ID for conversation continuity
+            user_id: User namespace identifier (used for memory scoping).
+            checkpoint_id: Optional checkpoint id to resume from (time travel).
 
         Returns:
             AgentResponse with content, sources, metadata, and performance metrics
@@ -579,15 +589,20 @@ class MultiAgentCoordinator:
             initial_state = MultiAgentState(
                 messages=[HumanMessage(content=query)],
                 tools_data=tools_data,
-                context=context,
                 total_start_time=start_time,
                 output_mode="last_message",
                 parallel_execution_active=True,
-            )
+            ).model_dump()
 
             # Run multi-agent workflow with performance tracking
             coordination_start = time.perf_counter()
-            result = self._run_agent_workflow(initial_state, thread_id)
+            result = self._run_agent_workflow(
+                initial_state,
+                thread_id=thread_id,
+                user_id=user_id,
+                checkpoint_id=checkpoint_id,
+                runtime_context=settings_override,
+            )
             coordination_time = time.perf_counter() - coordination_start
 
             # Handle timeout signaled by workflow
@@ -686,7 +701,13 @@ class MultiAgentCoordinator:
             return self._create_error_response(str(e), start_time)
 
     def _run_agent_workflow(
-        self, initial_state: MultiAgentState, thread_id: str
+        self,
+        initial_state: dict[str, Any],
+        *,
+        thread_id: str,
+        user_id: str,
+        checkpoint_id: str | None,
+        runtime_context: dict[str, Any] | None,
     ) -> dict[str, Any]:
         """Run the multi-agent workflow with timeout protection.
 
@@ -704,11 +725,16 @@ class MultiAgentCoordinator:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
 
-            config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+            cfg: dict[str, Any] = {"thread_id": str(thread_id), "user_id": str(user_id)}
+            if checkpoint_id:
+                cfg["checkpoint_id"] = str(checkpoint_id)
+            config: RunnableConfig = {"configurable": cfg}
             result: dict[str, Any] | None = None
-            for state in self.compiled_graph.stream(
+            graph = cast(Any, self.compiled_graph)
+            for state in graph.stream(
                 initial_state,
                 config=config,
+                context=runtime_context,
                 stream_mode="values",
             ):
                 if isinstance(state, dict):
@@ -724,7 +750,9 @@ class MultiAgentCoordinator:
                     result = cast(
                         dict[str, Any], model_dump() if callable(model_dump) else {}
                     )
-                elapsed = time.perf_counter() - initial_state.total_start_time
+                elapsed = time.perf_counter() - float(
+                    initial_state.get("total_start_time", 0.0)
+                )
                 if elapsed > self.max_agent_timeout:
                     logger.warning("Agent workflow timeout after %.2fs", elapsed)
                     try:
@@ -742,7 +770,7 @@ class MultiAgentCoordinator:
                 "(thread_id=%s)",
                 thread_id,
             )
-            return initial_state.model_dump()
+            return initial_state
 
         except (RuntimeError, ValueError, AttributeError, TimeoutError) as e:
             logger.error("Agent workflow execution failed: %s", e)
@@ -842,7 +870,7 @@ class MultiAgentCoordinator:
     def _fallback_basic_rag(
         self,
         query: str,
-        _context: ChatMemoryBuffer | None,
+        _context: Any | None,
         start_time: float,
     ) -> AgentResponse:
         """Fallback to basic RAG when multi-agent system fails."""
@@ -945,6 +973,54 @@ class MultiAgentCoordinator:
         # Include ADR compliance snapshot for observability
         stats["adr_compliance"] = self.validate_adr_compliance()
         return stats
+
+    # --- Persistence helpers (ADR-057) ---
+
+    def get_state_values(
+        self,
+        *,
+        thread_id: str,
+        user_id: str = "local",
+        checkpoint_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Return the persisted state values for a thread (latest by default)."""
+        if not self._ensure_setup():
+            return {}
+        if self.compiled_graph is None:
+            return {}
+        cfg: dict[str, Any] = {"thread_id": str(thread_id), "user_id": str(user_id)}
+        if checkpoint_id:
+            cfg["checkpoint_id"] = str(checkpoint_id)
+        snap = self.compiled_graph.get_state({"configurable": cfg})
+        values = getattr(snap, "values", None)
+        return values if isinstance(values, dict) else {}
+
+    def list_checkpoints(
+        self, *, thread_id: str, user_id: str = "local", limit: int = 20
+    ) -> list[dict[str, Any]]:
+        """List recent checkpoints for a thread (newest first)."""
+        if not self._ensure_setup():
+            return []
+        if self.compiled_graph is None:
+            return []
+        cfg: dict[str, Any] = {"thread_id": str(thread_id), "user_id": str(user_id)}
+        out: list[dict[str, Any]] = []
+        try:
+            for snap in self.compiled_graph.get_state_history(
+                {"configurable": cfg}, limit=int(limit)
+            ):
+                config = getattr(snap, "config", None)
+                conf = config.get("configurable") if isinstance(config, dict) else None
+                conf = conf if isinstance(conf, dict) else {}
+                out.append(
+                    {
+                        "checkpoint_id": conf.get("checkpoint_id"),
+                        "checkpoint_ns": conf.get("checkpoint_ns", ""),
+                    }
+                )
+        except Exception as exc:
+            logger.debug("Checkpoint listing failed: %s", exc)
+        return out
 
     def validate_system_status(self) -> dict[str, bool]:
         """Validate system components and performance."""

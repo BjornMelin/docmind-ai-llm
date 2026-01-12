@@ -62,6 +62,46 @@ def _maybe_rotate(path: Path) -> None:
         logging.debug("telemetry rotation skipped: %s", exc)
 
 
+def _sanitize_event(event: dict[str, Any]) -> dict[str, Any]:
+    """Apply final-release telemetry hygiene (local-first; no blobs/paths)."""
+
+    def _sanitize_value(value: Any, *, depth: int) -> Any:
+        if depth <= 0:
+            return value
+        # Ensure JSON-serializable and avoid leaking host paths.
+        if isinstance(value, Path):
+            return value.name
+        if isinstance(value, dict):
+            return _sanitize_mapping(value, depth=depth - 1)
+        if isinstance(value, list):
+            return [_sanitize_value(v, depth=depth - 1) for v in value]
+        return value
+
+    def _sanitize_mapping(mapping: dict[Any, Any], *, depth: int) -> dict[str, Any]:
+        cleaned: dict[str, Any] = {}
+        for key, value in mapping.items():
+            skey = str(key)
+            # Never persist base64 blobs.
+            if "base64" in skey.lower() or skey.endswith("_base64"):
+                continue
+            # Avoid persisting filesystem paths; keep only a safe basename.
+            if (skey == "path" or skey.endswith("_path")) and isinstance(value, str):
+                v = value
+                if (
+                    v.startswith("/")
+                    or v.startswith("\\\\")
+                    or ":" in v[:4]
+                    or "/" in v
+                    or "\\" in v
+                ):
+                    cleaned[skey] = Path(v).name
+                    continue
+            cleaned[skey] = _sanitize_value(value, depth=depth)
+        return cleaned
+
+    return _sanitize_mapping(event, depth=5)
+
+
 def log_jsonl(event: dict[str, Any]) -> None:
     """Append a JSON event with ISO timestamp to the local JSONL file.
 
@@ -84,7 +124,7 @@ def log_jsonl(event: dict[str, Any]) -> None:
 
     rec = {
         "ts": datetime.now(UTC).isoformat(),
-        **event,
+        **_sanitize_event(event),
     }
     # Include request_id when present
     with contextlib.suppress(LookupError):

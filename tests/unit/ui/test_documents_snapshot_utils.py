@@ -277,7 +277,8 @@ def test_rebuild_snapshot_writes_manifest(
     formats = {item["format"] for item in exports_meta}
     assert "jsonl" in formats
     for item in exports_meta:
-        assert item["path"].startswith("graph/")
+        assert item["filename"].startswith("graph_export-")
+        assert "/" not in item["filename"]
         assert item["seed_count"] == 32
         assert item["size_bytes"] > 0
         assert item["duration_ms"] >= 0

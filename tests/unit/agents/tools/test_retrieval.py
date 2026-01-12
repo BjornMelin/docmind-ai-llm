@@ -226,10 +226,24 @@ class TestParsingBoundaries:
         assert data["documents"][1]["content"] == "Second document"
 
     def test_retrieve_parsing_dict_list_passthrough(self):
-        """Test passthrough parsing of properly formatted document dictionaries."""
+        """Test parsing of document dictionaries enforces persistence hygiene."""
         inputs = [
-            {"content": "First doc", "score": 0.9},
-            {"content": "Second doc", "score": 0.8},
+            {
+                "content": "First doc",
+                "score": 0.9,
+                "metadata": {
+                    "doc_id": "doc-1",
+                    "source": "/abs/source.pdf",
+                    "image_path": "/abs/path.webp",
+                    "thumbnail_base64": "AAAA",
+                },
+                "image_base64": "BBBB",
+            },
+            {
+                "content": "Second doc",
+                "score": 0.8,
+                "metadata": {"doc_id": "doc-2"},
+            },
         ]
 
         mock_state = {"tools_data": {"vector": Mock()}}
@@ -249,7 +263,14 @@ class TestParsingBoundaries:
             )
 
         assert len(data["documents"]) == 2
-        assert data["documents"] == inputs
+        first = data["documents"][0]
+        assert first["content"] == "First doc"
+        assert "image_base64" not in first
+        assert "thumbnail_base64" not in first.get("metadata", {})
+        assert "image_path" not in first.get("metadata", {})
+        assert first.get("metadata", {}).get("doc_id") == "doc-1"
+        assert first.get("metadata", {}).get("source") == "source.pdf"
+        assert data["documents"][1].get("metadata", {}).get("doc_id") == "doc-2"
 
     def test_retrieve_parsing_fallback_conversion(self):
         """Test fallback conversion for unexpected result formats."""

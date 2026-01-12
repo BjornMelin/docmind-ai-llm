@@ -23,9 +23,10 @@ Architecture Decision:
     the hybrid organization strategy.
 """
 
-from typing import Any
+from typing import Annotated, Any
 
-from llama_index.core.memory import ChatMemoryBuffer
+from langchain_core.messages import AnyMessage
+from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field
 
 
@@ -103,9 +104,8 @@ class MultiAgentState(BaseModel):
     """
 
     # Core state
-    messages: list[Any] = Field(default_factory=list)
+    messages: Annotated[list[AnyMessage], add_messages] = Field(default_factory=list)
     tools_data: dict[str, Any] = Field(default_factory=dict)
-    context: ChatMemoryBuffer | None = None
 
     # Agent decisions and results
     routing_decision: dict[str, Any] = Field(default_factory=dict)

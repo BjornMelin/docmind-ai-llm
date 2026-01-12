@@ -10,6 +10,7 @@ Unstructured integrations (KISS/library-first).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import time
@@ -45,6 +46,7 @@ from src.models.processing import (
     IngestionResult,
     ManifestSummary,
 )
+from src.persistence.artifacts import ArtifactStore
 from src.persistence.hashing import compute_config_hash, compute_corpus_hash
 from src.processing.pdf_pages import save_pdf_page_images
 
@@ -206,10 +208,12 @@ def _document_from_input(
             RuntimeError,
         ) as exc:  # pragma: no cover
             logger.debug("UnstructuredReader failed: %s", exc)
+            safe_name = Path(item.source_path).name if item.source_path else "<bytes>"
             logger.info(
-                "Falling back to plain-text read for %s due to UnstructuredReader "
-                "failure",
-                item.source_path,
+                "Falling back to plain-text read for %s (doc_id=%s) due to "
+                "UnstructuredReader failure",
+                safe_name,
+                item.document_id,
             )
             text = Path(item.source_path).read_text(encoding="utf-8", errors="ignore")
             docs = [Document(text=text, doc_id=item.document_id)]
@@ -225,13 +229,29 @@ def _document_from_input(
         doc.doc_id = item.document_id
         doc.metadata.update(item.metadata)
         doc.metadata.setdefault("document_id", item.document_id)
-        if item.source_path is not None:
-            doc.metadata.setdefault("source_path", str(item.source_path))
+        # Final-release: do not persist raw filesystem paths in node metadata.
+        # Keep stable identifiers (document_id, sha256, source_filename) instead.
+        src = doc.metadata.get("source")
+        if isinstance(src, str):
+            # Unstructured/LlamaIndex often set `source` to a local path/URI.
+            # Normalize to a safe basename so durable stores never see absolute paths.
+            with contextlib.suppress(Exception):
+                doc.metadata["source"] = Path(src).name
+        elif src is not None:
+            with contextlib.suppress(Exception):
+                doc.metadata.pop("source", None)
+        for k in ("source_path", "file_path", "path"):
+            with contextlib.suppress(Exception):
+                doc.metadata.pop(k, None)
     return docs
 
 
 def _page_image_exports(
-    path: Path, cfg: IngestionConfig, encrypt_override: bool
+    path: Path,
+    cfg: IngestionConfig,
+    encrypt_override: bool,
+    *,
+    document_id: str | None = None,
 ) -> list[ExportArtifact]:
     """Generate optional page-image export artifacts for PDF inputs.
 
@@ -239,6 +259,7 @@ def _page_image_exports(
         path: Source document path.
         cfg: Ingestion configuration controlling cache directories.
         encrypt_override: Per-document override to force image encryption.
+        document_id: Stable document identifier for metadata attachment.
 
     Returns:
         list[ExportArtifact]: Export metadata describing rendered page images.
@@ -272,10 +293,29 @@ def _page_image_exports(
         ):
             content_type = "image/jpeg"
 
-        metadata = {k: v for k, v in entry.items() if k != "image_path"}
+        # Final-release: avoid returning path-like fields in persistable metadata.
+        metadata = {
+            k: v for k, v in entry.items() if k not in {"image_path", "thumbnail_path"}
+        }
+        # Attach stable identifiers for downstream indexing.
+        if document_id:
+            metadata.setdefault("doc_id", document_id)
+            metadata.setdefault("document_id", document_id)
+        metadata.setdefault("source_filename", path.name)
+
+        page_no = (
+            entry.get("page_no")
+            or entry.get("page")
+            or entry.get("page_number")
+            or entry.get("page_num")
+        )
+        try:
+            page_no_int = int(page_no) if page_no is not None else 0
+        except (TypeError, ValueError):
+            page_no_int = 0
         exports.append(
             ExportArtifact(
-                name=f"pdf-page-{entry['page']}",
+                name=f"pdf-page-{page_no_int}" if page_no_int else "pdf-page",
                 path=image_path,
                 content_type=content_type,
                 metadata=metadata,
@@ -304,9 +344,192 @@ def _load_documents(
         documents.extend(_document_from_input(reader, item))
         if item.source_path is not None:
             exports.extend(
-                _page_image_exports(Path(item.source_path), cfg, item.encrypt_images)
+                _page_image_exports(
+                    Path(item.source_path),
+                    cfg,
+                    item.encrypt_images,
+                    document_id=item.document_id,
+                )
             )
     return documents, exports
+
+
+def _index_page_images(
+    exports: list[ExportArtifact],
+    cfg: IngestionConfig,
+    *,
+    purge_doc_ids: set[str] | None = None,
+) -> dict[str, Any]:
+    """Index rendered PDF page images into Qdrant (best-effort).
+
+    Final-release wiring:
+    - Convert page-image exports to content-addressed artifact refs.
+    - Index page images into Qdrant image collection using SigLIP embeddings.
+    - Store **only** artifact references in Qdrant payload (no base64, no raw paths).
+
+    Returns:
+        dict[str, Any]: PII-safe counters/flags to include in the ingestion result.
+    """
+    if not bool(getattr(cfg, "enable_image_indexing", True)):
+        return {"image_index.enabled": False, "image_index.indexed": 0}
+
+    image_exports = [e for e in exports if str(e.content_type).startswith("image/")]
+    if not image_exports:
+        return {"image_index.enabled": True, "image_index.indexed": 0}
+
+    store = ArtifactStore.from_settings(app_settings)
+
+    records: list[Any] = []
+    skipped = 0
+    for e in image_exports:
+        meta = dict(getattr(e, "metadata", {}) or {})
+        doc_id = str(meta.get("doc_id") or meta.get("document_id") or "")
+        page_no_raw = meta.get("page_no") or meta.get("page") or meta.get("page_number")
+        try:
+            page_no = int(page_no_raw) if page_no_raw is not None else 0
+        except (TypeError, ValueError):
+            page_no = 0
+        if not doc_id or page_no <= 0:
+            skipped += 1
+            continue
+
+        try:
+            img_ref = store.put_file(Path(e.path))
+            img_path = store.resolve_path(img_ref)
+        except (OSError, ValueError) as exc:
+            logger.debug("ArtifactStore put failed: %s", exc)
+            skipped += 1
+            continue
+
+        thumb_ref = None
+        thumb_path = None
+        try:
+            from src.utils.images import ensure_thumbnail
+
+            thumb_dir = Path(e.path).parent / "thumbs"
+            thumb_dir.mkdir(parents=True, exist_ok=True)
+            thumb_local = ensure_thumbnail(
+                Path(e.path),
+                max_side=int(
+                    getattr(app_settings.processing, "thumbnail_max_side", 384)
+                ),
+                thumb_dir=thumb_dir,
+                encrypt=bool(str(e.path).endswith(".enc")),
+            )
+            thumb_ref = store.put_file(Path(thumb_local))
+            thumb_path = store.resolve_path(thumb_ref)
+        except Exception:
+            thumb_ref = None
+            thumb_path = None
+
+        # Update export metadata with stable references (safe for persistence).
+        e.metadata.update(
+            {
+                "image_artifact_id": img_ref.sha256,
+                "image_artifact_suffix": img_ref.suffix,
+            }
+        )
+        if thumb_ref is not None:
+            e.metadata.update(
+                {
+                    "thumbnail_artifact_id": thumb_ref.sha256,
+                    "thumbnail_artifact_suffix": thumb_ref.suffix,
+                }
+            )
+
+        try:
+            from src.retrieval.image_index import PageImageRecord
+
+            records.append(
+                PageImageRecord(
+                    doc_id=doc_id,
+                    page_no=page_no,
+                    image=img_ref,
+                    image_path=img_path,
+                    thumbnail=thumb_ref,
+                    thumbnail_path=thumb_path,
+                    phash=meta.get("phash"),
+                    page_text=meta.get("page_text"),
+                    bbox=meta.get("bbox"),
+                )
+            )
+        except Exception as exc:  # pragma: no cover
+            logger.debug("PageImageRecord build failed: %s", exc)
+            skipped += 1
+
+    if not records:
+        return {
+            "image_index.enabled": True,
+            "image_index.indexed": 0,
+            "image_index.skipped": skipped,
+        }
+
+    purged_points = 0
+    try:
+        from qdrant_client import QdrantClient
+
+        from src.retrieval.image_index import index_page_images_siglip
+        from src.utils.siglip_adapter import SiglipEmbedding
+        from src.utils.storage import get_client_config
+
+        t0 = time.time()
+        client = QdrantClient(**get_client_config())
+        if purge_doc_ids:
+            try:
+                from src.retrieval.image_index import delete_page_images_for_doc_id
+
+                for doc_id in sorted({str(d) for d in purge_doc_ids if d}):
+                    with contextlib.suppress(Exception):
+                        purged_points += int(
+                            delete_page_images_for_doc_id(
+                                client,
+                                app_settings.database.qdrant_image_collection,
+                                doc_id=doc_id,
+                            )
+                        )
+            except Exception:
+                purged_points = int(purged_points)
+        embedder = SiglipEmbedding()
+        indexed = index_page_images_siglip(
+            client,
+            collection_name=app_settings.database.qdrant_image_collection,
+            records=records,
+            embedder=embedder,
+            batch_size=int(getattr(cfg, "image_index_batch_size", 8)),
+        )
+        with contextlib.suppress(Exception):
+            client.close()
+        pruned = 0
+        try:
+            artifacts_cfg = getattr(app_settings, "artifacts", None)
+            max_mb = int(getattr(artifacts_cfg, "max_total_mb", 0) or 0)
+            if max_mb > 0:
+                pruned = store.prune(
+                    max_total_bytes=max_mb * 1024 * 1024,
+                    min_age_seconds=int(
+                        getattr(artifacts_cfg, "gc_min_age_seconds", 0) or 0
+                    ),
+                )
+        except Exception:
+            pruned = 0
+        return {
+            "image_index.enabled": True,
+            "image_index.collection": app_settings.database.qdrant_image_collection,
+            "image_index.indexed": int(indexed),
+            "image_index.skipped": skipped,
+            "image_index.purged_points": int(purged_points),
+            "image_index.latency_ms": int((time.time() - t0) * 1000),
+            "image_index.artifact_gc_deleted": int(pruned),
+        }
+    except Exception as exc:  # pragma: no cover - fail open
+        logger.info("Image indexing skipped: %s", type(exc).__name__)
+        logger.debug("Image indexing error: %s", exc)
+        return {
+            "image_index.enabled": True,
+            "image_index.indexed": 0,
+            "image_index.skipped": skipped,
+            "image_index.error_type": type(exc).__name__,
+        }
 
 
 async def ingest_documents(
@@ -346,6 +569,8 @@ async def ingest_documents(
     if docstore_path is not None and pipeline.docstore is not None:
         pipeline.docstore.persist(str(docstore_path))
 
+    img_index_meta = _index_page_images(exports, cfg)
+
     corpus_paths = [Path(item.source_path) for item in inputs if item.source_path]
     base_dir: Path | None = None
     if corpus_paths:
@@ -362,8 +587,12 @@ async def ingest_documents(
 
     metadata = {
         "document_count": len(inputs),
-        "cache_path": str(cache_path),
-        "docstore_path": str(docstore_path) if docstore_path else None,
+        # Final-release: avoid emitting absolute local filesystem paths in
+        # structured results that could be logged or persisted.
+        "cache_db": cache_path.name,
+        "docstore_enabled": bool(docstore_path),
+        "docstore_filename": docstore_path.name if docstore_path else None,
+        **img_index_meta,
     }
 
     return IngestionResult(
@@ -402,8 +631,44 @@ def ingest_documents_sync(
     )
 
 
+def reindex_page_images_sync(
+    cfg: IngestionConfig,
+    inputs: Sequence[IngestionInput],
+) -> dict[str, Any]:
+    """Rebuild page-image exports and reindex them into Qdrant (best-effort).
+
+    This is an operational helper for artifact repair and lifecycle maintenance.
+    It does **not** ingest text or rebuild vector/graph indices.
+
+    Returns:
+        dict[str, Any]: Mapping containing updated exports and PII-safe metadata.
+    """
+    exports: list[ExportArtifact] = []
+    purge_doc_ids: set[str] = set()
+    for item in inputs:
+        if item.source_path is None:
+            continue
+        purge_doc_ids.add(str(item.document_id))
+        exports.extend(
+            _page_image_exports(
+                Path(item.source_path),
+                cfg,
+                item.encrypt_images,
+                document_id=item.document_id,
+            )
+        )
+    meta = _index_page_images(exports, cfg, purge_doc_ids=purge_doc_ids)
+    return {
+        "document_count": len([i for i in inputs if i.source_path is not None]),
+        "export_count": len(exports),
+        "metadata": meta,
+        "exports": exports,
+    }
+
+
 __all__ = [
     "build_ingestion_pipeline",
     "ingest_documents",
     "ingest_documents_sync",
+    "reindex_page_images_sync",
 ]

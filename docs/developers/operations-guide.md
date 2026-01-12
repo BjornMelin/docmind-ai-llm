@@ -77,7 +77,8 @@ services:
       # Core production settings
       - DOCMIND_DEBUG=false
       - DOCMIND_LOG_LEVEL=INFO
-      - DOCMIND_BASE_PATH=/app/data
+      - DOCMIND_DATA_DIR=/app/data
+      - DOCMIND_CACHE_DIR=/app/cache
       
       # GPU optimization for RTX 4090
       - VLLM_ATTENTION_BACKEND=FLASHINFER
@@ -87,13 +88,14 @@ services:
       - VLLM_DISABLE_CUSTOM_ALL_REDUCE=1
       
       # Service connections
-      - DOCMIND_QDRANT__URL=http://qdrant:6333
-      - DOCMIND_LLM__BASE_URL=http://localhost:11434
+      - DOCMIND_DATABASE__QDRANT_URL=http://qdrant:6333
+      - DOCMIND_LLM_BACKEND=ollama
+      - DOCMIND_OLLAMA_BASE_URL=http://host.docker.internal:11434
       
       # Multi-agent optimization
       - DOCMIND_AGENTS__DECISION_TIMEOUT=200
       - DOCMIND_AGENTS__ENABLE_MULTI_AGENT=true
-      - DOCMIND_AGENTS__CONCURRENT_AGENTS=3
+      - DOCMIND_AGENTS__MAX_CONCURRENT_AGENTS=3
     
     deploy:
       resources:

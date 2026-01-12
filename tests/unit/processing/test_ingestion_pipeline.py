@@ -61,7 +61,9 @@ async def test_ingest_documents_with_bytes_payload(tmp_path: Path) -> None:
     assert result.duration_ms >= 0
     assert result.manifest.payload_count == len(result.nodes)
     assert result.metadata["document_count"] == 1
-    assert Path(result.metadata["docstore_path"]).exists()
+    assert result.metadata["docstore_enabled"] is True
+    assert cfg.docstore_path is not None
+    assert cfg.docstore_path.exists()
 
 
 @pytest.mark.asyncio
@@ -86,8 +88,12 @@ async def test_ingest_documents_with_path(tmp_path: Path) -> None:
     result = await ingest_documents(cfg, inputs, embedding=DummyEmbedding())
 
     assert result.manifest.corpus_hash
-    assert result.metadata["cache_path"].endswith("docmind.duckdb")
+    assert result.metadata["cache_db"] == "docmind.duckdb"
     assert (tmp_path / "docstore.json").exists()
+    assert result.documents
+    for doc in result.documents:
+        meta = getattr(doc, "metadata", {}) or {}
+        assert "source_path" not in meta
 
 
 def test_ingest_documents_sync_wrapper(tmp_path: Path) -> None:
@@ -275,7 +281,7 @@ def test_load_documents_uses_reader(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr(module, "UnstructuredReader", DummyReader)
     monkeypatch.setattr(
-        module, "_page_image_exports", lambda path, cfg, flag: ["export"]
+        module, "_page_image_exports", lambda *args, **kwargs: ["export"]
     )
 
     sample = tmp_path / "sample.pdf"

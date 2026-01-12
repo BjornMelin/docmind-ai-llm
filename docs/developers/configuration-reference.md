@@ -142,23 +142,34 @@ DOCMIND_VLLM__DTYPE=auto
 
 ### LLM Backend Configuration
 
-| Variable                   | Type | Default                             | Description                             |
-| -------------------------- | ---- | ----------------------------------- | --------------------------------------- |
-| `DOCMIND_LLM_BACKEND`      | str  | `"vllm"`                            | LLM backend type (vllm, ollama, openai) |
-| `DOCMIND_LLM__BASE_URL`    | str  | `"http://localhost:11434"`          | LLM service base URL                    |
-| `DOCMIND_LLM__MODEL`       | str  | `"Qwen/Qwen3-4B-Instruct-2507-FP8"` | Model name                              |
-| `DOCMIND_LLM__TIMEOUT`     | int  | `300`                               | Request timeout in seconds              |
-| `DOCMIND_LLM__MAX_RETRIES` | int  | `3`                                 | Maximum retry attempts                  |
+| Variable                        | Type | Default                        | Description                                                         |
+| ------------------------------- | ---- | ------------------------------ | ------------------------------------------------------------------- |
+| `DOCMIND_LLM_BACKEND`           | str  | `"ollama"`                     | Backend selector (`ollama`, `vllm`, `lmstudio`, `llamacpp`)          |
+| `DOCMIND_MODEL`                 | str  | `""`                           | Optional global model override (also overrides `vllm.model`)         |
+| `DOCMIND_OLLAMA_BASE_URL`       | str  | `"http://localhost:11434"`     | Ollama server base URL                                              |
+| `DOCMIND_VLLM__VLLM_BASE_URL`   | str  | `"http://localhost:8000"`      | vLLM server base URL (OpenAI-compatible)                            |
+| `DOCMIND_LMSTUDIO_BASE_URL`     | str  | `"http://localhost:1234/v1"`   | LM Studio OpenAI-compatible base URL (normalized to include `/v1`)   |
+| `DOCMIND_LLAMACPP_BASE_URL`     | str  | `""`                           | Optional llama.cpp OpenAI-compatible server base URL                 |
+| `DOCMIND_OPENAI__BASE_URL`      | str  | `"http://localhost:1234/v1"`   | OpenAI-compatible base URL (used by LM Studio / local servers too)   |
+| `DOCMIND_OPENAI__API_KEY`       | str  | `""`                           | API key (local servers often accept placeholder keys)                |
+| `DOCMIND_LLM_REQUEST_TIMEOUT_SECONDS` | int | `120`                     | Global LLM request timeout                                           |
+| `DOCMIND_LLM_STREAMING_ENABLED` | bool | `true`                         | Enable streaming responses when supported                            |
 
 **Example Configuration:**
 
 ```bash
-# LLM backend settings
-DOCMIND_LLM_BACKEND=vllm
-DOCMIND_LLM__BASE_URL=http://localhost:11434
-DOCMIND_LLM__MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8
-DOCMIND_LLM__TIMEOUT=300
-DOCMIND_LLM__MAX_RETRIES=3
+# LLM backend settings (local-first)
+DOCMIND_LLM_BACKEND=ollama
+DOCMIND_OLLAMA_BASE_URL=http://localhost:11434
+
+# Optional: vLLM OpenAI-compatible server
+# DOCMIND_LLM_BACKEND=vllm
+# DOCMIND_VLLM__VLLM_BASE_URL=http://localhost:8000
+# DOCMIND_VLLM__MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8
+
+# Common LLM controls
+DOCMIND_LLM_REQUEST_TIMEOUT_SECONDS=120
+DOCMIND_LLM_STREAMING_ENABLED=true
 ```
 
 ### BGE-M3 Embedding Configuration
@@ -212,6 +223,7 @@ DOCMIND_AGENTS__CONCURRENT_AGENTS=3
 | `DOCMIND_PROCESSING__MAX_DOCUMENT_SIZE_MB` | int  | `100`              | Maximum document size in MB          |
 | `DOCMIND_PROCESSING__ENABLE_OCR`           | bool | `true`             | Enable OCR for image-based documents |
 | `DOCMIND_PROCESSING__SPACY_MODEL`          | str  | `"en_core_web_sm"` | spaCy model for NLP processing       |
+| `DOCMIND_PROCESSING__ENCRYPT_PAGE_IMAGES`  | bool | `false`            | Encrypt rendered PDF page images (`*.enc`) |
 
 **Example Configuration:**
 
@@ -222,27 +234,48 @@ DOCMIND_PROCESSING__CHUNK_OVERLAP=150
 DOCMIND_PROCESSING__MAX_DOCUMENT_SIZE_MB=100
 DOCMIND_PROCESSING__ENABLE_OCR=true
 DOCMIND_PROCESSING__SPACY_MODEL=en_core_web_sm
+DOCMIND_PROCESSING__ENCRYPT_PAGE_IMAGES=false
+```
+
+**PDF page image encryption keys (optional):**
+
+```bash
+# AES-GCM key for encrypting page images; base64-encoded 32B key
+DOCMIND_IMG_AES_KEY_BASE64=
+DOCMIND_IMG_KID=local-key-1
+DOCMIND_IMG_DELETE_PLAINTEXT=false
 ```
 
 ### Qdrant Vector Database Configuration
 
-| Variable                               | Type | Default                   | Description                           |
-| -------------------------------------- | ---- | ------------------------- | ------------------------------------- |
-| `DOCMIND_QDRANT__URL`                  | str  | `"http://localhost:6333"` | Qdrant service URL                    |
-| `DOCMIND_QDRANT__COLLECTION_NAME`      | str  | `"docmind_vectors"`       | Collection name for vectors           |
-| `DOCMIND_QDRANT__VECTOR_SIZE`          | int  | `1024`                    | BGE-M3 dense embedding dimension      |
-| `DOCMIND_QDRANT__DISTANCE_METRIC`      | str  | `"Cosine"`                | Distance metric for similarity search |
-| `DOCMIND_QDRANT__ENABLE_HYBRID_SEARCH` | bool | `true`                    | Enable dense + sparse hybrid search   |
+| Variable                                   | Type | Default                   | Description                                              |
+| ------------------------------------------ | ---- | ------------------------- | -------------------------------------------------------- |
+| `DOCMIND_DATABASE__QDRANT_URL`             | str  | `"http://localhost:6333"` | Qdrant service URL                                       |
+| `DOCMIND_DATABASE__QDRANT_COLLECTION`      | str  | `"docmind_docs"`          | Text collection (named vectors: `text-dense`, `text-sparse`) |
+| `DOCMIND_DATABASE__QDRANT_IMAGE_COLLECTION`| str  | `"docmind_images"`        | Image collection (named vector: `siglip`)                |
+| `DOCMIND_DATABASE__QDRANT_TIMEOUT`         | int  | `60`                      | Client timeout in seconds                                |
 
 **Example Configuration:**
 
 ```bash
 # Qdrant vector database
-DOCMIND_QDRANT__URL=http://localhost:6333
-DOCMIND_QDRANT__COLLECTION_NAME=docmind_vectors
-DOCMIND_QDRANT__VECTOR_SIZE=1024
-DOCMIND_QDRANT__DISTANCE_METRIC=Cosine
-DOCMIND_QDRANT__ENABLE_HYBRID_SEARCH=true
+DOCMIND_DATABASE__QDRANT_URL=http://localhost:6333
+DOCMIND_DATABASE__QDRANT_COLLECTION=docmind_docs
+DOCMIND_DATABASE__QDRANT_IMAGE_COLLECTION=docmind_images
+DOCMIND_DATABASE__QDRANT_TIMEOUT=60
+```
+
+### Artifact Storage (page images + thumbnails)
+
+DocMind stores binary multimodal artifacts (rendered PDF page images + thumbnails) in a
+content-addressed ArtifactStore rooted under `DOCMIND_DATA_DIR` by default. Durable stores
+(Qdrant payloads, LangGraph SQLite) persist only `ArtifactRef(sha256, suffix)`.
+
+```bash
+# Artifact store (content-addressed)
+# DOCMIND_ARTIFACTS__DIR=./data/artifacts
+DOCMIND_ARTIFACTS__MAX_TOTAL_MB=4096
+DOCMIND_ARTIFACTS__GC_MIN_AGE_SECONDS=3600
 ```
 
 ## User Configuration Validation
@@ -740,7 +773,7 @@ DOCMIND_PROCESSING__MAX_DOCUMENT_SIZE_MB=50
 # Testing settings - lightweight models, fast execution
 DOCMIND_DEBUG=true
 DOCMIND_LLM_BACKEND=ollama
-DOCMIND_LLM__MODEL=llama3.2:1b
+DOCMIND_MODEL=llama3.2:1b
 DOCMIND_EMBEDDING__MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
 DOCMIND_AGENTS__DECISION_TIMEOUT=100
 DOCMIND_PROCESSING__CHUNK_SIZE=500
@@ -755,7 +788,7 @@ DOCMIND_LOG_LEVEL=INFO
 DOCMIND_VLLM__GPU_MEMORY_UTILIZATION=0.85
 DOCMIND_AGENTS__DECISION_TIMEOUT=200
 DOCMIND_PROCESSING__MAX_DOCUMENT_SIZE_MB=200
-DOCMIND_QDRANT__ENABLE_HYBRID_SEARCH=true
+DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=true
 ```
 
 ### Dynamic Configuration
@@ -820,7 +853,8 @@ def monitor_configuration_drift():
 # === CORE APPLICATION ===
 DOCMIND_DEBUG=false
 DOCMIND_LOG_LEVEL=INFO
-DOCMIND_BASE_PATH=./
+DOCMIND_DATA_DIR=./data
+DOCMIND_CACHE_DIR=./cache
 DOCMIND_APP_NAME="DocMind AI"
 DOCMIND_APP_VERSION=2.0.0
 
@@ -835,10 +869,12 @@ DOCMIND_VLLM__DTYPE=auto
 
 # === LLM BACKEND ===
 DOCMIND_LLM_BACKEND=vllm
-DOCMIND_LLM__BASE_URL=http://localhost:11434
-DOCMIND_LLM__MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8
-DOCMIND_LLM__TIMEOUT=300
-DOCMIND_LLM__MAX_RETRIES=3
+# vLLM server endpoint
+DOCMIND_VLLM__VLLM_BASE_URL=http://localhost:8000
+# Optional top-level override (also overrides vllm.model)
+# DOCMIND_MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8
+DOCMIND_LLM_REQUEST_TIMEOUT_SECONDS=120
+DOCMIND_LLM_STREAMING_ENABLED=true
 
 # === BGE-M3 EMBEDDINGS ===
 DOCMIND_EMBEDDING__MODEL_NAME=BAAI/bge-m3
@@ -862,11 +898,10 @@ DOCMIND_PROCESSING__ENABLE_OCR=true
 DOCMIND_PROCESSING__SPACY_MODEL=en_core_web_sm
 
 # === QDRANT VECTOR DATABASE ===
-DOCMIND_QDRANT__URL=http://localhost:6333
-DOCMIND_QDRANT__COLLECTION_NAME=docmind_vectors
-DOCMIND_QDRANT__VECTOR_SIZE=1024
-DOCMIND_QDRANT__DISTANCE_METRIC=Cosine
-DOCMIND_QDRANT__ENABLE_HYBRID_SEARCH=true
+DOCMIND_DATABASE__QDRANT_URL=http://localhost:6333
+DOCMIND_DATABASE__QDRANT_COLLECTION=docmind_docs
+DOCMIND_DATABASE__QDRANT_IMAGE_COLLECTION=docmind_images
+DOCMIND_DATABASE__QDRANT_TIMEOUT=60
 
 # === vLLM SYSTEM OPTIMIZATION ===
 VLLM_ATTENTION_BACKEND=FLASHINFER
@@ -904,8 +939,9 @@ services:
       - VLLM_KV_CACHE_DTYPE=fp8_e5m2
 
       # Service URLs
-      - DOCMIND_QDRANT__URL=http://qdrant:6333
-      - DOCMIND_LLM__BASE_URL=http://localhost:11434
+      - DOCMIND_DATABASE__QDRANT_URL=http://qdrant:6333
+      - DOCMIND_LLM_BACKEND=ollama
+      - DOCMIND_OLLAMA_BASE_URL=http://host.docker.internal:11434
 
     deploy:
       resources:

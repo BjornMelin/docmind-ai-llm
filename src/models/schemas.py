@@ -273,8 +273,8 @@ class PdfPageImageNode(BaseModel):
     modality: Literal["pdf_page_image"] = Field(
         default="pdf_page_image", description="Modality marker"
     )
-    source_path: str = Field(description="Path to source PDF")
-    hash: str = Field(description="SHA-256 hash of image bytes")
+    source_filename: str = Field(description="Basename of source PDF")
+    hash: str = Field(description="SHA-256 hash of image bytes (artifact id)")
 
 
 class AnalysisOutput(BaseModel):

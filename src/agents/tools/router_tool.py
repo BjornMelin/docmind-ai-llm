@@ -8,7 +8,7 @@ from contextlib import suppress
 from typing import Annotated, Any, cast
 
 from langchain_core.tools import tool
-from langgraph.prebuilt import InjectedState
+from langgraph.prebuilt import InjectedState, ToolRuntime
 from loguru import logger
 from opentelemetry import trace
 
@@ -22,6 +22,7 @@ _ROUTER_TRACER = trace.get_tracer("docmind.tools.router")
 def router_tool(
     query: str,
     state: Annotated[dict | None, InjectedState] = None,
+    runtime: ToolRuntime = None,  # type: ignore[assignment]
 ) -> str:
     """Route a query through a prebuilt RouterQueryEngine and return JSON."""
     start = time.perf_counter()
@@ -30,8 +31,14 @@ def router_tool(
         try:
             st = state if isinstance(state, dict) else {}
             tools_data = cast(dict, st.get("tools_data", {})) if st else {}
-
-            router_engine = st.get("router_engine") or tools_data.get("router_engine")
+            runtime_ctx = runtime.context if runtime is not None else None
+            router_engine = None
+            if isinstance(runtime_ctx, dict):
+                router_engine = runtime_ctx.get("router_engine")
+            if router_engine is None:
+                router_engine = st.get("router_engine") or tools_data.get(
+                    "router_engine"
+                )
             span.set_attribute("router.engine.available", router_engine is not None)
             if router_engine is None:
                 span.set_attribute("router.success", False)

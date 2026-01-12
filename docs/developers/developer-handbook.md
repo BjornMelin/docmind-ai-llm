@@ -128,7 +128,7 @@ agent_timeout = settings.agents.decision_timeout
 
 # INCORRECT: Direct environment variable access
 import os
-model = os.getenv("DOCMIND_LLM__MODEL")  # Don't do this
+model = os.getenv("DOCMIND_MODEL")  # Don't do this
 ```
 
 ## Implementation Patterns

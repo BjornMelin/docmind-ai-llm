@@ -47,6 +47,12 @@ def _get_key() -> bytes | None:
         return None
 
 
+def get_image_kid() -> str | None:
+    """Return the configured image key id (kid) for AES-GCM metadata, if any."""
+    kid = os.getenv(_ENV_KID, "").strip()
+    return kid or None
+
+
 def encrypt_file(path: str) -> str:
     """Encrypt file at `path` and return new `.enc` path.
 
@@ -64,7 +70,7 @@ def encrypt_file(path: str) -> str:
         data = p.read_bytes()
         aes = AESGCM(key)
         nonce = os.urandom(12)
-        aad_env = os.getenv(_ENV_KID, "").encode("utf-8") or None
+        aad_env = (get_image_kid() or "").encode("utf-8") or None
         ct = aes.encrypt(nonce, data, associated_data=aad_env)
         out_path = p.with_suffix(p.suffix + ".enc")
         out_path.write_bytes(nonce + ct)
@@ -93,7 +99,7 @@ def decrypt_file(path: str) -> str:
         blob = p.read_bytes()
         nonce, ct = blob[:12], blob[12:]
         aes = AESGCM(key)
-        aad_env = os.getenv(_ENV_KID, "").encode("utf-8") or None
+        aad_env = (get_image_kid() or "").encode("utf-8") or None
         pt = aes.decrypt(nonce, ct, associated_data=aad_env)
         fd, name = tempfile.mkstemp(suffix=p.suffix.replace(".enc", ""))
         os.close(fd)
@@ -177,6 +183,7 @@ __all__ = [
     "build_owner_filter",
     "decrypt_file",
     "encrypt_file",
+    "get_image_kid",
     "redact_pii",
     "validate_export_path",
 ]

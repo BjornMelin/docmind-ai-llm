@@ -288,6 +288,12 @@ class RetrievalConfig(BaseModel):
     use_reranking: bool = Field(default=True)
     reranking_top_k: int = Field(default=5, ge=1, le=20)
     reranker_normalize_scores: bool = Field(default=True)
+    enable_image_retrieval: bool = Field(
+        default=True,
+        description=(
+            "Enable visual retrieval (SigLIP text->image) and multimodal fusion."
+        ),
+    )
 
     # Server-side fusion settings (ADR-024 v2.8)
     fusion_mode: Literal["rrf", "dbsf"] = Field(
@@ -398,6 +404,27 @@ class CacheConfig(BaseModel):
     filename: str = Field(default="docmind.duckdb")
 
 
+class ArtifactsConfig(BaseModel):
+    """Local content-addressed artifact storage (page images, thumbnails)."""
+
+    dir: Path | None = Field(
+        default=None,
+        description="Optional override; default is data_dir/artifacts",
+    )
+    max_total_mb: int = Field(
+        default=4096,
+        ge=100,
+        le=200_000,
+        description="Best-effort artifact GC budget (MB)",
+    )
+    gc_min_age_seconds: int = Field(
+        default=3600,
+        ge=0,
+        le=31_536_000,
+        description="Do not GC artifacts newer than this age (seconds)",
+    )
+
+
 class HashingConfig(BaseModel):
     """Deterministic hashing and canonicalisation configuration."""
 
@@ -439,6 +466,7 @@ class DatabaseConfig(BaseModel):
     vector_store_type: str = Field(default="qdrant")
     qdrant_url: str = Field(default="http://localhost:6333")
     qdrant_collection: str = Field(default="docmind_docs")
+    qdrant_image_collection: str = Field(default="docmind_images")
     qdrant_timeout: int = Field(default=60, ge=10, le=300)
 
     # SQL Database
@@ -562,6 +590,7 @@ class DocMindSettings(BaseSettings):
 
     # File System Paths
     data_dir: Path = Field(default=Path("./data"))
+    artifacts: ArtifactsConfig = Field(default_factory=ArtifactsConfig)
     cache_dir: Path = Field(default=Path("./cache"))
     log_file: Path = Field(default=Path("./logs/docmind.log"))
 

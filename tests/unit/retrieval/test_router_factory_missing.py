@@ -99,7 +99,7 @@ def test_router_engine_warns_when_graph_disabled(
     finally:
         logger.remove(token)
 
-    assert get_router_tool_names(router) == ["semantic_search"]
+    assert get_router_tool_names(router) == ["semantic_search", "multimodal_search"]
     assert any(rf.GRAPH_DEPENDENCY_HINT in message for message in captured), (
         f"Expected warning containing '{rf.GRAPH_DEPENDENCY_HINT}', got: {captured}"
     )

@@ -1,73 +1,195 @@
-"""Document processing utility placeholders.
+"""Document helper utilities (final-release).
 
-Legacy ingestion helpers were removed as part of the 2025-09-16
-ingestion/observability refactor. The functions exposed here now raise
-``NotImplementedError`` so that any accidental usage surfaces immediately
-until the new LlamaIndex-first pipeline lands in later phases.
+This module provides lightweight, import-safe convenience wrappers for loading
+documents using LlamaIndex (Unstructured when available) while enforcing
+DocMind's path hygiene rules:
+
+- Never persist absolute filesystem paths in document metadata.
+- Normalize `metadata["source"]` to a safe basename when present.
 """
 
 from __future__ import annotations
 
+import hashlib
+import shutil
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import Any
 
 from loguru import logger
 
 
-def _raise_pending(feature: str) -> NoReturn:
-    # TODO(ingestion-phase-2): Replace placeholders with the LlamaIndex-first
-    # ingestion pipeline and remove this guard once implemented.
-    raise NotImplementedError(
-        f"{feature} is unavailable until the ingestion pipeline rewrite is complete."
-    )
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _sanitize_doc_metadata(
+    meta: dict[str, Any], *, source_filename: str
+) -> dict[str, Any]:
+    out = dict(meta or {})
+    # Drop common path keys.
+    for key in ("source_path", "file_path", "path"):
+        out.pop(key, None)
+    # Normalize `source` to basename (Unstructured/LlamaIndex frequently use
+    # paths here).
+    src = out.get("source")
+    if isinstance(src, str) and ("/" in src or "\\" in src or src.startswith("file:")):
+        out["source"] = Path(src).name
+    out.setdefault("source_filename", source_filename)
+    return out
 
 
 async def load_documents_unstructured(
-    _file_paths: list[str | Path], _settings: Any | None = None
+    file_paths: Sequence[str | Path], settings_obj: Any | None = None
 ) -> list[Any]:
-    """Placeholder coroutine for the upcoming ingestion helpers."""
-    # TODO(ingestion-phase-2): Implement unstructured ingestion for file paths.
-    _raise_pending("load_documents_unstructured")
+    """Load documents using UnstructuredReader when installed (async-friendly).
+
+    Returns a list of LlamaIndex `Document` objects. This function is safe to
+    call even when Unstructured is unavailable: it falls back to a plain-text
+    read for UTF-8-ish inputs.
+    """
+    from llama_index.core import Document
+
+    paths = [Path(p) for p in file_paths]
+    docs: list[Any] = []
+    reader = None
+    try:
+        from llama_index.readers.file import UnstructuredReader
+
+        reader = UnstructuredReader()
+    except Exception:
+        reader = None
+
+    for path in paths:
+        if not path.exists():
+            continue
+        doc_id = f"doc-{_sha256_file(path)[:16]}"
+        if reader is not None:
+            try:
+                loaded = reader.load_data(  # type: ignore[call-arg]
+                    file=path,
+                    unstructured_kwargs={"filename": str(path)},
+                )
+                for item in loaded or []:
+                    meta = getattr(item, "metadata", {}) or {}
+                    item.doc_id = doc_id
+                    item.metadata = _sanitize_doc_metadata(
+                        meta,
+                        source_filename=path.name,
+                    )
+                    docs.append(item)
+                continue
+            except Exception as exc:
+                logger.debug("UnstructuredReader failed for %s: %s", path.name, exc)
+
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            text = ""
+        docs.append(
+            Document(
+                text=text,
+                doc_id=doc_id,
+                metadata=_sanitize_doc_metadata({}, source_filename=path.name),
+            )
+        )
+    return docs
 
 
 async def load_documents_from_directory(
-    _directory_path: str | Path,
-    _settings: Any | None = None,
-    _recursive: bool = True,
-    _supported_extensions: set[str] | None = None,
+    directory_path: str | Path,
+    settings_obj: Any | None = None,
+    recursive: bool = True,
+    supported_extensions: set[str] | None = None,
 ) -> list[Any]:
-    """Placeholder coroutine for directory ingestion."""
-    # TODO(ingestion-phase-2): Implement directory ingestion with extension
-    # filtering and recursive traversal.
-    _raise_pending("load_documents_from_directory")
+    """Load documents from a directory using UnstructuredReader when available."""
+    root = Path(directory_path)
+    if not root.exists():
+        return []
+    exts = {e.lower() for e in (supported_extensions or {".pdf", ".txt", ".md"})}
+    glob = "**/*" if recursive else "*"
+    paths = [p for p in root.glob(glob) if p.is_file() and p.suffix.lower() in exts]
+    return await load_documents_unstructured(paths, settings_obj=settings_obj)
 
 
-async def load_documents(_file_paths: list[str | Path]) -> list[Any]:
+async def load_documents(file_paths: list[str | Path]) -> list[Any]:
     """Convenience alias retained for compatibility with async callers."""
-    # TODO(ingestion-phase-2): Route to the new ingestion pipeline.
-    _raise_pending("load_documents")
+    return await load_documents_unstructured(file_paths)
 
 
-def ensure_spacy_model() -> Any:
-    """Placeholder spaCy loader."""
-    # TODO(ingestion-phase-2): Restore spaCy model download/validation.
-    _raise_pending("ensure_spacy_model")
+def ensure_spacy_model(model: str = "en_core_web_sm") -> Any:
+    """Load a spaCy model when installed; raises a clear error when missing."""
+    try:
+        import spacy  # type: ignore
+    except ImportError as exc:  # pragma: no cover
+        raise RuntimeError("spaCy is not installed (optional dependency).") from exc
+    try:
+        return spacy.load(model)
+    except OSError as exc:  # pragma: no cover
+        raise RuntimeError(
+            f"spaCy model '{model}' is not installed. "
+            "Install it with: uv run python -m spacy download en_core_web_sm"
+        ) from exc
 
 
 def get_document_info(file_path: str | Path) -> dict[str, Any]:
-    """Return basic file metadata placeholder."""
-    # TODO(ingestion-phase-2): Populate document metadata via the new pipeline.
-    logger.debug("get_document_info pending ingestion refactor", file_path=file_path)
-    _raise_pending("get_document_info")
+    """Return basic file metadata (path-safe; no absolute paths persisted)."""
+    path = Path(file_path)
+    if not path.exists():
+        return {"exists": False, "source_filename": path.name}
+    stat = path.stat()
+    return {
+        "exists": True,
+        "source_filename": path.name,
+        "suffix": path.suffix.lower(),
+        "size_bytes": int(stat.st_size),
+        "sha256": _sha256_file(path),
+    }
 
 
-def clear_document_cache() -> None:
-    """Placeholder cache cleanup."""
-    # TODO(ingestion-phase-2): Implement cache invalidation for ingested docs.
-    _raise_pending("clear_document_cache")
+def clear_document_cache(*, cache_dir: Path | None = None) -> None:
+    """Best-effort cache cleanup for local ingestion caches."""
+    if cache_dir is None:
+        try:
+            from src.config.settings import settings as _settings
+
+            cache_dir = _settings.cache_dir / "ingestion"
+        except Exception:  # pragma: no cover
+            cache_dir = Path("./cache/ingestion")
+    with logger.catch(reraise=False):
+        shutil.rmtree(Path(cache_dir), ignore_errors=True)
 
 
-def get_cache_stats() -> dict[str, Any]:
-    """Placeholder cache statistics."""
-    # TODO(ingestion-phase-2): Provide cache statistics for ingestion artifacts.
-    _raise_pending("get_cache_stats")
+def get_cache_stats(*, cache_dir: Path | None = None) -> dict[str, Any]:
+    """Return basic cache directory stats (best-effort)."""
+    if cache_dir is None:
+        try:
+            from src.config.settings import settings as _settings
+
+            cache_dir = _settings.cache_dir / "ingestion"
+        except Exception:  # pragma: no cover
+            cache_dir = Path("./cache/ingestion")
+    cache_dir = Path(cache_dir)
+    if not cache_dir.exists():
+        return {"exists": False, "files": 0, "bytes": 0}
+    files = [p for p in cache_dir.glob("**/*") if p.is_file()]
+    return {
+        "exists": True,
+        "files": len(files),
+        "bytes": sum(p.stat().st_size for p in files),
+    }
+
+
+__all__ = [
+    "clear_document_cache",
+    "ensure_spacy_model",
+    "get_cache_stats",
+    "get_document_info",
+    "load_documents",
+    "load_documents_from_directory",
+    "load_documents_unstructured",
+]

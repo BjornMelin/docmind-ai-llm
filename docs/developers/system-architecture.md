@@ -512,8 +512,10 @@ src/
 ├── utils/                    # Utility modules
 │   ├── core.py              # Core utilities
 │   ├── document.py          # Document processing utilities
+│   ├── images.py            # Encrypted-safe image I/O helpers
 │   ├── monitoring.py        # Performance monitoring
-│   └── multimodal.py        # CLIP multimodal processing
+│   ├── siglip_adapter.py    # SigLIP CLIP-like adapter (get_image_embedding)
+│   └── vision_siglip.py     # Shared SigLIP loader (cached)
 └── models/                   # Pydantic data models
     └── schemas.py           # API and response schemas
 ```

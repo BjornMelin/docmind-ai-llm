@@ -65,10 +65,8 @@ def ingest_files(
     configure_observability(settings)
 
     saved_inputs: list[IngestionInput] = []
-    saved_paths: list[Path] = []
     for file_obj in files:
         stored_path, digest = save_uploaded_file(file_obj)
-        saved_paths.append(stored_path)
         metadata = {
             "source_filename": getattr(file_obj, "name", stored_path.name),
             "uploaded_at": datetime.now(UTC).isoformat(),
@@ -103,15 +101,21 @@ def ingest_files(
     )
     pg_index = _build_property_graph(result.documents) if enable_graphrag else None
 
+    exports: list[dict[str, Any]] = []
+    for artifact in result.exports:
+        dumped = artifact.model_dump()
+        # Final-release: do not emit raw filesystem paths into Streamlit state.
+        dumped.pop("path", None)
+        exports.append(dumped)
+
     return {
         "count": len(saved_inputs),
         "vector_index": vector_index,
         "pg_index": pg_index,
         "manifest": result.manifest.model_dump(),
-        "exports": [artifact.model_dump() for artifact in result.exports],
+        "exports": exports,
         "duration_ms": result.duration_ms,
         "documents": result.documents,
-        "paths": saved_paths,
     }
 
 

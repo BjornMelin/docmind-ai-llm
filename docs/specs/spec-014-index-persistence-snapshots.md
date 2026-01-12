@@ -52,7 +52,7 @@ storage/
   },
   "graph_exports": [
     {
-      "path": "graph/graph_export-YYYYMMDDTHHMMSSZ.jsonl",
+      "filename": "graph_export-YYYYMMDDTHHMMSSZ.jsonl",
       "format": "jsonl" | "parquet",
       "seed_count": 32,
       "size_bytes": 1234,
@@ -111,7 +111,7 @@ Manifest Enrichment
 
 - Include fields: `schema_version`, `persist_format_version`, and `versions` (keys: `app`, `llama_index`, `qdrant_client`, `vector_client`, `embed_model`).
 - Write `manifest.jsonl`, `manifest.meta.json`, and `manifest.checksum` together; `manifest.json` SHALL NOT be emitted going forward.
-- Record GraphRAG export metadata under `graph_exports` (path, format, seed_count, size_bytes, duration_ms, sha256, created_at). Timestamped export files SHALL follow `graph_export-YYYYMMDDTHHMMSSZ.<ext>` naming and be written *before* manifest hashing.
+- Record GraphRAG export metadata under `graph_exports` (filename, format, seed_count, size_bytes, duration_ms, sha256, created_at). Timestamped export files SHALL follow `graph_export-YYYYMMDDTHHMMSSZ.<ext>` naming and be written *before* manifest hashing.
 - Set `complete=true` only after the workspace renames into its immutable directory; prior to rename the field SHALL remain `false` and consumers MUST ignore incomplete manifests.
 - Persist an optional `errors.jsonl` capturing structured failure events (stage, snapshot_id, error_code, message) for telemetry and troubleshooting.
 

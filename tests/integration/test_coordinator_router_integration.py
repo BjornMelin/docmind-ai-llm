@@ -61,9 +61,12 @@ def test_coordinator_injected_state_router_engine_visible(supervisor_stream_shim
                 optimization_metrics={},
             )
 
-        def _workflow_passthrough(initial_state, _thread_id):
-            # Return a dict final state that preserves tools_data
-            return {"messages": [], "tools_data": dict(initial_state.tools_data)}
+        def _workflow_passthrough(initial_state, *_a, **_k):
+            # In final-release persistence, injected objects flow via runtime
+            # context (not serialized into tools_data).
+            runtime_context = _k.get("runtime_context") or {}
+            tools_data = {"router_engine": runtime_context.get("router_engine")}
+            return {"messages": [], "tools_data": tools_data}
 
         with (
             _patch.object(

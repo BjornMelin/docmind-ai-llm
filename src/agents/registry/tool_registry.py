@@ -10,6 +10,21 @@ from typing import Any, Protocol
 from src.config.settings import DocMindSettings, settings
 
 
+def _is_jsonable(value: Any, *, _depth: int = 0) -> bool:
+    if _depth > 6:
+        return False
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return True
+    if isinstance(value, list | tuple):
+        return all(_is_jsonable(v, _depth=_depth + 1) for v in value)
+    if isinstance(value, dict):
+        return all(
+            isinstance(k, str) and _is_jsonable(v, _depth=_depth + 1)
+            for k, v in value.items()
+        )
+    return False
+
+
 class ToolRegistry(Protocol):
     """Protocol describing registry capabilities for agent tool wiring."""
 
@@ -77,7 +92,9 @@ class DefaultToolRegistry:
 
         combined = defaults.copy()
         if overrides:
-            combined.update(overrides)
+            for key, value in overrides.items():
+                if _is_jsonable(value):
+                    combined[key] = value
         return combined
 
     def get_router_tools(self) -> Sequence[Any]:
@@ -94,9 +111,10 @@ class DefaultToolRegistry:
 
     def get_retrieval_tools(self) -> Sequence[Any]:
         """Return the retrieval tool callable."""
+        from src.agents.tools.memory import forget_memory, recall_memories, remember
         from src.agents.tools.router_tool import router_tool
 
-        return [router_tool]
+        return [router_tool, recall_memories, remember, forget_memory]
 
     def get_synthesis_tools(self) -> Sequence[Any]:
         """Return the synthesis tool callable."""

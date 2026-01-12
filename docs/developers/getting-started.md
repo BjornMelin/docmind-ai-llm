@@ -154,30 +154,32 @@ cp .env.example .env
 
 ### 2. Essential Environment Variables
 
-Edit `.env` with these key variables:
+Start from `.env.example` and override only what you need:
 
 ```bash
-# Core Application
+# Core application
 DOCMIND_DEBUG=false
 DOCMIND_LOG_LEVEL=INFO
-DOCMIND_BASE_PATH=./
+DOCMIND_DATA_DIR=./data
+DOCMIND_CACHE_DIR=./cache
 
-# LLM Configuration
-DOCMIND_LLM__BASE_URL=http://localhost:11434
-DOCMIND_LLM__MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8
+# LLM backend (local-first)
+DOCMIND_LLM_BACKEND=ollama
+DOCMIND_OLLAMA_BASE_URL=http://localhost:11434
 
-# Vector Storage
-DOCMIND_QDRANT__URL=http://localhost:6333
-DOCMIND_QDRANT__COLLECTION_NAME=docmind_vectors
+# Qdrant (text + images)
+DOCMIND_DATABASE__QDRANT_URL=http://localhost:6333
+DOCMIND_DATABASE__QDRANT_COLLECTION=docmind_docs
+DOCMIND_DATABASE__QDRANT_IMAGE_COLLECTION=docmind_images
 
-# Multi-Agent System
-DOCMIND_AGENTS__ENABLE_MULTI_AGENT=true
-DOCMIND_AGENTS__DECISION_TIMEOUT=200
+# Multimodal PDF page images (optional encryption)
+DOCMIND_PROCESSING__ENCRYPT_PAGE_IMAGES=false
+DOCMIND_IMG_AES_KEY_BASE64=
+DOCMIND_IMG_DELETE_PLAINTEXT=false
 
-# GPU Optimization
-VLLM_ATTENTION_BACKEND=FLASHINFER
-VLLM_KV_CACHE_DTYPE=fp8_e5m2
-VLLM_GPU_MEMORY_UTILIZATION=0.85
+# Artifact store (page images + thumbnails)
+DOCMIND_ARTIFACTS__MAX_TOTAL_MB=4096
+DOCMIND_ARTIFACTS__GC_MIN_AGE_SECONDS=3600
 ```
 
 ### 3. Configuration System Overview
@@ -193,8 +195,8 @@ DocMind AI uses a **unified prefix pattern** with **nested configuration support
 | Category           | Environment Prefix     | Purpose                            |
 | ------------------ | ---------------------- | ---------------------------------- |
 | **Core App**       | `DOCMIND_`             | Basic application settings         |
-| **LLM Backend**    | `DOCMIND_LLM__`        | Large language model configuration |
-| **Vector Storage** | `DOCMIND_QDRANT__`     | Qdrant vector database settings    |
+| **LLM Backend**    | `DOCMIND_LLM_BACKEND`  | Backend selector + base URL fields |
+| **Vector Storage** | `DOCMIND_DATABASE__`   | Qdrant + SQLite configuration      |
 | **Multi-Agent**    | `DOCMIND_AGENTS__`     | Agent coordination configuration   |
 | **Processing**     | `DOCMIND_PROCESSING__` | Document processing parameters     |
 | **Embedding**      | `DOCMIND_EMBEDDING__`  | BGE-M3 embedding configuration     |
@@ -208,10 +210,10 @@ DocMind AI uses a **unified prefix pattern** with **nested configuration support
 # Test configuration loads correctly
 python -c "
 from src.config import settings
-print(f'✅ App: {settings.app_name} v{settings.app_version}')
-print(f'✅ Model: {settings.vllm.model}')
-print(f'✅ Embedding: {settings.embedding.model_name}')
-print(f'✅ Qdrant: {settings.qdrant.url}')
+	print(f'✅ App: {settings.app_name} v{settings.app_version}')
+	print(f'✅ Model: {settings.vllm.model}')
+	print(f'✅ Embedding: {settings.embedding.model_name}')
+	print(f'✅ Qdrant: {settings.database.qdrant_url}')
 "
 ```
 

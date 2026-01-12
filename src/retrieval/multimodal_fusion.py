@@ -1,0 +1,244 @@
+"""Multimodal retrieval fusion (text + PDF page images).
+
+Final-release design:
+- Text retrieval remains server-side hybrid via Qdrant Query API (RRF/DBSF).
+- Visual retrieval uses SigLIP text->image embedding against a dedicated Qdrant
+  image collection (named vector: ``siglip``).
+- Results are fused at the application level via rank-based RRF and then passed
+  through the existing modality-aware reranking pipeline.
+
+Qdrant payload for image points must be thin and must not include raw filesystem
+paths or base64 blobs. We resolve content-addressed artifacts locally at
+render/rerank time.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import time
+from dataclasses import dataclass
+
+from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
+from loguru import logger
+from qdrant_client import QdrantClient
+
+from src.config.settings import settings
+from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
+from src.utils.siglip_adapter import SiglipEmbedding
+from src.utils.storage import get_client_config
+from src.utils.telemetry import log_jsonl
+
+
+@dataclass(frozen=True)
+class ImageSearchParams:
+    """Configuration for SigLIP image retrieval."""
+
+    collection: str
+    top_k: int = 30
+    using: str = "siglip"
+    with_payload: tuple[str, ...] = (
+        "doc_id",
+        "page_id",
+        "page_no",
+        "modality",
+        "image_artifact_id",
+        "image_artifact_suffix",
+        "thumbnail_artifact_id",
+        "thumbnail_artifact_suffix",
+        "phash",
+        "bbox",
+        "text",
+    )
+
+
+class ImageSiglipRetriever:
+    """Retrieve PDF page images using SigLIP text->image embeddings (Qdrant)."""
+
+    def __init__(
+        self,
+        params: ImageSearchParams,
+        *,
+        client: QdrantClient | None = None,
+        embedder: SiglipEmbedding | None = None,
+    ) -> None:
+        """Create a SigLIP image retriever."""
+        self.params = params
+        self._client = client or QdrantClient(**get_client_config())
+        self._embedder = embedder or SiglipEmbedding()
+
+    def close(self) -> None:
+        """Close underlying client (best-effort)."""
+        try:
+            self._client.close()
+        except Exception:  # pragma: no cover - defensive
+            return
+
+    def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:
+        """Retrieve image nodes for a text query."""
+        qtext = query.query_str if isinstance(query, QueryBundle) else str(query)
+        try:
+            vec = self._embedder.get_text_embedding(qtext)
+        except Exception as exc:  # pragma: no cover - fail open
+            logger.debug("SigLIP text embedding failed: %s", exc)
+            return []
+
+        try:
+            result = self._client.query_points(
+                collection_name=self.params.collection,
+                query=vec.tolist(),
+                using=self.params.using,
+                limit=int(self.params.top_k),
+                with_payload=list(self.params.with_payload),
+            )
+        except Exception as exc:  # pragma: no cover - fail open
+            logger.debug("Image query_points failed: %s", exc)
+            return []
+
+        points = (
+            getattr(result, "points", None) or getattr(result, "result", None) or []
+        )
+        if not isinstance(points, list):
+            try:
+                points = list(points)
+            except TypeError:
+                points = []
+
+        # Stable ordering.
+        ordered = sorted(
+            points,
+            key=lambda p: (
+                -float(getattr(p, "score", 0.0)),
+                str(getattr(p, "id", "")),
+            ),
+        )
+
+        nodes: list[NodeWithScore] = []
+        for p in ordered[: int(self.params.top_k)]:
+            payload = getattr(p, "payload", {}) or {}
+            score = float(getattr(p, "score", 0.0))
+            text = payload.get("text") or ""
+            page_id = payload.get("page_id") or str(getattr(p, "id", ""))
+
+            node = TextNode(text=str(text), id_=str(page_id))
+            node.metadata.update({k: v for k, v in payload.items() if k != "text"})
+            nodes.append(NodeWithScore(node=node, score=score))
+
+        return nodes
+
+
+def _rrf_merge(
+    lists: list[list[NodeWithScore]], k_constant: int
+) -> list[NodeWithScore]:
+    scores: dict[str, tuple[float, NodeWithScore]] = {}
+    for ranked in lists:
+        for rank, nws in enumerate(ranked, start=1):
+            nid = nws.node.node_id
+            inc = 1.0 / (k_constant + rank)
+            cur = scores.get(nid)
+            if cur is None:
+                scores[nid] = (inc, nws)
+            else:
+                scores[nid] = (cur[0] + inc, cur[1])
+    fused_list = list(scores.values())
+    fused_list.sort(
+        key=lambda t: (-float(t[0]), str(getattr(t[1].node, "node_id", "")))
+    )
+    return [NodeWithScore(node=n.node, score=float(score)) for score, n in fused_list]
+
+
+class MultimodalFusionRetriever:
+    """Fuse text hybrid retrieval with SigLIP image retrieval (rank-based RRF)."""
+
+    def __init__(
+        self,
+        *,
+        text_retriever: ServerHybridRetriever | None = None,
+        image_retriever: ImageSiglipRetriever | None = None,
+        fused_top_k: int | None = None,
+        dedup_key: str | None = None,
+    ) -> None:
+        """Create a fusion retriever from text and image components."""
+        self._text = text_retriever or ServerHybridRetriever(
+            _HybridParams(
+                collection=settings.database.qdrant_collection,
+                fused_top_k=int(getattr(settings.retrieval, "fused_top_k", 60)),
+                prefetch_sparse=int(
+                    getattr(settings.retrieval, "prefetch_sparse_limit", 400)
+                ),
+                prefetch_dense=int(
+                    getattr(settings.retrieval, "prefetch_dense_limit", 200)
+                ),
+                fusion_mode=str(getattr(settings.retrieval, "fusion_mode", "rrf")),
+                dedup_key=str(getattr(settings.retrieval, "dedup_key", "page_id")),
+            )
+        )
+        self._image = image_retriever or ImageSiglipRetriever(
+            ImageSearchParams(collection=settings.database.qdrant_image_collection)
+        )
+        self._fused_top_k = int(
+            fused_top_k or getattr(settings.retrieval, "fused_top_k", 60)
+        )
+        self._dedup_key = str(
+            dedup_key or getattr(settings.retrieval, "dedup_key", "page_id")
+        )
+
+    def close(self) -> None:
+        """Close underlying retrievers (best-effort)."""
+        with contextlib.suppress(Exception):
+            self._text.close()
+        with contextlib.suppress(Exception):
+            self._image.close()
+
+    def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:
+        """Retrieve fused multimodal results."""
+        qtext = query.query_str if isinstance(query, QueryBundle) else str(query)
+        t0 = time.time()
+
+        text_nodes = self._text.retrieve(qtext)
+        image_nodes = self._image.retrieve(qtext)
+
+        k_constant = int(getattr(settings.retrieval, "rrf_k", 60))
+        fused = _rrf_merge([text_nodes, image_nodes], k_constant=k_constant)
+
+        # Deduplicate by configured key (default: page_id).
+        key_name = (self._dedup_key or "page_id").strip()
+        best: dict[str, tuple[float, NodeWithScore]] = {}
+        for nws in fused:
+            score = float(getattr(nws, "score", 0.0) or 0.0)
+            meta = getattr(nws.node, "metadata", {}) or {}
+            key = str(meta.get(key_name) or nws.node.node_id)
+            cur = best.get(key)
+            if cur is None or score > cur[0]:
+                best[key] = (score, nws)
+
+        dedup_sorted = sorted(best.values(), key=lambda x: (-x[0], x[1].node.node_id))
+        out = [nws for _score, nws in dedup_sorted[: self._fused_top_k]]
+
+        # PII-safe telemetry-like metadata (no query text).
+        with contextlib.suppress(Exception):
+            latency_ms = int((time.time() - t0) * 1000)
+            logger.debug(
+                "MultimodalFusionRetriever done (text=%d, image=%d, out=%d, ms=%d)",
+                len(text_nodes),
+                len(image_nodes),
+                len(out),
+                latency_ms,
+            )
+        with contextlib.suppress(Exception):
+            latency_ms = int((time.time() - t0) * 1000)
+            log_jsonl(
+                {
+                    "retrieval.multimodal": True,
+                    "retrieval.text_count": len(text_nodes),
+                    "retrieval.image_count": len(image_nodes),
+                    "retrieval.fused_count": len(out),
+                    "retrieval.rrf_k": int(k_constant),
+                    "dedup.key": key_name,
+                    "retrieval.latency_ms": latency_ms,
+                }
+            )
+
+        return out
+
+
+__all__ = ["ImageSearchParams", "ImageSiglipRetriever", "MultimodalFusionRetriever"]

@@ -227,14 +227,26 @@ def _load_siglip() -> tuple[Any, Any, str]:  # (model, processor, device)
 def _extract_image_paths(ns: list[NodeWithScore]) -> list[str]:
     """Extract possible image paths from node metadata and attributes."""
     out: list[str] = []
+    from src.persistence.artifacts import ArtifactRef, ArtifactStore
+
+    store: ArtifactStore | None = None
     for nn in ns:
         meta = getattr(nn.node, "metadata", {}) or {}
-        p = (
-            meta.get("image_path")
-            or meta.get("path")
-            or getattr(nn.node, "image_path", None)
-            or getattr(nn.node, "path", None)
+        p = ""
+        # Final-release: resolve local paths from stable artifact refs rather than
+        # accepting raw filesystem paths from node metadata.
+        img_id = meta.get("image_artifact_id") or meta.get("thumbnail_artifact_id")
+        img_sfx = meta.get("image_artifact_suffix") or meta.get(
+            "thumbnail_artifact_suffix"
         )
+        if img_id:
+            try:
+                if store is None:
+                    store = ArtifactStore.from_settings(settings)
+                ref = ArtifactRef(sha256=str(img_id), suffix=str(img_sfx or ""))
+                p = str(store.resolve_path(ref))
+            except Exception:
+                p = ""
         out.append(str(p) if p else "")
     return out
 

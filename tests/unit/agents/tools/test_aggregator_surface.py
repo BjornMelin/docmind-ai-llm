@@ -8,7 +8,7 @@ import pytest
 from loguru import logger
 
 from src.agents.tool_factory import ToolFactory
-from src.agents.tools.planning import ChatMemoryBuffer, plan_query, route_query
+from src.agents.tools.planning import plan_query, route_query
 from src.agents.tools.retrieval import retrieve_documents
 from src.agents.tools.router_tool import router_tool
 from src.agents.tools.synthesis import synthesize_results
@@ -36,5 +36,4 @@ def test_patch_points_present() -> None:
     """Patch points available at concrete seams (no aggregator)."""
     assert ToolFactory is not None
     assert logger is not None
-    assert ChatMemoryBuffer is not None
     assert hasattr(time, "perf_counter")

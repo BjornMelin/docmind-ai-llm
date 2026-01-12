@@ -257,6 +257,33 @@ class ToolFactory:
         )
 
     @classmethod
+    def create_multimodal_search_tool(cls, retriever: Any) -> QueryEngineTool:
+        """Create multimodal search tool (text hybrid + visual SigLIP channel).
+
+        The retriever is expected to return both text and image nodes and to
+        rely on the shared modality-aware reranker (SigLIP default; optional
+        ColPali).
+        """
+        from src.retrieval.reranking import get_postprocessors as _get_pp
+
+        post = _get_pp(
+            "hybrid",
+            use_reranking=bool(getattr(settings.retrieval, "use_reranking", True)),
+        )
+        query_engine = build_retriever_query_engine(
+            retriever=retriever, post=post, llm=None
+        )
+        return cls.create_query_tool(
+            query_engine,
+            "multimodal_search",
+            (
+                "Multimodal search (final-release): fuses text hybrid retrieval "
+                "with visual PDF page-image retrieval (SigLIP). Best for charts, "
+                "tables, and scanned documents."
+            ),
+        )
+
+    @classmethod
     def create_hybrid_vector_tool(cls, index: Any) -> QueryEngineTool:
         """Create hybrid vector search tool as fallback.
 
@@ -339,8 +366,15 @@ class ToolFactory:
 
         # Add hybrid fusion search if retriever is available (highest priority)
         if retriever:
-            tools.append(cls.create_hybrid_search_tool(retriever))
-            logger.info("Added hybrid fusion search tool")
+            is_mm = getattr(getattr(retriever, "__class__", None), "__name__", "") == (
+                "MultimodalFusionRetriever"
+            )
+            if is_mm:
+                tools.append(cls.create_multimodal_search_tool(retriever))
+                logger.info("Added multimodal search tool")
+            else:
+                tools.append(cls.create_hybrid_search_tool(retriever))
+                logger.info("Added hybrid fusion search tool")
         else:
             # Fallback to hybrid vector search
             tools.append(cls.create_hybrid_vector_tool(vector_index))

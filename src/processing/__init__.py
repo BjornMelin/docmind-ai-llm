@@ -1,10 +1,22 @@
-"""Document processing package placeholder.
+"""DocMind processing package (final-release).
 
-Legacy ingestion modules have been removed in preparation for the
-LlamaIndex-first ingestion pipeline rebuild (see 2025-09-16 plan).
+Public entrypoints for the library-first ingestion pipeline and PDF page-image
+rendering helpers.
 """
 
-# TODO(ingestion-phase-2): Reintroduce processing modules once the new pipeline
-# is implemented.
+from .ingestion_pipeline import (
+    build_ingestion_pipeline,
+    ingest_documents,
+    ingest_documents_sync,
+    reindex_page_images_sync,
+)
+from .pdf_pages import pdf_pages_to_image_documents, save_pdf_page_images
 
-__all__: list[str] = []
+__all__ = [
+    "build_ingestion_pipeline",
+    "ingest_documents",
+    "ingest_documents_sync",
+    "pdf_pages_to_image_documents",
+    "reindex_page_images_sync",
+    "save_pdf_page_images",
+]
