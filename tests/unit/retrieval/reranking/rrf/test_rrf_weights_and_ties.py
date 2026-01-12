@@ -1,21 +1,15 @@
 """RRF merge tie and k-constant sensitivity tests."""
 
 import pytest
-from llama_index.core.schema import NodeWithScore, TextNode
 
 from src.retrieval.rrf import rrf_merge
 
 pytestmark = pytest.mark.unit
 
 
-def _nws(nid: str, score: float = 0.0):
-    node = TextNode(text="", id_=nid)
-    return NodeWithScore(node=node, score=score)
-
-
-def test_rrf_ties_and_k_constant():
-    a = [_nws("A"), _nws("B"), _nws("C")]
-    b = [_nws("B"), _nws("C"), _nws("A")]
+def test_rrf_ties_and_k_constant(nws_factory):
+    a = [nws_factory("A"), nws_factory("B"), nws_factory("C")]
+    b = [nws_factory("B"), nws_factory("C"), nws_factory("A")]
 
     fused_k10 = rrf_merge([a, b], k_constant=10)
     fused_k60 = rrf_merge([a, b], k_constant=60)
