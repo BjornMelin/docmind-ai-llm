@@ -14,7 +14,7 @@ def test_build_tools_data_merges_overrides():
 
     assert tools_data["router_engine"] == "router"
     assert "enable_dspy" in tools_data
-    assert tools_data["vector"] is overrides["vector"]
+    assert "vector" not in tools_data
 
 
 def test_registry_returns_tool_collections():

@@ -72,14 +72,12 @@ def remember(
     store.put(ns, mem_id, payload, index=["content"])
     elapsed_ms = (time.perf_counter() - start) * 1000.0
     with _SuppressTelemetry():
-        log_jsonl(
-            {
-                "chat.memory_saved": True,
-                "scope": scope,
-                "count": 1,
-                "latency_ms": round(elapsed_ms, 2),
-            }
-        )
+        log_jsonl({
+            "chat.memory_saved": True,
+            "scope": scope,
+            "count": 1,
+            "latency_ms": round(elapsed_ms, 2),
+        })
     return json.dumps({"ok": True, "memory_id": mem_id})
 
 
@@ -95,38 +93,36 @@ def recall_memories(
     store = runtime.store if runtime is not None else None
     config = runtime.config if runtime is not None else {}
     if store is None:
-        return json.dumps(
-            {"ok": False, "error": "memory store unavailable", "memories": []}
-        )
+        return json.dumps({
+            "ok": False,
+            "error": "memory store unavailable",
+            "memories": [],
+        })
     ns = _namespace_from_config(config, scope=scope)
     results = store.search(ns, query=str(query), limit=int(limit))
     elapsed_ms = (time.perf_counter() - start) * 1000.0
     with _SuppressTelemetry():
-        log_jsonl(
-            {
-                "chat.memory_searched": True,
-                "scope": scope,
-                "top_k": int(limit),
-                "latency_ms": round(elapsed_ms, 2),
-                "result_count": len(results),
-            }
-        )
+        log_jsonl({
+            "chat.memory_searched": True,
+            "scope": scope,
+            "top_k": int(limit),
+            "latency_ms": round(elapsed_ms, 2),
+            "result_count": len(results),
+        })
     # Return only structured memory content; do not include internal timings from store.
     out = []
     for item in results:
         value = getattr(item, "value", None)
         if not isinstance(value, dict):
             continue
-        out.append(
-            {
-                "id": getattr(item, "key", None),
-                "content": value.get("content"),
-                "kind": value.get("kind"),
-                "importance": value.get("importance"),
-                "tags": value.get("tags"),
-                "score": getattr(item, "score", None),
-            }
-        )
+        out.append({
+            "id": getattr(item, "key", None),
+            "content": value.get("content"),
+            "kind": value.get("kind"),
+            "importance": value.get("importance"),
+            "tags": value.get("tags"),
+            "score": getattr(item, "score", None),
+        })
     return json.dumps({"ok": True, "memories": out})
 
 

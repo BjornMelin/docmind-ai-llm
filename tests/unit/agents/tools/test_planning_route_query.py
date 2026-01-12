@@ -38,14 +38,12 @@ class TestRouteQuery:
 
     def test_route_query_complex_query(self):
         """Complex query routes to hybrid and requires planning."""
-        result_json = route_query.invoke(
-            {
-                "query": (
-                    "Compare machine learning vs deep learning approaches, analyze "
-                    "their differences and explain step by step implementation"
-                )
-            }
-        )
+        result_json = route_query.invoke({
+            "query": (
+                "Compare machine learning vs deep learning approaches, analyze "
+                "their differences and explain step by step implementation"
+            )
+        })
         result = json.loads(result_json)
 
         assert result["complexity"] == "complex"
@@ -56,9 +54,9 @@ class TestRouteQuery:
 
     def test_route_query_medium_query(self):
         """Medium query routes to hybrid without planning flag."""
-        result_json = route_query.invoke(
-            {"query": "When was backpropagation introduced"}
-        )
+        result_json = route_query.invoke({
+            "query": "When was backpropagation introduced"
+        })
         result = json.loads(result_json)
 
         assert result["complexity"] == "medium"
@@ -68,9 +66,9 @@ class TestRouteQuery:
 
     def test_route_query_graphrag_patterns(self):
         """GraphRAG indicators flip strategy to graphrag."""
-        result_json = route_query.invoke(
-            {"query": "Show the relationship between concepts and their connections"}
-        )
+        result_json = route_query.invoke({
+            "query": "Show the relationship between concepts and their connections"
+        })
         result = json.loads(result_json)
 
         assert result["strategy"] == "graphrag"
@@ -85,12 +83,10 @@ class TestRouteQuery:
             ]
         }
 
-        result_json = route_query.invoke(
-            {
-                "query": "What about this topic?",
-                "state": mock_state,
-            }
-        )
+        result_json = route_query.invoke({
+            "query": "What about this topic?",
+            "state": mock_state,
+        })
         result = json.loads(result_json)
 
         assert result["context_dependent"]
@@ -115,9 +111,9 @@ class TestRouteQuery:
 
     def test_route_query_boundary_values(self):
         """Word count exact thresholds are reflected in output."""
-        result_json = route_query.invoke(
-            {"query": "This is exactly ten words for medium complexity threshold test"}
-        )
+        result_json = route_query.invoke({
+            "query": "This is exactly ten words for medium complexity threshold test"
+        })
         result = json.loads(result_json)
         assert result["word_count"] == 10
 

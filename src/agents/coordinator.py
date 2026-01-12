@@ -481,7 +481,7 @@ class MultiAgentCoordinator:
             # Normalize flag naming across code paths
             "parallel_execution_active": bool(
                 state.get("parallel_execution_active")
-                or state.get("parallel_tool_calls", False)
+                or state.get("parallel_tool_calls")
             ),
             "optimization_enabled": True,
             "model_path": self.model_path,
@@ -503,16 +503,14 @@ class MultiAgentCoordinator:
             AgentResponse.optimization_metrics.
         """
         base = self._build_base_optimization_metrics_from_state(final_state)
-        base.update(
-            {
-                "coordination_overhead_ms": round(coordination_time * 1000, 2),
-                "meets_target": coordination_time < COORDINATION_OVERHEAD_THRESHOLD,
-                "token_reduction_achieved": final_state.get(
-                    "token_reduction_achieved", 0.0
-                ),
-                "context_window_used": self.max_context_length,
-            }
-        )
+        base.update({
+            "coordination_overhead_ms": round(coordination_time * 1000, 2),
+            "meets_target": coordination_time < COORDINATION_OVERHEAD_THRESHOLD,
+            "token_reduction_achieved": final_state.get(
+                "token_reduction_achieved", 0.0
+            ),
+            "context_window_used": self.max_context_length,
+        })
         return base
 
     def _record_query_metrics(self, latency_s: float, success: bool) -> None:
@@ -1121,12 +1119,10 @@ class MultiAgentCoordinator:
                 config = getattr(snap, "config", None)
                 conf = config.get("configurable") if isinstance(config, dict) else None
                 conf = conf if isinstance(conf, dict) else {}
-                out.append(
-                    {
-                        "checkpoint_id": conf.get("checkpoint_id"),
-                        "checkpoint_ns": conf.get("checkpoint_ns", ""),
-                    }
-                )
+                out.append({
+                    "checkpoint_id": conf.get("checkpoint_id"),
+                    "checkpoint_ns": conf.get("checkpoint_ns", ""),
+                })
         except Exception as exc:
             logger.debug("Checkpoint listing failed: %s", exc)
         return out
@@ -1163,7 +1159,8 @@ class MultiAgentCoordinator:
                 self._setup_complete and self.compiled_graph is not None
             ),
             # ADR-004: FP8 model variant used by default (suffix-based)
-            "adr_004_fp8_model": self.model_path.upper()
+            "adr_004_fp8_model": self.model_path
+            .upper()
             .split("/")[-1]
             .endswith("-FP8"),
             # Coordination under 200ms per turn

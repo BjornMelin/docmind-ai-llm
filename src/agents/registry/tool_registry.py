@@ -130,25 +130,23 @@ class DefaultToolRegistry:
 
     def _resolve_graphrag_flag(self) -> bool:
         """Derive the GraphRAG enablement flag with defensive guards."""
-        if hasattr(self.app_settings, "is_graphrag_enabled"):
+        fn = getattr(self.app_settings, "is_graphrag_enabled", None)
+        if callable(fn):
             try:
-                return bool(self.app_settings.is_graphrag_enabled())
+                return bool(fn())
             except (AttributeError, TypeError, ValueError):
-                # Log suppressed exceptions for debugging.
                 logging.getLogger(__name__).debug(
-                    "is_graphrag_enabled() raised; GraphRAG disabled (fail-closed); "
-                    "skipping legacy enablement paths",
+                    "is_graphrag_enabled() raised; GraphRAG disabled (fail-closed)",
                     exc_info=True,
                 )
                 return False
-        base_flag = bool(getattr(self.app_settings, "enable_graphrag", False))
-        if not base_flag and hasattr(self.app_settings, "get_graphrag_config"):
-            try:
-                gr_cfg = self.app_settings.get_graphrag_config()
-                return bool(gr_cfg.get("enabled", False))
-            except (AttributeError, TypeError, ValueError):
-                return base_flag
-        return base_flag
+        try:
+            base_flag = bool(getattr(self.app_settings, "enable_graphrag", False))
+            cfg = getattr(self.app_settings, "graphrag_cfg", None)
+            enabled = bool(getattr(cfg, "enabled", True)) if cfg is not None else True
+            return base_flag and enabled
+        except (AttributeError, TypeError, ValueError):
+            return False
 
     def _resolve_reranker_normalize(self) -> bool:
         try:

@@ -13,6 +13,7 @@ import pytest
 
 from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.registry import DefaultToolRegistry
+from tests.integration.coordinator_helpers import patch_supervisor_and_react
 
 # Rationale: tests set minimal coordinator internals to avoid heavy setup.
 
@@ -25,13 +26,7 @@ def test_coordinator_injected_state_router_engine_visible(supervisor_stream_shim
     through compiled_graph.stream(...), which the shim forwards from the
     initial_state provided to process_query().
     """
-    with (
-        _patch(
-            "src.agents.coordinator.create_supervisor",
-            return_value=supervisor_stream_shim,
-        ),
-        _patch("src.agents.coordinator.create_react_agent"),
-    ):
+    with patch_supervisor_and_react(supervisor_stream_shim):
         # Bypass full __init__ setup; only set required attrs for the test
         with _patch.object(MultiAgentCoordinator, "__init__", return_value=None):
             coord = MultiAgentCoordinator()  # type: ignore[call-arg]

@@ -13,7 +13,7 @@ from src.agents.coordinator import MultiAgentCoordinator
 
 
 def test_settings_override_router_engine_passthrough() -> None:
-    """Router engine passed via settings_override should reach tools_data."""
+    """Router engine passed via settings_override should reach runtime context."""
     coord = MultiAgentCoordinator()
 
     # Patch setup to skip heavy initialization
@@ -21,9 +21,10 @@ def test_settings_override_router_engine_passthrough() -> None:
 
     captured = {}
 
-    def fake_run(initial_state, _thread_id):  # type: ignore[no-untyped-def]
+    def fake_run(initial_state, **kwargs):  # type: ignore[no-untyped-def]
         # MultiAgentState is a Pydantic model; access attributes directly
         captured["tools_data"] = dict(getattr(initial_state, "tools_data", {}) or {})
+        captured["runtime_context"] = kwargs.get("runtime_context")
         # Return a minimal state compatible with _extract_response
         return {
             "messages": [{"content": "ok"}],
@@ -45,4 +46,5 @@ def test_settings_override_router_engine_passthrough() -> None:
     router = object()
     resp = coord.process_query("hi", settings_override={"router_engine": router})
     assert getattr(resp, "content", "") == "answer"
-    assert captured["tools_data"].get("router_engine") is router
+    assert captured["tools_data"].get("router_engine") is None
+    assert captured["runtime_context"].get("router_engine") is router
