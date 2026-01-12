@@ -264,7 +264,9 @@ __all__ = [
     "TELEMETRY_JSONL_PATH",
     "TelemetryEventCounts",
     "get_analytics_duckdb_path",
+    "get_request_id",
     "get_telemetry_jsonl_path",
     "log_jsonl",
     "parse_telemetry_jsonl_counts",
+    "set_request_id",
 ]
