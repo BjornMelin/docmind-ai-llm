@@ -19,7 +19,6 @@ import contextlib
 import json
 import sqlite3
 import threading
-import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -27,6 +26,7 @@ from typing import Any
 from loguru import logger
 
 from src.config.settings import DocMindSettings, settings
+from src.utils.time import now_ms
 
 try:  # pragma: no cover - optional native dependency
     import sqlite_vec
@@ -56,10 +56,6 @@ VEC_TABLE = "docmind_store_vec"
 # Namespace representation
 _NS_DELIM = "\x1f"
 _MAX_NS_DEPTH = 8
-
-
-def _now_ms() -> int:
-    return time.time_ns() // 1_000_000
 
 
 def _ms_to_dt(ms: int) -> datetime:
@@ -132,8 +128,15 @@ def _matches_filter(value: dict[str, Any], filt: dict[str, Any] | None) -> bool:
     return True
 
 
+def _now_ms() -> int:
+    return now_ms()
+
+
 class DocMindSqliteStore(BaseStore):
-    """SQLite-backed LangGraph BaseStore with vec0-powered semantic search."""
+    """SQLite-backed LangGraph BaseStore with vec0-powered semantic search.
+
+    TTL values are interpreted as minutes.
+    """
 
     __slots__ = (
         "_conn",
@@ -191,6 +194,11 @@ class DocMindSqliteStore(BaseStore):
 
         self._vec_enabled = False
         self._setup_schema()
+
+    def close(self) -> None:
+        """Close the underlying SQLite connection."""
+        with contextlib.suppress(Exception):
+            self._conn.close()
 
     # BaseStore API
     def batch(self, ops: Any) -> list[Result]:
@@ -301,7 +309,7 @@ class DocMindSqliteStore(BaseStore):
 
     # Op handlers
     def _handle_get(self, op: GetOp) -> Item | None:
-        now = _now_ms()
+        now = now_ms()
         ns_key = _ns_key(op.namespace)
         row = self._conn.execute(
             """
@@ -350,7 +358,7 @@ class DocMindSqliteStore(BaseStore):
         )
 
     def _handle_put(self, op: PutOp) -> Item | None:
-        now = _now_ms()
+        now = now_ms()
         ns_parts = _ns_parts(op.namespace)
         ns_key = _NS_DELIM.join(ns_parts)
         key = str(op.key)
@@ -453,7 +461,7 @@ class DocMindSqliteStore(BaseStore):
         )
 
     def _handle_search(self, op: SearchOp) -> list[SearchItem]:
-        now = _now_ms()
+        now = now_ms()
         prefix_parts = _ns_parts(op.namespace_prefix)
         prefix_key = _ns_key(prefix_parts) if prefix_parts else None
         prefix_like = f"{prefix_key}{_NS_DELIM}%" if prefix_key else None

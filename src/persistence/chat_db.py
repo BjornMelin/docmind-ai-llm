@@ -11,13 +11,14 @@ creates DocMind-owned tables only.
 
 from __future__ import annotations
 
+import contextlib
 import sqlite3
-import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
 from src.config.settings import DocMindSettings, settings
+from src.utils.time import now_ms
 
 CHAT_SESSION_TABLE = "chat_session"
 
@@ -36,10 +37,6 @@ class ChatSession:
     updated_at_ms: int
     deleted_at_ms: int | None = None
     last_checkpoint_id: str | None = None
-
-
-def _now_ms() -> int:
-    return time.time_ns() // 1_000_000
 
 
 def _validate_chat_db_path(path: Path, cfg: DocMindSettings = settings) -> Path:
@@ -102,7 +99,7 @@ def ensure_session_registry(conn: sqlite3.Connection) -> None:
 def create_session(*, title: str, conn: sqlite3.Connection) -> ChatSession:
     """Create a new chat session and return its registry record."""
     thread_id = str(uuid.uuid4())
-    now = _now_ms()
+    now = now_ms()
     conn.execute(
         """
         INSERT INTO chat_session
@@ -193,7 +190,7 @@ def upsert_session(
     last_checkpoint_id: str | None = None,
 ) -> None:
     """Insert or update a session registry entry."""
-    now = _now_ms()
+    now = now_ms()
     conn.execute(
         """
         INSERT INTO chat_session
@@ -222,7 +219,7 @@ def upsert_session(
 
 def rename_session(conn: sqlite3.Connection, *, thread_id: str, title: str) -> None:
     """Rename a session in the registry."""
-    now = _now_ms()
+    now = now_ms()
     conn.execute(
         """
         UPDATE chat_session
@@ -238,7 +235,7 @@ def touch_session(
     conn: sqlite3.Connection, *, thread_id: str, last_checkpoint_id: str | None = None
 ) -> None:
     """Update a session's updated_at timestamp (and optionally checkpoint id)."""
-    now = _now_ms()
+    now = now_ms()
     conn.execute(
         """
         UPDATE chat_session
@@ -252,7 +249,7 @@ def touch_session(
 
 def soft_delete_session(conn: sqlite3.Connection, *, thread_id: str) -> None:
     """Soft delete a session registry entry."""
-    now = _now_ms()
+    now = now_ms()
     conn.execute(
         """
         UPDATE chat_session
@@ -267,9 +264,14 @@ def soft_delete_session(conn: sqlite3.Connection, *, thread_id: str) -> None:
 def purge_session(conn: sqlite3.Connection, *, thread_id: str) -> None:
     """Hard delete a session's persisted data (checkpoints + writes + memories)."""
     tid = str(thread_id)
-    # LangGraph SqliteSaver tables
-    conn.execute("DELETE FROM writes WHERE thread_id=?;", (tid,))
-    conn.execute("DELETE FROM checkpoints WHERE thread_id=?;", (tid,))
+    # LangGraph SqliteSaver tables (best-effort; may not exist yet)
+    langgraph_deletes = (
+        "DELETE FROM writes WHERE thread_id=?;",
+        "DELETE FROM checkpoints WHERE thread_id=?;",
+    )
+    for stmt in langgraph_deletes:
+        with contextlib.suppress(sqlite3.OperationalError):
+            conn.execute(stmt, (tid,))
 
     # DocMind memory store tables (best-effort; may not exist yet)
     try:

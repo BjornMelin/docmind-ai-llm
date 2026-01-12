@@ -87,7 +87,9 @@ def recall_memories(
     store = runtime.store if runtime is not None else None
     config = runtime.config if runtime is not None else {}
     if store is None:
-        return json.dumps({"memories": []})
+        return json.dumps(
+            {"ok": False, "error": "memory store unavailable", "memories": []}
+        )
     ns = _namespace_from_config(config, scope=scope)
     results = store.search(ns, query=str(query), limit=int(limit))
     elapsed_ms = (time.perf_counter() - start) * 1000.0
@@ -117,7 +119,7 @@ def recall_memories(
                 "score": getattr(item, "score", None),
             }
         )
-    return json.dumps({"memories": out})
+    return json.dumps({"ok": True, "memories": out})
 
 
 @tool
@@ -150,4 +152,6 @@ class _SuppressTelemetry:
     ) -> bool:
         if exc_type is not None:
             logger.debug("memory tool telemetry suppressed: %s", exc_type.__name__)
-        return True
+        return exc_type is not None and issubclass(
+            exc_type, (OSError, RuntimeError, ValueError)
+        )

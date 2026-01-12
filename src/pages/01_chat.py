@@ -370,8 +370,12 @@ def _render_memory_sidebar(user_id: str, thread_id: str) -> None:
             st.caption(f"{item.key} · score={getattr(item, 'score', None)}")
             if content:
                 st.write(str(content))
-            if st.button("Delete", key=f"mem_del_{item.key}"):
+
+            confirm_key = f"mem_del_confirm__{item.key}"
+            confirm = st.checkbox("Confirm", key=confirm_key)
+            if st.button("Delete", key=f"mem_del_{item.key}", disabled=not confirm):
                 store.delete(ns, str(item.key))
+                st.session_state.pop(confirm_key, None)
                 st.rerun()
 
 
