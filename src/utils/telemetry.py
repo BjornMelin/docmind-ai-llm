@@ -226,7 +226,11 @@ def parse_telemetry_jsonl_counts(
                     stale += 1
                 if evt.get("export_performed"):
                     exports += 1
-    except OSError:
+    except OSError as exc:
+        logger.debug(
+            "telemetry parse failed (oserror): "
+            f"err={getattr(exc, 'errno', None)} msg={exc}"
+        )
         return TelemetryEventCounts(
             router_selected_by_route={},
             snapshot_stale_detected=0,
