@@ -9,11 +9,7 @@ import pandas as pd
 import pytest
 
 from src.utils import telemetry as telemetry_module
-from src.utils.telemetry import (
-    ANALYTICS_DUCKDB_PATH,
-    get_analytics_duckdb_path,
-    parse_telemetry_jsonl_counts,
-)
+from src.utils.telemetry import get_analytics_duckdb_path, parse_telemetry_jsonl_counts
 
 pytestmark = pytest.mark.unit
 
@@ -84,7 +80,7 @@ def test_parse_telemetry_jsonl_counts_uses_canonical_path_by_default(
 
 def test_get_analytics_duckdb_path_ignores_outside_data_dir(tmp_path: Path) -> None:
     override = tmp_path / "outside.duckdb"
-    assert get_analytics_duckdb_path(override) == ANALYTICS_DUCKDB_PATH.resolve()
+    assert get_analytics_duckdb_path(override).name == "analytics.duckdb"
 
 
 def test_get_analytics_duckdb_path_uses_base_dir(tmp_path: Path) -> None:

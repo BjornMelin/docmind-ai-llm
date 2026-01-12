@@ -1,6 +1,7 @@
 """Lightweight JSONL telemetry emitter.
 
 Writes events to logs/telemetry.jsonl to keep observability local-first.
+Use get_analytics_duckdb_path() for settings-aware analytics DB paths.
 """
 
 from __future__ import annotations
@@ -24,8 +25,8 @@ TELEMETRY_JSONL_PATH = Path("./logs/telemetry.jsonl")
 # Public constant for consumers that need the canonical telemetry path.
 _TELEM_PATH = TELEMETRY_JSONL_PATH
 
-# Public constant for consumers that need the canonical local analytics DB path.
-ANALYTICS_DUCKDB_PATH = Path("data/analytics/analytics.duckdb")
+# Internal default path; prefer get_analytics_duckdb_path() for settings-aware use.
+_ANALYTICS_DUCKDB_PATH = Path("data/analytics/analytics.duckdb")
 
 # Context-managed request id (optional). When set, it will be added to events.
 _REQUEST_ID: ContextVar[str | None] = ContextVar("request_id", default=None)
@@ -115,7 +116,9 @@ def get_analytics_duckdb_path(
     base_dir: Path | None = None,
 ) -> Path:
     """Return the local analytics DuckDB path (optionally overridden)."""
-    resolved_base = (base_dir or settings.data_dir or Path("data")).resolve()
+    resolved_base = (
+        base_dir or settings.data_dir or _ANALYTICS_DUCKDB_PATH.parent.parent
+    ).resolve()
     default_path = resolved_base / "analytics" / "analytics.duckdb"
     if override is None:
         return default_path
@@ -262,7 +265,6 @@ def parse_telemetry_jsonl_counts(
 
 
 __all__ = [
-    "ANALYTICS_DUCKDB_PATH",
     "TELEMETRY_JSONL_PATH",
     "TelemetryEventCounts",
     "get_analytics_duckdb_path",
