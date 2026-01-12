@@ -7,6 +7,7 @@ without requiring actual model inference.
 
 import os
 import tempfile
+from types import SimpleNamespace
 
 from llama_index.core.schema import ImageNode, NodeWithScore
 
@@ -17,11 +18,25 @@ def test_siglip_decrypts_and_cleans_temp(monkeypatch, tmp_path):
     # Create a fake encrypted path (we won't actually encrypt to keep this unit-only)
     enc_path = tmp_path / "page.webp.enc"
     enc_path.write_bytes(b"ciphertext")
+    monkeypatch.setattr(
+        rr,
+        "ArtifactStore",
+        SimpleNamespace(
+            from_settings=lambda _settings: SimpleNamespace(
+                resolve_path=lambda _ref: enc_path
+            )
+        ),
+        raising=False,
+    )
 
     nodes = [
         NodeWithScore(
             node=ImageNode(
-                image_path=str(enc_path), metadata={"modality": "pdf_page_image"}
+                metadata={
+                    "modality": "pdf_page_image",
+                    "image_artifact_id": "deadbeef",
+                    "image_artifact_suffix": ".webp.enc",
+                }
             ),
             score=0.0,
         )

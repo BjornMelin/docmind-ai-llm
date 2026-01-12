@@ -21,19 +21,6 @@ from src.persistence.chat_db import (
 pytestmark = pytest.mark.unit
 
 
-def test_open_chat_db_anchors_relative_paths_under_data_dir(tmp_path: Path) -> None:
-    cfg = SimpleNamespace(data_dir=tmp_path)  # type: ignore[arg-type]
-    conn = open_chat_db(Path("data/chat.db"), cfg=cfg)  # legacy default shape
-    try:
-        assert Path(conn.execute("PRAGMA database_list;").fetchone()[2]).exists()
-        ensure_session_registry(conn)
-        created = create_session(title="A", conn=conn)
-        assert created.thread_id
-        assert list_sessions(conn)[0].title == "A"
-    finally:
-        conn.close()
-
-
 def test_session_crud_and_purge(tmp_path: Path) -> None:
     cfg = SimpleNamespace(data_dir=tmp_path)  # type: ignore[arg-type]
     conn = open_chat_db(Path("chat.db"), cfg=cfg)

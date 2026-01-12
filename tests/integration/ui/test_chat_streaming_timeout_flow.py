@@ -2,7 +2,7 @@
 
 This test patches MultiAgentCoordinator.process_query to simulate a timeout
 response and verifies that st.write_stream is called and the session history
-is appended with the assistant message.
+is updated with the assistant response.
 """
 
 from __future__ import annotations
@@ -31,8 +31,14 @@ def test_chat_streaming_timeout_flow(monkeypatch) -> None:  # type: ignore[no-un
     # Clean session
     st.session_state.clear()
 
+    captured: dict[str, Any] = {"streamed": ""}
+
     # Patch Streamlit pieces used by main
-    monkeypatch.setattr(st, "write_stream", _fake_write_stream, raising=False)
+    def _capture_write_stream(stream: Iterable[str]) -> str:
+        captured["streamed"] = _fake_write_stream(stream)
+        return captured["streamed"]
+
+    monkeypatch.setattr(st, "write_stream", _capture_write_stream, raising=False)
     monkeypatch.setattr(st, "chat_message", _fake_chat_message, raising=False)
 
     # Provide a single user prompt
@@ -52,6 +58,12 @@ def test_chat_streaming_timeout_flow(monkeypatch) -> None:  # type: ignore[no-un
 
     # Patch coordinator to return a timeout response
     class _DummyCoord:
+        def list_checkpoints(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+            return []
+
+        def get_state_values(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+            return {"messages": []}
+
         def process_query(self, *args: Any, **kwargs: Any) -> AgentResponse:
             """Return a deterministic timeout response."""
             return AgentResponse(
@@ -70,12 +82,45 @@ def test_chat_streaming_timeout_flow(monkeypatch) -> None:  # type: ignore[no-un
         mod, "MultiAgentCoordinator", lambda: _DummyCoord(), raising=False
     )
 
-    # Run the page main()
-    with contextlib.suppress(Exception):
-        mod.main()
+    # Stub non-essential page dependencies so we actually reach _handle_chat_prompt.
+    monkeypatch.setattr(
+        mod, "configure_observability", lambda *_a, **_k: None, raising=False
+    )
+    monkeypatch.setattr(mod, "provider_badge", lambda *_a, **_k: None, raising=False)
 
-    # Validate that assistant message appended with streamed final text
-    msgs = st.session_state.get("messages", [])
-    assert msgs, "Expected messages history to be updated"
-    assert msgs[-1]["role"] == "assistant"
-    assert "timed out" in msgs[-1]["content"].lower()
+    class _Conn:
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(mod, "get_chat_db_conn", lambda: _Conn(), raising=False)
+
+    class _Selection:
+        thread_id = "t1"
+        user_id = "u1"
+        resume_checkpoint_id = None
+
+    monkeypatch.setattr(
+        mod, "render_session_sidebar", lambda _conn: _Selection(), raising=False
+    )
+    monkeypatch.setattr(mod, "_get_coordinator", lambda: _DummyCoord(), raising=False)
+    monkeypatch.setattr(
+        mod, "render_time_travel_sidebar", lambda *_a, **_k: None, raising=False
+    )
+    monkeypatch.setattr(
+        mod, "_render_memory_sidebar", lambda *_a, **_k: None, raising=False
+    )
+    monkeypatch.setattr(
+        mod, "_render_visual_search_sidebar", lambda *_a, **_k: None, raising=False
+    )
+    monkeypatch.setattr(mod, "_ensure_router_engine", lambda: None, raising=False)
+    monkeypatch.setattr(mod, "_render_staleness_badge", lambda: None, raising=False)
+    monkeypatch.setattr(mod, "_load_chat_messages", lambda *_a, **_k: [], raising=False)
+    monkeypatch.setattr(
+        mod, "_render_chat_history", lambda *_a, **_k: None, raising=False
+    )
+    monkeypatch.setattr(mod, "touch_session", lambda *_a, **_k: None, raising=False)
+
+    # Run the page main()
+    mod.main()
+
+    assert "timed out" in str(captured.get("streamed") or "").lower()

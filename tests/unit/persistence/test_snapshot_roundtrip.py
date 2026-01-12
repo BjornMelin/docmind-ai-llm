@@ -51,7 +51,13 @@ def _isolate_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Point data_dir to tmp so SnapshotManager writes under it
     from src.config.settings import settings as _settings
 
-    _settings.data_dir = tmp_path
+    monkeypatch.setattr(_settings, "data_dir", tmp_path, raising=False)
+    monkeypatch.setattr(
+        _settings.chat, "sqlite_path", tmp_path / "chat.db", raising=False
+    )
+    monkeypatch.setattr(
+        _settings.database, "sqlite_db_path", tmp_path / "docmind.db", raising=False
+    )
 
 
 def test_snapshot_roundtrip_with_stubs(monkeypatch: pytest.MonkeyPatch) -> None:

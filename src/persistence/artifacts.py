@@ -3,7 +3,7 @@
 Stores binary artifacts (e.g., rendered PDF page images + thumbnails) under a
 directory rooted at ``settings.data_dir`` by default.
 
-Final-release constraints:
+Constraints:
 - Persist **references** (sha256 + suffix), not raw filesystem paths, in durable
   stores (Qdrant payloads, LangGraph SQLite state, etc.).
 - Enforce a directory jail: resolved artifact paths must live under the root.

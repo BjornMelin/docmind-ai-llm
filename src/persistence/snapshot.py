@@ -672,7 +672,7 @@ __all__ = [
 
 
 class SnapshotManager:
-    """Compatibility wrapper for UI components expecting a class API."""
+    """Convenience wrapper for UI components expecting a class API."""
 
     def __init__(self, storage_dir: Path) -> None:
         """Initialize the manager with the provided storage directory.

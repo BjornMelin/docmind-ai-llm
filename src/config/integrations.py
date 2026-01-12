@@ -20,13 +20,10 @@ from typing import TYPE_CHECKING, Any, cast
 from llama_index.core import Settings
 
 from src.config.llm_factory import build_llm
-from src.models.embeddings import (
-    BackboneName,
-    ImageEmbedder,
-    TextEmbedder,
-    UnifiedEmbedder,
-)
+from src.models.embedding_constants import ImageBackboneName
+from src.models.embeddings import ImageEmbedder, TextEmbedder, UnifiedEmbedder
 from src.telemetry.opentelemetry import setup_metrics, setup_tracing
+from src.utils.exceptions import IMPORT_EXCEPTIONS
 
 from .settings import DocMindSettings, settings
 
@@ -152,12 +149,7 @@ def startup_init(cfg: "DocMindSettings" = settings) -> None:
                 bool(getattr(cfg.retrieval, "enable_server_hybrid", False)),
                 str(getattr(cfg.retrieval, "fusion_mode", "rrf")),
             )
-        except (
-            ImportError,
-            AttributeError,
-            TypeError,
-            ValueError,
-        ) as exc:  # pragma: no cover - logging must not fail
+        except IMPORT_EXCEPTIONS as exc:  # pragma: no cover - logging must not fail
             logger.debug("Startup logging failed: %s", exc)
     except (
         OSError,
@@ -219,7 +211,7 @@ def get_unified_embedder():  # pragma: no cover - simple factory
 
 
 def get_image_embedder(
-    backbone: BackboneName = "siglip_base",
+    backbone: ImageBackboneName = "siglip_base",
 ) -> ImageEmbedder:  # pragma: no cover - simple factory
     """Return an ImageEmbedder with the requested backbone.
 

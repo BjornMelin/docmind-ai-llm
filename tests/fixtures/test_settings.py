@@ -23,6 +23,7 @@ from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 
 from src.config.settings import (
+    SETTINGS_MODEL_CONFIG,
     AgentConfig,
     CacheConfig,
     DocMindSettings,
@@ -248,12 +249,8 @@ class SystemTestSettings(DocMindSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",  # Load production .env for system tests
-        env_prefix="DOCMIND_",
-        env_nested_delimiter="__",
-        case_sensitive=False,
+        **SETTINGS_MODEL_CONFIG,
         validate_default=True,
-        extra="ignore",
     )
 
     # Uses all production defaults from DocMindSettings and nested configurations

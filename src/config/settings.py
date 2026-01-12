@@ -18,7 +18,17 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from src.models.embedding_constants import ImageBackboneName
+
 logger = logging.getLogger(__name__)
+
+SETTINGS_MODEL_CONFIG = SettingsConfigDict(
+    env_file=".env",
+    env_prefix="DOCMIND_",
+    env_nested_delimiter="__",
+    case_sensitive=False,
+    extra="ignore",
+)
 
 
 class VLLMConfig(BaseModel):
@@ -156,7 +166,7 @@ class ProcessingConfig(BaseModel):
 class ChatConfig(BaseModel):
     """Chat memory configuration (ADR-021)."""
 
-    sqlite_path: Path = Field(default=Path("./data/chat.db"))
+    sqlite_path: Path = Field(default=Path("chat.db"))
     memory_store_filter_fetch_cap: int = Field(
         default=5000,
         ge=256,
@@ -271,13 +281,7 @@ class EmbeddingConfig(BaseModel):
     batch_size_text_cpu: int = Field(default=4, ge=1, le=64)
 
     # Images
-    image_backbone: Literal[
-        "auto",
-        "openclip_vitl14",
-        "openclip_vith14",
-        "siglip_base",
-        "bge_visualized",
-    ] = Field(default="auto")
+    image_backbone: ImageBackboneName = Field(default="auto")
     siglip_model_id: str = Field(default="google/siglip-base-patch16-224")
     normalize_image: bool = Field(default=True)
     batch_size_image: int = Field(default=8, ge=1, le=64)
@@ -322,8 +326,6 @@ class RetrievalConfig(BaseModel):
     named_vectors_multi_head_enabled: bool = Field(default=False)
     # Router and feature toggles (ADR-003)
     router: Literal["auto", "simple", "hierarchical", "graph"] = Field(default="auto")
-    # Deprecated legacy flag removed; use enable_server_hybrid
-    hierarchy_enabled: bool = Field(default=True)
     graph_enabled: bool = Field(default=False)
     # Server-side hybrid via Qdrant Query API fusion (prefetch + RRF/DBSF).
     # This specifically controls registration of a server-side hybrid tool in
@@ -476,7 +478,7 @@ class DatabaseConfig(BaseModel):
     qdrant_timeout: int = Field(default=60, ge=10, le=300)
 
     # SQL Database
-    sqlite_db_path: Path = Field(default=Path("./data/docmind.db"))
+    sqlite_db_path: Path = Field(default=Path("docmind.db"))
     enable_wal_mode: bool = Field(default=True)
 
 
@@ -573,13 +575,7 @@ class MonitoringConfig(BaseModel):
 class DocMindSettings(BaseSettings):
     """Unified DocMind AI configuration with Pydantic Settings V2."""
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_prefix="DOCMIND_",
-        env_nested_delimiter="__",
-        case_sensitive=False,
-        extra="ignore",
-    )
+    model_config = SETTINGS_MODEL_CONFIG
 
     # Core Application
     app_name: str = Field(default="DocMind AI")
@@ -697,13 +693,6 @@ class DocMindSettings(BaseSettings):
     dspy_metric_threshold: float = Field(default=0.8, ge=0.5, le=1.0)
     enable_dspy_bootstrapping: bool = Field(default=True)
 
-    # GraphRAG legacy (prefer nested graphrag_cfg)
-    graphrag_relationship_extraction: bool = Field(default=False)
-    graphrag_entity_resolution: str = Field(default="fuzzy")
-    graphrag_max_hops: int = Field(default=2, ge=1, le=5)
-    graphrag_max_triplets: int = Field(default=1000, ge=100, le=10000)
-    graphrag_chunk_size: int = Field(default=1024, ge=256, le=4096)
-
     # UI Configuration moved to nested UIConfig structure
 
     # Nested Configuration Models
@@ -738,6 +727,7 @@ class DocMindSettings(BaseSettings):
     def _apply_aliases_and_validate(self) -> "DocMindSettings":
         self._apply_alias_overrides()
         self._map_hybrid_to_retrieval()
+        self._normalize_persistence_paths()
         self._validate_endpoints_security()
         self._validate_lmstudio_url()
         return self
@@ -775,6 +765,21 @@ class DocMindSettings(BaseSettings):
             logger.warning(
                 "Failed to sync hybrid config into retrieval settings: %s", exc
             )
+
+    def _normalize_persistence_paths(self) -> None:
+        """Normalize configured DB paths to live under data_dir by default."""
+        for section, attr in (("chat", "sqlite_path"), ("database", "sqlite_db_path")):
+            candidate = getattr(getattr(self, section, None), attr, None)
+            if not isinstance(candidate, Path):
+                continue
+            if candidate.is_absolute():
+                continue
+            if candidate.parent != Path("."):
+                continue
+            target = getattr(self, section, None)
+            if target is None:
+                continue
+            setattr(target, attr, self.data_dir / candidate)
 
     @field_validator("lmstudio_base_url", mode="before")
     @classmethod
@@ -931,26 +936,14 @@ class DocMindSettings(BaseSettings):
             Mapping with GraphRAG enablement and extraction/traversal settings.
             Router initialization consumes this helper directly.
         """
-        # Prefer nested configuration; fallback to top-level fields
-        if hasattr(self, "graphrag_cfg") and isinstance(
-            self.graphrag_cfg, GraphRAGConfig
-        ):
-            c = self.graphrag_cfg
-            return {
-                "enabled": self.is_graphrag_enabled(),
-                "relationship_extraction": c.relationship_extraction,
-                "entity_resolution": c.entity_resolution,
-                "max_hops": c.max_hops,
-                "max_triplets": c.max_triplets,
-                "chunk_size": c.chunk_size,
-            }
+        c = self.graphrag_cfg
         return {
             "enabled": self.is_graphrag_enabled(),
-            "relationship_extraction": self.graphrag_relationship_extraction,
-            "entity_resolution": self.graphrag_entity_resolution,
-            "max_hops": self.graphrag_max_hops,
-            "max_triplets": self.graphrag_max_triplets,
-            "chunk_size": self.graphrag_chunk_size,
+            "relationship_extraction": c.relationship_extraction,
+            "entity_resolution": c.entity_resolution,
+            "max_hops": c.max_hops,
+            "max_triplets": c.max_triplets,
+            "chunk_size": c.chunk_size,
         }
 
     def is_graphrag_enabled(self) -> bool:

@@ -20,10 +20,12 @@ Notes:
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
+
+from src.models.embedding_constants import ImageBackboneName
 
 try:  # Optional torch for normalization and device checks
     import torch as TORCH  # type: ignore  # noqa: N812
@@ -276,14 +278,8 @@ class TextEmbedder:
 
 
 # ===== Images: OpenCLIP / SigLIP (tiered) =====
-BackboneName = Literal[
-    "auto",
-    "openclip_vitl14",
-    "openclip_vith14",
-    "siglip_base",
-    "bge_visualized",
-]
-_BackboneName = BackboneName
+BackboneName = ImageBackboneName
+_BackboneName = ImageBackboneName
 
 
 class ImageEmbedder:
@@ -335,10 +331,10 @@ class ImageEmbedder:
             )
 
             # High-VRAM GPUs use OpenCLIP ViT-H/14; otherwise SigLIP base.
-            _dev_str, _idx = _resdev(self.device)
+            _dev_str, idx = _resdev(self.device)
             return (
                 "openclip_vith14"
-                if _has_cuda_vram(20.0, device_index=int(_idx or 0))
+                if _has_cuda_vram(20.0, device_index=int(idx or 0))
                 else "siglip_base"
             )
         except (RuntimeError, ImportError, AttributeError, TypeError):

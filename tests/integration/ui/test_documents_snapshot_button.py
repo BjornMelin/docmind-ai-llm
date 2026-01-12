@@ -27,6 +27,8 @@ def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[AppTest]:
     from src.config.settings import settings as app_settings
 
     app_settings.data_dir = tmp_path
+    app_settings.chat.sqlite_path = tmp_path / "chat.db"
+    app_settings.database.sqlite_db_path = tmp_path / "docmind.db"
 
     prev_modules = {
         name: sys.modules.get(name)

@@ -183,7 +183,7 @@ def test_resolve_embedding_configures_llamaindex(
 
 @pytest.mark.asyncio
 async def test_ingest_documents_without_embedding_warns_and_runs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """ingest_documents proceeds when embeddings remain unavailable."""
     from src.processing import ingestion_pipeline as module
@@ -212,20 +212,23 @@ async def test_ingest_documents_without_embedding_warns_and_runs(
     monkeypatch.setattr(module, "build_ingestion_pipeline", _fake_build)
     monkeypatch.setattr(module, "get_settings_embed_model", lambda: None)
     monkeypatch.setattr(module, "setup_llamaindex", lambda **_: None)
+    warnings: list[str] = []
+
+    def _warn(msg: str, *args: Any, **kwargs: Any) -> None:
+        warnings.append(str(msg))
+
+    monkeypatch.setattr(module.logger, "warning", _warn, raising=False)
 
     cfg = IngestionConfig(
         cache_dir=tmp_path / "cache", docstore_path=tmp_path / "docstore.json"
     )
     inputs = [IngestionInput(document_id="doc", payload_bytes=b"payload")]
 
-    with caplog.at_level("WARNING"):
-        result = await module.ingest_documents(cfg, inputs, embedding=None)
+    result = await module.ingest_documents(cfg, inputs, embedding=None)
 
     assert call_state["embedding"] is None
     assert result.nodes == [{"doc_id": "doc", "text": "payload"}]
-    assert any(
-        "No embedding model configured" in record.message for record in caplog.records
-    )
+    assert any("No embedding model configured" in msg for msg in warnings)
 
 
 def test_document_from_input_falls_back_on_type_error(tmp_path: Path) -> None:

@@ -225,7 +225,7 @@ def _document_from_input(
         doc.doc_id = item.document_id
         doc.metadata.update(item.metadata)
         doc.metadata.setdefault("document_id", item.document_id)
-        # Final-release: do not persist raw filesystem paths in node metadata.
+        # Do not persist raw filesystem paths in node metadata.
         # Keep stable identifiers (document_id, sha256, source_filename) instead.
         src = doc.metadata.get("source")
         if isinstance(src, str):
@@ -289,7 +289,7 @@ def _page_image_exports(
         ):
             content_type = "image/jpeg"
 
-        # Final-release: avoid returning path-like fields in persistable metadata.
+        # Avoid returning path-like fields in persistable metadata.
         metadata = {
             k: v for k, v in entry.items() if k not in {"image_path", "thumbnail_path"}
         }
@@ -411,19 +411,15 @@ def _build_page_image_records(
 
         # NOTE: This mutates export.metadata in-place so downstream consumers of
         # `exports` see stable artifact references.
-        export.metadata.update(
-            {
-                "image_artifact_id": img_ref.sha256,
-                "image_artifact_suffix": img_ref.suffix,
-            }
-        )
+        export.metadata.update({
+            "image_artifact_id": img_ref.sha256,
+            "image_artifact_suffix": img_ref.suffix,
+        })
         if thumb_ref is not None:
-            export.metadata.update(
-                {
-                    "thumbnail_artifact_id": thumb_ref.sha256,
-                    "thumbnail_artifact_suffix": thumb_ref.suffix,
-                }
-            )
+            export.metadata.update({
+                "thumbnail_artifact_id": thumb_ref.sha256,
+                "thumbnail_artifact_suffix": thumb_ref.suffix,
+            })
 
         try:
             records.append(
@@ -518,7 +514,7 @@ def _index_page_images(
 ) -> dict[str, Any]:
     """Index rendered PDF page images into Qdrant (best-effort).
 
-    Final-release wiring:
+    Wiring:
     - Convert page-image exports to content-addressed artifact refs.
     - Index page images into Qdrant image collection using SigLIP embeddings.
     - Store **only** artifact references in Qdrant payload (no base64, no raw paths).
@@ -620,7 +616,7 @@ async def ingest_documents(
 
     metadata = {
         "document_count": len(inputs),
-        # Final-release: avoid emitting absolute local filesystem paths in
+        # Avoid emitting absolute local filesystem paths in
         # structured results that could be logged or persisted.
         "cache_db": cache_path.name,
         "docstore_enabled": bool(docstore_path),
