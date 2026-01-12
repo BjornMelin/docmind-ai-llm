@@ -91,18 +91,20 @@ def _sanitize_event(event: dict[str, Any]) -> dict[str, Any]:
         for key, value in mapping.items():
             skey = str(key)
             # Never persist base64 blobs.
-            if "base64" in skey.lower() or skey.endswith("_base64"):
+            if "base64" in skey.lower():
                 continue
             # Avoid persisting filesystem paths; keep only a safe basename.
             if (skey == "path" or skey.endswith("_path")) and isinstance(value, str):
                 v = value
-                if (
-                    v.startswith("/")
-                    or v.startswith("\\\\")
-                    or ":" in v[:4]
-                    or "/" in v
-                    or "\\" in v
-                ):
+                is_abs_unix = v.startswith("/") and not v.startswith("//")
+                is_unc = v.startswith("\\\\")
+                is_windows_drive = len(v) >= 2 and v[1] == ":" and v[0].isalpha()
+                is_relative_with_sep = (
+                    ("/" in v or "\\" in v)
+                    and not v.startswith(("http://", "https://", "s3://", "gs://"))
+                    and not v.startswith("data:")
+                )
+                if is_abs_unix or is_unc or is_windows_drive or is_relative_with_sep:
                     cleaned[skey] = Path(v).name
                     continue
             cleaned[skey] = _sanitize_value(value, depth=depth)

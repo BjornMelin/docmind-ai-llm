@@ -107,6 +107,7 @@ This supersedes ADR-043 and ADR-021 by establishing **one canonical, final-relea
 ### Security Considerations
 
 - `langgraph-checkpoint-sqlite==3.0.1` is pinned because it fixes **CVE-2025-67644** (SQL injection via metadata filter keys in checkpoint list; patched release published 2025-12-09).
+- `langgraph-checkpoint-sqlite>=3.0.0` is required to address **CVE-2025-64439** (JsonPlusSerializer RCE in versions < 3.0.0).
 
 ## High-Level Architecture
 

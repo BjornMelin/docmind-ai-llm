@@ -114,11 +114,6 @@ async def load_documents_from_directory(
     return await load_documents_unstructured(paths)
 
 
-async def load_documents(file_paths: list[str | Path]) -> list[Any]:
-    """Convenience alias retained for compatibility with async callers."""
-    return await load_documents_unstructured(file_paths)
-
-
 def ensure_spacy_model(model: str = "en_core_web_sm") -> Any:
     """Load a spaCy model when installed; raises a clear error when missing."""
     try:
@@ -188,7 +183,6 @@ __all__ = [
     "ensure_spacy_model",
     "get_cache_stats",
     "get_document_info",
-    "load_documents",
     "load_documents_from_directory",
     "load_documents_unstructured",
 ]

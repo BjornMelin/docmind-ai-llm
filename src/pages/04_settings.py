@@ -213,9 +213,10 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
     # Apply updated settings in-place so existing imports keep the same instance.
     for field in settings.model_fields:
         try:
-            setattr(settings, field, getattr(updated, field))
+            value = getattr(updated, field)
         except AttributeError:
             continue
+        setattr(settings, field, value)
 
     model_label = validated.model or validated.vllm.model
     try:

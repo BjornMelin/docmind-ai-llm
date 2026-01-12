@@ -9,10 +9,10 @@ import sys
 import time
 import urllib.request
 from html.parser import HTMLParser
+from http.client import HTTPResponse
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import unquote, urlparse
-from urllib.response import addinfourl
 
 
 class _TorchWheelIndexParser(HTMLParser):
@@ -110,14 +110,14 @@ def _ensure_https(url: str) -> None:
         raise SystemExit(f"Refusing non-HTTPS URL: {url}")
 
 
-def _open_https(url: str, timeout: int) -> addinfourl:
+def _open_https(url: str, timeout: int) -> HTTPResponse:
     _ensure_https(url)
-    return urllib.request.urlopen(url, timeout=timeout)  # noqa: S310
+    return urllib.request.urlopen(url, timeout=timeout)  # type: ignore[return-value]  # noqa: S310
 
 
-def _open_https_request(req: urllib.request.Request, timeout: int) -> addinfourl:
+def _open_https_request(req: urllib.request.Request, timeout: int) -> HTTPResponse:
     _ensure_https(req.full_url)
-    return urllib.request.urlopen(req, timeout=timeout)  # noqa: S310
+    return urllib.request.urlopen(req, timeout=timeout)  # type: ignore[return-value]  # noqa: S310
 
 
 def main() -> None:
