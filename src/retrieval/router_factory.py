@@ -103,19 +103,28 @@ def build_router_engine(
 
     the_llm = llm if llm is not None else None
 
-    # Vector tool (always on)
-    try:
-        from src.retrieval.reranking import get_postprocessors as _get_pp
+    def _safe_get_pp() -> Any | None:
+        try:
+            from src.retrieval.reranking import get_postprocessors
 
-        vector_post = _get_pp(
-            "vector", use_reranking=use_rerank_flag, top_n=normalized_top_k
+            return get_postprocessors
+        except ImportError:
+            return None
+
+    # Vector tool (always on)
+    get_pp = _safe_get_pp()
+    try:
+        vector_post = (
+            get_pp("vector", use_reranking=use_rerank_flag, top_n=normalized_top_k)
+            if get_pp is not None
+            else None
         )
         vector_engine = build_vector_query_engine(
             vector_index,
             vector_post,
             similarity_top_k=int(getattr(cfg.retrieval, "top_k", 10)),
         )
-    except (TypeError, AttributeError, ValueError, ImportError):
+    except (TypeError, AttributeError, ValueError):
         vector_engine = vector_index.as_query_engine()
 
     vector_tool = query_engine_tool_cls(
@@ -160,8 +169,14 @@ def build_router_engine(
                 from src.retrieval.multimodal_fusion import MultimodalFusionRetriever
 
                 mm_retriever = MultimodalFusionRetriever()
-                mm_post = _get_pp(
-                    "hybrid", use_reranking=use_rerank_flag, top_n=normalized_top_k
+                mm_post = (
+                    get_pp(
+                        "hybrid",
+                        use_reranking=use_rerank_flag,
+                        top_n=normalized_top_k,
+                    )
+                    if get_pp is not None
+                    else None
                 )
                 mm_engine = build_retriever_query_engine(
                     mm_retriever,
@@ -197,7 +212,6 @@ def build_router_engine(
         if hybrid_requested:
             try:
                 from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
-                from src.retrieval.reranking import get_postprocessors as _get_pp
 
                 params = _HybridParams(
                     collection=cfg.database.qdrant_collection,
@@ -212,8 +226,14 @@ def build_router_engine(
                     dedup_key=str(getattr(cfg.retrieval, "dedup_key", "page_id")),
                 )
                 retriever = ServerHybridRetriever(params)
-                hybrid_post = _get_pp(
-                    "hybrid", use_reranking=use_rerank_flag, top_n=normalized_top_k
+                hybrid_post = (
+                    get_pp(
+                        "hybrid",
+                        use_reranking=use_rerank_flag,
+                        top_n=normalized_top_k,
+                    )
+                    if get_pp is not None
+                    else None
                 )
                 hybrid_engine = build_retriever_query_engine(
                     retriever,
@@ -255,11 +275,17 @@ def build_router_engine(
                     getattr(getattr(cfg, "graphrag_cfg", cfg), "default_path_depth", 1)
                 )
                 graph_top_k = int(getattr(cfg.retrieval, "top_k", 10))
-                from src.retrieval.reranking import get_postprocessors as _get_pp
 
-                graph_post = _get_pp(
-                    "kg", use_reranking=use_rerank_flag, top_n=normalized_top_k
+                graph_post = (
+                    get_pp(
+                        "kg",
+                        use_reranking=use_rerank_flag,
+                        top_n=normalized_top_k,
+                    )
+                    if get_pp is not None
+                    else None
                 )
+
                 try:
                     artifacts = build_graph_query_engine(
                         pg_index,
