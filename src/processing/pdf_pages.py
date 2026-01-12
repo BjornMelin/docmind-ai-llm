@@ -236,19 +236,29 @@ def pdf_pages_to_image_documents(
     for i, path, _rect, phash, page_text in entries:
         try:
             ref = store.put_file(Path(path))
-            resolved_path = store.resolve_path(ref)
-        except (OSError, ValueError) as exc:
-            # Final-release invariant: never return ImageDocuments that reference
-            # non-jailed raw filesystem paths.
-            logger.warning(
-                "Skipped PDF page image artifact storage "
-                "(page={}, path={}, phash={}): {}",
+        except (OSError, ValueError):
+            logger.exception(
+                "ArtifactStore.put_file failed for PDF page image "
+                "(page=%s, path=%s, phash=%s)",
                 i,
                 path,
                 phash,
-                type(exc).__name__,
             )
             continue
+
+        try:
+            resolved_path = store.resolve_path(ref)
+        except (OSError, ValueError):
+            logger.exception(
+                "ArtifactStore.resolve_path failed for PDF page image "
+                "(page=%s, path=%s, phash=%s, ref=%s)",
+                i,
+                path,
+                phash,
+                ref,
+            )
+            continue
+
         meta: dict[str, Any] = {
             "page": i,
             "modality": "pdf_page_image",

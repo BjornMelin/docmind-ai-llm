@@ -103,7 +103,7 @@ class ImageSiglipRetriever:
             except TypeError:
                 points = []
 
-        # Stable ordering.
+        # Stable ordering: score desc, id asc (avoid tie nondeterminism)
         ordered = sorted(
             points,
             key=lambda p: (

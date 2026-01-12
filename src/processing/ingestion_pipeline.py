@@ -354,6 +354,164 @@ def _load_documents(
     return documents, exports
 
 
+def _store_image_artifact(
+    store: ArtifactStore,
+    export: ExportArtifact,
+    settings: Any,
+) -> tuple[Any, Path, Any | None, Path | None]:
+    img_ref = store.put_file(Path(export.path))
+    img_path = store.resolve_path(img_ref)
+    thumb_ref = None
+    thumb_path = None
+    try:
+        from src.utils.images import ensure_thumbnail
+
+        thumb_dir = Path(export.path).parent / "thumbs"
+        thumb_dir.mkdir(parents=True, exist_ok=True)
+        thumb_local = ensure_thumbnail(
+            Path(export.path),
+            max_side=int(getattr(settings.processing, "thumbnail_max_side", 384)),
+            thumb_dir=thumb_dir,
+            encrypt=bool(str(export.path).endswith(".enc")),
+        )
+        thumb_ref = store.put_file(Path(thumb_local))
+        thumb_path = store.resolve_path(thumb_ref)
+    except Exception:
+        thumb_ref = None
+        thumb_path = None
+    return img_ref, img_path, thumb_ref, thumb_path
+
+
+def _build_page_image_records(
+    exports: list[ExportArtifact],
+    store: ArtifactStore,
+    settings: Any,
+) -> tuple[list[Any], int]:
+    from src.retrieval.image_index import PageImageRecord
+
+    records: list[Any] = []
+    skipped = 0
+    for export in exports:
+        meta = dict(getattr(export, "metadata", {}) or {})
+        doc_id = str(meta.get("doc_id") or meta.get("document_id") or "")
+        page_no_raw = meta.get("page_no") or meta.get("page") or meta.get("page_number")
+        try:
+            page_no = int(page_no_raw) if page_no_raw is not None else 0
+        except (TypeError, ValueError):
+            page_no = 0
+        if not doc_id or page_no <= 0:
+            skipped += 1
+            continue
+
+        try:
+            img_ref, img_path, thumb_ref, thumb_path = _store_image_artifact(
+                store, export, settings
+            )
+        except (OSError, ValueError) as exc:
+            logger.debug("ArtifactStore put failed: %s", exc)
+            skipped += 1
+            continue
+
+        # Update export metadata with stable references (safe for persistence).
+        export.metadata.update(
+            {
+                "image_artifact_id": img_ref.sha256,
+                "image_artifact_suffix": img_ref.suffix,
+            }
+        )
+        if thumb_ref is not None:
+            export.metadata.update(
+                {
+                    "thumbnail_artifact_id": thumb_ref.sha256,
+                    "thumbnail_artifact_suffix": thumb_ref.suffix,
+                }
+            )
+
+        try:
+            records.append(
+                PageImageRecord(
+                    doc_id=doc_id,
+                    page_no=page_no,
+                    image=img_ref,
+                    image_path=img_path,
+                    thumbnail=thumb_ref,
+                    thumbnail_path=thumb_path,
+                    phash=meta.get("phash"),
+                    page_text=meta.get("page_text"),
+                    bbox=meta.get("bbox"),
+                )
+            )
+        except Exception as exc:  # pragma: no cover
+            logger.debug("PageImageRecord build failed: %s", exc)
+            skipped += 1
+    return records, skipped
+
+
+def _index_page_images_orchestrator(
+    records: list[Any],
+    store: ArtifactStore,
+    cfg: IngestionConfig,
+    *,
+    purge_doc_ids: set[str] | None = None,
+) -> dict[str, Any]:
+    from qdrant_client import QdrantClient
+
+    from src.retrieval.image_index import (
+        delete_page_images_for_doc_id,
+        index_page_images_siglip,
+    )
+    from src.utils.siglip_adapter import SiglipEmbedding
+    from src.utils.storage import get_client_config
+
+    t0 = time.time()
+    client = QdrantClient(**get_client_config())
+    purged_points = 0
+    if purge_doc_ids:
+        for doc_id in sorted({str(d) for d in purge_doc_ids if d}):
+            with contextlib.suppress(Exception):
+                purged_points += int(
+                    delete_page_images_for_doc_id(
+                        client,
+                        app_settings.database.qdrant_image_collection,
+                        doc_id=doc_id,
+                    )
+                )
+    embedder = SiglipEmbedding()
+    try:
+        indexed = index_page_images_siglip(
+            client,
+            collection_name=app_settings.database.qdrant_image_collection,
+            records=records,
+            embedder=embedder,
+            batch_size=int(getattr(cfg, "image_index_batch_size", 8)),
+        )
+    finally:
+        with contextlib.suppress(Exception):
+            client.close()
+
+    pruned = 0
+    try:
+        artifacts_cfg = getattr(app_settings, "artifacts", None)
+        max_mb = int(getattr(artifacts_cfg, "max_total_mb", 0) or 0)
+        if max_mb > 0:
+            pruned = store.prune(
+                max_total_bytes=max_mb * 1024 * 1024,
+                min_age_seconds=int(
+                    getattr(artifacts_cfg, "gc_min_age_seconds", 0) or 0
+                ),
+            )
+    except Exception:
+        pruned = 0
+
+    return {
+        "image_index.collection": app_settings.database.qdrant_image_collection,
+        "image_index.indexed": int(indexed),
+        "image_index.purged_points": int(purged_points),
+        "image_index.latency_ms": int((time.time() - t0) * 1000),
+        "image_index.artifact_gc_deleted": int(pruned),
+    }
+
+
 def _index_page_images(
     exports: list[ExportArtifact],
     cfg: IngestionConfig,
@@ -379,83 +537,7 @@ def _index_page_images(
 
     store = ArtifactStore.from_settings(app_settings)
 
-    records: list[Any] = []
-    skipped = 0
-    for e in image_exports:
-        meta = dict(getattr(e, "metadata", {}) or {})
-        doc_id = str(meta.get("doc_id") or meta.get("document_id") or "")
-        page_no_raw = meta.get("page_no") or meta.get("page") or meta.get("page_number")
-        try:
-            page_no = int(page_no_raw) if page_no_raw is not None else 0
-        except (TypeError, ValueError):
-            page_no = 0
-        if not doc_id or page_no <= 0:
-            skipped += 1
-            continue
-
-        try:
-            img_ref = store.put_file(Path(e.path))
-            img_path = store.resolve_path(img_ref)
-        except (OSError, ValueError) as exc:
-            logger.debug("ArtifactStore put failed: %s", exc)
-            skipped += 1
-            continue
-
-        thumb_ref = None
-        thumb_path = None
-        try:
-            from src.utils.images import ensure_thumbnail
-
-            thumb_dir = Path(e.path).parent / "thumbs"
-            thumb_dir.mkdir(parents=True, exist_ok=True)
-            thumb_local = ensure_thumbnail(
-                Path(e.path),
-                max_side=int(
-                    getattr(app_settings.processing, "thumbnail_max_side", 384)
-                ),
-                thumb_dir=thumb_dir,
-                encrypt=bool(str(e.path).endswith(".enc")),
-            )
-            thumb_ref = store.put_file(Path(thumb_local))
-            thumb_path = store.resolve_path(thumb_ref)
-        except Exception:
-            thumb_ref = None
-            thumb_path = None
-
-        # Update export metadata with stable references (safe for persistence).
-        e.metadata.update(
-            {
-                "image_artifact_id": img_ref.sha256,
-                "image_artifact_suffix": img_ref.suffix,
-            }
-        )
-        if thumb_ref is not None:
-            e.metadata.update(
-                {
-                    "thumbnail_artifact_id": thumb_ref.sha256,
-                    "thumbnail_artifact_suffix": thumb_ref.suffix,
-                }
-            )
-
-        try:
-            from src.retrieval.image_index import PageImageRecord
-
-            records.append(
-                PageImageRecord(
-                    doc_id=doc_id,
-                    page_no=page_no,
-                    image=img_ref,
-                    image_path=img_path,
-                    thumbnail=thumb_ref,
-                    thumbnail_path=thumb_path,
-                    phash=meta.get("phash"),
-                    page_text=meta.get("page_text"),
-                    bbox=meta.get("bbox"),
-                )
-            )
-        except Exception as exc:  # pragma: no cover
-            logger.debug("PageImageRecord build failed: %s", exc)
-            skipped += 1
+    records, skipped = _build_page_image_records(image_exports, store, app_settings)
 
     if not records:
         return {
@@ -464,64 +546,14 @@ def _index_page_images(
             "image_index.skipped": skipped,
         }
 
-    purged_points = 0
     try:
-        from qdrant_client import QdrantClient
-
-        from src.retrieval.image_index import index_page_images_siglip
-        from src.utils.siglip_adapter import SiglipEmbedding
-        from src.utils.storage import get_client_config
-
-        t0 = time.time()
-        client = QdrantClient(**get_client_config())
-        if purge_doc_ids:
-            try:
-                from src.retrieval.image_index import delete_page_images_for_doc_id
-
-                for doc_id in sorted({str(d) for d in purge_doc_ids if d}):
-                    with contextlib.suppress(Exception):
-                        purged_points += int(
-                            delete_page_images_for_doc_id(
-                                client,
-                                app_settings.database.qdrant_image_collection,
-                                doc_id=doc_id,
-                            )
-                        )
-            except Exception:
-                purged_points = int(purged_points)
-        embedder = SiglipEmbedding()
-        try:
-            indexed = index_page_images_siglip(
-                client,
-                collection_name=app_settings.database.qdrant_image_collection,
-                records=records,
-                embedder=embedder,
-                batch_size=int(getattr(cfg, "image_index_batch_size", 8)),
-            )
-        finally:
-            with contextlib.suppress(Exception):
-                client.close()
-        pruned = 0
-        try:
-            artifacts_cfg = getattr(app_settings, "artifacts", None)
-            max_mb = int(getattr(artifacts_cfg, "max_total_mb", 0) or 0)
-            if max_mb > 0:
-                pruned = store.prune(
-                    max_total_bytes=max_mb * 1024 * 1024,
-                    min_age_seconds=int(
-                        getattr(artifacts_cfg, "gc_min_age_seconds", 0) or 0
-                    ),
-                )
-        except Exception:
-            pruned = 0
+        orchestration = _index_page_images_orchestrator(
+            records, store, cfg, purge_doc_ids=purge_doc_ids
+        )
         return {
             "image_index.enabled": True,
-            "image_index.collection": app_settings.database.qdrant_image_collection,
-            "image_index.indexed": int(indexed),
             "image_index.skipped": skipped,
-            "image_index.purged_points": int(purged_points),
-            "image_index.latency_ms": int((time.time() - t0) * 1000),
-            "image_index.artifact_gc_deleted": int(pruned),
+            **orchestration,
         }
     except Exception as exc:  # pragma: no cover - fail open
         logger.info("Image indexing skipped: %s", type(exc).__name__)

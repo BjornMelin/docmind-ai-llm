@@ -10,6 +10,9 @@ feature. It is designed for DocMind's offline-first Streamlit UX:
 Security-by-default:
 - Parameterized SQL only
 - sqlite-vec extension loading is enabled only briefly during initialization
+
+TTL note:
+- `PutOp.ttl` values are interpreted in **minutes** (converted to milliseconds).
 """
 
 from __future__ import annotations
@@ -139,6 +142,7 @@ class DocMindSqliteStore(BaseStore):
     """
 
     __slots__ = (
+        "_closed",
         "_conn",
         "_lock",
         "_path",
@@ -176,12 +180,15 @@ class DocMindSqliteStore(BaseStore):
                 f"(got {self._path}, data_dir={data_dir})"
             )
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self._path), check_same_thread=False)
+        self._conn: sqlite3.Connection = sqlite3.connect(
+            str(self._path), check_same_thread=False
+        )
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL;")
         self._conn.execute("PRAGMA foreign_keys=ON;")
         self._conn.execute("PRAGMA busy_timeout=5000;")
         self._lock = threading.Lock()
+        self._closed = False
 
         self.index_config = index.copy() if index else None
         self.embeddings = ensure_embeddings(index.get("embed")) if index else None
@@ -193,12 +200,38 @@ class DocMindSqliteStore(BaseStore):
             ]
 
         self._vec_enabled = False
+        self._closed = False
         self._setup_schema()
 
     def close(self) -> None:
-        """Close the underlying SQLite connection."""
-        with contextlib.suppress(Exception):
-            self._conn.close()
+        """Close the underlying SQLite connection (best-effort).
+
+        Safe to call multiple times.
+        """
+        with self._lock:
+            if self._closed:
+                return
+
+            with contextlib.suppress(Exception):
+                self._conn.commit()
+            with contextlib.suppress(Exception):
+                self._conn.close()
+
+            self._closed = True
+            self._vec_enabled = False
+
+    def __enter__(self) -> DocMindSqliteStore:
+        """Return self for context manager use."""
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: object,
+    ) -> None:
+        """Close the store on context manager exit."""
+        self.close()
 
     # BaseStore API
     def batch(self, ops: Any) -> list[Result]:
@@ -395,6 +428,7 @@ class DocMindSqliteStore(BaseStore):
 
         expires_at_ms: int | None = None
         if op.ttl is not None:
+            # op.ttl is specified in minutes.
             expires_at_ms = now + int(float(op.ttl) * 60_000.0)
 
         ns_cols = list(ns_parts) + [""] * (_MAX_NS_DEPTH - len(ns_parts))

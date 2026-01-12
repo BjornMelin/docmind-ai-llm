@@ -29,17 +29,35 @@ def router_tool(
     with _ROUTER_TRACER.start_as_current_span("router_tool.query") as span:
         span.set_attribute("router.query.length", len(query))
         try:
-            st = state if isinstance(state, dict) else {}
             runtime_ctx = runtime.context if runtime is not None else None
+            runtime_cfg = runtime.config if runtime is not None else None
+
             router_engine = None
             if isinstance(runtime_ctx, dict):
                 router_engine = runtime_ctx.get("router_engine")
-            if router_engine is None:
-                router_engine = st.get("router_engine")
+
+            if router_engine is None and isinstance(runtime_cfg, dict):
+                configurable = runtime_cfg.get("configurable")
+                if isinstance(configurable, dict):
+                    runtime_cfg_ctx = configurable.get("runtime")
+                    if isinstance(runtime_cfg_ctx, dict):
+                        router_engine = runtime_cfg_ctx.get("router_engine")
+
+            if router_engine is None and isinstance(state, dict):
+                tools_data = state.get("tools_data")
+                if isinstance(tools_data, dict):
+                    router_engine = tools_data.get("router_engine")
+
             span.set_attribute("router.engine.available", router_engine is not None)
             if router_engine is None:
+                message = (
+                    "router_tool requires 'router_engine' via ToolRuntime.context "
+                    "(preferred) or injected state tools_data."
+                )
                 span.set_attribute("router.success", False)
-                return json.dumps({"error": "router_engine missing in InjectedState"})
+                span.set_attribute("router.error", message)
+                logger.error(message)
+                raise RuntimeError(message)
 
             try:
                 resp = router_engine.query(query)
