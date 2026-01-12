@@ -33,7 +33,12 @@ def router_tool(
             runtime_cfg = runtime.config if runtime is not None else None
 
             router_engine = None
-            if isinstance(runtime_ctx, dict):
+            if isinstance(state, dict):
+                tools_data = state.get("tools_data")
+                if isinstance(tools_data, dict):
+                    router_engine = tools_data.get("router_engine")
+
+            if router_engine is None and isinstance(runtime_ctx, dict):
                 router_engine = runtime_ctx.get("router_engine")
 
             if router_engine is None and isinstance(runtime_cfg, dict):

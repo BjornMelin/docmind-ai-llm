@@ -295,7 +295,7 @@ class RetrievalConfig(BaseModel):
     reranking_top_k: int = Field(default=5, ge=1, le=20)
     reranker_normalize_scores: bool = Field(default=True)
     enable_image_retrieval: bool = Field(
-        default=False,
+        default=True,
         description=(
             "Enable visual retrieval (SigLIP text->image) and multimodal fusion."
         ),

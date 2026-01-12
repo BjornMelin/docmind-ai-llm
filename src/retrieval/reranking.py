@@ -30,6 +30,42 @@ from src.utils.core import has_cuda_vram, resolve_device
 from src.utils.telemetry import log_jsonl
 
 
+# Back-compat: tests and callers still import _rrf_merge from this module.
+def _rrf_merge(lists: list[list[Any]], k_constant: int) -> list[Any]:
+    """Compatibility wrapper for tests and legacy callers.
+
+    Accepts NodeWithScore lists or lightweight stand-ins used in tests.
+    """
+    scores: dict[str, tuple[float, Any]] = {}
+    for ranked in lists:
+        for rank, item in enumerate(ranked, start=1):
+            node = getattr(item, "node", None)
+            nid = getattr(node, "node_id", None) or getattr(node, "id_", None) or str(
+                node
+            )
+            inc = 1.0 / (k_constant + rank)
+            cur = scores.get(str(nid))
+            if cur is None:
+                scores[str(nid)] = (inc, item)
+            else:
+                scores[str(nid)] = (cur[0] + inc, cur[1])
+
+    fused_list = list(scores.values())
+    fused_list.sort(
+        key=lambda t: (-float(t[0]), str(getattr(t[1].node, "node_id", "")))
+    )
+
+    out: list[Any] = []
+    for score, item in fused_list:
+        if isinstance(item, NodeWithScore):
+            out.append(NodeWithScore(node=item.node, score=float(score)))
+        else:
+            with contextlib.suppress(Exception):
+                setattr(item, "score", float(score))
+            out.append(item)
+    return out
+
+
 # Time budgets (ms)
 def _text_timeout_ms() -> int:
     try:
