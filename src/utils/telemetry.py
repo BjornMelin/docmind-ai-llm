@@ -18,6 +18,8 @@ from typing import Any
 
 from loguru import logger
 
+from src.config.settings import settings
+
 TELEMETRY_JSONL_PATH = Path("./logs/telemetry.jsonl")
 # Public constant for consumers that need the canonical telemetry path.
 _TELEM_PATH = TELEMETRY_JSONL_PATH
@@ -113,7 +115,7 @@ def get_analytics_duckdb_path(
     base_dir: Path | None = None,
 ) -> Path:
     """Return the local analytics DuckDB path (optionally overridden)."""
-    resolved_base = (base_dir or Path("data")).resolve()
+    resolved_base = (base_dir or settings.data_dir or Path("data")).resolve()
     default_path = resolved_base / "analytics" / "analytics.duckdb"
     if override is None:
         return default_path
