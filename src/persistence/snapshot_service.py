@@ -17,7 +17,7 @@ from loguru import logger
 
 from src.persistence.hashing import compute_config_hash, compute_corpus_hash
 from src.persistence.snapshot import SnapshotManager
-from src.persistence.snapshot_utils import current_config_dict
+from src.persistence.snapshot_utils import current_config_dict, timestamped_export_path
 from src.utils.hashing import sha256_file
 
 
@@ -37,6 +37,8 @@ def rebuild_snapshot(
         pg_index: Optional PropertyGraphIndex-like instance (may be None).
         settings_obj: Settings object with `data_dir`, `database`, and `app_version`.
         embed_model: Optional embed model instance for version reporting.
+            Pass explicitly for reliable version tracking; otherwise we fall back
+            to Settings.embed_model and (last-resort) vector_index._embed_model.
         log_export_event: Optional callback for local JSONL telemetry emission.
         record_graph_export_metric: Optional callback for OpenTelemetry metrics.
 
@@ -78,15 +80,6 @@ def rebuild_snapshot(
         graph_dir = workspace / "graph"
         graph_dir.mkdir(parents=True, exist_ok=True)
         exports_meta: list[dict[str, Any]] = []
-
-        def _timestamped_export_path(out_dir: Path, extension: str) -> Path:
-            ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-            candidate = out_dir / f"graph_export-{ts}.{extension}"
-            counter = 1
-            while candidate.exists():
-                candidate = out_dir / f"graph_export-{ts}-{counter}.{extension}"
-                counter += 1
-            return candidate
 
         def _record_export(path: Path, fmt: str, duration_ms: float) -> None:
             if not path.exists():
@@ -130,7 +123,7 @@ def rebuild_snapshot(
                 export_graph_parquet,
             )
 
-            jsonl_path = _timestamped_export_path(graph_dir, "jsonl")
+            jsonl_path = timestamped_export_path(graph_dir, "jsonl")
             try:
                 start_json = time.perf_counter()
                 export_graph_jsonl(
@@ -154,7 +147,7 @@ def rebuild_snapshot(
                     }
                 )
 
-            parquet_path = _timestamped_export_path(graph_dir, "parquet")
+            parquet_path = timestamped_export_path(graph_dir, "parquet")
             try:
                 start_parquet = time.perf_counter()
                 export_graph_parquet(

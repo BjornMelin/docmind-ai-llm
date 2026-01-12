@@ -372,15 +372,19 @@ def _render_memory_sidebar(user_id: str, thread_id: str) -> None:
         )
 
         add = st.text_input("Add memory", key="memory_add")
+        last_saved = st.session_state.get("_memory_last_saved")
         if st.button("Save memory", key="memory_save") and add.strip():
-            store.put(
-                ns,
-                str(uuid.uuid4()),
-                {"content": add.strip(), "kind": "fact", "importance": 0.7},
-                index=["content"],
-            )
-            st.session_state["memory_add"] = ""
-            st.rerun()
+            content = add.strip()
+            if content != last_saved:
+                store.put(
+                    ns,
+                    str(uuid.uuid4()),
+                    {"content": content, "kind": "fact", "importance": 0.7},
+                    index=["content"],
+                )
+                st.session_state["_memory_last_saved"] = content
+                st.session_state["memory_add"] = ""
+                st.rerun()
 
         q = st.text_input("Search", key="memory_search")
         if q.strip():

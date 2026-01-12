@@ -101,8 +101,9 @@ def _extract_previous_queries_from_state(state: dict | None) -> list[str]:
                         for block in content
                         if isinstance(block, dict) and block.get("type") == "text"
                     ]
-                    if text_parts:
-                        previous.append(" ".join(text_parts))
+                    joined = " ".join(part for part in text_parts if part.strip())
+                    if joined:
+                        previous.append(joined)
 
     return previous[-RECENT_CHAT_HISTORY_LIMIT:]
 

@@ -15,6 +15,7 @@ from loguru import logger
 from src.config.settings import settings
 from src.persistence.artifacts import ArtifactRef, ArtifactStore
 from src.persistence.snapshot import SnapshotLockTimeout, load_manifest
+from src.persistence.snapshot_utils import timestamped_export_path
 from src.retrieval.graph_config import (
     export_graph_jsonl,
     export_graph_parquet,
@@ -584,7 +585,7 @@ def _handle_manual_export(out_dir: Path, extension: str) -> None:
         vector_index = st.session_state.get("vector_index")
         cap = int(getattr(settings.graphrag_cfg, "export_seed_cap", 32))
         seeds = get_export_seed_ids(pg_index, vector_index, cap=cap)
-        out = _timestamped_export_path(out_dir, extension)
+        out = timestamped_export_path(out_dir, extension)
         start = time.perf_counter()
         if extension == "jsonl":
             export_graph_jsonl(
@@ -637,17 +638,6 @@ def _create_vector_index_fallback() -> Any | None:
         return VectorStoreIndex.from_vector_store(store)
     except Exception:  # pragma: no cover - defensive
         return None
-
-
-def _timestamped_export_path(out_dir: Path, extension: str) -> Path:
-    """Return a timestamped export path within ``out_dir``."""
-    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    candidate = out_dir / f"graph_export-{ts}.{extension}"
-    counter = 1
-    while candidate.exists():
-        candidate = out_dir / f"graph_export-{ts}-{counter}.{extension}"
-        counter += 1
-    return candidate
 
 
 def _log_export_event(payload: dict[str, Any]) -> None:

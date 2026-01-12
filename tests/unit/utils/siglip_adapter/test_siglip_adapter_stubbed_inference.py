@@ -10,12 +10,12 @@ pytestmark = pytest.mark.unit
 def test_siglip_embedding_text_and_image_with_stubbed_model() -> None:
     try:
         import torch  # type: ignore
-    except Exception:  # pragma: no cover
+    except ImportError:  # pragma: no cover
         pytest.skip("torch not installed")
 
     try:
         from PIL import Image  # type: ignore
-    except Exception:  # pragma: no cover
+    except ImportError:  # pragma: no cover
         pytest.skip("Pillow not installed")
 
     import numpy as np

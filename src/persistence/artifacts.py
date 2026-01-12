@@ -35,10 +35,6 @@ class ArtifactRef:
         return f"{self.sha256}{self.suffix}"
 
 
-def _sha256_file(path: Path) -> str:
-    return sha256_file(path)
-
-
 def _suffix_for_artifact(path: Path) -> str:
     # Preserve compound suffixes used by encrypted images: ".webp.enc".
     suffixes = path.suffixes
@@ -98,7 +94,7 @@ class ArtifactStore:
         src = Path(src)
         if not src.exists():
             raise FileNotFoundError(str(src))
-        sha = _sha256_file(src)
+        sha = sha256_file(src)
         suffix = _suffix_for_artifact(src)
         ref = ArtifactRef(sha256=sha, suffix=suffix)
         dest = self.resolve_path(ref)

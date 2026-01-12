@@ -71,9 +71,10 @@ async def load_documents_unstructured(
                     file=path,
                     unstructured_kwargs={"filename": str(path)},
                 )
-                for item in loaded or []:
+                loaded_items = list(loaded or [])
+                for idx, item in enumerate(loaded_items):
                     meta = getattr(item, "metadata", {}) or {}
-                    item.doc_id = doc_id
+                    item.doc_id = f"{doc_id}-{idx}" if len(loaded_items) > 1 else doc_id
                     item.metadata = _sanitize_doc_metadata(
                         meta,
                         source_filename=path.name,
@@ -87,7 +88,8 @@ async def load_documents_unstructured(
             text = await asyncio.to_thread(
                 path.read_text, encoding="utf-8", errors="ignore"
             )
-        except Exception:
+        except Exception as exc:
+            logger.debug(f"Fallback text read failed for {path.name}: {exc}")
             text = ""
         docs.append(
             Document(
@@ -125,7 +127,7 @@ def ensure_spacy_model(model: str = "en_core_web_sm") -> Any:
     except OSError as exc:  # pragma: no cover
         raise RuntimeError(
             f"spaCy model '{model}' is not installed. "
-            "Install it with: uv run python -m spacy download en_core_web_sm"
+            f"Install it with: uv run python -m spacy download {model}"
         ) from exc
 
 
@@ -152,7 +154,7 @@ def _resolve_ingestion_cache_dir(cache_dir: Path | None = None) -> Path:
 
         return _settings.cache_dir / "ingestion"
     except Exception:  # pragma: no cover
-        return Path("./cache/ingestion")
+        return Path(".") / "cache" / "ingestion"
 
 
 def clear_document_cache(*, cache_dir: Path | None = None) -> None:

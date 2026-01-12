@@ -228,6 +228,7 @@ def pdf_pages_to_image_documents(
     out_dir.mkdir(parents=True, exist_ok=True)
     entries = _render_pdf_pages(pdf_path, out_dir, dpi, encrypt=encrypt)
     docs: list[ImageDocument] = []
+    failed_pages: list[tuple[int, str]] = []
     # Final-release: store rendered images as content-addressed artifacts and
     # reference the jailed artifact paths in ImageDocument nodes.
     store = ArtifactStore.from_settings(settings)
@@ -235,7 +236,7 @@ def pdf_pages_to_image_documents(
     for i, path, _rect, phash, page_text in entries:
         try:
             ref = store.put_file(Path(path))
-        except (OSError, ValueError):
+        except (OSError, ValueError) as exc:
             logger.exception(
                 "ArtifactStore.put_file failed for PDF page image "
                 "(page={}, path={}, phash={})",
@@ -243,11 +244,12 @@ def pdf_pages_to_image_documents(
                 path,
                 phash,
             )
+            failed_pages.append((i, f"put_file: {exc}"))
             continue
 
         try:
             resolved_path = store.resolve_path(ref)
-        except (OSError, ValueError):
+        except (OSError, ValueError) as exc:
             logger.exception(
                 "ArtifactStore.resolve_path failed for PDF page image "
                 "(page={}, path={}, phash={}, ref={})",
@@ -256,6 +258,7 @@ def pdf_pages_to_image_documents(
                 phash,
                 ref,
             )
+            failed_pages.append((i, f"resolve_path: {exc}"))
             continue
 
         meta: dict[str, Any] = {
@@ -282,6 +285,10 @@ def pdf_pages_to_image_documents(
         )
         docs.append(ImageDocument(image_path=str(resolved_path), metadata=meta))
 
+    if failed_pages:
+        logger.warning(
+            "Failed to store {} page(s): {}", len(failed_pages), failed_pages
+        )
     return docs, out_dir
 
 

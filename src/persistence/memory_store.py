@@ -149,10 +149,6 @@ def _matches_filter(value: dict[str, Any], filt: dict[str, Any] | None) -> bool:
     return True
 
 
-def _now_ms() -> int:
-    return now_ms()
-
-
 class DocMindSqliteStore(BaseStore):
     """SQLite-backed LangGraph BaseStore with vec0-powered semantic search.
 
@@ -501,8 +497,10 @@ class DocMindSqliteStore(BaseStore):
                 self._upsert_embedding(
                     item_id=item_id, ns_cols=ns_cols, embedding=embedding
                 )
+            except ValueError as exc:  # pragma: no cover - fail-open
+                logger.warning("Memory embedding dimension mismatch: {}", exc)
             except Exception as exc:  # pragma: no cover - fail-open
-                logger.warning("Memory embedding update failed; continuing: %s", exc)
+                logger.warning("Memory embedding update failed; continuing: {}", exc)
 
         self._conn.commit()
         return Item(

@@ -32,27 +32,34 @@ def router_tool(
             runtime_ctx = runtime.context if runtime is not None else None
             runtime_cfg = runtime.config if runtime is not None else None
 
+            def _get_attr_or_key(obj: Any, key: str) -> Any | None:
+                if obj is None:
+                    return None
+                if isinstance(obj, dict):
+                    return obj.get(key)
+                return getattr(obj, key, None)
+
+            def _get_router_engine(obj: Any) -> Any | None:
+                return _get_attr_or_key(obj, "router_engine")
+
             router_engine = None
             if isinstance(state, dict):
                 tools_data = state.get("tools_data")
-                if isinstance(tools_data, dict):
-                    router_engine = tools_data.get("router_engine")
+                router_engine = _get_router_engine(tools_data)
 
-            if router_engine is None and isinstance(runtime_ctx, dict):
-                router_engine = runtime_ctx.get("router_engine")
+            if router_engine is None:
+                router_engine = _get_router_engine(runtime_ctx)
 
-            if router_engine is None and isinstance(runtime_cfg, dict):
-                configurable = runtime_cfg.get("configurable")
-                if isinstance(configurable, dict):
-                    runtime_cfg_ctx = configurable.get("runtime")
-                    if isinstance(runtime_cfg_ctx, dict):
-                        router_engine = runtime_cfg_ctx.get("router_engine")
+            if router_engine is None:
+                configurable = _get_attr_or_key(runtime_cfg, "configurable")
+                runtime_cfg_ctx = _get_attr_or_key(configurable, "runtime")
+                router_engine = _get_router_engine(runtime_cfg_ctx)
 
             span.set_attribute("router.engine.available", router_engine is not None)
             if router_engine is None:
                 message = (
-                    "router_tool requires 'router_engine' via ToolRuntime.context "
-                    "or runtime.configurable.runtime."
+                    "router_tool requires 'router_engine' via state.tools_data, "
+                    "ToolRuntime.context, or runtime.configurable.runtime."
                 )
                 span.set_attribute("router.success", False)
                 span.set_attribute("router.error", message)
@@ -64,7 +71,7 @@ def router_tool(
             except Exception as exc:
                 span.set_attribute("router.success", False)
                 span.set_attribute("router.error", str(exc))
-                logger.error("router_tool query failed: %s", exc)
+                logger.error("router_tool query failed: {}", exc)
                 return json.dumps({"error": str(exc)})
 
             response_text = (

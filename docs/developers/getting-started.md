@@ -191,6 +191,10 @@ DOCMIND_ARTIFACTS__MAX_TOTAL_MB=4096
 DOCMIND_ARTIFACTS__GC_MIN_AGE_SECONDS=3600
 ```
 
+Qdrant image collections use a **named vector** `siglip` (768D) for SigLIP
+cross-modal embeddings. The collection is created automatically on first use
+via `ensure_siglip_image_collection()` in `src/retrieval/image_index.py`.
+
 ### 3. Configuration System Overview
 
 DocMind AI uses a **unified prefix pattern** with **nested configuration support**:

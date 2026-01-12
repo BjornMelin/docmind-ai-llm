@@ -10,7 +10,7 @@ import hashlib
 from collections.abc import Sequence
 from pathlib import Path
 from types import SimpleNamespace
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import pytest
 from llama_index.core.base.embeddings.base import BaseEmbedding
@@ -111,7 +111,9 @@ def test_ingestion_pdf_images_exports_and_index_wiring(
 
     captured: dict[str, object] = {"records": None}
 
-    def _fake_index(*_a: object, records: Sequence[object], **_k: object) -> int:
+    def _fake_index(
+        *_a: object, records: Sequence[dict[str, Any]], **_k: object
+    ) -> int:
         captured["records"] = list(records)
         return len(records)
 

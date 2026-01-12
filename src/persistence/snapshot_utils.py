@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,7 @@ __all__ = [
     "compute_config_hash",
     "compute_staleness",
     "current_config_dict",
+    "timestamped_export_path",
 ]
 
 
@@ -59,3 +61,14 @@ def compute_staleness(
         return False
     chash_abs = compute_corpus_hash(corpus_list)
     return manifest.get("corpus_hash") != chash_abs
+
+
+def timestamped_export_path(out_dir: Path, extension: str) -> Path:
+    """Return a timestamped export path within ``out_dir``."""
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    candidate = out_dir / f"graph_export-{ts}.{extension}"
+    counter = 1
+    while candidate.exists():
+        candidate = out_dir / f"graph_export-{ts}-{counter}.{extension}"
+        counter += 1
+    return candidate

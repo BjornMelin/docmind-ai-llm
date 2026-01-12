@@ -237,31 +237,31 @@ def soft_delete_session(conn: sqlite3.Connection, *, thread_id: str) -> None:
 def purge_session(conn: sqlite3.Connection, *, thread_id: str) -> None:
     """Hard delete a session's persisted data (checkpoints + writes + memories)."""
     tid = str(thread_id)
-    # LangGraph SqliteSaver tables (best-effort; may not exist yet)
-    langgraph_deletes = (
-        "DELETE FROM writes WHERE thread_id=?;",
-        "DELETE FROM checkpoints WHERE thread_id=?;",
-    )
-    for stmt in langgraph_deletes:
-        with contextlib.suppress(sqlite3.OperationalError):
-            conn.execute(stmt, (tid,))
+    with conn:
+        # LangGraph SqliteSaver tables (best-effort; may not exist yet)
+        langgraph_deletes = (
+            "DELETE FROM writes WHERE thread_id=?;",
+            "DELETE FROM checkpoints WHERE thread_id=?;",
+        )
+        for stmt in langgraph_deletes:
+            with contextlib.suppress(sqlite3.OperationalError):
+                conn.execute(stmt, (tid,))
 
-    # DocMind memory store tables (best-effort; may not exist yet)
-    try:
+        # DocMind memory store tables (best-effort; may not exist yet)
+        try:
+            conn.execute(
+                "DELETE FROM docmind_store_vec WHERE ns2=?;",
+                (tid,),
+            )
+            conn.execute(
+                "DELETE FROM docmind_store_items WHERE ns2=?;",
+                (tid,),
+            )
+        except sqlite3.OperationalError:
+            # Tables not created yet.
+            pass
+
         conn.execute(
-            "DELETE FROM docmind_store_vec WHERE ns2=?;",
+            "DELETE FROM chat_session WHERE thread_id=?;",
             (tid,),
         )
-        conn.execute(
-            "DELETE FROM docmind_store_items WHERE ns2=?;",
-            (tid,),
-        )
-    except sqlite3.OperationalError:
-        # Tables not created yet.
-        pass
-
-    conn.execute(
-        "DELETE FROM chat_session WHERE thread_id=?;",
-        (tid,),
-    )
-    conn.commit()

@@ -6,6 +6,7 @@ import importlib
 import json
 import re
 import time
+from pathlib import Path
 from typing import Annotated, Any
 
 from langchain_core.tools import tool
@@ -342,6 +343,7 @@ def _deduplicate_documents(documents: list[dict]) -> list[dict]:
 
 
 def _looks_contextual(query: str) -> bool:
+    # Intentionally broad: err on false-positives to trigger recall.
     pattern = (
         r"\b(this|that|they|them|above|previous|chart|figure|diagram|table|"
         r"image|photo)\b"
@@ -400,8 +402,6 @@ def _sanitize_document_dict(doc: dict[str, Any]) -> dict[str, Any]:
         if isinstance(src, str) and (
             "/" in src or "\\" in src or src.startswith("file:")
         ):
-            from pathlib import Path
-
             sanitized["source"] = Path(src).name
         return sanitized
 
@@ -423,8 +423,6 @@ def _sanitize_document_dict(doc: dict[str, Any]) -> dict[str, Any]:
     # If a tool returns a top-level `source`, apply the same policy.
     src = cleaned.get("source")
     if isinstance(src, str) and ("/" in src or "\\" in src or src.startswith("file:")):
-        from pathlib import Path
-
         cleaned["source"] = Path(src).name
     return cleaned
 

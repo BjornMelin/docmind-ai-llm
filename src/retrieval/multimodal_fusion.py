@@ -24,7 +24,7 @@ from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 from loguru import logger
 from qdrant_client import QdrantClient
 
-from src.config.settings import settings
+from src.config import settings
 from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
 from src.retrieval.rrf import rrf_merge
 from src.utils.siglip_adapter import SiglipEmbedding
@@ -68,6 +68,7 @@ class ImageSiglipRetriever:
         self.params = params
         self._client = client or QdrantClient(**get_client_config())
         self._embedder = embedder or SiglipEmbedding()
+        self._collection_checked = False
 
     def close(self) -> None:
         """Close underlying client (best-effort)."""
@@ -82,8 +83,21 @@ class ImageSiglipRetriever:
         try:
             vec = self._embedder.get_text_embedding(qtext)
         except Exception as exc:  # pragma: no cover - fail open
-            logger.debug("SigLIP text embedding failed: %s", exc)
+            logger.debug("SigLIP text embedding failed: {}", exc)
             return []
+
+        if not self._collection_checked:
+            try:
+                from src.retrieval.image_index import ensure_siglip_image_collection
+
+                ensure_siglip_image_collection(
+                    self._client,
+                    self.params.collection,
+                    dim=len(vec),
+                )
+            except Exception as exc:  # pragma: no cover - best effort
+                logger.debug("SigLIP collection check failed: {}", exc)
+            self._collection_checked = True
 
         try:
             result = self._client.query_points(
@@ -94,7 +108,7 @@ class ImageSiglipRetriever:
                 with_payload=list(self.params.with_payload),
             )
         except Exception as exc:  # pragma: no cover - fail open
-            logger.debug("Image query_points failed: %s", exc)
+            logger.debug("Image query_points failed: {}", exc)
             return []
 
         points = (

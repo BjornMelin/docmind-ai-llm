@@ -201,7 +201,7 @@ def _extract_image_paths(ns: list[NodeWithScore]) -> list[str]:
     """Extract possible image paths from node metadata and attributes."""
     out: list[str] = []
 
-    store: ArtifactStore | None = None
+    store: ArtifactStore | None = None  # Lazy init on first artifact ref.
     for nn in ns:
         meta = getattr(nn.node, "metadata", {}) or {}
         p = ""

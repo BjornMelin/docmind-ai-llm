@@ -12,6 +12,8 @@ import os
 from contextlib import contextmanager
 from pathlib import Path
 
+from loguru import logger
+
 
 @contextmanager
 def open_image_encrypted(path: str):
@@ -86,10 +88,11 @@ def ensure_thumbnail(
     base_stem = Path(src.name[:-4] if src.name.endswith(".enc") else src.name).stem
     is_enc = src.name.endswith(".enc")
 
+    should_encrypt = bool(encrypt) if encrypt is not None else is_enc
     thumb_plain = thumb_root / f"{base_stem}__thumb.webp"
     thumb_target = (
         thumb_plain.with_suffix(thumb_plain.suffix + ".enc")
-        if (encrypt or is_enc)
+        if should_encrypt
         else thumb_plain
     )
 
@@ -108,17 +111,21 @@ def ensure_thumbnail(
     with open_image_encrypted(str(src)) as im:
         img = im.convert("RGB")
         img.thumbnail((int(max_side), int(max_side)), Resampling.LANCZOS)
-        thumb_plain.parent.mkdir(parents=True, exist_ok=True)
         img.save(thumb_plain, format="WEBP", quality=60, method=6)
 
-    if encrypt or is_enc:
+    if should_encrypt:
         try:
             from src.utils.security import encrypt_file
 
             # encrypt_file decides whether to delete plaintext (env-driven).
             enc_path = encrypt_file(str(thumb_plain))
             return Path(enc_path)
-        except (OSError, RuntimeError, ValueError, ImportError):
+        except (OSError, RuntimeError, ValueError, ImportError) as exc:
+            logger.warning(
+                "Thumbnail encryption failed; returning plaintext: {} ({})",
+                thumb_plain,
+                exc,
+            )
             return thumb_plain
 
     return thumb_plain
