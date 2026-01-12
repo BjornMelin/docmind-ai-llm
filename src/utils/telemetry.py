@@ -123,11 +123,15 @@ def get_analytics_duckdb_path(
     except OSError:
         return default_path
 
-    if resolved_base in resolved.parents and resolved.suffix in {".duckdb", ".db"}:
+    is_under_base = resolved_base in resolved.parents
+    has_valid_suffix = resolved.suffix in {".duckdb", ".db"}
+    if is_under_base and has_valid_suffix:
         return resolved
 
+    reason = "outside data/" if not is_under_base else "invalid extension"
     logger.warning(
-        "analytics db path override outside data/ ignored: override=%s base=%s",
+        "analytics db path override ignored (%s): override=%s base=%s",
+        reason,
         candidate,
         resolved_base,
     )
