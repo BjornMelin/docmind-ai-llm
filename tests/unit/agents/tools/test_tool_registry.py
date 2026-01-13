@@ -34,7 +34,7 @@ def test_registry_returns_tool_collections():
 def test_is_jsonable_supports_lists_dicts_and_depth_limit() -> None:
     assert tr._is_jsonable([1, "x", True]) is True
     assert tr._is_jsonable({"a": [1, 2], "b": {"c": "d"}}) is True
-    nested = value = []  # type: ignore[var-annotated]
+    value: list[object] = []
     for _ in range(8):
         value = [value]
     nested = value

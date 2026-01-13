@@ -257,7 +257,7 @@ def _check_cuda_compatibility(
     test_results: dict[str, bool],
     *,
     cwd: Path | None = None,
-) -> bool | None:  # type: ignore[return-value]  # sys.exit() when compatibility_only=True
+) -> bool:
     """Check CUDA availability and optionally exit after compatibility summary."""
     print("\n🔧 Step 2: CUDA Compatibility Check")
     cuda_available = check_cuda_availability(cwd=cwd)
