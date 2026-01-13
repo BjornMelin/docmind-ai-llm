@@ -238,7 +238,7 @@ def pdf_pages_to_image_documents(
 
     for i, path, _rect, phash, page_text in entries:
         try:
-            ref = store.put_file(Path(path))
+            ref = store.put_file(path)
         except (OSError, ValueError) as exc:
             logger.exception(
                 "ArtifactStore.put_file failed for PDF page image "

@@ -395,20 +395,30 @@ class DocMindSqliteStore(BaseStore):
 
     # BaseStore API
     def batch(self, ops: Iterable[StoreOp]) -> list[Result]:
-        """Execute a batch of store operations synchronously."""
+        """Execute a batch of store operations synchronously.
+
+        **Note**: Batch operations currently allow partial commits if a handler
+        calls commit() internally (e.g., _handle_put). For true ACID guarantees,
+        refactor handlers to defer commits and call batch-level transaction control.
+        """
         results: list[Result] = []
         with self._lock:
-            for op in ops:
-                if isinstance(op, GetOp):
-                    results.append(self._handle_get(op))
-                elif isinstance(op, PutOp):
-                    results.append(self._handle_put(op))
-                elif isinstance(op, SearchOp):
-                    results.append(self._handle_search(op))
-                elif isinstance(op, ListNamespacesOp):
-                    results.append(self._handle_list_namespaces(op))
-                else:
-                    raise TypeError(f"Unsupported op type: {type(op).__name__}")
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                for op in ops:
+                    if isinstance(op, GetOp):
+                        results.append(self._handle_get(op))
+                    elif isinstance(op, PutOp):
+                        results.append(self._handle_put(op))
+                    elif isinstance(op, SearchOp):
+                        results.append(self._handle_search(op))
+                    elif isinstance(op, ListNamespacesOp):
+                        results.append(self._handle_list_namespaces(op))
+                    else:
+                        raise TypeError(f"Unsupported op type: {type(op).__name__}")
+            except Exception:
+                self._conn.rollback()
+                raise
         return results
 
     async def abatch(self, ops: Iterable[StoreOp]) -> list[Result]:

@@ -7,6 +7,7 @@ importable in tests while providing a reusable, typed snapshot rebuild entrypoin
 from __future__ import annotations
 
 import contextlib
+import errno
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -208,7 +209,7 @@ def _export_graphs(
     return exports_meta
 
 
-def _collect_corpus_paths(  # noqa: PLR0912
+def _collect_corpus_paths(  # noqa: PLR0912, PLR0915
     settings_obj: Any,
 ) -> tuple[list[Path], Path]:
     """Collect uploaded corpus paths and base directory.
@@ -245,9 +246,11 @@ def _collect_corpus_paths(  # noqa: PLR0912
                 missing = [p for p in cached_paths if not p.exists()]
                 if not missing:
                     file_count = 0
+                    current_paths: list[Path] = []
                     for p in islice(uploads_dir.rglob("*"), MAX_CORPUS_FILES + 1):
                         if p.is_file():
                             file_count += 1
+                            current_paths.append(p)
                     if file_count != len(cached_paths):
                         logger.debug(
                             "Corpus manifest cache invalidated; cached_count={} "
@@ -256,21 +259,31 @@ def _collect_corpus_paths(  # noqa: PLR0912
                             file_count,
                         )
                     else:
-                        sample_size = min(50, len(cached_paths))
-                        newer_found = False
-                        for p in cached_paths[:sample_size]:
-                            try:
-                                if p.stat().st_mtime > manifest_mtime:
-                                    newer_found = True
-                                    break
-                            except OSError:
-                                continue
-                        if not newer_found:
-                            return cached_paths, uploads_dir
-                        logger.debug(
-                            "Corpus manifest cache invalidated; sampled files newer "
-                            "than manifest"
-                        )
+                        # Compare path sets to detect renames or moved files
+                        cached_path_set = {str(p) for p in cached_paths}
+                        current_path_set = {str(p) for p in current_paths}
+                        if cached_path_set != current_path_set:
+                            logger.debug(
+                                "Corpus manifest cache invalidated; path set differs "
+                                "(cached: {}, current: {})",
+                                len(cached_path_set),
+                                len(current_path_set),
+                            )
+                        else:
+                            sample_size = min(50, len(cached_paths))
+                            newer_found = False
+                            for p in cached_paths[:sample_size]:
+                                try:
+                                    if p.stat().st_mtime > manifest_mtime:
+                                        newer_found = True
+                                        break
+                                except OSError:
+                                    continue
+                            if not newer_found:
+                                return cached_paths, uploads_dir
+                            logger.debug(
+                                "Corpus manifest cache invalidated; newer files found"
+                            )
                 else:
                     logger.debug(
                         "Corpus manifest cache invalidated; {} missing files detected",
@@ -294,6 +307,22 @@ def _collect_corpus_paths(  # noqa: PLR0912
     try:
         with manifest_file.open("w") as f:
             json.dump({"files": [str(p) for p in corpus_paths]}, f)
+    except OSError as e:
+        # Log permission errors at warning level with full details
+        if e.errno in (errno.EACCES, errno.EPERM):
+            logger.warning(
+                "Permission denied writing corpus manifest at {}: {}",
+                manifest_file,
+                e,
+                exc_info=True,
+            )
+        else:
+            logger.debug(
+                "Failed to cache corpus manifest at {}: {}",
+                manifest_file,
+                e,
+                exc_info=True,
+            )
     except Exception as e:
         logger.debug(
             "Failed to cache corpus manifest at {}: {}", manifest_file, e, exc_info=True

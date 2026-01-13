@@ -485,7 +485,7 @@ uv run python -m pytest -m "requires_gpu" --timeout=600
   it over time. Example command:
   `uv run python -m pytest --cov=src --cov-branch --cov-report=term-missing --cov-fail-under=80 tests/`
   (you can lower `--cov-fail-under` initially for branch coverage).
-- **Critical Modules**: Agents, Core, Models, Config should meet or exceed target
+- **Critical Modules**: Agents, Core, Models, Config should meet or exceed target.
 
 #### Coverage Commands
 

@@ -18,11 +18,11 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import Any, Literal
 
-from langchain.tools import ToolRuntime
 from langchain_core.messages import AnyMessage
 from langchain_core.messages.utils import get_buffer_string
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
+from langgraph.prebuilt import ToolRuntime
 from langgraph.store.base import BaseStore
 from loguru import logger
 from pydantic import BaseModel, Field, ValidationError
@@ -158,7 +158,7 @@ def remember(
     importance: float = 0.7,
     tags: list[str] | None = None,
     scope: Literal["session", "user"] = "session",
-    runtime: ToolRuntime = None,  # type: ignore[assignment]
+    runtime: ToolRuntime | None = None,
 ) -> str:
     """Store a long-term memory item (explicit user intent)."""
     start = time.perf_counter()
@@ -203,7 +203,7 @@ def recall_memories(
     query: str,
     limit: int = 5,
     scope: Literal["session", "user"] = "session",
-    runtime: ToolRuntime = None,  # type: ignore[assignment]
+    runtime: ToolRuntime | None = None,
 ) -> str:
     """Semantic search across stored memories."""
     start = time.perf_counter()
@@ -256,7 +256,7 @@ def recall_memories(
 def forget_memory(
     memory_id: str,
     scope: Literal["session", "user"] = "session",
-    runtime: ToolRuntime = None,  # type: ignore[assignment]
+    runtime: ToolRuntime | None = None,
 ) -> str:
     """Delete a stored memory item by id."""
     store = runtime.store if runtime is not None else None

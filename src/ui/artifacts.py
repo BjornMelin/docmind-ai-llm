@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import streamlit as st
+from loguru import logger
 
 from src.persistence.artifacts import ArtifactRef, ArtifactStore
 
@@ -25,21 +26,26 @@ def render_artifact_image(
     try:
         img_path = store.resolve_path(ref)
         is_encrypted = img_path.suffix == ".enc"
+
+        # Guard: encrypted image without decryption support
         if is_encrypted:
             if open_image_encrypted is None:
-                if encrypted_caption:
-                    st.caption(encrypted_caption)
-                elif missing_caption:
-                    st.caption(missing_caption)
+                st.caption(
+                    encrypted_caption
+                    or missing_caption
+                    or "Encrypted image unavailable"
+                )
                 return
             with open_image_encrypted(str(img_path)) as im:
                 st.image(im, caption=caption, use_container_width=use_container_width)
             return
+
+        # Display regular image
         st.image(
             str(img_path), caption=caption, use_container_width=use_container_width
         )
     except Exception as exc:
-        if missing_caption:
-            st.caption(missing_caption)
-        else:
-            st.caption(f"Image artifact unavailable ({type(exc).__name__}).")
+        logger.exception("Failed to render image artifact")
+        st.caption(
+            missing_caption or f"Image artifact unavailable ({type(exc).__name__})."
+        )

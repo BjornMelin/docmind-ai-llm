@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import io
 import json
 import os
 import sys
@@ -20,7 +21,8 @@ PROCESSED_FILES: frozenset[str] = frozenset(
 
 def should_exclude(file_path: str) -> bool:
     """Check if file is already processed."""
-    return any(pattern in file_path for pattern in PROCESSED_FILES)
+    basename = Path(file_path).stem
+    return basename in PROCESSED_FILES
 
 
 def extract_threads(json_file: Path) -> list[dict[str, Any]] | None:
@@ -42,13 +44,13 @@ def extract_threads(json_file: Path) -> list[dict[str, Any]] | None:
     return data.get("unresolved_review_threads", [])
 
 
-def get_code_block_indicator(thread: dict[str, Any]) -> str:
+def get_code_block_indicator(thread: dict[str, Any]) -> bool:
     """Check if thread has suggested code."""
     for comment in thread.get("comments", []):
         body = comment.get("body", "")
         if "```" in body:
-            return "Yes"
-    return "No"
+            return True
+    return False
 
 
 def get_issue_summary(thread: dict[str, Any]) -> str:
@@ -76,6 +78,14 @@ def _get_issue_line_key(issue: dict[str, Any]) -> int:
 
 
 def _resolve_json_path(arg_path: str | None) -> Path | None:
+    """Resolve JSON input path from CLI arg or DOCMIND_REVIEW_JSON env var.
+
+    Args:
+        arg_path: Explicit JSON file path from CLI argument.
+
+    Returns:
+        Resolved Path object, or None if neither arg nor env var is provided.
+    """
     if arg_path:
         return Path(arg_path)
     env_path = os.environ.get("DOCMIND_REVIEW_JSON")
@@ -129,7 +139,7 @@ def main() -> None:  # noqa: PLR0915
             {
                 "line": line_number,
                 "summary": summary,
-                "has_code": has_code,
+                "has_code": "Yes" if has_code else "No",
                 "thread_id": thread.get("thread_id"),
                 "comment_count": thread.get("comment_count", 0),
             }
@@ -140,7 +150,8 @@ def main() -> None:  # noqa: PLR0915
 
     # Print summary by file
     print("=" * 120)
-    print("UNRESOLVED REVIEW THREADS (excluding router_factory, 01_chat, coordinator)")
+    excluded = ", ".join(sorted(PROCESSED_FILES))
+    print(f"UNRESOLVED REVIEW THREADS (excluding {excluded})")
     print("=" * 120)
     print()
 
@@ -171,29 +182,33 @@ def main() -> None:  # noqa: PLR0915
     print("CSV OUTPUT (for spreadsheet import)")
     print("=" * 120 + "\n")
 
-    output_csv = Path(args.output_csv)
-    with output_csv.open("w", encoding="utf-8", newline="") as csv_file:
-        writer = csv.writer(csv_file)
-        writer.writerow(["File", "Line", "Has Code Block", "Comments", "Issue Summary"])
+    # Generate CSV content in memory
+    csv_buffer = io.StringIO()
+    writer = csv.writer(csv_buffer)
+    writer.writerow(["File", "Line", "Has Code Block", "Comments", "Issue Summary"])
 
-        for file_path in sorted(by_file.keys()):
-            for issue in sorted(
-                by_file[file_path],
-                key=_get_issue_line_key,
-            ):
-                line_str = str(issue["line"]) if issue["line"] is not None else "N/A"
-                writer.writerow(
-                    [
-                        file_path,
-                        line_str,
-                        issue["has_code"],
-                        issue["comment_count"],
-                        issue["summary"],
-                    ]
-                )
+    for file_path in sorted(by_file.keys()):
+        for issue in sorted(
+            by_file[file_path],
+            key=_get_issue_line_key,
+        ):
+            line_str = str(issue["line"]) if issue["line"] is not None else "N/A"
+            writer.writerow(
+                [
+                    file_path,
+                    line_str,
+                    issue["has_code"],
+                    issue["comment_count"],
+                    issue["summary"],
+                ]
+            )
 
-    csv_content = output_csv.read_text(encoding="utf-8")
+    csv_content = csv_buffer.getvalue()
     print(csv_content)
+
+    # Write CSV to file
+    output_csv = Path(args.output_csv)
+    output_csv.write_text(csv_content, encoding="utf-8")
 
     # Summary stats
     print("\n" + "=" * 120)

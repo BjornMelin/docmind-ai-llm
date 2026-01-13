@@ -261,9 +261,6 @@ def _configure_llm() -> None:
         settings._validate_endpoints_security()
     except ValueError as err:
         logger.warning("LLM configuration blocked by security policy: {}", err)
-        logging.getLogger(__name__).warning(
-            "LLM configuration blocked by security policy: %s", err
-        )
         Settings.llm = None
         return
 

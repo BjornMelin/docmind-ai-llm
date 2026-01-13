@@ -570,7 +570,7 @@ def _handle_overall_coverage(
     analyzer: CoverageAnalyzer, args: argparse.Namespace
 ) -> int:
     """Evaluate and report overall coverage results."""
-    overall_result = analyzer.check_overall_coverage(record_messages=args.fail_under)
+    overall_result = analyzer.check_overall_coverage(record_messages=True)
     if overall_result["status"] == "error":
         print(f"ERROR: {overall_result['message']}")
         return 2

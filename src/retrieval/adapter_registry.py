@@ -83,7 +83,6 @@ def resolve_adapter(
 
 # Register default adapter lazily on first lookup —
 # `ensure_default_adapter()` is intentionally not called here.
-# ensure_default_adapter()
 
 
 @lru_cache(maxsize=1)

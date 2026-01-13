@@ -354,13 +354,15 @@ def _run_benchmarks(
 ) -> None:
     """Run optional performance benchmark steps.
 
+    **IMPORTANT**: The `cwd` parameter is mandatory and must point to the
+    repository root, as this function performs filesystem checks (e.g.,
+    vllm_script.exists()) and uses cwd for run_command calls.
+
     Args:
         exit_codes: List to append exit codes for benchmark runs.
         test_results: Dictionary to record benchmark test outcomes.
         cwd: Repository root directory (required). Must be a valid existing Path
-            pointing to the project root where scripts/ directory exists, as this
-            function performs filesystem checks such as vllm_script.exists().
-            Callers must pass a valid directory path.
+            pointing to the project root where scripts/ directory exists.
     """
     print("\nStep 5: Performance Benchmarks")
     cmd = ["uv", "run", "python", "scripts/performance_monitor.py", "--run-tests"]
@@ -392,10 +394,10 @@ def _run_memory_leak_check(
     trend = memory_samples[-1] - memory_samples[0]
     if trend > 500:
         print(f"WARN: Potential memory leak detected: {trend}MB increase")
-        test_results["memory_leak"] = False
+        test_results["memory_stable"] = False
         return
     print(f"OK: Memory usage stable: {trend}MB change")
-    test_results["memory_leak"] = True
+    test_results["memory_stable"] = True
 
 
 def _print_summary(

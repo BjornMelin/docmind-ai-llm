@@ -789,7 +789,7 @@ def _should_generate_coverage(args: argparse.Namespace) -> bool:
     if args.paths:
         return False
     return not any(
-        [
+        (
             args.fast,
             args.unit,
             args.integration,
@@ -798,23 +798,31 @@ def _should_generate_coverage(args: argparse.Namespace) -> bool:
             args.gpu,
             args.smoke,
             args.validate_imports,
-        ]
+        )
     )
 
 
-def _finalize_run(runner: TestRunner) -> None:
-    """Print summary and exit with a failure code if any runs failed."""
+def _finalize_run(runner: TestRunner) -> int:
+    """Print summary and return exit code.
+
+    Returns:
+        0 if all test runs succeeded, 1 if any runs failed.
+    """
     runner.print_summary()
     failed_runs = sum(1 for r in runner.results if r.exit_code != 0)
     if failed_runs > 0:
         print(f"\n{failed_runs} test run(s) failed")
-        sys.exit(1)
+        return 1
     print("\nAll test runs completed successfully")
-    sys.exit(0)
+    return 0
 
 
-def main() -> None:
-    """Main entry point for tiered test runner."""
+def main() -> int:
+    """Main entry point for tiered test runner.
+
+    Returns:
+        Exit code (0 for success, 1 for failure).
+    """
     parser = _build_arg_parser()
     args = parser.parse_args()
 
@@ -833,12 +841,13 @@ def main() -> None:
             runner.generate_coverage_report()
     except KeyboardInterrupt:
         print("\nWARN: Test execution interrupted by user")
+        return 1
     except Exception as e:  # pylint: disable=broad-exception-caught
         print(f"\nUnexpected error: {e}")
-        sys.exit(1)
+        return 1
 
-    _finalize_run(runner)
+    return _finalize_run(runner)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -95,7 +95,7 @@ class ImageSiglipRetriever:
                     dim=len(vec_list),
                 )
             except Exception as exc:  # pragma: no cover - best effort
-                logger.debug("SigLIP collection check failed: {}", exc)
+                logger.warning("SigLIP collection check failed: {}", exc)
             self._collection_checked = True
 
         try:
