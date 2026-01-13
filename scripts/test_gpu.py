@@ -345,21 +345,22 @@ def _run_gpu_tests(
 
 
 def _run_benchmarks(
-    project_root: Path, exit_codes: list[int], test_results: dict[str, bool]
+    exit_codes: list[int],
+    test_results: dict[str, bool],
+    *,
+    cwd: Path,
 ) -> None:
     """Run optional performance benchmark steps."""
     print("\n📊 Step 5: Performance Benchmarks")
     cmd = ["uv", "run", "python", "scripts/performance_monitor.py", "--run-tests"]
-    exit_code, _ = run_command(
-        cmd, "Performance Benchmarks", timeout=1200, cwd=project_root
-    )
+    exit_code, _ = run_command(cmd, "Performance Benchmarks", timeout=1200, cwd=cwd)
     exit_codes.append(exit_code)
     test_results["benchmark"] = exit_code == 0
-    vllm_script = project_root / "scripts" / "vllm_performance_validation.py"
+    vllm_script = cwd / "scripts" / "vllm_performance_validation.py"
     if not vllm_script.exists():
         return
     cmd = ["uv", "run", "python", "scripts/vllm_performance_validation.py"]
-    exit_code, _ = run_command(cmd, "vLLM Performance", timeout=1200, cwd=project_root)
+    exit_code, _ = run_command(cmd, "vLLM Performance", timeout=1200, cwd=cwd)
     exit_codes.append(exit_code)
     test_results["vllm"] = exit_code == 0
 
@@ -465,7 +466,7 @@ def main() -> None:
         final_memory = _run_gpu_tests(exit_codes, test_results, cwd=project_root)
 
     if args.benchmark:
-        _run_benchmarks(project_root, exit_codes, test_results)
+        _run_benchmarks(exit_codes, test_results, cwd=project_root)
     if args.memory_check:
         _run_memory_leak_check(test_results, cwd=project_root)
 

@@ -18,6 +18,7 @@ from contextlib import suppress
 from typing import TYPE_CHECKING, Any, cast
 
 from llama_index.core import Settings
+from loguru import logger as _loguru_logger
 
 from src.config.llm_factory import build_llm
 from src.models.embedding_constants import ImageBackboneName
@@ -136,7 +137,11 @@ def startup_init(cfg: "DocMindSettings" = settings) -> None:
             try:
                 cfg.chat.sqlite_path.parent.mkdir(parents=True, exist_ok=True)
             except OSError as exc:
-                logger.opt(exception=exc).debug("Failed to ensure chat sqlite dir")
+                _loguru_logger.warning(
+                    "Chat DB directory creation failed (non-blocking) for {}: {}",
+                    cfg.chat.sqlite_path,
+                    exc,
+                )
 
         # Telemetry env bridge (local JSONL sink still honored elsewhere)
         if not bool(getattr(cfg, "telemetry_enabled", True)):

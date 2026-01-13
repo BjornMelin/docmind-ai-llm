@@ -104,6 +104,7 @@ class TestRunner:
         coverage_dir.mkdir(parents=True, exist_ok=True)
 
         stale_paths = [
+            self.project_root / ".coverage",
             coverage_dir / ".coverage",
             self.project_root / "coverage.json",
             self.project_root / "coverage.xml",
@@ -499,22 +500,26 @@ else:
         ]
         self.run_command(coverage_cmd, "Coverage Report")
 
-        # Always generate fresh report artifacts so analysis is never stale.
-        self.run_command(
-            ["uv", "run", "coverage", "json", "-o", "coverage.json"],
-            "Coverage JSON",
-        )
-        self.run_command(
-            ["uv", "run", "coverage", "xml", "-o", "coverage.xml"],
-            "Coverage XML",
-        )
-        self.run_command(
-            ["uv", "run", "coverage", "html", "-d", "htmlcov"],
-            "Coverage HTML",
-        )
+        coverage_json = self.project_root / "coverage.json"
+        coverage_xml = self.project_root / "coverage.xml"
+        coverage_html = self.project_root / "htmlcov"
+        if not (
+            coverage_json.exists() and coverage_xml.exists() and coverage_html.exists()
+        ):
+            self.run_command(
+                ["uv", "run", "coverage", "json", "-o", "coverage.json"],
+                "Coverage JSON",
+            )
+            self.run_command(
+                ["uv", "run", "coverage", "xml", "-o", "coverage.xml"],
+                "Coverage XML",
+            )
+            self.run_command(
+                ["uv", "run", "coverage", "html", "-d", "htmlcov"],
+                "Coverage HTML",
+            )
 
         # Generate coverage analysis if coverage.json exists
-        coverage_json = self.project_root / "coverage.json"
         if coverage_json.exists():
             self._analyze_coverage_data(coverage_json)
 
@@ -810,7 +815,7 @@ def main() -> None:
     parser = _build_arg_parser()
     args = parser.parse_args()
 
-    project_root = Path(__file__).parent.parent
+    project_root = Path(__file__).resolve().parent.parent
     runner = TestRunner(project_root)
 
     print("DocMind AI Test Suite")

@@ -814,8 +814,8 @@ The testing framework integrates with CI/CD through quality gates:
   run: |
     # Coverage enforcement
     COVERAGE=$(python -c "import xml.etree.ElementTree as ET; tree = ET.parse('coverage.xml'); print(float(tree.getroot().get('line-rate', 0)) * 100)")
-    if (( $(echo "${COVERAGE} >= 35.0" | bc -l) )); then
-      echo "✓ Coverage threshold met (${COVERAGE}% >= 35.0%)"
+    if (( $(echo "${COVERAGE} >= 80.0" | bc -l) )); then
+      echo "✓ Coverage threshold met (${COVERAGE}% >= 80.0%)"
     else
       echo "✗ Coverage below threshold"
       exit 1
@@ -824,7 +824,7 @@ The testing framework integrates with CI/CD through quality gates:
 
 ### Quality Metrics
 
-- **Minimum Coverage**: 35% for merge approval
+- **Minimum Coverage**: 80% for merge approval
 - **Test Success Rate**: 95% for stable tests
 - **Performance Benchmarks**: No regression > 10%
 - **Mock Reduction**: Target 60%+ reduction in legacy files

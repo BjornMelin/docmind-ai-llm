@@ -4,14 +4,14 @@ title: UI + Persistence (Sessions, Time Travel, Memory, Multimodal Rendering)
 status: Completed
 date: 2026-01-13
 version: 1.0
-related_adrs: ["ADR-057", "ADR-058"]
+related_adrs: ["ADR-058"]
 related_specs: ["SPEC-041", "SPEC-042"]
 ---
 
 ## Implementation Prompt — 0044: UI + Persistence (Sessions, Time Travel, Memory, Multimodal Rendering)
 
 **Purpose:** Ship final-release Streamlit UX and durability for multimodal chat.  
-**Source of truth:** ADR-058 + ADR-057 + SPEC-042 + SPEC-041.
+**Source of truth:** ADR-058 + SPEC-042 + SPEC-041.
 
 ## Scope
 

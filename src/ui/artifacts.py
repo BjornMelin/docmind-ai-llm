@@ -39,5 +39,5 @@ def render_artifact_image(
     except Exception as exc:
         if missing_caption:
             st.caption(missing_caption)
-        if missing_caption is None:
+        else:
             st.caption(f"Image artifact unavailable ({type(exc).__name__}).")

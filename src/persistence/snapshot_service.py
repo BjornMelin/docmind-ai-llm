@@ -10,6 +10,7 @@ import contextlib
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
+from itertools import islice
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -241,16 +242,43 @@ def _collect_corpus_paths(settings_obj: Any) -> tuple[list[Path], Path]:
             if uploads_mtime <= manifest_mtime:
                 missing = [p for p in cached_paths if not p.exists()]
                 if not missing:
-                    return cached_paths, uploads_dir
-                logger.debug(
-                    "Corpus manifest cache invalidated; {} missing files detected",
-                    len(missing),
-                )
+                    file_count = 0
+                    for p in islice(uploads_dir.rglob("*"), MAX_CORPUS_FILES + 1):
+                        if p.is_file():
+                            file_count += 1
+                    if file_count != len(cached_paths):
+                        logger.debug(
+                            "Corpus manifest cache invalidated; cached_count={} "
+                            "current_count={}",
+                            len(cached_paths),
+                            file_count,
+                        )
+                    else:
+                        sample_size = min(50, len(cached_paths))
+                        newer_found = False
+                        for p in cached_paths[:sample_size]:
+                            try:
+                                if p.stat().st_mtime > manifest_mtime:
+                                    newer_found = True
+                                    break
+                            except OSError:
+                                continue
+                        if not newer_found:
+                            return cached_paths, uploads_dir
+                        logger.debug(
+                            "Corpus manifest cache invalidated; sampled files newer "
+                            "than manifest"
+                        )
+                else:
+                    logger.debug(
+                        "Corpus manifest cache invalidated; {} missing files detected",
+                        len(missing),
+                    )
 
     # Glob for corpus files (bounded to immediate children if corpus is large)
     corpus_paths: list[Path] = []
     if uploads_dir.exists():
-        for i, p in enumerate(uploads_dir.rglob("*")):
+        for i, p in enumerate(islice(uploads_dir.rglob("*"), MAX_CORPUS_FILES + 1)):
             if i >= MAX_CORPUS_FILES:
                 logger.warning(
                     "Corpus file scan capped at {}; snapshot hash may be partial.",

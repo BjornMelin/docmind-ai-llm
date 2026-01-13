@@ -351,9 +351,8 @@ def _verify_checksum(dest: Path, sha256: str | None) -> None:
     if not sha256:
         return
     if not _sha256_matches(dest, sha256):
-        digest = _sha256_digest(dest)
         raise SystemExit(
-            f"Torch wheel checksum mismatch: expected {sha256}, got {digest}"
+            f"Torch wheel checksum mismatch: expected {sha256}, got {_sha256_digest(dest)}"
         )
 
 

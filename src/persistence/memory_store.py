@@ -533,8 +533,13 @@ class DocMindSqliteStore(BaseStore):
             ttl_delta_ms = int(row["expires_at_ms"]) - int(row["accessed_at_ms"])
             if ttl_delta_ms < 0:
                 logger.debug(
-                    "Negative TTL delta detected for key {} ({} ms); clamping to zero",
+                    "Negative TTL delta detected (item_id={}, key={}, accessed={}, "
+                    "expires={}, now={}, delta={}); clamping to zero",
+                    row["item_id"],
                     op.key,
+                    row["accessed_at_ms"],
+                    row["expires_at_ms"],
+                    now,
                     ttl_delta_ms,
                 )
             expires_at_ms = now + max(0, ttl_delta_ms)
@@ -690,9 +695,13 @@ class DocMindSqliteStore(BaseStore):
             sql_limit = fetch_limit
             sql_offset = 0
             if fetch_limit >= self._filter_fetch_cap:
-                logger.debug(
-                    "Filter fetch cap reached ({}); results may be incomplete",
+                logger.warning(
+                    "Filter fetch cap reached (cap={}, limit={}, offset={}, "
+                    "fetch_limit={}); results may be incomplete",
                     self._filter_fetch_cap,
+                    requested_limit,
+                    requested_offset,
+                    fetch_limit,
                 )
         else:
             sql_limit = requested_limit

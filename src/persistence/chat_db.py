@@ -20,7 +20,7 @@ from pathlib import Path
 from loguru import logger
 
 from src.config.settings import DocMindSettings, settings
-from src.persistence.memory_store import NAMESPACE_THREAD_INDEX
+from src.persistence.memory_store import NAMESPACE_THREAD_INDEX, _MAX_NS_DEPTH
 from src.persistence.path_utils import resolve_path_under_data_dir
 from src.utils.time import now_ms
 
@@ -30,24 +30,12 @@ CHAT_SESSION_TABLE = "chat_session"
 STORE_ITEMS_TABLE = "docmind_store_items"
 STORE_VEC_TABLE = "docmind_store_vec"
 _NS_DELETE_VEC = {
-    0: "DELETE FROM docmind_store_vec WHERE ns0=?;",
-    1: "DELETE FROM docmind_store_vec WHERE ns1=?;",
-    2: "DELETE FROM docmind_store_vec WHERE ns2=?;",
-    3: "DELETE FROM docmind_store_vec WHERE ns3=?;",
-    4: "DELETE FROM docmind_store_vec WHERE ns4=?;",
-    5: "DELETE FROM docmind_store_vec WHERE ns5=?;",
-    6: "DELETE FROM docmind_store_vec WHERE ns6=?;",
-    7: "DELETE FROM docmind_store_vec WHERE ns7=?;",
+    i: f"DELETE FROM {STORE_VEC_TABLE} WHERE ns{i}=?;"
+    for i in range(_MAX_NS_DEPTH)
 }
 _NS_DELETE_ITEMS = {
-    0: "DELETE FROM docmind_store_items WHERE ns0=?;",
-    1: "DELETE FROM docmind_store_items WHERE ns1=?;",
-    2: "DELETE FROM docmind_store_items WHERE ns2=?;",
-    3: "DELETE FROM docmind_store_items WHERE ns3=?;",
-    4: "DELETE FROM docmind_store_items WHERE ns4=?;",
-    5: "DELETE FROM docmind_store_items WHERE ns5=?;",
-    6: "DELETE FROM docmind_store_items WHERE ns6=?;",
-    7: "DELETE FROM docmind_store_items WHERE ns7=?;",
+    i: f"DELETE FROM {STORE_ITEMS_TABLE} WHERE ns{i}=?;"
+    for i in range(_MAX_NS_DEPTH)
 }
 
 

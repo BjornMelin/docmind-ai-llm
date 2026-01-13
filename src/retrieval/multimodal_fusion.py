@@ -101,10 +101,7 @@ class ImageSiglipRetriever:
         try:
             timeout_s = max(
                 1,
-                int(
-                    float(getattr(settings.retrieval, "siglip_timeout_ms", 150))
-                    / 1000.0
-                ),
+                int(getattr(settings.retrieval, "siglip_timeout_ms", 150)) // 1000,
             )
             result = self._client.query_points(
                 collection_name=self.params.collection,

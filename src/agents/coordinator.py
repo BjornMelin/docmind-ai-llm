@@ -26,10 +26,11 @@ Example:
 
 import asyncio
 import contextlib
+import threading
 import time
 import warnings
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from typing import Any, cast
 
 from langchain.agents import create_agent
@@ -244,8 +245,24 @@ class MultiAgentCoordinator:
             max_workers=MEMORY_CONSOLIDATION_MAX_WORKERS,
             thread_name_prefix="docmind-memory",
         )
+        self._memory_consolidation_semaphore = threading.BoundedSemaphore(
+            MEMORY_CONSOLIDATION_MAX_WORKERS
+        )
+        self._memory_executor_closed = False
 
         logger.info("MultiAgentCoordinator initialized (model: %s)", model_path)
+
+    def close(self) -> None:
+        """Release resources held by the coordinator."""
+        if self._memory_executor_closed:
+            return
+        self._memory_executor_closed = True
+        with contextlib.suppress(Exception):
+            self._memory_executor.shutdown(wait=False)
+
+    def __del__(self) -> None:  # pragma: no cover - best-effort cleanup
+        with contextlib.suppress(Exception):
+            self.close()
 
     def _ensure_setup(self) -> bool:
         """Ensure all components are set up (lazy initialization)."""
@@ -316,7 +333,9 @@ class MultiAgentCoordinator:
             return True
 
         except (RuntimeError, ValueError, AttributeError, ImportError) as e:
-            logger.error("Failed to setup coordinator ({}): {}", type(e).__name__, e)
+            logger.exception(
+                "Failed to setup coordinator ({}): {}", type(e).__name__, e
+            )
             return False
 
     def _setup_agent_graph(self) -> None:
@@ -633,12 +652,12 @@ class MultiAgentCoordinator:
         response = AgentResponse(
             content=("The multi-agent system timed out while processing your request."),
             sources=[],
-            metadata={"fallback_used": False, "reason": "timeout"},
+            metadata={"fallback_used": True, "reason": "timeout"},
             validation_score=0.0,
             processing_time=processing_time,
             optimization_metrics={"timeout": True},
         )
-        return response, False
+        return response, True
 
     def _handle_workflow_result(
         self,
@@ -1336,9 +1355,48 @@ class MultiAgentCoordinator:
         """Schedule memory consolidation off the critical path."""
         if self.store is None:
             return
-        self._memory_executor.submit(
+        if not self._memory_consolidation_semaphore.acquire(blocking=False):
+            logger.debug(
+                "Skipping memory consolidation; max in-flight reached for thread {}",
+                thread_id,
+            )
+            return
+
+        future = self._memory_executor.submit(
             self._consolidate_memories, final_state, thread_id, user_id
         )
+
+        def _release_slot() -> None:
+            with contextlib.suppress(ValueError):
+                self._memory_consolidation_semaphore.release()
+
+        def _watch_future() -> None:
+            should_release = True
+            try:
+                future.result(timeout=MEMORY_CONSOLIDATION_TIMEOUT_S)
+            except FuturesTimeoutError:
+                logger.warning(
+                    "Memory consolidation timed out after {}s for thread {}",
+                    MEMORY_CONSOLIDATION_TIMEOUT_S,
+                    thread_id,
+                )
+                if not future.cancel():
+                    logger.debug(
+                        "Memory consolidation still running after timeout for thread {}",
+                        thread_id,
+                    )
+                    should_release = False
+            except Exception as exc:
+                logger.debug("Memory consolidation task failed: {}", exc)
+            finally:
+                if should_release:
+                    _release_slot()
+
+        threading.Thread(
+            target=_watch_future,
+            name="docmind-memory-watch",
+            daemon=True,
+        ).start()
 
 
 # Factory function for coordinator

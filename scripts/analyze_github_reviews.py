@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import csv
+import io
 import json
 import os
+import tempfile
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -78,8 +80,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--output-csv",
-        default="/tmp/unresolved_reviews.csv",
-        help="CSV output path (default: /tmp/unresolved_reviews.csv).",
+        default=str(Path(tempfile.gettempdir()) / "unresolved_reviews.csv"),
+        help="CSV output path (default: <tempdir>/unresolved_reviews.csv).",
     )
     args = parser.parse_args()
 
@@ -150,28 +152,28 @@ def main() -> None:
     print("=" * 120 + "\n")
 
     output_csv = Path(args.output_csv)
-    with output_csv.open("w", newline="") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(["File", "Line", "Has Code Block", "Comments", "Issue Summary"])
+    csv_buffer = io.StringIO()
+    writer = csv.writer(csv_buffer)
+    writer.writerow(["File", "Line", "Has Code Block", "Comments", "Issue Summary"])
 
-        for file_path in sorted(by_file.keys()):
-            for issue in sorted(
-                by_file[file_path],
-                key=lambda x: x["line"] if isinstance(x["line"], int) else 999999,
-            ):
-                writer.writerow(
-                    [
-                        file_path,
-                        issue["line"],
-                        issue["has_code"],
-                        issue["comment_count"],
-                        issue["summary"],
-                    ]
-                )
+    for file_path in sorted(by_file.keys()):
+        for issue in sorted(
+            by_file[file_path],
+            key=lambda x: x["line"] if isinstance(x["line"], int) else 999999,
+        ):
+            writer.writerow(
+                [
+                    file_path,
+                    issue["line"],
+                    issue["has_code"],
+                    issue["comment_count"],
+                    issue["summary"],
+                ]
+            )
 
-    # Print CSV content
-    with output_csv.open(encoding="utf-8") as handle:
-        print(handle.read())
+    csv_content = csv_buffer.getvalue()
+    output_csv.write_text(csv_content, encoding="utf-8", newline="")
+    print(csv_content)
 
     # Summary stats
     print("\n" + "=" * 120)
