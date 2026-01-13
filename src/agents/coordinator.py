@@ -663,10 +663,7 @@ class MultiAgentCoordinator:
             processing_time: Total query processing time.
             coordination_time: Time spent coordinating agents.
         """
-        if workflow_timed_out:
-            if used_fallback:
-                self.fallback_queries += 1
-        else:
+        if not workflow_timed_out:
             self.successful_queries += 1
         self._update_performance_metrics(processing_time, coordination_time)
 
