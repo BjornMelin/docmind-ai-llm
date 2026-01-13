@@ -4,7 +4,7 @@ title: Chat Persistence + Hybrid Agentic Memory (LangGraph SQLite Checkpointer +
 version: 1.0.0
 date: 2026-01-09
 owners: ["ai-arch"]
-status: Implemented
+status: Partial
 related_requirements:
   - FR-022: Persist chat history locally across refresh/restart with per-session clear/purge.
   - NFR-SEC-001: Offline-first; remote endpoints blocked by default.
@@ -114,7 +114,7 @@ class LlamaIndexEmbeddingsAdapter(Embeddings):
 
 #### C) Memory extraction + consolidation (final-release)
 
-Long-term memory must not be an unbounded append-only log. Implement a deterministic, testable consolidation pipeline inspired by state-of-the-art “ADD/UPDATE/DELETE/NOOP” memory update patterns:
+Long-term memory must not be an unbounded append-only log. Implement a deterministic, testable consolidation pipeline inspired by state-of-the-art “ADD/UPDATE/DELETE/NOOP” memory update patterns (see internal implementation in [src/agents/tools/memory.py](src/agents/tools/memory.py) and [src/persistence/memory_store.py](src/persistence/memory_store.py)):
 
 1. **Extract candidates** from the most recent conversation turn into a fixed schema:
    - memories must be small, user-relevant facts/preferences
@@ -128,6 +128,14 @@ Long-term memory must not be an unbounded append-only log. Implement a determini
    - enforce max per-namespace counts (evict oldest/lowest-importance)
 4. **User controls**:
    - UI must provide memory review and delete/purge per-user and per-session
+
+Configuration defaults (settings.chat):
+
+- `memory_similarity_threshold` (0.85)
+- `memory_low_importance_threshold` (0.3)
+- `memory_low_importance_ttl_days` (14)
+- `memory_max_items_per_namespace` (200)
+- `memory_max_candidates_per_turn` (8)
 
 Namespace conventions:
 
@@ -205,7 +213,7 @@ Important Streamlit behavior:
 
 The system must list sessions and store user-friendly titles. The LangGraph checkpointer does not provide “list all thread_ids” as a stable public API.
 
-Implement a small session registry table in the Chat DB:
+Implement a small session registry table in the Chat DB (see [src/persistence/chat_db.py](src/persistence/chat_db.py)):
 
 - `chat_session`
   - `thread_id TEXT PRIMARY KEY`
@@ -222,7 +230,7 @@ Indexes:
 
 ### Time travel UX semantics
 
-Expose in Chat sidebar:
+Expose in Chat sidebar (orchestrated by [src/agents/coordinator.py](src/agents/coordinator.py)):
 
 1. List checkpoints for current `thread_id` (reverse chronological).
 2. User selects one checkpoint to fork.

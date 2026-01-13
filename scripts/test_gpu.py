@@ -20,12 +20,13 @@ Usage:
 """
 
 import argparse
-import os
+import csv
 import subprocess
 import sys
 import time
+from io import StringIO
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import TypedDict
 
 
 class GPUInfo(TypedDict):
@@ -38,7 +39,7 @@ class GPUInfo(TypedDict):
     cuda_version: str | None
 
 
-def get_gpu_info() -> GPUInfo | None:
+def get_gpu_info(*, cwd: Path | None = None) -> GPUInfo | None:
     """Get detailed GPU information."""
     try:
         result = subprocess.run(
@@ -51,29 +52,35 @@ def get_gpu_info() -> GPUInfo | None:
             text=True,
             check=False,
             timeout=10,
+            cwd=cwd,
         )
 
         if result.returncode != 0:
             return None
 
-        gpu_data = result.stdout.strip().split(", ")
-        return cast(
-            GPUInfo,
-            {
-                "name": gpu_data[0],
-                "memory_total": int(gpu_data[1]),
-                "memory_free": int(gpu_data[2]),
-                "driver_version": gpu_data[3],
-                "cuda_version": gpu_data[4]
-                if gpu_data[4] != "[Not Supported]"
-                else None,
-            },
-        )
+        # `nvidia-smi` returns one CSV row per GPU; pick the first GPU for now.
+        rows = list(csv.reader(StringIO(result.stdout.strip())))
+        if not rows:
+            return None
+
+        row = [cell.strip() for cell in rows[0]]
+        if len(row) < 5:
+            return None
+
+        cuda = row[4]
+        gpu_info: GPUInfo = {
+            "name": row[0],
+            "memory_total": int(row[1]),
+            "memory_free": int(row[2]),
+            "driver_version": row[3],
+            "cuda_version": None if cuda == "[Not Supported]" else cuda,
+        }
+        return gpu_info
     except (subprocess.TimeoutExpired, FileNotFoundError, IndexError, ValueError):
         return None
 
 
-def check_cuda_availability() -> bool:
+def check_cuda_availability(*, cwd: Path | None = None) -> bool:
     """Check if CUDA is available and working."""
     try:
         result = subprocess.run(
@@ -95,6 +102,7 @@ def check_cuda_availability() -> bool:
             text=True,
             check=False,
             timeout=30,
+            cwd=cwd,
         )
 
         if result.returncode == 0 and "CUDA available: True" in result.stdout:
@@ -111,7 +119,11 @@ def check_cuda_availability() -> bool:
 
 
 def run_command(
-    command: list[str], description: str, timeout: int = 1800
+    command: list[str],
+    description: str,
+    timeout: int = 1800,
+    *,
+    cwd: Path | None = None,
 ) -> tuple[int, str]:
     """Run a command and return exit code and output."""
     print(f"\n{'=' * 60}")
@@ -128,6 +140,7 @@ def run_command(
             text=True,
             check=False,
             timeout=timeout,
+            cwd=cwd,
         )
 
         duration = time.time() - start_time
@@ -151,7 +164,7 @@ def run_command(
         return -1, str(e)
 
 
-def monitor_gpu_memory() -> dict:
+def monitor_gpu_memory(*, cwd: Path | None = None) -> dict[str, float]:
     """Monitor GPU memory usage."""
     try:
         result = subprocess.run(
@@ -164,15 +177,23 @@ def monitor_gpu_memory() -> dict:
             text=True,
             check=False,
             timeout=5,
+            cwd=cwd,
         )
 
         if result.returncode == 0:
-            memory_data = result.stdout.strip().split(", ")
+            rows = list(csv.reader(StringIO(result.stdout.strip())))
+            if not rows:
+                raise ValueError("Empty nvidia-smi output")
+            row = [cell.strip() for cell in rows[0]]
+            if len(row) < 2:
+                raise ValueError("Unexpected nvidia-smi output")
+            used = int(row[0])
+            total = int(row[1])
             return {
-                "used": int(memory_data[0]),
-                "total": int(memory_data[1]),
-                "free": int(memory_data[1]) - int(memory_data[0]),
-                "utilization": (int(memory_data[0]) / int(memory_data[1])) * 100,
+                "used": float(used),
+                "total": float(total),
+                "free": float(total - used),
+                "utilization": (used / total) * 100 if total else 0.0,
             }
     except (OSError, ValueError) as e:
         print(f"Warning: Could not get GPU memory info: {e}")
@@ -206,10 +227,10 @@ def _print_header() -> None:
     print("Scope: GPU-specific tests and benchmarks")
 
 
-def _require_gpu_info() -> GPUInfo:
+def _require_gpu_info(*, cwd: Path | None = None) -> GPUInfo:
     """Detect GPU hardware and return metadata or exit."""
     print("\n🔍 Step 1: GPU Hardware Detection")
-    gpu_info = get_gpu_info()
+    gpu_info = get_gpu_info(cwd=cwd)
     if not gpu_info:
         print("❌ No GPU detected or nvidia-smi not available")
         print(
@@ -231,11 +252,15 @@ def _require_gpu_info() -> GPUInfo:
 
 
 def _check_cuda_compatibility(
-    gpu_info: GPUInfo, compatibility_only: bool, test_results: dict
+    gpu_info: GPUInfo,
+    compatibility_only: bool,
+    test_results: dict[str, bool],
+    *,
+    cwd: Path | None = None,
 ) -> bool:
     """Check CUDA availability and optionally exit after compatibility summary."""
     print("\n🔧 Step 2: CUDA Compatibility Check")
-    cuda_available = check_cuda_availability()
+    cuda_available = check_cuda_availability(cwd=cwd)
     test_results["hardware"] = True
     test_results["cuda"] = cuda_available
     if not cuda_available:
@@ -259,20 +284,23 @@ def _check_cuda_compatibility(
 
 
 def _run_quick_check(
-    exit_codes: list[int], test_results: dict[str, bool]
+    exit_codes: list[int],
+    test_results: dict[str, bool],
+    *,
+    cwd: Path | None = None,
 ) -> dict[str, float]:
     """Run the quick smoke test path and return final memory stats."""
     print("\n⚡ Step 3: Quick GPU Health Check")
-    initial_memory = monitor_gpu_memory()
+    initial_memory = monitor_gpu_memory(cwd=cwd)
     print(
         f"Initial VRAM usage: {initial_memory['used']}MB "
         f"({initial_memory['utilization']:.1f}%)"
     )
     cmd = ["uv", "run", "python", "scripts/run_tests.py", "--smoke"]
-    exit_code, _ = run_command(cmd, "GPU Smoke Test", timeout=300)
+    exit_code, _ = run_command(cmd, "GPU Smoke Test", timeout=300, cwd=cwd)
     exit_codes.append(exit_code)
     test_results["smoke"] = exit_code == 0
-    final_memory = monitor_gpu_memory()
+    final_memory = monitor_gpu_memory(cwd=cwd)
     print(
         f"Final VRAM usage: {final_memory['used']}MB "
         f"({final_memory['utilization']:.1f}%)"
@@ -284,32 +312,35 @@ def _run_quick_check(
 
 
 def _run_gpu_tests(
-    exit_codes: list[int], test_results: dict[str, bool]
+    exit_codes: list[int],
+    test_results: dict[str, bool],
+    *,
+    cwd: Path | None = None,
 ) -> dict[str, float]:
     """Run GPU-required tests and performance validation."""
     print("\n🎯 Step 3: GPU-Required Tests")
-    initial_memory = monitor_gpu_memory()
+    initial_memory = monitor_gpu_memory(cwd=cwd)
     print(
         f"Initial VRAM: {initial_memory['used']}MB used, "
         f"{initial_memory['free']}MB free"
     )
     cmd = ["uv", "run", "python", "scripts/run_tests.py", "--gpu"]
-    exit_code, _ = run_command(cmd, "GPU Tests", timeout=1800)
+    exit_code, _ = run_command(cmd, "GPU Tests", timeout=1800, cwd=cwd)
     exit_codes.append(exit_code)
     test_results["gpu_tests"] = exit_code == 0
-    final_memory = monitor_gpu_memory()
+    final_memory = monitor_gpu_memory(cwd=cwd)
     print(f"Final VRAM: {final_memory['used']}MB used, {final_memory['free']}MB free")
     print("\n🧠 Step 4: Performance Validation")
     cmd = ["uv", "run", "python", "scripts/run_tests.py", "--performance"]
-    exit_code, _ = run_command(cmd, "Performance Tests", timeout=2400)
+    exit_code, _ = run_command(cmd, "Performance Tests", timeout=2400, cwd=cwd)
     exit_codes.append(exit_code)
     test_results["performance"] = exit_code == 0
-    post_system_memory = monitor_gpu_memory()
+    post_system_memory = monitor_gpu_memory(cwd=cwd)
     print(
         f"Post-performance VRAM: {post_system_memory['used']}MB used, "
         f"{post_system_memory['free']}MB free"
     )
-    return final_memory
+    return post_system_memory
 
 
 def _run_benchmarks(
@@ -318,26 +349,32 @@ def _run_benchmarks(
     """Run optional performance benchmark steps."""
     print("\n📊 Step 5: Performance Benchmarks")
     cmd = ["uv", "run", "python", "scripts/performance_monitor.py", "--run-tests"]
-    exit_code, _ = run_command(cmd, "Performance Benchmarks", timeout=1200)
+    exit_code, _ = run_command(
+        cmd, "Performance Benchmarks", timeout=1200, cwd=project_root
+    )
     exit_codes.append(exit_code)
     test_results["benchmark"] = exit_code == 0
     vllm_script = project_root / "scripts" / "vllm_performance_validation.py"
     if not vllm_script.exists():
         return
     cmd = ["uv", "run", "python", "scripts/vllm_performance_validation.py"]
-    exit_code, _ = run_command(cmd, "vLLM Performance", timeout=1200)
+    exit_code, _ = run_command(cmd, "vLLM Performance", timeout=1200, cwd=project_root)
     exit_codes.append(exit_code)
     test_results["vllm"] = exit_code == 0
 
 
-def _run_memory_leak_check(test_results: dict[str, bool]) -> None:
+def _run_memory_leak_check(
+    test_results: dict[str, bool],
+    *,
+    cwd: Path | None = None,
+) -> None:
     """Sample memory usage to detect potential leaks."""
     print("\n🔍 Step 6: Memory Leak Detection")
-    memory_samples: list[int] = []
+    memory_samples: list[float] = []
     for i in range(5):
         print(f"   Sample {i + 1}/5...")
-        memory = monitor_gpu_memory()
-        memory_samples.append(memory["used"])
+        memory = monitor_gpu_memory(cwd=cwd)
+        memory_samples.append(float(memory["used"]))
         time.sleep(10)
     if len(memory_samples) < 3:
         return
@@ -382,8 +419,8 @@ def _print_summary(
         print("   🔧 Install/update CUDA drivers")
     if not test_results.get("gpu_tests", True):
         print("   🎯 Check GPU-specific test failures")
-    if not test_results.get("system", True):
-        print("   🧠 Investigate system test issues with real models")
+    if not test_results.get("performance", True):
+        print("   Investigate performance test issues with real models")
     sys.exit(1)
 
 
@@ -409,24 +446,25 @@ def main() -> None:
 
     project_root = Path(__file__).parent.parent
     _print_header()
-    os.chdir(project_root)
 
     exit_codes: list[int] = []
     test_results: dict[str, bool] = {}
 
-    gpu_info = _require_gpu_info()
-    _check_cuda_compatibility(gpu_info, args.compatibility, test_results)
+    gpu_info = _require_gpu_info(cwd=project_root)
+    _check_cuda_compatibility(
+        gpu_info, args.compatibility, test_results, cwd=project_root
+    )
 
     final_memory: dict[str, float] | None
     if args.quick:
-        final_memory = _run_quick_check(exit_codes, test_results)
+        final_memory = _run_quick_check(exit_codes, test_results, cwd=project_root)
     else:
-        final_memory = _run_gpu_tests(exit_codes, test_results)
+        final_memory = _run_gpu_tests(exit_codes, test_results, cwd=project_root)
 
     if args.benchmark:
         _run_benchmarks(project_root, exit_codes, test_results)
     if args.memory_check:
-        _run_memory_leak_check(test_results)
+        _run_memory_leak_check(test_results, cwd=project_root)
 
     total_failures = sum(1 for code in exit_codes if code != 0)
     _print_summary(gpu_info, test_results, total_failures, final_memory)

@@ -7,17 +7,17 @@ import types as types_
 from collections.abc import Iterable
 from contextlib import contextmanager
 from types import ModuleType, SimpleNamespace
-from typing import cast
-from unittest.mock import MagicMock, patch
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 class _StubCoordinator:
     """Lightweight stub coordinator used for isolation in tests."""
 
-    def __init__(self, *_, **__) -> None:
-        pass
+    def __init__(self, *_: object, **__: object) -> None:
+        return
 
-    def process_query(self, *_a, **_kw) -> SimpleNamespace:
+    def process_query(self, *_a: object, **_kw: object) -> SimpleNamespace:
         return SimpleNamespace(content="stub")
 
 
@@ -30,7 +30,7 @@ class _StubToolFactory:
 
 
 def install_mock_torch(
-    monkeypatch,
+    monkeypatch: Any,
     *,
     include_cuda_props: bool = True,
     include_device: bool = False,
@@ -59,14 +59,14 @@ def install_mock_torch(
     return mock_torch
 
 
-def install_heavy_dependencies(monkeypatch, dependencies: Iterable[str]) -> None:
+def install_heavy_dependencies(monkeypatch: Any, dependencies: Iterable[str]) -> None:
     """Mock heavy optional dependencies if they are not already loaded."""
     for module in dependencies:
         if module not in sys.modules:
             monkeypatch.setitem(sys.modules, module, MagicMock())
 
 
-def install_mock_ollama(monkeypatch) -> MagicMock:
+def install_mock_ollama(monkeypatch: Any) -> MagicMock:
     """Mock ollama client boundary calls."""
     mock_ollama = MagicMock()
     mock_ollama.list.return_value = {
@@ -78,7 +78,7 @@ def install_mock_ollama(monkeypatch) -> MagicMock:
     return mock_ollama
 
 
-def install_dependency_injector(monkeypatch) -> None:
+def install_dependency_injector(monkeypatch: Any) -> None:
     """Mock dependency_injector for import resolution."""
     mock_dependency_injector = MagicMock()
     mock_dependency_injector.wiring = MagicMock()
@@ -100,9 +100,12 @@ def install_dependency_injector(monkeypatch) -> None:
     )
 
 
-def install_llama_index_core(monkeypatch) -> None:
+def install_llama_index_core(monkeypatch: Any) -> None:
     """Mock minimal LlamaIndex core objects used by E2E tests."""
-    li_core = cast(ModuleType, ModuleType("llama_index.core"))
+    li_pkg = ModuleType("llama_index")
+    li_pkg.__path__ = []  # mark as package
+
+    li_core = ModuleType("llama_index.core")
     li_core.__path__ = []  # mark as package
 
     class _DummySettings:
@@ -114,7 +117,9 @@ def install_llama_index_core(monkeypatch) -> None:
     li_core.Settings = _DummySettings
 
     class _DummyDocument:
-        def __init__(self, text: str = "", metadata: dict | None = None, **_):
+        def __init__(
+            self, text: str = "", metadata: dict[str, Any] | None = None, **_: Any
+        ):
             self.text = text
             self.metadata = metadata or {}
 
@@ -123,12 +128,16 @@ def install_llama_index_core(monkeypatch) -> None:
     class _DummyStorageContext:
         """Minimal storage context shim used in tests."""
 
-        def __init__(self, *, vector_store=None, image_store=None):
+        def __init__(
+            self, *, vector_store: Any = None, image_store: Any = None
+        ) -> None:
             self.vector_store = vector_store
             self.image_store = image_store
 
         @classmethod
-        def from_defaults(cls, *, vector_store=None, image_store=None):
+        def from_defaults(
+            cls, *, vector_store: Any = None, image_store: Any = None
+        ) -> _DummyStorageContext:
             return cls(vector_store=vector_store, image_store=image_store)
 
     li_core.StorageContext = _DummyStorageContext
@@ -157,7 +166,7 @@ def install_llama_index_core(monkeypatch) -> None:
         """Minimal multi-modal index shim with factory constructor."""
 
         @classmethod
-        def from_documents(cls, *_args, **_kwargs):
+        def from_documents(cls, *_args: Any, **_kwargs: Any) -> _DummyMMIndex:
             return cls()
 
     li_indices.MultiModalVectorStoreIndex = _DummyMMIndex
@@ -166,6 +175,7 @@ def install_llama_index_core(monkeypatch) -> None:
         pass
 
     li_core.VectorStoreIndex = _DummyVSI
+
     li_retrievers = ModuleType("llama_index.core.retrievers")
 
     class _DummyBaseRetriever:
@@ -173,6 +183,9 @@ def install_llama_index_core(monkeypatch) -> None:
 
     li_retrievers.BaseRetriever = _DummyBaseRetriever
 
+    li_pkg.core = li_core
+
+    monkeypatch.setitem(sys.modules, "llama_index", li_pkg)
     monkeypatch.setitem(sys.modules, "llama_index.core", li_core)
     monkeypatch.setitem(sys.modules, "llama_index.core.llms", li_llms)
     monkeypatch.setitem(sys.modules, "llama_index.core.indices", li_indices)
@@ -181,12 +194,14 @@ def install_llama_index_core(monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, "llama_index.core.vector_stores", MagicMock())
 
 
-def install_agent_stubs(monkeypatch) -> None:
+def install_agent_stubs(monkeypatch: Any) -> None:
     """Provide lightweight stubs for src.agents imports."""
     agents_coord = ModuleType("src.agents.coordinator")
     agents_coord.MultiAgentCoordinator = _StubCoordinator
+
     agents_factory = ModuleType("src.agents.tool_factory")
     agents_factory.ToolFactory = _StubToolFactory
+
     monkeypatch.setitem(sys.modules, "src.agents.coordinator", agents_coord)
     monkeypatch.setitem(sys.modules, "src.agents.tool_factory", agents_factory)
 
@@ -196,12 +211,16 @@ def build_isolated_modules() -> dict[str, types_.ModuleType]:
     src_pkg = types_.ModuleType("src")
     agents_pkg = types_.ModuleType("src.agents")
     utils_pkg = types_.ModuleType("src.utils")
+
     coord_mod = types_.ModuleType("src.agents.coordinator")
     coord_mod.MultiAgentCoordinator = _StubCoordinator
+
     tf_mod = types_.ModuleType("src.agents.tool_factory")
     tf_mod.ToolFactory = _StubToolFactory
+
     src_pkg.agents = agents_pkg
     src_pkg.utils = utils_pkg
+
     return {
         "src": src_pkg,
         "src.agents": agents_pkg,
@@ -247,10 +266,13 @@ def patch_async_workflow_dependencies():
     """Patch async workflow dependencies used across E2E tests."""
     with (
         patch(
-            "src.utils.document.load_documents_unstructured", create=True
+            "src.utils.document.load_documents_unstructured",
+            new_callable=AsyncMock,
+            create=True,
         ) as mock_load,
         patch(
-            "src.agents.coordinator.MultiAgentCoordinator", create=True
+            "src.agents.coordinator.MultiAgentCoordinator",
+            create=True,
         ) as mock_coordinator_class,
     ):
         yield mock_load, mock_coordinator_class
@@ -258,9 +280,11 @@ def patch_async_workflow_dependencies():
 
 @contextmanager
 def patch_document_loader():
-    """Patch the document loader for E2E tests."""
+    """Patch the async document loader for E2E tests."""
     with patch(
-        "src.utils.document.load_documents_unstructured", create=True
+        "src.utils.document.load_documents_unstructured",
+        new_callable=AsyncMock,
+        create=True,
     ) as mock_load_docs:
         yield mock_load_docs
 

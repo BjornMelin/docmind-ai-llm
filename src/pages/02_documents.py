@@ -12,7 +12,7 @@ from typing import Any
 import streamlit as st
 from loguru import logger
 
-from src.config.settings import settings
+from src.config import settings
 from src.persistence.artifacts import ArtifactRef, ArtifactStore
 from src.persistence.snapshot import SnapshotLockTimeout, load_manifest
 from src.persistence.snapshot_utils import timestamped_export_path
@@ -145,7 +145,7 @@ def _set_multimodal_retriever() -> None:
 
         st.session_state["hybrid_retriever"] = MultimodalFusionRetriever()
     except Exception:  # pragma: no cover - UI best-effort
-        logger.debug("Multimodal retriever init failed", exc_info=True)
+        logger.opt(exception=True).debug("Multimodal retriever init failed")
         st.session_state.pop("hybrid_retriever", None)
 
 
@@ -266,7 +266,8 @@ def _render_export_images(items: list[dict[str, Any]], preview_limit: int) -> No
                 continue
             try:
                 img_path = store.resolve_path(ref)
-                if str(img_path).endswith(".enc"):
+                is_encrypted = img_path.name.endswith(".enc")
+                if is_encrypted:
                     if open_image_encrypted is None:
                         raise RuntimeError("Encrypted image support unavailable.")
                     with open_image_encrypted(str(img_path)) as im:
@@ -385,7 +386,7 @@ def _handle_reindex_page_images(
         enable_image_encryption=bool(encrypt),
         enable_image_indexing=True,
         cache_dir=cache_dir,
-        cache_collection="docmind_image_reindex",
+        cache_collection=f"{settings.database.qdrant_image_collection}_image_reindex",
         docstore_path=None,
     )
 
@@ -417,22 +418,35 @@ def _handle_reindex_page_images(
         status.update(label="Done", state="complete")
 
 
-def _handle_delete_upload(*, target: Path, purge_artifacts: bool) -> None:
+def _handle_delete_upload(*, target: Path, purge_artifacts: bool) -> None:  # noqa: PLR0915
     """Delete an uploaded file and best-effort clean Qdrant points."""
-    uploads_dir = (settings.data_dir / "uploads").resolve()
+    uploads_dir = settings.data_dir / "uploads"
+    uploads_dir_resolved = uploads_dir.resolve()
+
+    candidate = target.expanduser()
+    # Reject symlinks: avoid deleting the link target outside uploads.
     try:
-        resolved = target.resolve()
+        if candidate.is_symlink():
+            st.error("Refusing to delete symlink.")
+            return
     except OSError:
         st.error("Invalid path.")
         return
-    if not resolved.is_relative_to(uploads_dir):
-        st.error("Refusing to delete path outside uploads directory.")
+
+    # Containment: only allow direct children of uploads_dir.
+    try:
+        if candidate.parent.resolve() != uploads_dir_resolved:
+            st.error("Refusing to delete path outside uploads directory.")
+            return
+    except OSError:
+        st.error("Invalid path.")
         return
-    if not resolved.exists():
+
+    if not candidate.exists():
         st.warning("File not found.")
         return
 
-    doc_id = _doc_id_for_upload(resolved)
+    doc_id = _doc_id_for_upload(candidate)
 
     deleted_image_points = 0
     deleted_text_points = 0
@@ -523,10 +537,10 @@ def _handle_delete_upload(*, target: Path, purge_artifacts: bool) -> None:
         st.caption(f"Qdrant cleanup skipped: {type(exc).__name__}")
 
     with contextlib.suppress(Exception):
-        resolved.unlink()
+        candidate.unlink()
 
     st.success(
-        f"Deleted {resolved.name}. "
+        f"Deleted {candidate.name}. "
         "Qdrant: image_points="
         f"{deleted_image_points} text_points≈{deleted_text_points}."
     )
@@ -689,7 +703,9 @@ def _log_export_event(payload: dict[str, Any]) -> None:
         log_jsonl(event)
 
 
-def rebuild_snapshot(vector_index: Any, pg_index: Any, settings_obj: Any) -> Path:
+def rebuild_snapshot(
+    vector_index: Any, pg_index: Any | None, settings_obj: Any
+) -> Path:
     """Rebuild snapshot for current indices and return final path."""
     from src.persistence.snapshot_service import rebuild_snapshot as _rebuild
 

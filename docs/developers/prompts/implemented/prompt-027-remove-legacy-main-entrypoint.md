@@ -183,14 +183,14 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 
 | Requirement     | Status | Proof / Notes                                                                      |
 | --------------- | ------ | ---------------------------------------------------------------------------------- |
-| **Packaging**   |        | `uv sync` clean                                                                    |
-| **Formatting**  |        | `uv run ruff format .`                                                             |
-| **Lint**        |        | `uv run ruff check .` clean                                                        |
-| **Types**       |        | `uv run pyright` clean                                                             |
-| **Tests**       |        | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
-| **Docs**        |        | docs/scripts reference only `streamlit run src/app.py`                             |
-| **Security**    |        | no new config bypasses introduced                                                  |
-| **Tech Debt**   |        | zero TODO/FIXME introduced                                                         |
-| **Performance** |        | no new import-time heavy work                                                      |
+| **Packaging**   | ✅     | `uv sync` clean                                                                    |
+| **Formatting**  | ✅     | `uv run ruff format .`                                                             |
+| **Lint**        | ✅     | `uv run ruff check .` clean                                                        |
+| **Types**       | ✅     | `uv run pyright` clean                                                             |
+| **Tests**       | ✅     | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
+| **Docs**        | ✅     | docs/scripts reference only `streamlit run src/app.py`                             |
+| **Security**    | ✅     | no new config bypasses introduced                                                  |
+| **Tech Debt**   | ✅     | zero TODO/FIXME introduced                                                         |
+| **Performance** | ✅     | no new import-time heavy work                                                      |
 
 **EXECUTE UNTIL COMPLETE.**

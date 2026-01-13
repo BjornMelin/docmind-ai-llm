@@ -292,7 +292,6 @@ def export_graph_parquet(
 
     path_obj = Path(output_path)
     path_obj.parent.mkdir(parents=True, exist_ok=True)
-    lines = _render_rel_map_jsonl(store=store, seed_node_ids=node_ids, depth=int(depth))
     try:
         import pyarrow as pa
         import pyarrow.parquet as pq
@@ -301,6 +300,7 @@ def export_graph_parquet(
 
     import json
 
+    lines = _render_rel_map_jsonl(store=store, seed_node_ids=node_ids, depth=int(depth))
     rows = [json.loads(line) for line in lines if str(line).strip()]
     if not rows:
         return

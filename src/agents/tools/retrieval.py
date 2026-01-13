@@ -126,7 +126,7 @@ def retrieve_documents(
         # nothing, reuse most recent sources from persisted state. This enables
         # "what does that chart show?" flows across reloads without storing images.
         if not documents and _looks_contextual(query):
-            recalled = _recall_recent_sources(st if isinstance(st, dict) else None)
+            recalled = _recall_recent_sources(st)
             if recalled:
                 documents.extend(recalled)
                 strategy_used = f"{strategy_used}+recall"
@@ -455,7 +455,12 @@ def _parse_tool_result(result: Any) -> list[dict[str, Any]]:
                 else:
                     get_content = getattr(node, "get_content", None)
                     text = str(get_content()) if callable(get_content) else str(node)
-            except Exception:
+            except Exception as exc:
+                logger.opt(exception=exc).debug(
+                    "Failed to extract text from node; falling back to str(node) "
+                    "(node_type={node_type})",
+                    node_type=type(node).__name__,
+                )
                 text = str(node)
             meta = _sanitize_document_dict({
                 "metadata": getattr(node, "metadata", {}) or {}

@@ -25,6 +25,22 @@ Implement and/or verify:
 - Returned sources are sanitized (no runtime-only paths) but keep artifact refs.
 - Contextual recall works when retrieval returns empty.
 
+## Configuration requirements
+
+- Enable server-side hybrid retrieval:
+  - `DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=true`
+- Ensure the Qdrant text collection has the required named vectors:
+  - `text-dense` (dense embedding vector)
+  - `text-sparse` (sparse embedding vector with IDF modifier)
+
+## Notes on contextual recall
+
+- Trigger: a “contextual” query (e.g. “that chart”) plus empty retrieval.
+- Implementation: `src/agents/tools/retrieval.py` uses `_looks_contextual(...)` to
+  detect these queries and `_recall_recent_sources(state)` to reuse the most recent
+  persisted sources from `state["synthesis_result"]["documents"]` (preferred) or
+  prior `state["retrieval_results"][*]["documents"]`.
+
 ## Key modules
 
 - Fusion retriever: `src/retrieval/multimodal_fusion.py`

@@ -173,6 +173,34 @@ class ChatConfig(BaseModel):
         le=100000,
         description="Max rows fetched for filtered memory searches before slicing.",
     )
+    memory_similarity_threshold: float = Field(
+        default=0.85,
+        ge=0.0,
+        le=1.0,
+        description="Similarity threshold for consolidating memory candidates.",
+    )
+    memory_low_importance_threshold: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=1.0,
+        description="Importance cutoff for applying memory TTL.",
+    )
+    memory_low_importance_ttl_days: int = Field(
+        default=14,
+        ge=0,
+        description="TTL in days for low-importance memories (0 disables TTL).",
+    )
+    memory_max_items_per_namespace: int = Field(
+        default=200,
+        ge=1,
+        description="Maximum memories kept per namespace before eviction.",
+    )
+    memory_max_candidates_per_turn: int = Field(
+        default=8,
+        ge=1,
+        le=50,
+        description="Maximum extracted memory candidates per turn.",
+    )
 
 
 class AgentConfig(BaseModel):

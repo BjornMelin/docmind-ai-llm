@@ -67,9 +67,8 @@ jobs:
         run: |
           uv run python scripts/run_tests.py --fast
 
-      - name: Run unit/integration with coverage (soft gate)
+      - name: Run unit/integration with coverage
         if: ${{ matrix.profile == 'base' }}
-        continue-on-error: true
         env:
           REQUIRE_REAL_LLAMA: ${{ matrix.profile == 'llama' && '1' || '0' }}
         run: |

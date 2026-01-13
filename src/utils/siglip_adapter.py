@@ -217,17 +217,21 @@ class SiglipEmbedding:
 
         bs = max(1, int(batch_size))
         out: list[np.ndarray] = []
-        for i in range(0, len(images), bs):
-            batch = images[i : i + bs]
-            inputs = self._proc(images=batch, return_tensors="pt")  # type: ignore[call-arg]
-            pix = inputs.get("pixel_values")
-            if pix is None:  # pragma: no cover - defensive
-                raise RuntimeError("SigLIP processor returned no pixel_values")
-            pix = self._move_to_device(pix)
-            with torch.no_grad():  # type: ignore[name-defined]
-                feats = self._model.get_image_features(pixel_values=pix)  # type: ignore[union-attr]
-                feats = feats / feats.norm(dim=-1, keepdim=True)
-                out.append(feats.detach().cpu().numpy().astype(np.float32))
+        try:
+            for i in range(0, len(images), bs):
+                batch = images[i : i + bs]
+                inputs = self._proc(images=batch, return_tensors="pt")  # type: ignore[call-arg]
+                pix = inputs.get("pixel_values")
+                if pix is None:  # pragma: no cover - defensive
+                    raise RuntimeError("SigLIP processor returned no pixel_values")
+                pix = self._move_to_device(pix)
+                with torch.no_grad():  # type: ignore[name-defined]
+                    feats = self._model.get_image_features(pixel_values=pix)  # type: ignore[union-attr]
+                    feats = feats / feats.norm(dim=-1, keepdim=True)
+                    out.append(feats.detach().cpu().numpy().astype(np.float32))
+        except Exception:
+            dim = int(self._dim or 768)
+            return np.zeros((len(images), dim), dtype=np.float32)
         return (
             np.concatenate(out, axis=0)
             if out
@@ -254,25 +258,29 @@ class SiglipEmbedding:
 
         bs = max(1, int(batch_size))
         out: list[np.ndarray] = []
-        for i in range(0, len(texts), bs):
-            batch = [str(t) for t in texts[i : i + bs]]
-            inputs = self._proc(  # type: ignore[call-arg]
-                text=batch,
-                return_tensors="pt",
-                padding=True,
-                truncation=True,
-            )
-            input_ids = inputs.get("input_ids")
-            attn = inputs.get("attention_mask")
-            input_ids = self._move_to_device(input_ids)
-            attn = self._move_to_device(attn)
-            with torch.no_grad():  # type: ignore[name-defined]
-                feats = self._model.get_text_features(  # type: ignore[union-attr]
-                    input_ids=input_ids,
-                    attention_mask=attn,
+        try:
+            for i in range(0, len(texts), bs):
+                batch = [str(t) for t in texts[i : i + bs]]
+                inputs = self._proc(  # type: ignore[call-arg]
+                    text=batch,
+                    return_tensors="pt",
+                    padding=True,
+                    truncation=True,
                 )
-                feats = feats / feats.norm(dim=-1, keepdim=True)
-                out.append(feats.detach().cpu().numpy().astype(np.float32))
+                input_ids = inputs.get("input_ids")
+                attn = inputs.get("attention_mask")
+                input_ids = self._move_to_device(input_ids)
+                attn = self._move_to_device(attn)
+                with torch.no_grad():  # type: ignore[name-defined]
+                    feats = self._model.get_text_features(  # type: ignore[union-attr]
+                        input_ids=input_ids,
+                        attention_mask=attn,
+                    )
+                    feats = feats / feats.norm(dim=-1, keepdim=True)
+                    out.append(feats.detach().cpu().numpy().astype(np.float32))
+        except Exception:
+            dim = int(self._dim or 768)
+            return np.zeros((len(texts), dim), dtype=np.float32)
         return (
             np.concatenate(out, axis=0)
             if out

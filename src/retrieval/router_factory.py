@@ -257,7 +257,11 @@ def _maybe_add_graph_tool(
                 similarity_top_k=graph_top_k,
                 node_postprocessors=graph_post,
             )
-        except TypeError:
+        except TypeError as exc:
+            logger.debug(
+                "Graph query engine lacks node_postprocessors; retrying ({exc})",
+                exc=exc,
+            )
             artifacts = build_graph_query_engine(
                 pg_index,
                 llm=the_llm,

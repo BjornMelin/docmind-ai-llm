@@ -416,7 +416,7 @@ exclude_lines = [
     "except ImportError:",
     "if TYPE_CHECKING:",
 ]
-fail_under = 45.0
+fail_under = 80.0
 precision = 2
 show_missing = true
 skip_covered = false
@@ -443,7 +443,7 @@ unit_test_time_threshold_seconds = 0.1
 performance_regression_threshold = 1.5
 
 # Coverage enforcement
-min_line_coverage_percent = 65.0
+min_line_coverage_percent = 80.0
 min_branch_coverage_percent = 0.0
 coverage_fail_on_decrease = false
 coverage_regression_threshold = 0.95

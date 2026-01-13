@@ -187,8 +187,13 @@ def _set_active_lock(lock: SnapshotLock | None) -> None:
 
 def begin_snapshot(base_dir: Path | None = None) -> Path:
     """Create a locked workspace for snapshot persistence."""
-    if _get_active_lock() is not None:
-        raise RuntimeError("Snapshot lock already held; finalize or cleanup first.")
+    active_lock = _get_active_lock()
+    if active_lock is not None:
+        # Clear stale in-memory lock references that outlive the lock file.
+        if not active_lock.path.exists():
+            _set_active_lock(None)
+        else:
+            raise RuntimeError("Snapshot lock already held; finalize or cleanup first.")
 
     paths = _snapshot_paths(base_dir)
     paths.base_dir.mkdir(parents=True, exist_ok=True)
@@ -221,8 +226,10 @@ def _release_active_lock() -> None:
     lock = _get_active_lock()
     if lock is None:
         return
-    lock.release()
-    _set_active_lock(None)
+    try:
+        lock.release()
+    finally:
+        _set_active_lock(None)
 
 
 def cleanup_tmp(tmp_dir: Path) -> None:

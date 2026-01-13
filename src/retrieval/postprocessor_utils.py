@@ -31,7 +31,7 @@ def build_retriever_query_engine(
     **kwargs: Any,
 ) -> Any:
     """Build a retriever query engine, optionally applying postprocessors."""
-    engine_kwargs: dict[str, Any] = {"retriever": retriever, "llm": llm, **kwargs}
+    engine_kwargs: dict[str, Any] = {**kwargs, "retriever": retriever, "llm": llm}
     if post:
         engine_kwargs["node_postprocessors"] = list(post)
     return engine_cls.from_args(**engine_kwargs)

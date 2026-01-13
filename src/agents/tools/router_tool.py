@@ -61,12 +61,11 @@ def _extract_response_text(resp: Any) -> str:
 
 def _extract_selected_strategy(resp: Any) -> str | None:
     """Extract the selector strategy name from response metadata."""
-    try:
+    with suppress(Exception):
         metadata = getattr(resp, "metadata", None)
         if isinstance(metadata, dict):
-            return metadata.get("selector_result")
-    except Exception:
-        return None
+            value = metadata.get("selector_result")
+            return str(value) if value is not None else None
     return None
 
 
@@ -87,7 +86,7 @@ def _log_router_event(selected_strategy: str | None, payload: dict[str, Any]) ->
     """Emit structured logging and JSONL telemetry for routing."""
     with suppress(Exception):  # pragma: no cover - logging resilience
         logger.info(
-            "router_tool completed: strategy=%s, timing_ms=%.2f",
+            "router_tool completed: strategy={}, timing_ms={:.2f}",
             selected_strategy,
             payload["timing_ms"],
         )
@@ -121,7 +120,7 @@ def router_tool(
             if router_engine is None:
                 message = (
                     "router_tool requires 'router_engine' via state.tools_data, "
-                    "ToolRuntime.context, or runtime.configurable.runtime."
+                    "ToolRuntime.context, or runtime.config.configurable.runtime."
                 )
                 span.set_attribute("router.success", False)
                 span.set_attribute("router.error", message)
@@ -155,5 +154,5 @@ def router_tool(
         except Exception as exc:
             span.set_attribute("router.success", False)
             span.set_attribute("router.error", str(exc))
-            logger.error("router_tool failed: %s", exc)
+            logger.error("router_tool failed: {}", exc)
             return json.dumps({"error": str(exc)})

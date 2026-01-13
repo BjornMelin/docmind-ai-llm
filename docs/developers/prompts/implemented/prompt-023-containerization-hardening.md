@@ -36,7 +36,7 @@ Use the `$docker-architect` workflow patterns (multi-stage, non-root, .dockerign
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
-**Audience note:** This prompt targets the Codex/MCP execution environment (functions._ tools and `${CODEX_\*}` paths). If you are running without Codex, replace those calls with direct shell commands and standard tooling; the skill paths are external to the DocMind repo.
+**Audience note:** This prompt targets the Codex/MCP execution environment (functions._ tools and `${CODEX_*}` paths). If you are running without Codex, replace those calls with direct shell commands and standard tooling; the skill paths are external to the DocMind repo.
 
 **Read first:** `docs/developers/prompts/README.md` and `${CODEX_PROMPT_LIBRARY:-$HOME/prompt_library}/assistant/codex-inventory.md`.
 
@@ -228,7 +228,7 @@ After container changes, the repo must still pass:
      ```
 
 6. [ ] Update RTM row NFR-PORT-003 and verify docs are consistent.
-7. [ ] Add Docker static validation in CI (hadolint + CMD/ENTRYPOINT checks + `.dockerignore` + non-root/user checks + DOCMIND\_\* prefix scan), or file a tracking ADR/issue if out of scope for this WP.
+7. [ ] Add Docker static validation in CI (hadolint + CMD/ENTRYPOINT checks + `.dockerignore` + non-root/user checks + `DOCMIND_*` prefix scan), or file a tracking ADR/issue if out of scope for this WP.
 
 ---
 

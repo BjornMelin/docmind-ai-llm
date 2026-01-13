@@ -75,11 +75,11 @@ def _sanitize_event(event: dict[str, Any]) -> dict[str, Any]:
     """Apply telemetry hygiene (local-first; no blobs/paths)."""
 
     def _sanitize_value(value: Any, *, depth: int) -> Any:
-        if depth <= 0:
-            return value
-        # Ensure JSON-serializable and avoid leaking host paths.
+        # Always convert Path objects regardless of depth.
         if isinstance(value, Path):
             return value.name
+        if depth <= 0:
+            return value
         if isinstance(value, dict):
             return _sanitize_mapping(value, depth=depth - 1)
         if isinstance(value, list):

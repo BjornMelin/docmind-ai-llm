@@ -399,6 +399,34 @@ docker-compose restart qdrant
 docker-compose logs qdrant
 ```
 
+### Qdrant Dimension Mismatch (SigLIP image collection)
+
+**Issue**: Image indexing fails with an error like `expected dim: 768, got 1024`.
+
+This usually means your existing Qdrant image collection was created with a
+different vector size than the SigLIP embedder expects (768D).
+
+**Solution**:
+
+1. **Inspect the collection config**:
+
+   ```bash
+   curl http://localhost:6333/collections/docmind_images
+   ```
+
+2. **Recreate the image collection** if the `siglip` vector size is not `768`:
+
+   ```bash
+   curl -X DELETE http://localhost:6333/collections/docmind_images
+   ```
+
+   The collection is recreated automatically on the next ingestion run.
+
+3. **Reindex images** by re-running ingestion for the affected documents.
+
+See `docs/developers/adrs/ADR-058-final-multimodal-pipeline-and-persistence.md`
+for the full multimodal indexing workflow.
+
 ### Performance Issues
 
 **Issue**: Slow model loading or inference

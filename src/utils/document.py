@@ -15,9 +15,12 @@ import contextlib
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
+
+if TYPE_CHECKING:  # pragma: no cover
+    from llama_index.core import Document
 
 from src.utils.hashing import sha256_file
 
@@ -40,7 +43,7 @@ def _sanitize_doc_metadata(
 
 async def load_documents_unstructured(
     file_paths: Sequence[str | Path],
-) -> list[Any]:
+) -> list[Document]:
     """Load documents using UnstructuredReader when installed (async-friendly).
 
     Returns a list of LlamaIndex `Document` objects. This function is safe to
@@ -51,13 +54,13 @@ async def load_documents_unstructured(
     from llama_index.core import Document
 
     paths = [Path(p) for p in file_paths]
-    docs: list[Any] = []
+    docs: list[Document] = []
     reader = None
     try:
         from llama_index.readers.file import UnstructuredReader
 
         reader = UnstructuredReader()
-    except Exception:
+    except (ImportError, ModuleNotFoundError, AttributeError):
         reader = None
 
     for path in paths:
@@ -69,7 +72,7 @@ async def load_documents_unstructured(
                 loaded = await asyncio.to_thread(
                     reader.load_data,  # type: ignore[call-arg]
                     file=path,
-                    unstructured_kwargs={"filename": str(path)},
+                    unstructured_kwargs={"filename": path.name},
                 )
                 loaded_items = list(loaded or [])
                 for idx, item in enumerate(loaded_items):
@@ -105,7 +108,7 @@ async def load_documents_from_directory(
     directory_path: str | Path,
     recursive: bool = True,
     supported_extensions: set[str] | None = None,
-) -> list[Any]:
+) -> list[Document]:
     """Load documents from a directory using UnstructuredReader when available."""
     root = Path(directory_path)
     if not root.exists():
@@ -168,15 +171,24 @@ def get_cache_stats(*, cache_dir: Path | None = None) -> dict[str, Any]:
     cache_path = _resolve_ingestion_cache_dir(cache_dir)
     if not cache_path.exists():
         return {"exists": False, "files": 0, "bytes": 0}
-    files = [p for p in cache_path.glob("**/*") if p.is_file()]
+    max_files = 10_000
+    file_count = 0
     total_bytes = 0
-    for p in files:
+    truncated = False
+    for p in cache_path.rglob("*"):
+        if not p.is_file():
+            continue
+        file_count += 1
+        if file_count > max_files:
+            truncated = True
+            break
         with contextlib.suppress(OSError):
             total_bytes += p.stat().st_size
     return {
         "exists": True,
-        "files": len(files),
+        "files": file_count,
         "bytes": total_bytes,
+        "truncated": truncated,
     }
 
 

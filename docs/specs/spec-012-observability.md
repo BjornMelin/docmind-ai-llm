@@ -68,7 +68,7 @@ DocMind uses a _single_ `observability.endpoint` value for both traces and metri
 Practical outcomes:
 
 - Setting `DOCMIND_OBSERVABILITY__ENDPOINT=http://localhost:4318` works for both traces and metrics.
-- If `DOCMIND_OBSERVABILITY__ENDPOINT` already includes a `/v1/...` suffix, DocMind rewrites it per exporter (`/v1/traces` for traces, `/v1/metrics` for metrics).
+- If `DOCMIND_OBSERVABILITY__ENDPOINT` already includes a `/v1/<signal>` suffix, DocMind rewrites it per exporter (`/v1/traces` for traces, `/v1/metrics` for metrics).
 - You can still leave `DOCMIND_OBSERVABILITY__ENDPOINT` unset and rely on standard OTEL env vars (`OTEL_EXPORTER_OTLP_ENDPOINT`, signal-specific endpoints, etc.).
 
 ## Implementation

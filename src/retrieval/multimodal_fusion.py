@@ -99,12 +99,20 @@ class ImageSiglipRetriever:
             self._collection_checked = True
 
         try:
+            timeout_s = max(
+                1,
+                int(
+                    float(getattr(settings.retrieval, "image_timeout_ms", 5000))
+                    / 1000.0
+                ),
+            )
             result = self._client.query_points(
                 collection_name=self.params.collection,
                 query=vec_list,
                 using=self.params.using,
                 limit=limit,
                 with_payload=list(self.params.with_payload),
+                timeout=timeout_s,
             )
         except Exception as exc:  # pragma: no cover - fail open
             logger.debug("Image query_points failed: {}", exc)

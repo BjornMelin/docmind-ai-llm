@@ -85,8 +85,9 @@ def ensure_thumbnail(
     thumb_root.mkdir(parents=True, exist_ok=True)
 
     # Determine underlying extension and encryption state.
-    base_stem = Path(src.name[:-4] if src.name.endswith(".enc") else src.name).stem
-    is_enc = src.name.endswith(".enc")
+    # src.stem strips .enc → "image.png", then Path().stem strips image ext → "image"
+    base_stem = Path(src.stem).stem if src.suffix == ".enc" else src.stem
+    is_enc = src.suffix == ".enc"
 
     should_encrypt = bool(encrypt) if encrypt is not None else is_enc
     thumb_plain = thumb_root / f"{base_stem}__thumb.webp"

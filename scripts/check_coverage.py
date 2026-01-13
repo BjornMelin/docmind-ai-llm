@@ -78,8 +78,11 @@ class CoverageAnalyzer:
             self.failures.append(f"Failed to load coverage data: {e}")
             return False
 
-    def check_overall_coverage(self) -> dict[str, Any]:
+    def check_overall_coverage(self, *, record_messages: bool = True) -> dict[str, Any]:
         """Check overall coverage against thresholds.
+
+        Args:
+            record_messages: When True, append failures to ``self.failures``.
 
         Returns:
             Dictionary with coverage analysis results
@@ -127,26 +130,29 @@ class CoverageAnalyzer:
             "overall_pass": overall_pass,
         }
 
-        # Record failures
-        if not line_meets_threshold:
-            self.failures.append(
-                f"Line coverage {line_percent:.1f}% below threshold "
-                f"{self.line_threshold}%"
-            )
+        if record_messages:
+            if not line_meets_threshold:
+                self.failures.append(
+                    f"Line coverage {line_percent:.1f}% below threshold "
+                    f"{self.line_threshold}%"
+                )
 
-        if branch_total > 0 and not branch_meets_threshold:
-            self.failures.append(
-                f"Branch coverage {branch_percent:.1f}% below threshold "
-                f"{self.branch_threshold}%"
-            )
+            if branch_total > 0 and not branch_meets_threshold:
+                self.failures.append(
+                    f"Branch coverage {branch_percent:.1f}% below threshold "
+                    f"{self.branch_threshold}%"
+                )
 
         return result
 
-    def analyze_file_coverage(self, min_file_threshold: float = 70.0) -> dict[str, Any]:
+    def analyze_file_coverage(
+        self, min_file_threshold: float = 70.0, *, record_messages: bool = True
+    ) -> dict[str, Any]:
         """Analyze coverage for individual files.
 
         Args:
             min_file_threshold: Minimum coverage threshold for individual files
+            record_messages: When True, append warnings to ``self.warnings``.
 
         Returns:
             Dictionary with file coverage analysis
@@ -184,13 +190,13 @@ class CoverageAnalyzer:
         low_coverage_files.sort(key=lambda x: x["percent_covered"])
         high_coverage_files.sort(key=lambda x: x["percent_covered"], reverse=True)
 
-        # Record warnings for low coverage files
-        for file_info in low_coverage_files:
-            self.warnings.append(
-                f"Low coverage in {file_info['filename']}: "
-                f"{file_info['percent_covered']:.1f}% "
-                f"({file_info['covered_lines']}/{file_info['total_lines']} lines)"
-            )
+        if record_messages:
+            for file_info in low_coverage_files:
+                self.warnings.append(
+                    f"Low coverage in {file_info['filename']}: "
+                    f"{file_info['percent_covered']:.1f}% "
+                    f"({file_info['covered_lines']}/{file_info['total_lines']} lines)"
+                )
 
         return {
             "total_files": len(files),
@@ -232,8 +238,8 @@ class CoverageAnalyzer:
         if not self.coverage_data:
             return "Error: No coverage data available"
 
-        overall = self.check_overall_coverage()
-        file_analysis = self.analyze_file_coverage()
+        overall = self.check_overall_coverage(record_messages=False)
+        file_analysis = self.analyze_file_coverage(record_messages=False)
 
         report_lines = [
             "=" * 60,
@@ -554,10 +560,10 @@ def _handle_overall_coverage(
         return 2
 
     line_coverage = overall_result["line_coverage"]
-    meets_threshold = overall_result["overall_pass"]
-    status_icon = "✅" if meets_threshold else "❌"
+    overall_pass = overall_result["overall_pass"]
+    line_icon = "✅" if line_coverage["meets_threshold"] else "❌"
     print(
-        f"{status_icon} Overall line coverage: "
+        f"{line_icon} Overall line coverage: "
         f"{line_coverage['percent']:.1f}% "
         f"(threshold: {line_coverage['threshold']}%)"
     )
@@ -571,7 +577,7 @@ def _handle_overall_coverage(
             f"(threshold: {branch_coverage['threshold']}%)"
         )
 
-    if meets_threshold or not args.fail_under:
+    if overall_pass or not args.fail_under:
         return 0
     return 1
 

@@ -88,6 +88,26 @@ def ensure_siglip_image_collection(
                 collection_name,
                 vector_name,
             )
+            return
+
+        vec_params = vec_cfg.get(vector_name)
+        existing_dim = getattr(vec_params, "size", None)
+        if existing_dim is None and isinstance(vec_params, dict):
+            existing_dim = vec_params.get("size")
+        if existing_dim is not None and int(existing_dim) != int(dim):
+            logger.error(
+                "Image collection '%s' vector '%s' has dim=%d but expected dim=%d; "
+                "recreate the collection to enable image indexing",
+                collection_name,
+                vector_name,
+                int(existing_dim),
+                int(dim),
+            )
+            raise ValueError(
+                "Image collection dimension mismatch; recreate the collection "
+                f"(collection={collection_name}, vector={vector_name}, "
+                f"expected_dim={int(dim)}, actual_dim={int(existing_dim)})"
+            )
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning("ensure_siglip_image_collection skipped: %s", exc)
 
@@ -104,7 +124,19 @@ def index_page_images_siglip(
     if not records:
         return 0
 
-    ensure_siglip_image_collection(client, collection_name)
+    expected_dim = _DEFAULT_SIGLIP_DIM
+    ensure_loaded = getattr(embedder, "_ensure_loaded", None)
+    if callable(ensure_loaded):
+        with contextlib.suppress(Exception):
+            ensure_loaded()
+    with contextlib.suppress(Exception):
+        expected_dim = int(
+            getattr(embedder, "_dim", None)
+            or getattr(embedder, "dim", None)
+            or _DEFAULT_SIGLIP_DIM
+        )
+
+    ensure_siglip_image_collection(client, collection_name, dim=expected_dim)
 
     # Best-effort short-circuit when existing phash matches (avoid re-embed).
     existing_phash: dict[str, str] = {}
@@ -157,7 +189,8 @@ def index_page_images_siglip(
                 len(batch),
                 len(vecs),
             )
-        for r, vec in zip(batch, vecs, strict=True):
+            continue
+        for r, vec in zip(batch, vecs, strict=False):
             pid = r.point_id()
             points.append(
                 qmodels.PointStruct(
