@@ -222,7 +222,7 @@ class MultiAgentCoordinator:
         self.avg_processing_time = 0.0
         self.avg_coordination_overhead = 0.0
 
-        # Checkpointer + store (ADR-057). Defaults to in-memory for tests.
+        # Checkpointer + store (ADR-058). Defaults to in-memory for tests.
         self.checkpointer = checkpointer or InMemorySaver()
         self.store = store
 
@@ -375,7 +375,7 @@ class MultiAgentCoordinator:
             # Store agents for reference
             self.agents = agents
 
-            # Compile graph with checkpointer + optional store (ADR-057).
+            # Compile graph with checkpointer + optional store (ADR-058).
             self.compiled_graph = self.graph.compile(
                 checkpointer=self.checkpointer, store=self.store
             )
@@ -1092,7 +1092,7 @@ class MultiAgentCoordinator:
         stats["adr_compliance"] = self.validate_adr_compliance()
         return stats
 
-    # --- Persistence helpers (ADR-057) ---
+    # --- Persistence helpers (ADR-058) ---
 
     def get_state_values(
         self,

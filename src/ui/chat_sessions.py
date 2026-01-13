@@ -1,4 +1,4 @@
-"""Streamlit helpers for chat session persistence (ADR-057 / SPEC-041)."""
+"""Streamlit helpers for chat session persistence (ADR-058 / SPEC-041)."""
 
 from __future__ import annotations
 

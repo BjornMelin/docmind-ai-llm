@@ -249,7 +249,7 @@ def _render_sources_fragment() -> None:
 
 
 def _render_memory_sidebar(user_id: str, thread_id: str) -> None:
-    """Render a simple memory review UI (ADR-057/SPEC-041)."""
+    """Render a simple memory review UI (ADR-058/SPEC-041)."""
     store = _get_memory_store()
 
     def memory_namespace(*, scope: str) -> tuple[str, ...]:

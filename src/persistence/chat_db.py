@@ -1,4 +1,4 @@
-"""Chat persistence database helpers (ADR-057 / SPEC-041).
+"""Chat persistence database helpers (ADR-058 / SPEC-041).
 
 This module owns the Chat DB lifecycle:
 - Session registry table (chat_session)

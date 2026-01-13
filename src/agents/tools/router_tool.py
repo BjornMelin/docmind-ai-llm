@@ -69,7 +69,9 @@ def _extract_selected_strategy(resp: Any) -> str | None:
     return None
 
 
-def _build_payload(response_text: str, timing_ms: float, selected: str | None) -> dict:
+def _build_payload(
+    response_text: str, timing_ms: float, selected: str | None
+) -> dict[str, Any]:
     """Build the JSON payload returned from the router tool."""
     payload: dict[str, Any] = {
         "response_text": response_text,
@@ -152,6 +154,8 @@ def router_tool(
             return json.dumps(payload)
 
         except Exception as exc:
+            if isinstance(exc, RuntimeError):
+                raise
             span.set_attribute("router.success", False)
             span.set_attribute("router.error", str(exc))
             logger.error("router_tool failed: {}", exc)

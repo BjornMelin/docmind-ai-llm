@@ -1,4 +1,4 @@
-"""SQLite-backed LangGraph BaseStore with optional semantic search (ADR-057 / SPEC-041).
+"""SQLite-backed LangGraph BaseStore with optional semantic search (ADR-058 / SPEC-041).
 
 This implements a persistent store compatible with LangGraph's InjectedStore
 feature. It is designed for DocMind's offline-first Streamlit UX:

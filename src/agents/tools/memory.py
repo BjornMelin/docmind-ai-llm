@@ -1,4 +1,4 @@
-"""Agent tools for long-term memory (ADR-057 / SPEC-041).
+"""Agent tools for long-term memory (ADR-058 / SPEC-041).
 
 These tools use LangGraph's injected store (BaseStore) and the run config
 (`user_id`, `thread_id`) to implement:
