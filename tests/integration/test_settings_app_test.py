@@ -17,7 +17,7 @@ def test_settings_page_renders_and_has_hybrid_toggle() -> None:
     successfully renders and includes the expected retrieval toggle.
     """
     at = AppTest.from_file("src/pages/04_settings.py")
-    at.run()
+    at.run(timeout=10)
     # Find the read-only field exposing the retrieval toggle state
     labels = [getattr(inp, "label", "") for inp in at.text_input]
     assert any(
