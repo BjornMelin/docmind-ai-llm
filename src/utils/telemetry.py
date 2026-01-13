@@ -101,16 +101,18 @@ def _sanitize_event(event: dict[str, Any]) -> dict[str, Any]:
                 is_windows_drive = len(v) >= 2 and v[1] == ":" and v[0].isalpha()
                 is_relative_with_sep = (
                     ("/" in v or "\\" in v)
-                    and not v.startswith((
-                        "http://",
-                        "https://",
-                        "s3://",
-                        "gs://",
-                        "ftp://",
-                        "file://",
-                        "blob:",
-                        "//",
-                    ))
+                    and not v.startswith(
+                        (
+                            "http://",
+                            "https://",
+                            "s3://",
+                            "gs://",
+                            "ftp://",
+                            "file://",
+                            "blob:",
+                            "//",
+                        )
+                    )
                     and not v.startswith("data:")
                 )
                 if is_abs_unix or is_unc or is_windows_drive or is_relative_with_sep:

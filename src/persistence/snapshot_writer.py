@@ -91,12 +91,14 @@ def write_manifest(workspace_path: Path, manifest_meta: dict[str, Any]) -> None:
     entries: list[dict[str, Any]] = []
     for payload in sorted(iter_payload_files(workspace_path)):
         relative = payload.relative_to(workspace_path).as_posix()
-        entries.append({
-            "path": relative,
-            "sha256": _sha256(payload),
-            "size_bytes": payload.stat().st_size,
-            "content_type": _guess_content_type(payload),
-        })
+        entries.append(
+            {
+                "path": relative,
+                "sha256": _sha256(payload),
+                "size_bytes": payload.stat().st_size,
+                "content_type": _guess_content_type(payload),
+            }
+        )
 
     manifest_path = workspace_path / "manifest.jsonl"
     serialized_lines = (

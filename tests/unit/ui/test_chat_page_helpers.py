@@ -425,11 +425,13 @@ def test_render_chat_history_and_handle_prompt(monkeypatch):
 
     monkeypatch.setattr(st, "chat_message", _chat_message, raising=False)
     monkeypatch.setattr(st, "markdown", lambda *_a, **_k: None, raising=False)
-    page._render_chat_history([
-        HumanMessage(content="hi"),
-        AIMessage(content="yo"),
-        object(),
-    ])
+    page._render_chat_history(
+        [
+            HumanMessage(content="hi"),
+            AIMessage(content="yo"),
+            object(),
+        ]
+    )
     assert roles == ["user", "assistant"]
 
     # Prompt flow

@@ -53,6 +53,7 @@ with the current codebase, pyproject.toml, scripts, and docs/specs/ADRs.
 - Coverage: `uv run python scripts/run_tests.py --coverage`
 - Quality gates: `uv run python scripts/run_quality_gates.py --ci --report`
 - Coverage report: `uv run python scripts/check_coverage.py --collect --report --html`
+- Review triage (unresolved PR threads): `python3 scripts/analyze_github_reviews.py --json-file <path>` (run after `fetch_unresolved_pr_review_comments.py` or set `DOCMIND_REVIEW_JSON`).
 - Performance check: `uv run python scripts/performance_monitor.py --run-tests --check-regressions --report`
 - GPU check: `uv run python scripts/test_gpu.py --quick`
 - Prefetch models: `uv run python tools/models/pull.py --all --cache_dir ./models_cache`

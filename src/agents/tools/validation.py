@@ -104,19 +104,21 @@ def validate_response(
 
     except (RuntimeError, ValueError, AttributeError) as e:
         logger.error("Response validation failed: {}", e)
-        return json.dumps({
-            "valid": False,
-            "confidence": 0.0,
-            "issues": [
-                {
-                    "type": "validation_error",
-                    "severity": "high",
-                    "description": str(e),
-                }
-            ],
-            "suggested_action": "regenerate",
-            "error": str(e),
-        })
+        return json.dumps(
+            {
+                "valid": False,
+                "confidence": 0.0,
+                "issues": [
+                    {
+                        "type": "validation_error",
+                        "severity": "high",
+                        "description": str(e),
+                    }
+                ],
+                "suggested_action": "regenerate",
+                "error": str(e),
+            }
+        )
 
 
 def _parse_sources(sources: str) -> list[object]:

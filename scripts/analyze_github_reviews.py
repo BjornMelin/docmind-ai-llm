@@ -1,3 +1,5 @@
+"""Summarize unresolved GitHub PR review threads into a console/CSV report."""
+
 from __future__ import annotations
 
 import argparse
@@ -11,7 +13,9 @@ from pathlib import Path
 from typing import Any
 
 # Files already processed (exclude from output)
-PROCESSED_FILES: frozenset[str] = frozenset({"router_factory", "01_chat", "coordinator"})
+PROCESSED_FILES: frozenset[str] = frozenset(
+    {"router_factory", "01_chat", "coordinator"}
+)
 
 
 def should_exclude(file_path: str) -> bool:
@@ -69,7 +73,8 @@ def _resolve_json_path(arg_path: str | None) -> Path | None:
     return Path(env_path) if env_path else None
 
 
-def main() -> None:
+def main() -> None:  # noqa: PLR0915
+    """Run the review thread summarizer CLI."""
     parser = argparse.ArgumentParser(
         description="Summarize unresolved GitHub PR review threads."
     )
@@ -144,7 +149,10 @@ def main() -> None:
             summary = issue["summary"]
             has_code = issue["has_code"]
             comments = issue["comment_count"]
-            print(f"  Line {str(line):6} | Code: {has_code:3} | Comments: {comments} | {summary}")
+            print(
+                "  Line "
+                f"{line!s:6} | Code: {has_code:3} | Comments: {comments} | {summary}"
+            )
 
     # Print CSV
     print("\n\n" + "=" * 120)
@@ -181,7 +189,10 @@ def main() -> None:
     print("=" * 120)
     total_threads = sum(len(issues) for issues in by_file.values())
     total_with_code = sum(
-        1 for issues in by_file.values() for issue in issues if issue["has_code"] == "Yes"
+        1
+        for issues in by_file.values()
+        for issue in issues
+        if issue["has_code"] == "Yes"
     )
     print(f"Total unresolved threads (excl. processed): {total_threads}")
     if total_threads == 0:
@@ -190,12 +201,12 @@ def main() -> None:
     else:
         print(
             "Threads with code suggestions: "
-            f"{total_with_code} ({100*total_with_code/total_threads:.0f}%)"
+            f"{total_with_code} ({100 * total_with_code / total_threads:.0f}%)"
         )
         print(
             "Threads without code: "
             f"{total_threads - total_with_code} "
-            f"({100*(total_threads - total_with_code)/total_threads:.0f}%)"
+            f"({100 * (total_threads - total_with_code) / total_threads:.0f}%)"
         )
     print(f"Files with issues: {len(by_file)}")
 

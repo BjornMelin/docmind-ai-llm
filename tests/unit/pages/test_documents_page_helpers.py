@@ -505,10 +505,12 @@ def test_render_manifest_details_and_log_export_event(
         },
         snapshot_dir=tmp_path,
     )
-    page._log_export_event({
-        "export_performed": True,
-        "dest_path": str(tmp_path / "a/b/c.txt"),
-    })  # type: ignore[attr-defined]
+    page._log_export_event(
+        {
+            "export_performed": True,
+            "dest_path": str(tmp_path / "a/b/c.txt"),
+        }
+    )  # type: ignore[attr-defined]
     assert events
     assert "dest_path" not in events[-1]
     assert events[-1]["dest_basename"] == "c.txt"
@@ -658,7 +660,9 @@ def test_render_export_images_handles_encrypted_without_support(
         ],
         preview_limit=1,
     )
-    assert any("(missing)" in c for c in streamlit_calls["captions"])
+    assert any(
+        "Encryption support unavailable" in c for c in streamlit_calls["captions"]
+    )
 
 
 def test_handle_reindex_page_images_no_pdfs(

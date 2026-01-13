@@ -8,25 +8,27 @@ from src.utils import telemetry
 def test_canonical_keys_present(tmp_path, monkeypatch):
     out = tmp_path / "telemetry.jsonl"
     monkeypatch.setattr(telemetry, "_TELEM_PATH", out, raising=False)
-    telemetry.log_jsonl({
-        "retrieval.fusion_mode": "rrf",
-        "retrieval.prefetch_dense_limit": 200,
-        "retrieval.prefetch_sparse_limit": 400,
-        "retrieval.fused_limit": 60,
-        "retrieval.return_count": 10,
-        "retrieval.latency_ms": 12,
-        "dedup.before": 12,
-        "dedup.after": 10,
-        "dedup.dropped": 2,
-        "dedup.key": "page_id",
-        "rerank.stage": "text",
-        "rerank.topk": 5,
-        "rerank.latency_ms": 5,
-        "rerank.timeout": False,
-        "rerank.batch_size": 4,
-        "rerank.processed_count": 12,
-        "rerank.processed_batches": 3,
-    })
+    telemetry.log_jsonl(
+        {
+            "retrieval.fusion_mode": "rrf",
+            "retrieval.prefetch_dense_limit": 200,
+            "retrieval.prefetch_sparse_limit": 400,
+            "retrieval.fused_limit": 60,
+            "retrieval.return_count": 10,
+            "retrieval.latency_ms": 12,
+            "dedup.before": 12,
+            "dedup.after": 10,
+            "dedup.dropped": 2,
+            "dedup.key": "page_id",
+            "rerank.stage": "text",
+            "rerank.topk": 5,
+            "rerank.latency_ms": 5,
+            "rerank.timeout": False,
+            "rerank.batch_size": 4,
+            "rerank.processed_count": 12,
+            "rerank.processed_batches": 3,
+        }
+    )
     data = [
         __import__("json").loads(line)
         for line in out.read_text().splitlines()

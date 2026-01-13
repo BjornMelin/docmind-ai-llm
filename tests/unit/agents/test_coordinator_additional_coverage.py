@@ -225,12 +225,14 @@ def test_get_state_values_and_list_checkpoints_use_compiled_graph(monkeypatch) -
 
     compiled = Mock()
     compiled.get_state.return_value = SimpleNamespace(values={"messages": ["x"]})
-    compiled.get_state_history.return_value = iter([
-        SimpleNamespace(
-            config={"configurable": {"checkpoint_id": "c1", "checkpoint_ns": "ns"}}
-        ),
-        SimpleNamespace(config={"configurable": {"checkpoint_id": "c0"}}),
-    ])
+    compiled.get_state_history.return_value = iter(
+        [
+            SimpleNamespace(
+                config={"configurable": {"checkpoint_id": "c1", "checkpoint_ns": "ns"}}
+            ),
+            SimpleNamespace(config={"configurable": {"checkpoint_id": "c0"}}),
+        ]
+    )
     coord.compiled_graph = compiled
 
     values = coord.get_state_values(thread_id="t", user_id="u")

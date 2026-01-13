@@ -274,20 +274,26 @@ def pdf_pages_to_image_documents(
             "page_text": page_text,
         }
         if doc_id:
-            meta.update({
-                "doc_id": doc_id,
-                "document_id": doc_id,
-                "page_id": f"{doc_id}::page::{i}",
-            })
+            meta.update(
+                {
+                    "doc_id": doc_id,
+                    "document_id": doc_id,
+                    "page_id": f"{doc_id}::page::{i}",
+                }
+            )
         if str(path).endswith(".enc"):
-            meta.update({
-                "encrypted": True,
-                "kid": get_image_kid(),
-            })
-        meta.update({
-            "image_artifact_id": ref.sha256,
-            "image_artifact_suffix": ref.suffix,
-        })
+            meta.update(
+                {
+                    "encrypted": True,
+                    "kid": get_image_kid(),
+                }
+            )
+        meta.update(
+            {
+                "image_artifact_id": ref.sha256,
+                "image_artifact_suffix": ref.suffix,
+            }
+        )
         docs.append(ImageDocument(image_path=str(resolved_path), metadata=meta))
 
     if failed_pages:

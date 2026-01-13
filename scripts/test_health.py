@@ -347,14 +347,16 @@ class TestHealthMonitor:
 
                 for line_num, line in enumerate(lines, 1):
                     if re.search(pattern, line):
-                        violations.append({
-                            "pattern": pattern_name,
-                            "file": str(file_path),
-                            "line": line_num,
-                            "content": line.strip(),
-                            "severity": pattern_config["severity"],
-                            "message": pattern_config["message"],
-                        })
+                        violations.append(
+                            {
+                                "pattern": pattern_name,
+                                "file": str(file_path),
+                                "line": line_num,
+                                "content": line.strip(),
+                                "severity": pattern_config["severity"],
+                                "message": pattern_config["message"],
+                            }
+                        )
 
         except (OSError, UnicodeDecodeError) as e:
             self.warnings.append(f"Error analyzing {file_path}: {e}")
@@ -462,29 +464,34 @@ class TestHealthMonitor:
             flaky_count = len(flaky_data.get("flaky_tests", []))
             total_tested = flaky_data.get("total_tests_analyzed", 0)
 
-            report_lines.extend([
-                "FLAKINESS ANALYSIS:",
-                f"  Tests Analyzed:      {total_tested}",
-                f"  Flaky Tests:         {flaky_count}",
-                f"  Stability Rate:      {(1 - flaky_count / total_tested) * 100:.1f}%"
-                if total_tested > 0
-                else "  Stability Rate:      N/A",
-                f"  Analysis Runs:       {flaky_data.get('total_runs', 0)}",
-                "",
-            ])
+            report_lines.extend(
+                [
+                    "FLAKINESS ANALYSIS:",
+                    f"  Tests Analyzed:      {total_tested}",
+                    f"  Flaky Tests:         {flaky_count}",
+                    "  Stability Rate:      "
+                    f"{(1 - flaky_count / total_tested) * 100:.1f}%"
+                    if total_tested > 0
+                    else "  Stability Rate:      N/A",
+                    f"  Analysis Runs:       {flaky_data.get('total_runs', 0)}",
+                    "",
+                ]
+            )
 
             # Top flaky tests
             flaky_tests = flaky_data.get("flaky_tests", [])
             if flaky_tests:
-                report_lines.extend([
-                    "MOST FLAKY TESTS:",
-                    *(
-                        f"  {test['test_name']}: {test['pass_rate']:.1%} pass rate "
-                        f"({test['pass_count']}/{test['total_runs']} runs)"
-                        for test in flaky_tests[:5]
-                    ),
-                    "",
-                ])
+                report_lines.extend(
+                    [
+                        "MOST FLAKY TESTS:",
+                        *(
+                            f"  {test['test_name']}: {test['pass_rate']:.1%} pass rate "
+                            f"({test['pass_count']}/{test['total_runs']} runs)"
+                            for test in flaky_tests[:5]
+                        ),
+                        "",
+                    ]
+                )
 
         # Pattern analysis
         if "patterns" in self.health_data:
@@ -492,13 +499,15 @@ class TestHealthMonitor:
             total_violations = pattern_data.get("total_violations", 0)
             files_analyzed = pattern_data.get("files_analyzed", 0)
 
-            report_lines.extend([
-                "CODE PATTERN ANALYSIS:",
-                f"  Files Analyzed:      {files_analyzed}",
-                f"  Total Violations:    {total_violations}",
-                f"  Patterns Found:      {pattern_data.get('patterns_found', 0)}",
-                "",
-            ])
+            report_lines.extend(
+                [
+                    "CODE PATTERN ANALYSIS:",
+                    f"  Files Analyzed:      {files_analyzed}",
+                    f"  Total Violations:    {total_violations}",
+                    f"  Patterns Found:      {pattern_data.get('patterns_found', 0)}",
+                    "",
+                ]
+            )
 
             # Pattern violations by severity
             pattern_summary = pattern_data.get("pattern_summary", {})
@@ -515,57 +524,65 @@ class TestHealthMonitor:
                     f"({pattern_info.get('files_affected', 0)} files)"
                 )
 
-            report_lines.extend([
-                "",
-                "VIOLATIONS BY SEVERITY:",
-                f"  High:    {severity_counts['high']}",
-                f"  Medium:  {severity_counts['medium']}",
-                f"  Low:     {severity_counts['low']}",
-                "",
-            ])
+            report_lines.extend(
+                [
+                    "",
+                    "VIOLATIONS BY SEVERITY:",
+                    f"  High:    {severity_counts['high']}",
+                    f"  Medium:  {severity_counts['medium']}",
+                    f"  Low:     {severity_counts['low']}",
+                    "",
+                ]
+            )
 
         # Test stability
         if "stability" in self.health_data:
             stability_data = self.health_data["stability"]
 
             exec_status = (
-                "✅ Success"
-                if stability_data.get("execution_successful")
-                else "❌ Failed"
+                "SUCCESS" if stability_data.get("execution_successful") else "FAILED"
             )
-            report_lines.extend([
-                "TEST SUITE STABILITY:",
-                f"  Execution Status:    {exec_status}",
-                f"  Pass Rate:           {stability_data.get('pass_rate', 0):.1%}",
-                f"  Tests Passed:        {stability_data.get('tests_passed', 0)}",
-                f"  Tests Failed:        {stability_data.get('tests_failed', 0)}",
-                f"  Tests Skipped:       {stability_data.get('tests_skipped', 0)}",
-                "",
-            ])
+            report_lines.extend(
+                [
+                    "TEST SUITE STABILITY:",
+                    f"  Execution Status:    {exec_status}",
+                    f"  Pass Rate:           {stability_data.get('pass_rate', 0):.1%}",
+                    f"  Tests Passed:        {stability_data.get('tests_passed', 0)}",
+                    f"  Tests Failed:        {stability_data.get('tests_failed', 0)}",
+                    f"  Tests Skipped:       {stability_data.get('tests_skipped', 0)}",
+                    "",
+                ]
+            )
 
         # Health issues
         if self.failures:
-            report_lines.extend([
-                "HEALTH ISSUES:",
-                *[f"  ❌ {failure}" for failure in self.failures],
-                "",
-            ])
+            report_lines.extend(
+                [
+                    "HEALTH ISSUES:",
+                    *[f"  - {failure}" for failure in self.failures],
+                    "",
+                ]
+            )
 
         if self.warnings:
-            report_lines.extend([
-                "HEALTH WARNINGS:",
-                *[f"  ⚠️  {warning}" for warning in self.warnings],
-                "",
-            ])
+            report_lines.extend(
+                [
+                    "HEALTH WARNINGS:",
+                    *[f"  - {warning}" for warning in self.warnings],
+                    "",
+                ]
+            )
 
         # Recommendations
         recommendations = self._generate_recommendations()
         if recommendations:
-            report_lines.extend([
-                "RECOMMENDATIONS:",
-                *[f"  💡 {rec}" for rec in recommendations],
-                "",
-            ])
+            report_lines.extend(
+                [
+                    "RECOMMENDATIONS:",
+                    *[f"  - {rec}" for rec in recommendations],
+                    "",
+                ]
+            )
 
         report_lines.append("=" * 70)
         return "\n".join(report_lines)
@@ -706,20 +723,20 @@ def _configure_logging(verbose: bool) -> None:
 
 def _run_flakiness(monitor: TestHealthMonitor, args: argparse.Namespace) -> int:
     """Run flakiness analysis and return exit code."""
-    print("🔍 Running flakiness analysis...")
+    print("Running flakiness analysis...")
     flakiness_data = monitor.run_flakiness_analysis(args.runs, args.test_pattern)
     monitor.health_data["flakiness"] = flakiness_data
     flaky_count = len(flakiness_data.get("flaky_tests", []))
     if flaky_count > 0:
-        print(f"⚠️  Found {flaky_count} flaky tests")
+        print(f"WARN: Found {flaky_count} flaky tests")
         return 1
-    print("✅ No flaky tests detected")
+    print("OK: No flaky tests detected")
     return 0
 
 
 def _run_patterns(monitor: TestHealthMonitor, args: argparse.Namespace) -> int:
     """Run test pattern analysis and return exit code."""
-    print("🔍 Running pattern analysis...")
+    print("Running pattern analysis...")
     pattern_data = monitor.analyze_test_patterns(args.test_dirs)
     monitor.health_data["patterns"] = pattern_data
     high_violations = sum(
@@ -728,23 +745,23 @@ def _run_patterns(monitor: TestHealthMonitor, args: argparse.Namespace) -> int:
         if info.get("severity") == "high"
     )
     if high_violations > 0:
-        print(f"⚠️  Found {high_violations} high-severity pattern violations")
+        print(f"WARN: Found {high_violations} high-severity pattern violations")
         return 1
     total_violations = pattern_data.get("total_violations", 0)
-    print(f"✅ Pattern analysis complete ({total_violations} total violations)")
+    print(f"OK: Pattern analysis complete ({total_violations} total violations)")
     return 0
 
 
 def _run_stability(monitor: TestHealthMonitor, args: argparse.Namespace) -> int:
     """Run stability checks and return exit code."""
-    print("🔍 Checking test stability...")
+    print("Checking test stability...")
     stability_data = monitor.check_test_stability(args.days)
     monitor.health_data["stability"] = stability_data
     if not stability_data.get("execution_successful"):
-        print("❌ Test suite execution failed")
+        print("FAIL: Test suite execution failed")
         return 1
     pass_rate = stability_data.get("pass_rate", 0)
-    print(f"✅ Test stability check complete ({pass_rate:.1%} pass rate)")
+    print(f"OK: Test stability check complete ({pass_rate:.1%} pass rate)")
     return 0
 
 
@@ -752,13 +769,13 @@ def _print_warnings_and_failures(monitor: TestHealthMonitor) -> int:
     """Print warnings/failures and return an exit code."""
     exit_code = 0
     if monitor.warnings:
-        print("\n⚠️  WARNINGS:")
+        print("\nWARNINGS:")
         for warning in monitor.warnings:
-            print(f"  • {warning}")
+            print(f"  - {warning}")
     if monitor.failures:
-        print("\n❌ FAILURES:")
+        print("\nFAILURES:")
         for failure in monitor.failures:
-            print(f"  • {failure}")
+            print(f"  - {failure}")
         exit_code = 1
     return exit_code
 
@@ -787,7 +804,7 @@ def main() -> int:
         exit_code = max(exit_code, _print_warnings_and_failures(monitor))
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.exception("Unexpected error during health monitoring")
-        print(f"❌ Unexpected error: {e}")
+        print(f"ERROR: Unexpected error: {e}")
         exit_code = 2
 
     return exit_code

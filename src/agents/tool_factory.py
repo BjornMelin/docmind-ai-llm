@@ -415,10 +415,12 @@ class ToolFactory:
                 ConnectionError,
                 TimeoutError,
             ) as exc:
-                log_jsonl({
-                    "keyword_tool.registration_failed": True,
-                    "keyword_tool.error_type": type(exc).__name__,
-                })
+                log_jsonl(
+                    {
+                        "keyword_tool.registration_failed": True,
+                        "keyword_tool.error_type": type(exc).__name__,
+                    }
+                )
                 logger.warning("Keyword tool registration failed: %s", exc)
 
         logger.info("Created %d tools for agent", len(tools))

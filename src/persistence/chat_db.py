@@ -20,7 +20,7 @@ from pathlib import Path
 from loguru import logger
 
 from src.config.settings import DocMindSettings, settings
-from src.persistence.memory_store import NAMESPACE_THREAD_INDEX, _MAX_NS_DEPTH
+from src.persistence.memory_store import _MAX_NS_DEPTH, NAMESPACE_THREAD_INDEX
 from src.persistence.path_utils import resolve_path_under_data_dir
 from src.utils.time import now_ms
 
@@ -30,11 +30,11 @@ CHAT_SESSION_TABLE = "chat_session"
 STORE_ITEMS_TABLE = "docmind_store_items"
 STORE_VEC_TABLE = "docmind_store_vec"
 _NS_DELETE_VEC = {
-    i: f"DELETE FROM {STORE_VEC_TABLE} WHERE ns{i}=?;"
+    i: f"DELETE FROM {STORE_VEC_TABLE} WHERE ns{i}=?;"  # noqa: S608
     for i in range(_MAX_NS_DEPTH)
 }
 _NS_DELETE_ITEMS = {
-    i: f"DELETE FROM {STORE_ITEMS_TABLE} WHERE ns{i}=?;"
+    i: f"DELETE FROM {STORE_ITEMS_TABLE} WHERE ns{i}=?;"  # noqa: S608
     for i in range(_MAX_NS_DEPTH)
 }
 

@@ -211,7 +211,9 @@ def _export_graphs(
     return exports_meta
 
 
-def _collect_corpus_paths(settings_obj: Any) -> tuple[list[Path], Path]:
+def _collect_corpus_paths(  # noqa: PLR0912
+    settings_obj: Any,
+) -> tuple[list[Path], Path]:
     """Collect uploaded corpus paths and base directory.
 
     Uses a cached manifest if available, falling back to bounded globbing

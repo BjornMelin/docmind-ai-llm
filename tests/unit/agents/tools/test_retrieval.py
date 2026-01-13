@@ -49,12 +49,14 @@ class TestRetrieveDocuments:
             mock_tool.call.return_value = [{"content": "test doc", "score": 0.9}]
             mock_factory.create_vector_search_tool.return_value = mock_tool
 
-            result_json = retrieve_documents.invoke({
-                "query": "test query",
-                "strategy": "vector",
-                "use_dspy": True,
-                "state": mock_state,
-            })
+            result_json = retrieve_documents.invoke(
+                {
+                    "query": "test query",
+                    "strategy": "vector",
+                    "use_dspy": True,
+                    "state": mock_state,
+                }
+            )
             result = json.loads(result_json)
 
         assert result["query_original"] == "test query"
@@ -83,11 +85,13 @@ class TestRetrieveDocuments:
             mock_tool.call.return_value = [{"content": "test doc"}]
             mock_factory.create_vector_search_tool.return_value = mock_tool
 
-            result_json = retrieve_documents.invoke({
-                "query": "AI",
-                "use_dspy": True,
-                "state": mock_state,
-            })
+            result_json = retrieve_documents.invoke(
+                {
+                    "query": "AI",
+                    "use_dspy": True,
+                    "state": mock_state,
+                }
+            )
             result = json.loads(result_json)
 
         assert result["query_optimized"].lower().startswith("find documents about")
@@ -107,12 +111,14 @@ class TestRetrieveDocuments:
             mock_tool.call.return_value = duplicate_docs
             mock_factory.create_vector_search_tool.return_value = mock_tool
 
-            result_json = retrieve_documents.invoke({
-                "query": "test query",
-                "strategy": "vector",
-                "state": mock_state,
-                "use_dspy": False,
-            })
+            result_json = retrieve_documents.invoke(
+                {
+                    "query": "test query",
+                    "strategy": "vector",
+                    "state": mock_state,
+                    "use_dspy": False,
+                }
+            )
             result = json.loads(result_json)
 
         assert len(result["documents"]) == 2
@@ -152,11 +158,13 @@ class TestParsingBoundaries:
             mock_factory.create_vector_search_tool.return_value = mock_tool
 
             data = json.loads(
-                retrieve_documents.invoke({
-                    "query": "q",
-                    "strategy": "vector",
-                    "state": mock_state,
-                })
+                retrieve_documents.invoke(
+                    {
+                        "query": "q",
+                        "strategy": "vector",
+                        "state": mock_state,
+                    }
+                )
             )
 
         assert len(data["documents"]) == 1
@@ -176,11 +184,13 @@ class TestParsingBoundaries:
             mock_factory.create_vector_search_tool.return_value = mock_tool
 
             data = json.loads(
-                retrieve_documents.invoke({
-                    "query": "q",
-                    "strategy": "vector",
-                    "state": mock_state,
-                })
+                retrieve_documents.invoke(
+                    {
+                        "query": "q",
+                        "strategy": "vector",
+                        "state": mock_state,
+                    }
+                )
             )
 
         assert len(data["documents"]) == 1
@@ -203,11 +213,13 @@ class TestParsingBoundaries:
             mock_factory.create_vector_search_tool.return_value = mock_tool
 
             data = json.loads(
-                retrieve_documents.invoke({
-                    "query": "q",
-                    "strategy": "vector",
-                    "state": mock_state,
-                })
+                retrieve_documents.invoke(
+                    {
+                        "query": "q",
+                        "strategy": "vector",
+                        "state": mock_state,
+                    }
+                )
             )
 
         assert len(data["documents"]) == 2
@@ -242,11 +254,13 @@ class TestParsingBoundaries:
             mock_factory.create_vector_search_tool.return_value = mock_tool
 
             data = json.loads(
-                retrieve_documents.invoke({
-                    "query": "q",
-                    "strategy": "vector",
-                    "state": mock_state,
-                })
+                retrieve_documents.invoke(
+                    {
+                        "query": "q",
+                        "strategy": "vector",
+                        "state": mock_state,
+                    }
+                )
             )
 
         assert len(data["documents"]) == 2
@@ -268,11 +282,13 @@ class TestParsingBoundaries:
             mock_factory.create_vector_search_tool.return_value = mock_tool
 
             data = json.loads(
-                retrieve_documents.invoke({
-                    "query": "q",
-                    "strategy": "vector",
-                    "state": mock_state,
-                })
+                retrieve_documents.invoke(
+                    {
+                        "query": "q",
+                        "strategy": "vector",
+                        "state": mock_state,
+                    }
+                )
             )
 
         assert len(data["documents"]) == 1
@@ -330,13 +346,15 @@ class TestAdditionalCoverage:
             mod, "_run_graphrag", lambda *_a, **_k: ([{"content": "x"}], True)
         )
         data = json.loads(
-            retrieve_documents.invoke({
-                "query": "q",
-                "strategy": "graphrag",
-                "use_dspy": False,
-                "use_graphrag": True,
-                "state": {"tools_data": {"kg": object()}},
-            })
+            retrieve_documents.invoke(
+                {
+                    "query": "q",
+                    "strategy": "graphrag",
+                    "use_dspy": False,
+                    "use_graphrag": True,
+                    "state": {"tools_data": {"kg": object()}},
+                }
+            )
         )
         assert data["strategy_used"] == "hybrid"
         assert data["documents"]
@@ -356,12 +374,14 @@ class TestAdditionalCoverage:
             mock_factory.create_vector_search_tool.return_value = tool
 
             data = json.loads(
-                retrieve_documents.invoke({
-                    "query": "that chart",
-                    "strategy": "vector",
-                    "use_dspy": False,
-                    "state": mock_state,
-                })
+                retrieve_documents.invoke(
+                    {
+                        "query": "that chart",
+                        "strategy": "vector",
+                        "use_dspy": False,
+                        "state": mock_state,
+                    }
+                )
             )
 
         assert data["documents"]
@@ -370,12 +390,14 @@ class TestAdditionalCoverage:
     def test_vector_strategy_errors_when_vector_index_missing(self):
         """Vector strategy fails with a clear error when vector index is absent."""
         data = json.loads(
-            retrieve_documents.invoke({
-                "query": "q",
-                "strategy": "vector",
-                "use_dspy": False,
-                "state": {"tools_data": {"kg": object()}},
-            })
+            retrieve_documents.invoke(
+                {
+                    "query": "q",
+                    "strategy": "vector",
+                    "use_dspy": False,
+                    "state": {"tools_data": {"kg": object()}},
+                }
+            )
         )
         assert "No vector index available" in data.get("error", "")
 
@@ -392,12 +414,14 @@ class TestAdditionalCoverage:
             mock_factory.create_vector_search_tool.return_value = vector
 
             data = json.loads(
-                retrieve_documents.invoke({
-                    "query": "q",
-                    "strategy": "hybrid",
-                    "use_dspy": False,
-                    "state": mock_state,
-                })
+                retrieve_documents.invoke(
+                    {
+                        "query": "q",
+                        "strategy": "hybrid",
+                        "use_dspy": False,
+                        "state": mock_state,
+                    }
+                )
             )
         assert data["documents"]
         assert data["strategy_used"] == "vector"
@@ -412,12 +436,14 @@ class TestAdditionalCoverage:
         """_recall_recent_sources chooses the most recent retrieval batch."""
         import src.agents.tools.retrieval as mod
 
-        out = mod._recall_recent_sources({
-            "retrieval_results": [
-                {"documents": [{"content": "old", "metadata": {"doc_id": "1"}}]},
-                {"documents": [{"content": "new", "metadata": {"doc_id": "2"}}]},
-            ]
-        })
+        out = mod._recall_recent_sources(
+            {
+                "retrieval_results": [
+                    {"documents": [{"content": "old", "metadata": {"doc_id": "1"}}]},
+                    {"documents": [{"content": "new", "metadata": {"doc_id": "2"}}]},
+                ]
+            }
+        )
         assert out
         assert out[0]["content"] == "new"
 

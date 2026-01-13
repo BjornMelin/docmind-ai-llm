@@ -239,22 +239,24 @@ class ServerHybridRetriever:
                 rrf_k_val = 60
                 qdrant_timeout_s = 60
             dropped = max(0, input_count - unique_count)
-            log_jsonl({
-                "retrieval.backend": "qdrant",
-                "retrieval.fusion_mode": fusion_mode,
-                "retrieval.rrf_k": rrf_k_val,
-                "retrieval.prefetch_dense_limit": self.params.prefetch_dense,
-                "retrieval.prefetch_sparse_limit": self.params.prefetch_sparse,
-                "retrieval.fused_top_k": self.params.fused_top_k,
-                "retrieval.return_count": len(nodes),
-                "retrieval.latency_ms": latency_ms,
-                "retrieval.sparse_fallback": sparse_vec is None,
-                "retrieval.qdrant_timeout_s": qdrant_timeout_s,
-                "dedup.key": key_name,
-                "dedup.before": input_count,
-                "dedup.after": unique_count,
-                "dedup.dropped": dropped,
-            })
+            log_jsonl(
+                {
+                    "retrieval.backend": "qdrant",
+                    "retrieval.fusion_mode": fusion_mode,
+                    "retrieval.rrf_k": rrf_k_val,
+                    "retrieval.prefetch_dense_limit": self.params.prefetch_dense,
+                    "retrieval.prefetch_sparse_limit": self.params.prefetch_sparse,
+                    "retrieval.fused_top_k": self.params.fused_top_k,
+                    "retrieval.return_count": len(nodes),
+                    "retrieval.latency_ms": latency_ms,
+                    "retrieval.sparse_fallback": sparse_vec is None,
+                    "retrieval.qdrant_timeout_s": qdrant_timeout_s,
+                    "dedup.key": key_name,
+                    "dedup.before": input_count,
+                    "dedup.after": unique_count,
+                    "dedup.dropped": dropped,
+                }
+            )
         except (OSError, ValueError, RuntimeError) as exc:
             logger.debug("Telemetry emit skipped: %s", exc)
 

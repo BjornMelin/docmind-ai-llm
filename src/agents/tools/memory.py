@@ -18,10 +18,10 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import Any, Literal
 
+from langchain.tools import ToolRuntime
 from langchain_core.messages import AnyMessage
 from langchain_core.messages.utils import get_buffer_string
 from langchain_core.runnables import RunnableConfig
-from langchain.tools import ToolRuntime
 from langchain_core.tools import tool
 from langgraph.store.base import BaseStore
 from loguru import logger
@@ -547,16 +547,15 @@ def consolidate_memory_candidates(
                 #   before UPDATE; otherwise NOOP.
                 #   Exact duplicates are stricter to avoid churn.
                 # - If the match is semantic-only (the `else` branch), allow
-                #   `cand.importance >= existing_importance` so equal-importance candidates
-                #   can replace older entries.
-                # - Updates merge tags via `_merge_tags(existing_value, cand)` and record a
+                #   `cand.importance >= existing_importance` so equal-importance
+                #   candidates can replace older entries.
+                # - Updates merge tags via `_merge_tags(existing_value, cand)` and
+                #   record a
                 #   `ConsolidationAction(..., existing_id=best_match.key, ...)`.
                 if score_value >= threshold and existing_kind == cand.kind:
                     if _content_matches(existing_content, cand.content):
                         if cand.importance > existing_importance:
-                            updated_candidate = _with_merged_tags(
-                                cand, existing_value
-                            )
+                            updated_candidate = _with_merged_tags(cand, existing_value)
                             actions.append(
                                 ConsolidationAction(
                                     action="UPDATE",
@@ -572,9 +571,7 @@ def consolidate_memory_candidates(
                             )
                     else:
                         if cand.importance >= existing_importance:
-                            updated_candidate = _with_merged_tags(
-                                cand, existing_value
-                            )
+                            updated_candidate = _with_merged_tags(cand, existing_value)
                             actions.append(
                                 ConsolidationAction(
                                     action="UPDATE",

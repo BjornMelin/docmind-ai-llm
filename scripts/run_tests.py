@@ -20,7 +20,7 @@ GPU Smoke Tests:
     - Real hardware testing for releases
 
 Usage:
-    uv run python run_tests.py                  # Run tiered tests (unit → integration)
+    uv run python run_tests.py                  # Run tiered tests (unit -> integration)
     uv run python run_tests.py --unit           # Run unit tests only
     uv run python run_tests.py --integration    # Run integration tests only
     uv run python run_tests.py --gpu            # Run GPU tests only
@@ -120,7 +120,7 @@ class TestRunner:
 
     def clean_artifacts(self) -> None:
         """Clean test artifacts and caches."""
-        print("🧹 Cleaning test artifacts...")
+        print("Cleaning test artifacts...")
 
         artifacts_to_clean = [
             ".pytest_cache",
@@ -150,7 +150,7 @@ class TestRunner:
                         with contextlib.suppress(OSError):
                             shutil.rmtree(path)
 
-        print("✅ Artifacts cleaned")
+        print("OK: Artifacts cleaned")
 
     def run_command(self, command: list[str], description: str) -> TestResult:
         """Run a test command and capture results."""
@@ -189,14 +189,14 @@ class TestRunner:
                 print(f"OK: {description} completed successfully")
                 if result.passed > 0:
                     print(
-                        f"   📊 {result.passed} passed, "
+                        f"   Stats: {result.passed} passed, "
                         f"{result.failed} failed, {result.skipped} skipped"
                     )
             else:
                 print(f"FAIL: {description} failed with exit code {result.exit_code}")
                 if result.failed > 0:
                     print(
-                        f"   📊 {result.passed} passed, "
+                        f"   Stats: {result.passed} passed, "
                         f"{result.failed} failed, {result.skipped} skipped"
                     )
 
@@ -412,7 +412,7 @@ class TestRunner:
         return self.run_command(command, "Fast Tests (Unit + Integration)")
 
     def run_tiered_tests(self) -> None:
-        """Run all tests in pyramid order: unit → integration (no system tests)."""
+        """Run all tests in pyramid order: unit -> integration (no system tests)."""
         print("\nRunning Tiered Test Strategy")
         print("=" * 50)
         print("Tier 1: Unit Tests (mocked dependencies)")
@@ -531,7 +531,7 @@ else:
 
             files = data.get("files", {})
             if not files:
-                print("❌ No coverage data found")
+                print("ERROR: No coverage data found")
                 return
 
             # Calculate overall stats
@@ -595,10 +595,10 @@ else:
                         found = True
                         break
                 if not found:
-                    print(f"   ❓ {critical}: Not found in coverage data")
+                    print(f"   WARN: {critical}: Not found in coverage data")
 
         except (OSError, ValueError, KeyError, json.JSONDecodeError) as e:
-            print(f"❌ Error analyzing coverage data: {e}")
+            print(f"ERROR: Error analyzing coverage data: {e}")
 
     def print_summary(self) -> None:
         """Print comprehensive test execution summary."""
@@ -619,7 +619,7 @@ else:
         print(f"   Errors:  {total_errors}")
         print(f"   Total Duration: {total_duration:.1f}s")
 
-        print("\n🔍 DETAILED RESULTS:")
+        print("\nDETAILED RESULTS:")
         print("-" * 60)
 
         for result in self.results:
@@ -631,12 +631,12 @@ else:
                     f"{result.skipped}S - {result.duration:.1f}s"
                 )
             else:
-                print(f"      ⏱️  {result.duration:.1f}s")
+                print(f"      Duration: {result.duration:.1f}s")
 
         # Show failures
         failed_results = [r for r in self.results if r.exit_code != 0]
         if failed_results:
-            print("\n❌ FAILED TESTS:")
+            print("\nFAILED TESTS:")
             print("-" * 60)
             for result in failed_results:
                 print(f"   Command: {result.command}")
@@ -654,7 +654,7 @@ else:
         # Print recommended actions
         print("\nRECOMMENDATIONS:")
         if total_failed > 0:
-            print("   🔧 Fix failing tests before deployment")
+            print("   - Fix failing tests before deployment")
         if total_failed == 0 and total_passed > 0:
             print("   All tests passing! Ready for deployment")
 
@@ -829,7 +829,7 @@ def main() -> None:
         if _should_generate_coverage(args):
             runner.generate_coverage_report()
     except KeyboardInterrupt:
-        print("\n⚠️  Test execution interrupted by user")
+        print("\nWARN: Test execution interrupted by user")
     except Exception as e:  # pylint: disable=broad-exception-caught
         print(f"\nUnexpected error: {e}")
         sys.exit(1)

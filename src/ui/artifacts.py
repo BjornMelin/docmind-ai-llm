@@ -35,7 +35,9 @@ def render_artifact_image(
             with open_image_encrypted(str(img_path)) as im:
                 st.image(im, caption=caption, use_container_width=use_container_width)
             return
-        st.image(str(img_path), caption=caption, use_container_width=use_container_width)
+        st.image(
+            str(img_path), caption=caption, use_container_width=use_container_width
+        )
     except Exception as exc:
         if missing_caption:
             st.caption(missing_caption)

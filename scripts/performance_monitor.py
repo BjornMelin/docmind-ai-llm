@@ -137,12 +137,14 @@ class PerformanceMonitor:
             cpu_peak_mb = self._read_cpu_peak_mb()
             gpu_peak_mb = self._read_gpu_peak_mb()
 
-            performance_data.update({
-                "total_duration": duration,
-                "exit_code": result.returncode,
-                "timestamp": datetime.now().isoformat(),
-                "command": " ".join(cmd),
-            })
+            performance_data.update(
+                {
+                    "total_duration": duration,
+                    "exit_code": result.returncode,
+                    "timestamp": datetime.now().isoformat(),
+                    "command": " ".join(cmd),
+                }
+            )
             if cpu_peak_mb is not None:
                 performance_data["memory_usage_peak"] = cpu_peak_mb
             if gpu_peak_mb is not None:
@@ -338,10 +340,12 @@ class PerformanceMonitor:
                     if len(parts) >= 3 and parts[0].endswith("s"):
                         duration = float(parts[0][:-1])  # Remove 's' suffix
                         test_name = " ".join(parts[2:])
-                        data["slowest_tests"].append({
-                            "test": test_name,
-                            "duration": duration,
-                        })
+                        data["slowest_tests"].append(
+                            {
+                                "test": test_name,
+                                "duration": duration,
+                            }
+                        )
                 except (ValueError, IndexError):
                     continue
             if "=" in line and in_slowest_section:
@@ -530,33 +534,39 @@ class PerformanceMonitor:
 
         # Test suite performance summary
         if self.results:
-            report_lines.extend([
-                "TEST SUITE PERFORMANCE:",
-                f"  Total Duration:      {self.results.get('total_duration', 0):.2f}s",
-                f"  Collection Time:     {self.results.get('collection_time', 0):.2f}s",
-                f"  Tests Collected:     {self.results.get('test_count', 0)}",
-                f"  Tests Passed:        {self.results.get('passed_count', 0)}",
-                f"  Tests Failed:        {self.results.get('failed_count', 0)}",
-                f"  Tests Skipped:       {self.results.get('skipped_count', 0)}",
-                "",
-            ])
+            report_lines.extend(
+                [
+                    "TEST SUITE PERFORMANCE:",
+                    "  Total Duration:      "
+                    f"{self.results.get('total_duration', 0):.2f}s",
+                    "  Collection Time:     "
+                    f"{self.results.get('collection_time', 0):.2f}s",
+                    f"  Tests Collected:     {self.results.get('test_count', 0)}",
+                    f"  Tests Passed:        {self.results.get('passed_count', 0)}",
+                    f"  Tests Failed:        {self.results.get('failed_count', 0)}",
+                    f"  Tests Skipped:       {self.results.get('skipped_count', 0)}",
+                    "",
+                ]
+            )
 
             # Slowest tests
             slowest_tests = self.results.get("slowest_tests", [])
             if slowest_tests:
-                report_lines.extend([
-                    "SLOWEST TESTS (Top 5):",
-                    *(
-                        (
-                            "  "
-                            + test["test"][:60]
-                            + ("..." if len(test["test"]) > 60 else "")
-                            + f": {test['duration']:.2f}s"
-                        )
-                        for test in slowest_tests[:5]
-                    ),
-                    "",
-                ])
+                report_lines.extend(
+                    [
+                        "SLOWEST TESTS (Top 5):",
+                        *(
+                            (
+                                "  "
+                                + test["test"][:60]
+                                + ("..." if len(test["test"]) > 60 else "")
+                                + f": {test['duration']:.2f}s"
+                            )
+                            for test in slowest_tests[:5]
+                        ),
+                        "",
+                    ]
+                )
 
         # Performance trends (if regression tracker available)
         if self.regression_tracker:
@@ -566,39 +576,46 @@ class PerformanceMonitor:
                         metric, days_back
                     )
                     if "error" not in trend:
-                        direction_emoji = {
-                            "improving": "📈",
-                            "stable": "➡️",
-                            "degrading": "📉",
-                        }.get(trend["trend_direction"], "❓")
+                        direction_marker = {
+                            "improving": "UP",
+                            "stable": "STABLE",
+                            "degrading": "DOWN",
+                        }.get(trend["trend_direction"], "UNKNOWN")
 
                         report_lines.append(
-                            f"  {metric}: {direction_emoji} {trend['trend_direction']} "
+                            f"  {metric}: {direction_marker} "
+                            f"{trend['trend_direction']} "
                             f"({trend['data_points']} samples)"
                         )
 
                 report_lines.append("")
 
             except (KeyError, ValueError, TypeError) as e:
-                report_lines.extend([
-                    f"  Error analyzing trends: {e}",
-                    "",
-                ])
+                report_lines.extend(
+                    [
+                        f"  Error analyzing trends: {e}",
+                        "",
+                    ]
+                )
 
         # Failures and warnings
         if self.failures:
-            report_lines.extend([
-                "PERFORMANCE ISSUES:",
-                *[f"  ❌ {failure}" for failure in self.failures],
-                "",
-            ])
+            report_lines.extend(
+                [
+                    "PERFORMANCE ISSUES:",
+                    *[f"  - {failure}" for failure in self.failures],
+                    "",
+                ]
+            )
 
         if self.warnings:
-            report_lines.extend([
-                "PERFORMANCE WARNINGS:",
-                *[f"  ⚠️  {warning}" for warning in self.warnings],
-                "",
-            ])
+            report_lines.extend(
+                [
+                    "PERFORMANCE WARNINGS:",
+                    *[f"  - {warning}" for warning in self.warnings],
+                    "",
+                ]
+            )
 
         # Recommendations
         recommendations = []
@@ -618,11 +635,13 @@ class PerformanceMonitor:
             recommendations.append("Address test failures to improve suite reliability")
 
         if recommendations:
-            report_lines.extend([
-                "RECOMMENDATIONS:",
-                *[f"  💡 {rec}" for rec in recommendations],
-                "",
-            ])
+            report_lines.extend(
+                [
+                    "RECOMMENDATIONS:",
+                    *[f"  - {rec}" for rec in recommendations],
+                    "",
+                ]
+            )
 
         report_lines.append("=" * 70)
         return "\n".join(report_lines)
@@ -745,12 +764,12 @@ def _handle_collection(monitor: PerformanceMonitor) -> None:
         > monitor.config["test_collection_timeout"]
     ):
         print(
-            "⚠️  Test collection time exceeds target: "
+            "WARN: Test collection time exceeds target: "
             f"{collection_data['collection_time']:.2f}s"
         )
         return
     print(
-        f"✅ Test collection: {collection_data['collection_time']:.2f}s "
+        f"OK: Test collection: {collection_data['collection_time']:.2f}s "
         f"({collection_data.get('test_count', 0)} tests)"
     )
 
@@ -768,11 +787,11 @@ def _handle_test_run(monitor: PerformanceMonitor, test_args: list[str] | None) -
     performance_data = monitor.run_test_suite_performance(test_args)
     monitor.results.update(performance_data)
     if performance_data.get("status") in ["timeout", "error"]:
-        print(f"❌ Test suite execution failed: {performance_data}")
+        print(f"FAIL: Test suite execution failed: {performance_data}")
         return 2
     duration = performance_data.get("total_duration", 0)
     test_count = performance_data.get("test_count", 0)
-    print(f"✅ Test suite: {duration:.2f}s ({test_count} tests)")
+    print(f"OK: Test suite: {duration:.2f}s ({test_count} tests)")
     return 0
 
 
@@ -780,7 +799,7 @@ def _handle_baseline(monitor: PerformanceMonitor) -> None:
     """Record current monitor results as a regression baseline when available."""
     if monitor.results:
         monitor.record_performance_baseline(monitor.results)
-        print("📊 Performance baseline recorded")
+        print("OK: Performance baseline recorded")
 
 
 def _handle_regressions(monitor: PerformanceMonitor) -> int:
@@ -794,9 +813,9 @@ def _handle_regressions(monitor: PerformanceMonitor) -> int:
     """
     regression_results = monitor.check_performance_regressions(monitor.results)
     if regression_results.get("regressions_detected"):
-        print("❌ Performance regressions detected!")
+        print("FAIL: Performance regressions detected!")
         return 1
-    print("✅ No performance regressions detected")
+    print("OK: No performance regressions detected")
     return 0
 
 
@@ -828,13 +847,13 @@ def _print_warnings_and_failures(monitor: PerformanceMonitor) -> int:
     """
     exit_code = 0
     if monitor.warnings:
-        print("\n⚠️  WARNINGS:")
+        print("\nWARNINGS:")
         for warning in monitor.warnings:
-            print(f"  • {warning}")
+            print(f"  - {warning}")
     if monitor.failures:
-        print("\n❌ FAILURES:")
+        print("\nFAILURES:")
         for failure in monitor.failures:
-            print(f"  • {failure}")
+            print(f"  - {failure}")
         exit_code = 1
     return exit_code
 
@@ -863,7 +882,7 @@ def main() -> int:
         exit_code = max(exit_code, _print_warnings_and_failures(monitor))
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.exception("Unexpected error during performance monitoring")
-        print(f"❌ Unexpected error: {e}")
+        print(f"ERROR: Unexpected error: {e}")
         exit_code = 2
 
     return exit_code

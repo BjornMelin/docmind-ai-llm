@@ -254,7 +254,7 @@ def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, A
 
 
 @asynccontextmanager
-async def managed_gpu_operation() -> AsyncGenerator[None, None]:  # noqa: RUF029
+async def managed_gpu_operation() -> AsyncGenerator[None, None]:
     """Context manager for GPU operations with cleanup."""
     try:
         yield

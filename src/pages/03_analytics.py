@@ -93,10 +93,12 @@ def main() -> None:  # pragma: no cover - Streamlit page
     if counts.lines_read > 0:
         st.subheader("Telemetry — Router Selection (JSONL)")
         if counts.router_selected_by_route:
-            df_routes = pd.DataFrame({
-                "route": list(counts.router_selected_by_route.keys()),
-                "n": list(counts.router_selected_by_route.values()),
-            })
+            df_routes = pd.DataFrame(
+                {
+                    "route": list(counts.router_selected_by_route.keys()),
+                    "n": list(counts.router_selected_by_route.values()),
+                }
+            )
             st.plotly_chart(
                 px.bar(df_routes, x="route", y="n"), use_container_width=True
             )

@@ -100,9 +100,9 @@ def _resolve_allowed_gguf_bases() -> list[Path]:
     except Exception:  # pragma: no cover - defensive
         extra_bases = None
     if isinstance(extra_bases, (list, tuple)):
-        allowed_bases.extend([
-            Path(str(base)) for base in extra_bases if str(base).strip()
-        ])
+        allowed_bases.extend(
+            [Path(str(base)) for base in extra_bases if str(base).strip()]
+        )
 
     base_dirs: list[Path] = []
     for base in allowed_bases:
@@ -261,36 +261,42 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
         ValueError,
     ) as exc:  # pragma: no cover - defensive UI feedback
         st.error(f"Runtime apply failed: {exc.__class__.__name__}")
-        log_jsonl({
-            "settings.apply": True,
-            "success": False,
-            "backend": validated.llm_backend,
-            "model": model_label,
-            "reason": exc.__class__.__name__,
-            "error": str(exc),
-        })
+        log_jsonl(
+            {
+                "settings.apply": True,
+                "success": False,
+                "backend": validated.llm_backend,
+                "model": model_label,
+                "reason": exc.__class__.__name__,
+                "error": str(exc),
+            }
+        )
         return
 
     from llama_index.core import Settings as LISettings  # local import (tests patch)
 
     if getattr(LISettings, "llm", None) is None:
         st.error("Runtime apply failed: Settings.llm is not bound.")
-        log_jsonl({
-            "settings.apply": True,
-            "success": False,
-            "backend": validated.llm_backend,
-            "model": model_label,
-            "reason": "llm_unbound",
-        })
+        log_jsonl(
+            {
+                "settings.apply": True,
+                "success": False,
+                "backend": validated.llm_backend,
+                "model": model_label,
+                "reason": "llm_unbound",
+            }
+        )
         return
 
     st.success("Runtime applied. Settings.llm bound.")
-    log_jsonl({
-        "settings.apply": True,
-        "success": True,
-        "backend": validated.llm_backend,
-        "model": model_label,
-    })
+    log_jsonl(
+        {
+            "settings.apply": True,
+            "success": True,
+            "backend": validated.llm_backend,
+            "model": model_label,
+        }
+    )
 
 
 def main() -> None:

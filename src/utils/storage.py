@@ -726,7 +726,7 @@ def gpu_memory_context() -> Generator[None, None, None]:
 
 
 @asynccontextmanager
-async def async_gpu_memory_context() -> AsyncGenerator[None, None]:  # noqa: RUF029
+async def async_gpu_memory_context() -> AsyncGenerator[None, None]:
     """Async context manager for GPU memory cleanup.
 
     Async version of gpu_memory_context() for use with async operations.

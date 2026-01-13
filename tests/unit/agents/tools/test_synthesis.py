@@ -28,10 +28,12 @@ class TestSynthesizeResults:
                 "processing_time_ms": 150,
             },
         ]
-        result_json = synthesize_results.invoke({
-            "sub_results": json.dumps(sub_results),
-            "original_query": "test query",
-        })
+        result_json = synthesize_results.invoke(
+            {
+                "sub_results": json.dumps(sub_results),
+                "original_query": "test query",
+            }
+        )
         result = json.loads(result_json)
 
         assert isinstance(result, dict)
@@ -67,10 +69,12 @@ class TestSynthesizeResults:
             },
             {"documents": [{"content": "deep learning uses neural networks"}]},
         ]
-        result_json = synthesize_results.invoke({
-            "sub_results": json.dumps(sub_results),
-            "original_query": "AI query",
-        })
+        result_json = synthesize_results.invoke(
+            {
+                "sub_results": json.dumps(sub_results),
+                "original_query": "AI query",
+            }
+        )
         result = json.loads(result_json)
 
         assert result["synthesis_metadata"]["original_count"] == 3
@@ -87,10 +91,12 @@ class TestSynthesizeResults:
                 ]
             }
         ]
-        result_json = synthesize_results.invoke({
-            "sub_results": json.dumps(sub_results),
-            "original_query": "machine learning",
-        })
+        result_json = synthesize_results.invoke(
+            {
+                "sub_results": json.dumps(sub_results),
+                "original_query": "machine learning",
+            }
+        )
         result = json.loads(result_json)
 
         assert len(result["documents"]) == 2
@@ -98,10 +104,12 @@ class TestSynthesizeResults:
 
     def test_synthesize_results_invalid_json(self):
         """Test error handling when invalid JSON is provided as input."""
-        result_json = synthesize_results.invoke({
-            "sub_results": "invalid json",
-            "original_query": "test query",
-        })
+        result_json = synthesize_results.invoke(
+            {
+                "sub_results": "invalid json",
+                "original_query": "test query",
+            }
+        )
         result = json.loads(result_json)
 
         assert result["documents"] == []
@@ -109,10 +117,12 @@ class TestSynthesizeResults:
 
     def test_synthesize_results_empty_input(self):
         """Test handling of empty input arrays and ensure graceful degradation."""
-        result_json = synthesize_results.invoke({
-            "sub_results": json.dumps([]),
-            "original_query": "test query",
-        })
+        result_json = synthesize_results.invoke(
+            {
+                "sub_results": json.dumps([]),
+                "original_query": "test query",
+            }
+        )
         result = json.loads(result_json)
 
         assert result["documents"] == []
@@ -123,10 +133,12 @@ class TestSynthesizeResults:
         large_results = [
             {"documents": [{"content": f"doc {i}", "score": 0.8} for i in range(15)]}
         ]
-        result_json = synthesize_results.invoke({
-            "sub_results": json.dumps(large_results),
-            "original_query": "test query",
-        })
+        result_json = synthesize_results.invoke(
+            {
+                "sub_results": json.dumps(large_results),
+                "original_query": "test query",
+            }
+        )
         result = json.loads(result_json)
 
         assert len(result["documents"]) <= 10

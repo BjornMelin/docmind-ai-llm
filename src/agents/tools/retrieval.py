@@ -486,11 +486,13 @@ def _parse_tool_result(result: Any) -> list[dict[str, Any]]:
         documents: list[dict[str, Any]] = []
         for item in result:
             if isinstance(item, Document):
-                documents.append({
-                    "content": item.text,
-                    "metadata": _sanitize_metadata(item.metadata),
-                    "score": getattr(item, "score", 1.0),
-                })
+                documents.append(
+                    {
+                        "content": item.text,
+                        "metadata": _sanitize_metadata(item.metadata),
+                        "score": getattr(item, "score", 1.0),
+                    }
+                )
             elif isinstance(item, dict):
                 documents.append(_sanitize_document_dict(item))
         return documents

@@ -179,21 +179,25 @@ class TestEmbeddingParameters:
         params1 = EmbeddingParameters(
             return_dense=False, return_sparse=False, return_colbert=False
         )
-        assert not any([
-            params1.return_dense,
-            params1.return_sparse,
-            params1.return_colbert,
-        ])
+        assert not any(
+            [
+                params1.return_dense,
+                params1.return_sparse,
+                params1.return_colbert,
+            ]
+        )
 
         # All embeddings enabled
         params2 = EmbeddingParameters(
             return_dense=True, return_sparse=True, return_colbert=True
         )
-        assert all([
-            params2.return_dense,
-            params2.return_sparse,
-            params2.return_colbert,
-        ])
+        assert all(
+            [
+                params2.return_dense,
+                params2.return_sparse,
+                params2.return_colbert,
+            ]
+        )
 
         # Mixed configurations
         params3 = EmbeddingParameters(

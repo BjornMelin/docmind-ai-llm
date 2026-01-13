@@ -186,11 +186,11 @@ class QualityGateRunner:
             }
 
             if result.returncode == 0:
-                logger.info("✅ %s - PASSED", gate_config["description"])
+                logger.info("%s - PASSED", gate_config["description"])
                 if self.verbose and result.stdout:
                     print(result.stdout)
             else:
-                logger.error("❌ %s - FAILED", gate_config["description"])
+                logger.error("%s - FAILED", gate_config["description"])
                 self.failures.append(f"{gate_name}: {gate_config['description']}")
                 if result.stdout:
                     print("STDOUT:", result.stdout)
@@ -202,12 +202,12 @@ class QualityGateRunner:
         except subprocess.TimeoutExpired:
             error_msg = f"{gate_name} exceeded timeout of {gate_config['timeout']}s"
             self.failures.append(error_msg)
-            logger.error("⏰ %s", error_msg)
+            logger.error("TIMEOUT: %s", error_msg)
             return False
         except (OSError, ValueError) as e:
             error_msg = f"Error running {gate_name}: {e}"
             self.failures.append(error_msg)
-            logger.error("💥 %s", error_msg)
+            logger.error("ERROR: %s", error_msg)
             return False
 
     def run_quality_suite(
@@ -277,9 +277,9 @@ class QualityGateRunner:
             }
 
             if result.returncode == 0:
-                logger.info("✅ Pre-commit hooks - PASSED")
+                logger.info("Pre-commit hooks - PASSED")
             else:
-                logger.error("❌ Pre-commit hooks - FAILED")
+                logger.error("Pre-commit hooks - FAILED")
                 self.failures.append("pre-commit: Pre-commit hooks validation")
                 if result.stdout:
                     print("STDOUT:", result.stdout)
@@ -289,19 +289,19 @@ class QualityGateRunner:
         except subprocess.TimeoutExpired:
             error_msg = "Pre-commit hooks exceeded timeout of 600s"
             self.failures.append(error_msg)
-            logger.error("⏰ %s", error_msg)
+            logger.error("TIMEOUT: %s", error_msg)
             return False
         except FileNotFoundError:
             error_msg = (
                 "pre-commit command not found - install with: uv pip install pre-commit"
             )
             self.failures.append(error_msg)
-            logger.error("💥 %s", error_msg)
+            logger.error("ERROR: %s", error_msg)
             return False
         except (OSError, ValueError) as e:
             error_msg = f"Error running pre-commit hooks: {e}"
             self.failures.append(error_msg)
-            logger.error("💥 %s", error_msg)
+            logger.error("ERROR: %s", error_msg)
             return False
 
     def generate_report(self) -> str:
@@ -322,21 +322,23 @@ class QualityGateRunner:
         passed_gates = sum(1 for result in self.results.values() if result["passed"])
         failed_gates = total_gates - passed_gates
 
-        report_lines.extend([
-            "SUMMARY:",
-            f"  Total Gates:     {total_gates}",
-            f"  Passed:          {passed_gates} ✅",
-            f"  Failed:          {failed_gates} ❌",
-            f"  Overall Status:  {'PASS' if failed_gates == 0 else 'FAIL'}",
-            "",
-        ])
+        report_lines.extend(
+            [
+                "SUMMARY:",
+                f"  Total Gates:     {total_gates}",
+                f"  Passed:          {passed_gates}",
+                f"  Failed:          {failed_gates}",
+                f"  Overall Status:  {'PASS' if failed_gates == 0 else 'FAIL'}",
+                "",
+            ]
+        )
 
         # Individual results
         if self.results:
             report_lines.extend(["GATE RESULTS:", ""])
 
             for gate_name, result in self.results.items():
-                status = "✅ PASS" if result["passed"] else "❌ FAIL"
+                status = "PASS" if result["passed"] else "FAIL"
                 report_lines.append(f"  {gate_name.upper()}: {status}")
                 report_lines.append(f"    {result['description']}")
                 report_lines.append(f"    Exit Code: {result['exit_code']}")
@@ -344,20 +346,24 @@ class QualityGateRunner:
 
         # Failures
         if self.failures:
-            report_lines.extend([
-                "FAILURES:",
-                *[f"  • {failure}" for failure in self.failures],
-                "",
-            ])
+            report_lines.extend(
+                [
+                    "FAILURES:",
+                    *[f"  - {failure}" for failure in self.failures],
+                    "",
+                ]
+            )
 
         # Recommendations
         recommendations = self._generate_recommendations()
         if recommendations:
-            report_lines.extend([
-                "RECOMMENDATIONS:",
-                *[f"  💡 {rec}" for rec in recommendations],
-                "",
-            ])
+            report_lines.extend(
+                [
+                    "RECOMMENDATIONS:",
+                    *[f"  - {rec}" for rec in recommendations],
+                    "",
+                ]
+            )
 
         report_lines.append("=" * 70)
         return "\n".join(report_lines)
@@ -489,11 +495,11 @@ def _print_report(runner: QualityGateRunner) -> None:
 def _print_final_status(runner: QualityGateRunner, overall_success: bool) -> None:
     """Print the final summary banner for quality gates."""
     if overall_success:
-        print("\n🎉 All quality gates PASSED!")
+        print("\nOK: All quality gates PASSED!")
         return
-    print(f"\n💥 Quality gates FAILED ({len(runner.failures)} issues)")
+    print(f"\nFAIL: Quality gates FAILED ({len(runner.failures)} issues)")
     for failure in runner.failures:
-        print(f"  • {failure}")
+        print(f"  - {failure}")
 
 
 def main() -> int:
@@ -512,7 +518,7 @@ def main() -> int:
         _print_final_status(runner, overall_success)
     except Exception as e:  # pylint: disable=broad-exception-caught
         logger.exception("Unexpected error during quality gate execution")
-        print(f"\n💥 Unexpected error: {e}")
+        print(f"\nERROR: Unexpected error: {e}")
         return 2
 
     return 0 if overall_success else 1

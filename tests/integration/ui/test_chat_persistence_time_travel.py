@@ -125,10 +125,12 @@ class _CoordinatorStub:
             config = getattr(snap, "config", None)
             conf = config.get("configurable") if isinstance(config, dict) else None
             conf = conf if isinstance(conf, dict) else {}
-            out.append({
-                "checkpoint_id": conf.get("checkpoint_id"),
-                "checkpoint_ns": conf.get("checkpoint_ns", ""),
-            })
+            out.append(
+                {
+                    "checkpoint_id": conf.get("checkpoint_id"),
+                    "checkpoint_ns": conf.get("checkpoint_ns", ""),
+                }
+            )
         return out
 
 
@@ -237,9 +239,9 @@ def test_chat_time_travel_fork_drops_future_messages(
         graph = _build_echo_graph(checkpointer=saver)
         fork_checkpoint: str | None = None
         for candidate in candidate_ids:
-            snap = graph.get_state({
-                "configurable": {"thread_id": thread_id, "checkpoint_id": candidate}
-            })
+            snap = graph.get_state(
+                {"configurable": {"thread_id": thread_id, "checkpoint_id": candidate}}
+            )
             values = getattr(snap, "values", None)
             if not isinstance(values, dict):
                 continue

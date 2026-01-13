@@ -30,11 +30,13 @@ def synthesize_results(
             )
         except json.JSONDecodeError:
             logger.error("Invalid JSON in sub_results")
-            return json.dumps({
-                "documents": [],
-                "error": "Invalid input format",
-                "synthesis_metadata": {},
-            })
+            return json.dumps(
+                {
+                    "documents": [],
+                    "error": "Invalid input format",
+                    "synthesis_metadata": {},
+                }
+            )
 
         all_documents = []
         strategies_used: set[str] = set()

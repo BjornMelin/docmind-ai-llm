@@ -30,7 +30,8 @@ import threading
 import time
 import warnings
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from typing import Any, cast
 
 from langchain.agents import create_agent
@@ -261,6 +262,7 @@ class MultiAgentCoordinator:
             self._memory_executor.shutdown(wait=False)
 
     def __del__(self) -> None:  # pragma: no cover - best-effort cleanup
+        """Best-effort cleanup during interpreter teardown."""
         with contextlib.suppress(Exception):
             self.close()
 
@@ -1382,7 +1384,8 @@ class MultiAgentCoordinator:
                 )
                 if not future.cancel():
                     logger.debug(
-                        "Memory consolidation still running after timeout for thread {}",
+                        "Memory consolidation still running after timeout for "
+                        "thread {}",
                         thread_id,
                     )
                     should_release = False

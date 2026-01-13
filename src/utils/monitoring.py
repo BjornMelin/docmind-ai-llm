@@ -225,7 +225,7 @@ def performance_timer(
 
 
 @asynccontextmanager
-async def async_performance_timer(  # noqa: RUF029
+async def async_performance_timer(
     operation: str, **context: Any
 ) -> AsyncGenerator[dict[str, Any], None]:
     """Async context manager for timing operations.

@@ -137,9 +137,12 @@ class MockEmbeddingFactory:
         for _i in range(num_docs):
             indices = np.random.choice(1000, size=10, replace=False)
             values = np.random.rand(10)
-            embeddings.append({
-                int(idx): float(val) for idx, val in zip(indices, values, strict=False)
-            })
+            embeddings.append(
+                {
+                    int(idx): float(val)
+                    for idx, val in zip(indices, values, strict=False)
+                }
+            )
         return embeddings
 
 

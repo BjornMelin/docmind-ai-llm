@@ -252,84 +252,100 @@ class CoverageAnalyzer:
             f"{overall['line_coverage']['total']} lines)",
             f"  Threshold:       {overall['line_coverage']['threshold']}%",
             f"  Status:          "
-            f"{'✓ PASS' if overall['line_coverage']['meets_threshold'] else '✗ FAIL'}",
+            f"{'PASS' if overall['line_coverage']['meets_threshold'] else 'FAIL'}",
             "",
         ]
 
         # Branch coverage (if available)
         if overall["branch_coverage"]["total"] > 0:
-            status = (
-                "✓ PASS" if overall["branch_coverage"]["meets_threshold"] else "✗ FAIL"
+            status = "PASS" if overall["branch_coverage"]["meets_threshold"] else "FAIL"
+            report_lines.extend(
+                [
+                    (
+                        f"  Branch Coverage: "
+                        f"{overall['branch_coverage']['percent']:.1f}% "
+                        f"({overall['branch_coverage']['covered']}/"
+                        f"{overall['branch_coverage']['total']} branches)"
+                    ),
+                    f"  Threshold:       {overall['branch_coverage']['threshold']}%",
+                    f"  Status:          {status}",
+                    "",
+                ]
             )
-            report_lines.extend([
-                (
-                    f"  Branch Coverage: "
-                    f"{overall['branch_coverage']['percent']:.1f}% "
-                    f"({overall['branch_coverage']['covered']}/"
-                    f"{overall['branch_coverage']['total']} branches)"
-                ),
-                f"  Threshold:       {overall['branch_coverage']['threshold']}%",
-                f"  Status:          {status}",
-                "",
-            ])
 
         # Overall status
-        report_lines.extend([
-            f"OVERALL STATUS: {'✓ PASS' if overall['overall_pass'] else '✗ FAIL'}",
-            "",
-        ])
+        report_lines.extend(
+            [
+                f"OVERALL STATUS: {'PASS' if overall['overall_pass'] else 'FAIL'}",
+                "",
+            ]
+        )
 
         # File analysis summary
-        report_lines.extend([
-            "FILE ANALYSIS:",
-            f"  Total Files:     {file_analysis['total_files']}",
-            f"  Low Coverage:    {file_analysis['files_below_threshold']} files",
-            f"  Uncovered Files: {len(file_analysis['uncovered_files'])} files",
-            "",
-        ])
+        report_lines.extend(
+            [
+                "FILE ANALYSIS:",
+                f"  Total Files:     {file_analysis['total_files']}",
+                f"  Low Coverage:    {file_analysis['files_below_threshold']} files",
+                f"  Uncovered Files: {len(file_analysis['uncovered_files'])} files",
+                "",
+            ]
+        )
 
         # Failures
         if self.failures:
-            report_lines.extend([
-                "FAILURES:",
-                *[f"  ✗ {failure}" for failure in self.failures],
-                "",
-            ])
+            report_lines.extend(
+                [
+                    "FAILURES:",
+                    *[f"  - {failure}" for failure in self.failures],
+                    "",
+                ]
+            )
 
         # Warnings
         if self.warnings:
-            report_lines.extend([
-                "WARNINGS:",
-                *[f"  ! {warning}" for warning in self.warnings],
-                "",
-            ])
+            report_lines.extend(
+                [
+                    "WARNINGS:",
+                    *[f"  ! {warning}" for warning in self.warnings],
+                    "",
+                ]
+            )
 
         # Detailed file analysis
         if detailed:
             if file_analysis["low_coverage_files"]:
-                report_lines.extend([
-                    "LOW COVERAGE FILES:",
-                    *(
-                        f"  {file_info['filename']}: "
-                        f"{file_info['percent_covered']:.1f}% "
-                        f"({file_info['covered_lines']}/"
-                        f"{file_info['total_lines']})"
-                        for file_info in file_analysis["low_coverage_files"][
-                            :10
-                        ]  # Top 10
-                    ),
-                    "",
-                ])
+                report_lines.extend(
+                    [
+                        "LOW COVERAGE FILES:",
+                        *(
+                            f"  {file_info['filename']}: "
+                            f"{file_info['percent_covered']:.1f}% "
+                            f"({file_info['covered_lines']}/"
+                            f"{file_info['total_lines']})"
+                            for file_info in file_analysis["low_coverage_files"][
+                                :10
+                            ]  # Top 10
+                        ),
+                        "",
+                    ]
+                )
 
             if file_analysis["uncovered_files"]:
-                report_lines.extend([
-                    "COMPLETELY UNCOVERED FILES:",
-                    *(
-                        f"  {file_info['filename']}: 0% (0/{file_info['total_lines']})"
-                        for file_info in file_analysis["uncovered_files"][:10]  # Top 10
-                    ),
-                    "",
-                ])
+                report_lines.extend(
+                    [
+                        "COMPLETELY UNCOVERED FILES:",
+                        *(
+                            "  "
+                            f"{file_info['filename']}: 0% "
+                            f"(0/{file_info['total_lines']})"
+                            for file_info in file_analysis["uncovered_files"][
+                                :10
+                            ]  # Top 10
+                        ),
+                        "",
+                    ]
+                )
 
         report_lines.append("=" * 60)
         return "\n".join(report_lines)
@@ -534,17 +550,17 @@ def _handle_new_code_coverage(
     new_code_result = analyzer.check_new_code_coverage(args.diff_from)
     status = new_code_result["status"]
     if status == "error":
-        print(f"❌ Error checking new code coverage: {new_code_result['message']}")
+        print(f"ERROR: Error checking new code coverage: {new_code_result['message']}")
         return 1
     if status == "no_changes":
-        print(f"ℹ️  {new_code_result['message']}")
+        print(f"INFO: {new_code_result['message']}")
         return 0
 
     meets_threshold = new_code_result["meets_threshold"]
     percent = new_code_result["overall_percent"]
     threshold = new_code_result["threshold"]
-    status_icon = "✅" if meets_threshold else "❌"
-    print(f"{status_icon} New code coverage: {percent:.1f}% (threshold: {threshold}%)")
+    status_icon = "OK" if meets_threshold else "FAIL"
+    print(f"{status_icon}: New code coverage: {percent:.1f}% (threshold: {threshold}%)")
     if meets_threshold or not args.fail_under:
         return 0
     return 1
@@ -556,23 +572,23 @@ def _handle_overall_coverage(
     """Evaluate and report overall coverage results."""
     overall_result = analyzer.check_overall_coverage()
     if overall_result["status"] == "error":
-        print(f"❌ {overall_result['message']}")
+        print(f"ERROR: {overall_result['message']}")
         return 2
 
     line_coverage = overall_result["line_coverage"]
     overall_pass = overall_result["overall_pass"]
-    line_icon = "✅" if line_coverage["meets_threshold"] else "❌"
+    line_icon = "OK" if line_coverage["meets_threshold"] else "FAIL"
     print(
-        f"{line_icon} Overall line coverage: "
+        f"{line_icon}: Overall line coverage: "
         f"{line_coverage['percent']:.1f}% "
         f"(threshold: {line_coverage['threshold']}%)"
     )
 
     branch_coverage = overall_result["branch_coverage"]
     if branch_coverage["total"] > 0:
-        branch_icon = "✅" if branch_coverage["meets_threshold"] else "❌"
+        branch_icon = "OK" if branch_coverage["meets_threshold"] else "FAIL"
         print(
-            f"{branch_icon} Branch coverage: "
+            f"{branch_icon}: Branch coverage: "
             f"{branch_coverage['percent']:.1f}% "
             f"(threshold: {branch_coverage['threshold']}%)"
         )
@@ -589,7 +605,7 @@ def _render_reports(analyzer: CoverageAnalyzer, args: argparse.Namespace) -> Non
         print("\n" + report)
     if args.html:
         if COVERAGE_HTML_DIR.exists():
-            print(f"📊 HTML coverage report: {COVERAGE_HTML_DIR / 'index.html'}")
+            print(f"HTML coverage report: {COVERAGE_HTML_DIR / 'index.html'}")
         else:
             print("HTML coverage report not found. Run --collect to generate.")
 
@@ -598,24 +614,24 @@ def _report_failures_and_warnings(analyzer: CoverageAnalyzer) -> int:
     """Print failures and warnings, returning an exit code."""
     exit_code = 0
     if analyzer.failures:
-        print("\n❌ FAILURES:")
+        print("\nFAILURES:")
         for failure in analyzer.failures:
-            print(f"  • {failure}")
+            print(f"  - {failure}")
         exit_code = 1
     if analyzer.warnings:
-        print("\n⚠️  WARNINGS:")
+        print("\nWARNINGS:")
         for warning in analyzer.warnings:
-            print(f"  • {warning}")
+            print(f"  - {warning}")
     return exit_code
 
 
 def _run_coverage_checks(analyzer: CoverageAnalyzer, args: argparse.Namespace) -> int:
     """Run coverage collection and checks based on CLI args."""
     if args.collect and not analyzer.run_coverage_collection():
-        print("❌ Coverage collection failed")
+        print("ERROR: Coverage collection failed")
         return 2
     if not analyzer.load_coverage_data():
-        print("❌ Failed to load coverage data")
+        print("ERROR: Failed to load coverage data")
         return 2
     if args.new_code_only:
         return _handle_new_code_coverage(analyzer, args)
@@ -639,7 +655,7 @@ def main() -> int:
         exit_code = max(exit_code, _report_failures_and_warnings(analyzer))
     except (OSError, ValueError, json.JSONDecodeError, subprocess.TimeoutExpired) as e:
         logger.exception("Unexpected error during coverage checking")
-        print(f"❌ Unexpected error: {e}")
+        print(f"ERROR: Unexpected error: {e}")
         exit_code = 2
 
     return exit_code
