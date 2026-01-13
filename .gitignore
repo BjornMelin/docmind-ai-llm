@@ -337,3 +337,4 @@ data/**/*.db
 
 # opensrc - source code for packages
 opensrc/
+data/.corpus_manifest.json
