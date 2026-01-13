@@ -39,3 +39,20 @@ def test_safe_cuda_operation_handles_import_error(monkeypatch):  # type: ignore[
 
     val = mod.safe_cuda_operation(_op, operation_name="probe", default_return=123)
     assert val == 123
+
+
+def test_safe_cuda_operation_handles_runtime_and_system_errors():  # type: ignore[no-untyped-def]
+    mod = importlib.import_module("src.utils.storage")
+
+    def _cuda():  # type: ignore[no-untyped-def]
+        raise RuntimeError("CUDA failure")
+
+    def _rt():  # type: ignore[no-untyped-def]
+        raise RuntimeError("boom")
+
+    def _sys():  # type: ignore[no-untyped-def]
+        raise OSError("disk")
+
+    assert mod.safe_cuda_operation(_cuda, default_return=1) == 1
+    assert mod.safe_cuda_operation(_rt, default_return=2) == 2
+    assert mod.safe_cuda_operation(_sys, default_return=3) == 3
