@@ -1,6 +1,6 @@
 # SPEC-042: Final Multimodal Pipeline + Cognitive Persistence (End-to-End)
 
-**Status:** Accepted  
+**Status:** Implemented  
 **Date:** 2026-01-12  
 **Related ADRs:** ADR-058 (this spec), ADR-057, ADR-037, ADR-009, ADR-011, ADR-014, ADR-047, ADR-055  
 **Scope:** Data schemas + API signatures for the shipped multimodal pipeline and persistence wiring.

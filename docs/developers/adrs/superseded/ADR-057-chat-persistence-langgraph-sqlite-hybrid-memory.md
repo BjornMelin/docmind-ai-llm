@@ -1,11 +1,11 @@
 ---
 ADR: 057
 Title: Chat Persistence + Hybrid Agentic Memory via LangGraph SQLite (Checkpointer + Memory Store)
-Status: Proposed
+Status: Superseded
 Version: 1.0
 Date: 2026-01-09
 Supersedes: 021, 043
-Superseded-by:
+Superseded-by: 058
 Related: 011, 016, 023, 024, 031, 047, 055
 Tags: chat, memory, persistence, langgraph, streamlit, sqlite, offline-first, security
 References:

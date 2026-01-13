@@ -1,4 +1,14 @@
-# Implementation Prompt — 0043: Hybrid Retrieval Logic (Text + Image Fusion)
+---
+prompt: PROMPT-043
+title: Hybrid Retrieval Logic (Text + Image Fusion)
+status: Completed
+date: 2026-01-13
+version: 1.0
+related_adrs: ["ADR-058"]
+related_specs: ["SPEC-042"]
+---
+
+## Implementation Prompt — 0043: Hybrid Retrieval Logic (Text + Image Fusion)
 
 **Purpose:** Final-release multimodal retrieval: text hybrid + SigLIP visual retrieval + RRF fusion.  
 **Source of truth:** ADR-058 + SPEC-042.

@@ -4,7 +4,7 @@ title: Chat Persistence + Hybrid Agentic Memory (LangGraph SQLite Checkpointer +
 version: 1.0.0
 date: 2026-01-09
 owners: ["ai-arch"]
-status: Draft
+status: Implemented
 related_requirements:
   - FR-022: Persist chat history locally across refresh/restart with per-session clear/purge.
   - NFR-SEC-001: Offline-first; remote endpoints blocked by default.
@@ -116,17 +116,17 @@ class LlamaIndexEmbeddingsAdapter(Embeddings):
 
 Long-term memory must not be an unbounded append-only log. Implement a deterministic, testable consolidation pipeline inspired by state-of-the-art “ADD/UPDATE/DELETE/NOOP” memory update patterns:
 
-1) **Extract candidates** from the most recent conversation turn into a fixed schema:
+1. **Extract candidates** from the most recent conversation turn into a fixed schema:
    - memories must be small, user-relevant facts/preferences
    - each candidate includes: `content`, `kind` (`fact|preference|todo|project_state`), `importance` (0..1), `source_checkpoint_id`, and optional `tags`
-2) **Update policy**:
+2. **Update policy**:
    - retrieve the top-N nearest existing memories in the same namespace (vector search)
    - decide per candidate: `ADD`, `UPDATE(existing_id)`, `DELETE(existing_id)`, or `NOOP`
    - write changes back to the store
-3) **Retention / TTL**:
+3. **Retention / TTL**:
    - apply TTL for low-importance items
    - enforce max per-namespace counts (evict oldest/lowest-importance)
-4) **User controls**:
+4. **User controls**:
    - UI must provide memory review and delete/purge per-user and per-session
 
 Namespace conventions:
@@ -152,21 +152,34 @@ class MemoryCandidate(BaseModel):
 Example payloads:
 
 ```json
-{"content":"Prefers dark mode","kind":"preference","importance":0.7,"source_checkpoint_id":"chkpt_01"}
+{
+  "content": "Prefers dark mode",
+  "kind": "preference",
+  "importance": 0.7,
+  "source_checkpoint_id": "chkpt_01"
+}
 ```
 
 ```json
-{"content":"Project roadmap doc lives in /docs/specs","kind":"fact","importance":1.0,"source_checkpoint_id":"chkpt_99","tags":["docs","project_state"]}
+{
+  "content": "Project roadmap doc lives in /docs/specs",
+  "kind": "fact",
+  "importance": 1.0,
+  "source_checkpoint_id": "chkpt_99",
+  "tags": ["docs", "project_state"]
+}
 ```
 
 ### Release scope (v1.0 vs. roadmap)
 
 **Release 1.0 (v1) scope:**
+
 - Durable checkpoints + session registry
 - Long-term memory storage with explicit `ADD/UPDATE/DELETE/NOOP` policy
 - Basic TTL and per-namespace caps with user-visible review/delete
 
 **Roadmap (post-v1):**
+
 - More advanced importance scoring and automated conflict resolution
 - Background consolidation scheduling with adaptive cadence
 
@@ -245,7 +258,7 @@ Threats and controls:
    - Provide explicit UI controls: memory review + delete + session purge.
    - Default to “store only salient facts/preferences” (explicit extract + update policy) rather than raw logs.
 2. **Prompt-injection memory poisoning**
-   - Treat memories as *untrusted* facts: store provenance and allow user review.
+   - Treat memories as _untrusted_ facts: store provenance and allow user review.
    - Use fixed tool schemas; do not allow arbitrary system prompt writes.
 3. **SQL injection**
    - Never interpolate user-provided keys into SQL.

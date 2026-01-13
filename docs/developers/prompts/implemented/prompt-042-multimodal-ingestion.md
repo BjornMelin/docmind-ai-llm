@@ -1,4 +1,14 @@
-# Implementation Prompt — 0042: Multimodal Ingestion (PDF page images → ArtifactRef → Qdrant)
+---
+prompt: PROMPT-042
+title: Multimodal Ingestion (PDF page images → ArtifactRef → Qdrant)
+status: Completed
+date: 2026-01-13
+version: 1.0
+related_adrs: ["ADR-058"]
+related_specs: ["SPEC-042"]
+---
+
+## Implementation Prompt — 0042: Multimodal Ingestion (PDF page images → ArtifactRef → Qdrant)
 
 **Purpose:** Final-release ingestion wiring for multimodal PDFs (page images).  
 **Source of truth:** ADR-058 + SPEC-042.  

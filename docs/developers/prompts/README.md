@@ -33,6 +33,16 @@ Each prompt is self-contained and embeds DocMind’s “Implementation Executor 
 18. `docs/developers/prompts/prompt-029-docs-consistency-pass.md`
 19. `docs/developers/prompts/prompt-023-containerization-hardening.md`
 
+## Implemented prompts
+
+- `docs/developers/prompts/implemented/prompt-022-settings-ui-hardening.md`
+- `docs/developers/prompts/implemented/prompt-023-containerization-hardening.md`
+- `docs/developers/prompts/implemented/prompt-025-keyword-tool-sparse-only.md`
+- `docs/developers/prompts/implemented/prompt-027-remove-legacy-main-entrypoint.md`
+- `docs/developers/prompts/implemented/prompt-042-multimodal-ingestion.md`
+- `docs/developers/prompts/implemented/prompt-043-hybrid-retrieval-logic.md`
+- `docs/developers/prompts/implemented/prompt-044-ui-and-persistence.md`
+
 ## Superseded prompts (do not implement)
 
 - `docs/developers/prompts/superseded/prompt-024-chat-persistence-simplechatstore.md`

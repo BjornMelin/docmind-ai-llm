@@ -1,4 +1,14 @@
-# Implementation Prompt — Analytics Page Hardening
+---
+prompt: PROMPT-034
+title: Analytics Page Hardening
+status: Completed
+date: 2026-01-11
+version: 1.0
+related_adrs: ["ADR-053"]
+related_specs: ["SPEC-034"]
+---
+
+## Implementation Prompt — Analytics Page Hardening
 
 Implements `ADR-053` + `SPEC-034`.
 

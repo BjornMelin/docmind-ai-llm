@@ -190,16 +190,16 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 
 All items below must be completed (Status = ✓) before the implementation is ready for code review.
 
-| Requirement     | Status | Gate      | Proof / Notes                                                                                                                       |
-| --------------- | ------ | --------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| **Packaging**   |        | Must pass | `uv sync` clean                                                                                                                     |
-| **Formatting**  |        | Must pass | `uv run ruff format .`                                                                                                              |
-| **Lint**        |        | Must pass | `uv run ruff check .` clean                                                                                                         |
-| **Types**       |        | Must pass | `uv run pyright` clean                                                                                                              |
-| **Tests**       |        | Must pass | service + UI wiring tests; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py`                       |
-| **Docs**        |        | Must pass | ADR/SPEC/RTM updated; verify `scripts/performance_monitor.py` details in `scripts/README.md`                                        |
-| **Security**    |        | Must pass | snapshot writes remain atomic; no new write surfaces                                                                                |
-| **Tech Debt**   |        | Must pass | zero TODO/FIXME introduced                                                                                                          |
+| Requirement     | Status | Gate      | Proof / Notes                                                                                                                        |
+| --------------- | ------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **Packaging**   |        | Must pass | `uv sync` clean                                                                                                                      |
+| **Formatting**  |        | Must pass | `uv run ruff format .`                                                                                                               |
+| **Lint**        |        | Must pass | `uv run ruff check .` clean                                                                                                          |
+| **Types**       |        | Must pass | `uv run pyright` clean                                                                                                               |
+| **Tests**       |        | Must pass | service + UI wiring tests; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py`                        |
+| **Docs**        |        | Must pass | ADR/SPEC/RTM updated; verify `scripts/performance_monitor.py` details in `scripts/README.md`                                         |
+| **Security**    |        | Must pass | snapshot writes remain atomic; no new write surfaces                                                                                 |
+| **Tech Debt**   |        | Must pass | zero TODO/FIXME introduced                                                                                                           |
 | **Performance** |        | Advisory  | service layer keeps Streamlit pages import-light; target ≤10% regression vs. baseline (measure via `scripts/performance_monitor.py`) |
 
 **EXECUTE UNTIL COMPLETE.**

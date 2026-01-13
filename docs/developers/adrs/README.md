@@ -21,8 +21,6 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
   Scope: Unified dense/sparse embeddings centered on BGE-M3
 - **[ADR-003 — Adaptive Retrieval Pipeline](ADR-003-adaptive-retrieval-pipeline.md)**<br>
   Scope: Router/strategy selection and hierarchical retrieval
-- ADR-006 — Modern Reranking Architecture (Superseded by ADR‑037)<br>
-  Scope: Historical text-only CrossEncoder reranking; see ADR‑037 for current design
 - **[ADR-037 — Multimodal Reranking with ColPali (visual) and BGE v2‑m3 (text)](ADR-037-multimodal-reranking-architecture.md)**<br>
   Scope: Modality-aware reranking; ColPali for visuals, BGE v2‑m3 for text
 - **[ADR-019 — Optional GraphRAG Module](ADR-019-optional-graphrag.md)**<br>
@@ -56,14 +54,12 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
   Scope: Transactional, local-only ops state for background jobs and snapshot events
 - **[ADR-035 — Application-Level Semantic Cache](ADR-035-semantic-cache-qdrant.md)**<br>
   Scope: Optional semantic response caching (backend pluggable; offline-first)
-- **[ADR-057 — Chat Persistence + Hybrid Agentic Memory (LangGraph SQLite)](ADR-057-chat-persistence-langgraph-sqlite-hybrid-memory.md)**<br>
-  Scope: Durable checkpoints, time travel/branching, and long-term memory via LangGraph store
 - **[ADR-058 — Final Multimodal Pipeline + Cognitive Persistence](ADR-058-final-multimodal-pipeline-and-persistence.md)**<br>
   Scope: End-to-end multimodal (PDF images → retrieval → UI) + durability invariants (no blobs/paths in durable stores)
 
 ## Document Processing
 
-- **[ADR-009 — Document Processing Pipeline](ADR-009-document-processing-pipeline.md)**<br>
+- **[ADR-009 — Document Processing Pipeline (Superseded by ADR-058)](superseded/ADR-009-document-processing-pipeline.md)**<br>
   Scope: Historical (superseded by ADR-058)
 
 ## Performance
@@ -99,22 +95,21 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
 - **[ADR-033 — Local Backup & Retention](ADR-033-local-backup-and-retention.md)**<br>
   Scope: Manual backups with rotation (local-only)
 
-## Archived ADRs
-
-- **[ADR-007 — Hybrid Persistence Strategy (archived)](archived/ADR-007-hybrid-persistence-strategy.md)**<br>
-  Scope: Early persistence approach (archived)
-
 ## Superseded ADRs
 
 These ADRs are kept for historical context only and MUST NOT be implemented. See files under `docs/developers/adrs/superseded/`.
 
+- **[ADR-006 — Modern Reranking Architecture (Superseded by ADR-037)](superseded/ADR-006-reranking-architecture.md)**
+- **[ADR-007 — Hybrid Persistence Strategy (Superseded by ADR-031)](superseded/ADR-007-hybrid-persistence-strategy.md)**
 - **[ADR-012 — Evaluation with DeepEval (Superseded by ADR-039)](superseded/ADR-012-evaluation-strategy.md)**
 - **[ADR-015 — Docker-First Local Deployment (Superseded by ADR-042)](superseded/ADR-015-deployment-strategy.md)**
-- **[ADR-021 — Conversational Memory & Context Management (Superseded by ADR-057)](superseded/ADR-021-chat-memory-context-management.md)**
-- **[ADR-043 — Chat Persistence via SimpleChatStore (Superseded by ADR-057)](superseded/ADR-043-chat-persistence-simplechatstore.md)**
+- **[ADR-021 — Conversational Memory & Context Management (Superseded by ADR-058)](superseded/ADR-021-chat-memory-context-management.md)**
+- **[ADR-043 — Chat Persistence via SimpleChatStore (Superseded by ADR-058)](superseded/ADR-043-chat-persistence-simplechatstore.md)**
 - **[ADR-025 — Caching Strategy (Superseded by ADR-030)](superseded/ADR-025-caching-strategy.md)**
 - **[ADR-036 — Reranker UI Controls (Superseded)](superseded/ADR-036-reranker-ui-controls-normalize-topn.md)**
 - **[ADR-054 — Config Surface Pruning (Unused Knobs) (Superseded)](superseded/ADR-054-config-surface-pruning-unused-knobs.md)**
+- **[ADR-057 — Chat Persistence + Hybrid Agentic Memory (LangGraph SQLite) (Superseded by ADR-058)](superseded/ADR-057-chat-persistence-langgraph-sqlite-hybrid-memory.md)**
+- **[ADR-013.1 — User Interface Architecture (Full) (Superseded by ADR-013)](superseded/ADR-013.1-user-interface-architecture-full.md)**
 
 ---
 
@@ -129,7 +124,6 @@ Latest additions:
 
 - **[ADR-041 — Settings UI Hardening: Pre-validation, Safe Badges, and .env Persistence](ADR-041-settings-ui-hardening-and-safe-badges.md)**
 - **[ADR-042 — Containerization Hardening](ADR-042-containerization-hardening.md)**
-- **[ADR-057 — Chat Persistence + Hybrid Agentic Memory (LangGraph SQLite)](ADR-057-chat-persistence-langgraph-sqlite-hybrid-memory.md)**
 - **[ADR-044 — Keyword Tool (Sparse-only Qdrant)](ADR-044-keyword-tool-sparse-only-qdrant.md)**
 - **[ADR-045 — Programmatic Ingestion API + Legacy Facade](ADR-045-ingestion-api-and-legacy-facade.md)**
 - **[ADR-046 — Remove Legacy `src/main.py` Entrypoint](ADR-046-remove-legacy-main-entrypoint.md)**

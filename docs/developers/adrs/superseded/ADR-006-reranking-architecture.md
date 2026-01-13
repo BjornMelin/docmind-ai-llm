@@ -4,9 +4,8 @@ Title: Text‑Only CrossEncoder Reranking (Superseded)
 Status: Superseded
 Version: 3.4
 Date: 2025-09-04
-Supersedes:
-Superseded-by: 037
-Related: 003, 024, 037
+Superseded-by: ADR-037
+Related: ADR-003, ADR-024, ADR-037
 Tags: retrieval, reranking, text, crossencoder
 References:
 - [BAAI/bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3)
@@ -36,11 +35,11 @@ Flat vector similarity alone returned off‑topic results for nuanced queries. W
 
 ### Decision Framework
 
-| Option                         | Leverage (35%) | Quality (30%) | Latency (20%) | Maintain (15%) | Total | Decision |
-| ------------------------------ | -------------- | ------------- | ------------- | -------------- | ----- | -------- |
-| CrossEncoder (Selected)        | 5              | 4             | 4             | 5              | 4.55  | ✅ Selected |
-| Vector‑only                    | 2              | 2             | 5             | 5              | 3.10  | Rejected |
-| Multi‑model ensemble           | 4              | 5             | 2             | 2              | 3.55  | Rejected |
+| Option                  | Leverage (35%) | Quality (30%) | Latency (20%) | Maintain (15%) | Total | Decision    |
+| ----------------------- | -------------- | ------------- | ------------- | -------------- | ----- | ----------- |
+| CrossEncoder (Selected) | 5              | 4             | 4             | 5              | 4.55  | ✅ Selected |
+| Vector‑only             | 2              | 2             | 5             | 5              | 3.10  | Rejected    |
+| Multi‑model ensemble    | 4              | 5             | 2             | 2              | 3.55  | Rejected    |
 
 ## Decision
 

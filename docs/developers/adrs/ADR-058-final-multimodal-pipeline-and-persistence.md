@@ -29,32 +29,32 @@ We implement a **local-first, thin-payload, end-to-end multimodal pipeline** wit
 
 ### Architecture (final)
 
-**Artifacts**
+#### Artifacts
 
 - `ArtifactStore` stores binary artifacts under `settings.data_dir/artifacts` (override supported).
 - `ArtifactRef` is the canonical durable pointer; all DB/Qdrant payloads store only `(sha256, suffix)` pairs.
 
-**Ingestion → Image indexing (SigLIP)**
+#### Ingestion → Image indexing (SigLIP)
 
 - During ingestion, rendered PDF page images are converted to `ArtifactRef`s.
 - Images are indexed into a dedicated Qdrant collection (`settings.database.qdrant_image_collection`) using SigLIP text/image embeddings.
 - Qdrant payload is **thin** (ids + artifact refs + page metadata) and explicitly excludes base64 and raw paths.
 
-**Retrieval → Multimodal fusion**
+#### Retrieval → Multimodal fusion
 
 - Text retrieval remains server-side hybrid (Qdrant Query API).
 - Image retrieval is SigLIP text→image against the image collection.
 - App-level fusion uses rank-based RRF and then existing postprocessors/reranking.
 - Retrieval tools sanitize runtime-only paths before returning sources to agent-visible JSON.
 
-**UI**
+#### UI
 
 - Chat page renders “Sources” including page thumbnails via `ArtifactRef` resolution.
 - Encrypted images (`*.enc`) are decrypted at render time using a safe context manager (no unsafe HTML).
 - Chat provides a sidebar **query-by-image** “Visual search” (SigLIP image→image) for rapid inspection.
 - Documents page previews image exports and exposes snapshot rebuild utilities regardless of export presence.
 
-**Cognitive persistence (ADR-057 integrated)**
+#### Cognitive persistence (ADR-057 integrated)
 
 - LangGraph `SqliteSaver` persists thread state (`messages` + agent outputs).
 - A DocMind session registry table provides user-friendly session lists, rename/delete, and hard purge.
