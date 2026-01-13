@@ -197,6 +197,7 @@ opensrc/
 
 # Snapshot persistence artifacts
 storage/
+!tests/unit/utils/storage/
 data/storage/
 data/uploads/
 **/_tmp-*/
