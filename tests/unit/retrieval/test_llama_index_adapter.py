@@ -119,7 +119,7 @@ def test_get_index_builder_returns_none_when_modules_missing(
     mock_llamaindex: None,
 ) -> None:
     factory = build_llama_index_factory()
-    factory._modules = SimpleNamespace(property_graph_index_cls=None)  # type: ignore[attr-defined]
+    factory._modules_cache = SimpleNamespace(property_graph_index_cls=None)  # type: ignore[attr-defined]
     assert factory.get_index_builder() is None
 
 

@@ -78,7 +78,7 @@ def resolve_adapter(
 
 
 # Register default adapter eagerly so callers can rely on lookups.
-ensure_default_adapter()
+# ensure_default_adapter()
 
 
 def get_default_adapter_health() -> tuple[bool, str, str]:

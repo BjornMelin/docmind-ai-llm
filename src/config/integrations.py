@@ -21,7 +21,6 @@ from llama_index.core import Settings
 
 from src.config.llm_factory import build_llm
 from src.models.embedding_constants import ImageBackboneName
-from src.models.embeddings import ImageEmbedder, TextEmbedder, UnifiedEmbedder
 from src.telemetry.opentelemetry import setup_metrics, setup_tracing
 from src.utils.exceptions import IMPORT_EXCEPTIONS
 
@@ -29,8 +28,12 @@ from .settings import DocMindSettings, settings
 
 if TYPE_CHECKING:  # pragma: no cover
     from llama_index.core.base.embeddings.base import BaseEmbedding
+
+    from src.models.embeddings import ImageEmbedder
 else:
     BaseEmbedding = Any
+    ImageEmbedder = Any
+
 
 # Text embeddings default wrapper
 # NOTE: Avoid heavy imports at module import-time. The embedding constructor
@@ -204,6 +207,8 @@ def get_unified_embedder():  # pragma: no cover - simple factory
     This is a lightweight entry point for app code to opt into the
     library-first TextEmbedder (BGE-M3) and ImageEmbedder (OpenCLIP/SigLIP).
     """
+    from src.models.embeddings import ImageEmbedder, TextEmbedder, UnifiedEmbedder
+
     device = "cuda" if settings.enable_gpu_acceleration else "cpu"
     text = TextEmbedder(model_name=settings.embedding.model_name, device=device)
     image = ImageEmbedder(backbone="siglip_base", device=device)
@@ -218,6 +223,8 @@ def get_image_embedder(
     Default backbone is SigLIP (preferred). Accepts "openclip_vitl14",
     "openclip_vith14", or "siglip_base".
     """
+    from src.models.embeddings import ImageEmbedder
+
     device = "cuda" if settings.enable_gpu_acceleration else "cpu"
     return ImageEmbedder(backbone=backbone, device=device)
 

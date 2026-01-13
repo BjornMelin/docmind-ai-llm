@@ -231,7 +231,13 @@ class LlamaIndexAdapterFactory(AdapterFactoryProtocol):
         self.supports_graphrag = True
         self.dependency_hint = _GRAPH_INSTALL_HINT
         self._telemetry: TelemetryHooksProtocol = _NoopTelemetry()
-        self._modules = _load_graph_modules()
+        self._modules_cache: _GraphModules | None = None
+
+    @property
+    def _modules(self) -> _GraphModules:
+        if self._modules_cache is None:
+            self._modules_cache = _load_graph_modules()
+        return self._modules_cache
 
     def build_graph_artifacts(
         self,

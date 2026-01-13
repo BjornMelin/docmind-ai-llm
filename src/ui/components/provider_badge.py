@@ -9,7 +9,6 @@ from __future__ import annotations
 import streamlit as st
 
 from src.config.settings import DocMindSettings
-from src.retrieval.adapter_registry import get_default_adapter_health
 
 
 def provider_badge(cfg: DocMindSettings) -> None:
@@ -18,6 +17,8 @@ def provider_badge(cfg: DocMindSettings) -> None:
     Args:
         cfg: Current unified settings.
     """
+    from src.retrieval.adapter_registry import get_default_adapter_health
+
     provider = cfg.llm_backend
     vllm_cfg = getattr(cfg, "vllm", None)
     model = cfg.model or (getattr(vllm_cfg, "model", None) if vllm_cfg else None)
