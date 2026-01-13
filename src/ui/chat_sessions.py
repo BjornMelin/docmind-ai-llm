@@ -124,8 +124,9 @@ def _render_session_selector(
     )
     if sel != active.thread_id:
         st.session_state["chat_thread_id"] = sel
-        touch_session(conn, thread_id=sel)
+        st.session_state.pop("chat_time_travel_hint_checkpoint_id", None)
         with contextlib.suppress(Exception):
+            st.query_params.pop("branch", None)
             st.query_params["chat"] = sel
         with st.spinner("Switching session…"):
             st.rerun()
@@ -138,7 +139,9 @@ def _render_new_delete_controls(conn: sqlite3.Connection, active: ChatSession) -
     if cols[0].button("New", use_container_width=True):
         created = create_session(title="New chat", conn=conn)
         st.session_state["chat_thread_id"] = created.thread_id
+        st.session_state.pop("chat_time_travel_hint_checkpoint_id", None)
         with contextlib.suppress(Exception):
+            st.query_params.pop("branch", None)
             st.query_params["chat"] = created.thread_id
         st.rerun()
 
@@ -150,6 +153,9 @@ def _render_new_delete_controls(conn: sqlite3.Connection, active: ChatSession) -
             st.session_state["chat_thread_id"] = remaining[0].thread_id
         else:
             st.session_state.pop("chat_thread_id", None)
+        st.session_state.pop("chat_time_travel_hint_checkpoint_id", None)
+        with contextlib.suppress(Exception):
+            st.query_params.pop("branch", None)
         st.session_state.pop("delete_confirm", None)
         st.rerun()
 
