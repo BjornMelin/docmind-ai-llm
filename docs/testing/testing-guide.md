@@ -124,6 +124,13 @@ uv run python -m pytest tests/system/ -v  # GPU required
 @pytest.mark.slow         # Long-running tests
 ```
 
+### UI AppTest Performance Guard
+
+For Streamlit AppTest UI checks, we add a lightweight wall-clock budget to catch
+render regressions (see `tests/integration/test_settings_app_test.py`). Use a
+generous CI budget (`CI`/`GITHUB_ACTIONS`) and a tighter local budget; keep the
+test functional rather than a micro-benchmark.
+
 ## Patterns
 
 ### 1. Boundary Testing Fixtures

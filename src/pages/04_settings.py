@@ -310,14 +310,15 @@ def main() -> None:
     st.title("Settings · LLM Runtime")
 
     # Show badge
-    provider_badge(settings)
+    graphrag_health = get_default_adapter_health()
+    provider_badge(settings, graphrag_health=graphrag_health)
     provider = _render_provider_section()
     model, context_window, timeout_s, use_gpu = _render_model_section()
     ollama_url, vllm_url, lmstudio_url, llamacpp_url = _render_provider_urls()
     gguf_path = _render_gguf_path()
     allow_remote = _render_security_section()
     rrf_k, t_text, t_siglip, t_colpali, t_total = _render_retrieval_section()
-    _render_graphrag_section()
+    _render_graphrag_section(graphrag_health)
 
     ui_errors, resolved_gguf_path = _validate_gguf_inputs(
         provider, llamacpp_url, gguf_path
@@ -512,10 +513,14 @@ def _render_retrieval_section() -> tuple[int, int, int, int, int]:
     return rrf_k, t_text, t_siglip, t_colpali, t_total
 
 
-def _render_graphrag_section() -> None:
+def _render_graphrag_section(
+    graphrag_health: tuple[bool, str, str] | None = None,
+) -> None:
     """Render GraphRAG status section."""
     st.subheader("GraphRAG")
-    supports, adapter_name, hint = get_default_adapter_health()
+    if graphrag_health is None:
+        graphrag_health = get_default_adapter_health()
+    supports, adapter_name, hint = graphrag_health
     st.text_input("Adapter", value=adapter_name, disabled=True)
     st.text_input(
         "GraphRAG status",

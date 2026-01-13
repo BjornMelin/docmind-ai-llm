@@ -274,6 +274,7 @@ DSPy (optional):
 - Mark tests with `unit`, `integration`, `system`, plus resource markers
   (`requires_gpu`, `requires_network`, `requires_ollama`).
 - Keep unit tests fast (<5s) and integration tests <30s where possible.
+- For Streamlit AppTest UI pages, add small render-time budgets (looser in CI).
 
 ## Docs and Architecture Sources
 

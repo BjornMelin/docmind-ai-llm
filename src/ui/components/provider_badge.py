@@ -11,11 +11,16 @@ import streamlit as st
 from src.config.settings import DocMindSettings
 
 
-def provider_badge(cfg: DocMindSettings) -> None:
+def provider_badge(
+    cfg: DocMindSettings,
+    *,
+    graphrag_health: tuple[bool, str, str] | None = None,
+) -> None:
     """Render a small badge indicating active provider and model.
 
     Args:
         cfg: Current unified settings.
+        graphrag_health: Optional cached GraphRAG health tuple to reuse.
     """
     from src.retrieval.adapter_registry import get_default_adapter_health
 
@@ -39,7 +44,9 @@ def provider_badge(cfg: DocMindSettings) -> None:
                 str(getattr(vllm_cfg, "llamacpp_model_path", "")) if vllm_cfg else None
             )
 
-    supports_graphrag, adapter_name, hint = get_default_adapter_health()
+    if graphrag_health is None:
+        graphrag_health = get_default_adapter_health()
+    supports_graphrag, adapter_name, hint = graphrag_health
     status_label = "enabled" if supports_graphrag else "disabled"
 
     st.badge(f"Provider: {provider}")
