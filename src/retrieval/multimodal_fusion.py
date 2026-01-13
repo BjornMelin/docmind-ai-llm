@@ -99,10 +99,8 @@ class ImageSiglipRetriever:
             self._collection_checked = True
 
         try:
-            timeout_s = max(
-                1,
-                int(getattr(settings.retrieval, "siglip_timeout_ms", 150)) // 1000,
-            )
+            timeout_ms = int(getattr(settings.retrieval, "siglip_timeout_ms", 2000))
+            timeout_s = max(1, (timeout_ms + 999) // 1000)
             result = self._client.query_points(
                 collection_name=self.params.collection,
                 query=vec_list,
@@ -209,12 +207,23 @@ class MultimodalFusionRetriever:
                 text_future.cancel()
                 logger.warning("Text retrieval timed out")
                 text_nodes = []
-            try:
-                image_nodes = image_future.result(timeout=image_timeout_s)
-            except FuturesTimeoutError:
+
+            # Compute remaining time for image retrieval to honor latency budget.
+            # Note: cancel() does not interrupt already-running threads, only
+            # prevents queued tasks from starting.
+            elapsed = time.perf_counter() - t0
+            remaining_time = max(0.0, image_timeout_s - elapsed)
+            if remaining_time <= 0.0:
                 image_future.cancel()
-                logger.warning("Image retrieval timed out")
+                logger.warning("Image retrieval budget exhausted")
                 image_nodes = []
+            else:
+                try:
+                    image_nodes = image_future.result(timeout=remaining_time)
+                except FuturesTimeoutError:
+                    image_future.cancel()
+                    logger.warning("Image retrieval timed out")
+                    image_nodes = []
 
         k_constant = int(getattr(settings.retrieval, "rrf_k", 60))
         fused = rrf_merge([text_nodes, image_nodes], k_constant=k_constant)

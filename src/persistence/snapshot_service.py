@@ -31,9 +31,6 @@ class VectorIndexProtocol(Protocol):
     def embed_model(self) -> Any:
         """Get the embed model from the vector index."""
 
-    def __getattr__(self, name: str) -> Any:
-        """Fallback attribute access for private attributes."""
-
 
 class PgIndexProtocol(Protocol):
     """Protocol for property graph index with required attributes."""
@@ -230,8 +227,11 @@ def _collect_corpus_paths(  # noqa: PLR0912
 
     # Try to use cached manifest first
     if manifest_file.exists():
-        with contextlib.suppress(Exception), open(manifest_file) as f:
+        manifest_data = None
+        with contextlib.suppress(Exception), manifest_file.open("r") as f:
             manifest_data = json.load(f)
+
+        if manifest_data is not None:
             cached_paths = [Path(p) for p in manifest_data.get("files", [])]
             if not uploads_dir.exists():
                 return cached_paths, uploads_dir
@@ -292,10 +292,12 @@ def _collect_corpus_paths(  # noqa: PLR0912
 
     # Cache the result for next time
     try:
-        with open(manifest_file, "w") as f:
+        with manifest_file.open("w") as f:
             json.dump({"files": [str(p) for p in corpus_paths]}, f)
-    except Exception:  # noqa: S110 - Best-effort caching, ignore failures
-        pass
+    except Exception as e:
+        logger.debug(
+            "Failed to cache corpus manifest at {}: {}", manifest_file, e, exc_info=True
+        )
 
     return corpus_paths, uploads_dir
 
@@ -308,8 +310,10 @@ def _build_versions(
     Args:
         settings_obj: Settings object with app_version and database.
         vector_index: Vector index instance (used for fallback embed model).
-        embed_model: Optional explicit embed model; if None, falls back to
-            Settings.embed_model or vector_index public interface.
+        embed_model: Optional explicit embed model. If None, falls back in order:
+            1. llama_index.core.Settings.embed_model
+            2. vector_index.embed_model (public interface)
+            3. vector_index._embed_model (private, last resort only)
 
     Returns:
         Dictionary of component versions for manifest metadata.
@@ -320,30 +324,29 @@ def _build_versions(
 
         versions["llama_index"] = getattr(llama_index, "__version__", "unknown")
 
-    # Use explicitly passed embed_model or fall back to settings
+    # Resolve embed_model following documented fallback order.
     if embed_model is None:
         with contextlib.suppress(Exception):
             from llama_index.core import Settings  # type: ignore
 
             embed_model = getattr(Settings, "embed_model", None)
 
-    # Last-resort fallback: try public interface first, then private (if available)
     if embed_model is None:
         embed_model = getattr(vector_index, "embed_model", None)
-    if embed_model is None:
-        # Only access private attribute as last resort, with guard
-        if hasattr(vector_index, "_embed_model"):
-            embed_model = getattr(vector_index, "_embed_model", None)
-            if embed_model:
-                logger.debug(
-                    "Using private _embed_model fallback; prefer passing "
-                    "embed_model explicitly"
-                )
-        if embed_model is None:
+
+    if embed_model is None and hasattr(vector_index, "_embed_model"):
+        embed_model = getattr(vector_index, "_embed_model", None)
+        if embed_model:
             logger.debug(
-                "Embed model not found: pass explicitly or ensure public "
-                "interface available"
+                "Using private _embed_model fallback; prefer passing "
+                "embed_model explicitly"
             )
+
+    if embed_model is None:
+        logger.debug(
+            "Embed model not found: pass explicitly or ensure public "
+            "interface available"
+        )
 
     # Extract model name safely
     embed_model_name = (

@@ -352,7 +352,16 @@ def _run_benchmarks(
     *,
     cwd: Path,
 ) -> None:
-    """Run optional performance benchmark steps."""
+    """Run optional performance benchmark steps.
+
+    Args:
+        exit_codes: List to append exit codes for benchmark runs.
+        test_results: Dictionary to record benchmark test outcomes.
+        cwd: Repository root directory (required). Must be a valid existing Path
+            pointing to the project root where scripts/ directory exists, as this
+            function performs filesystem checks such as vllm_script.exists().
+            Callers must pass a valid directory path.
+    """
     print("\nStep 5: Performance Benchmarks")
     cmd = ["uv", "run", "python", "scripts/performance_monitor.py", "--run-tests"]
     exit_code, _ = run_command(cmd, "Performance Benchmarks", timeout=1200, cwd=cwd)
@@ -422,7 +431,7 @@ def _print_summary(
     if not test_results.get("gpu_tests", True):
         print("   - Check GPU-specific test failures")
     if not test_results.get("performance", True):
-        print("   Investigate performance test issues with real models")
+        print("   - Investigate performance test issues with real models")
     sys.exit(1)
 
 

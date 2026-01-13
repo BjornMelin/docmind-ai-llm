@@ -759,17 +759,19 @@ def _handle_collection(monitor: PerformanceMonitor) -> None:
     """
     collection_data = monitor.measure_test_collection_time()
     monitor.results.update(collection_data)
-    if (
-        collection_data.get("collection_time", 0)
-        > monitor.config["test_collection_timeout"]
-    ):
-        print(
-            "WARN: Test collection time exceeds target: "
-            f"{collection_data['collection_time']:.2f}s"
-        )
+
+    # Handle error status early
+    if collection_data.get("status") == "error":
+        error_msg = collection_data.get("error", "Unknown error")
+        print(f"FAIL: Test collection failed: {error_msg}")
+        return
+
+    collection_time = collection_data.get("collection_time", 0)
+    if collection_time > monitor.config["test_collection_timeout"]:
+        print(f"WARN: Test collection time exceeds target: {collection_time:.2f}s")
         return
     print(
-        f"OK: Test collection: {collection_data['collection_time']:.2f}s "
+        f"OK: Test collection: {collection_time:.2f}s "
         f"({collection_data.get('test_count', 0)} tests)"
     )
 

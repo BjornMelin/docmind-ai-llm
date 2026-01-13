@@ -19,7 +19,7 @@ def render_artifact_image(
     """Render an artifact image, handling optional encrypted images."""
     try:
         from src.utils.images import open_image_encrypted
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         open_image_encrypted = None
 
     try:

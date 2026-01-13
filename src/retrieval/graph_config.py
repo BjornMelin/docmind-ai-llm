@@ -311,7 +311,8 @@ def export_graph_parquet(
     try:
         import pyarrow as pa
         import pyarrow.parquet as pq
-    except ImportError:  # pragma: no cover - optional dependency
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        logger.debug("PyArrow not installed, skipping Parquet export: {}", exc)
         return
 
     rows = _build_rel_map_rows(store=store, seed_node_ids=node_ids, depth=int(depth))

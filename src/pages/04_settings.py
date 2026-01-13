@@ -70,6 +70,20 @@ def _validate_candidate(
 _GGUF_PATH_PATTERN = re.compile(r"^[A-Za-z0-9._ \-~/\\\\:]+$")
 
 
+def _get_resolved_home_dir() -> Path:
+    """Resolve the home directory with fallback to original on errors.
+
+    Returns:
+        Expanded and resolved home directory path, or original Path.home() if
+        resolution fails due to OS, runtime, or value errors.
+    """
+    home_dir = Path.home()
+    try:
+        return home_dir.expanduser().resolve(strict=False)
+    except (OSError, RuntimeError, ValueError):
+        return home_dir
+
+
 def _clean_gguf_path_text(path_text: str) -> str | None:
     """Validate and normalize raw GGUF path input."""
     clean = (path_text or "").strip()
@@ -88,11 +102,7 @@ def _clean_gguf_path_text(path_text: str) -> str | None:
 
 def _resolve_allowed_gguf_bases() -> list[Path]:
     """Resolve allowed base directories for GGUF paths."""
-    home_dir = Path.home()
-    try:
-        home_dir_resolved = home_dir.expanduser().resolve(strict=False)
-    except (OSError, RuntimeError, ValueError):
-        home_dir_resolved = home_dir
+    home_dir_resolved = _get_resolved_home_dir()
 
     allowed_bases = [home_dir_resolved]
     try:
@@ -191,11 +201,7 @@ def resolve_valid_gguf_path(path_text: str) -> Path | None:
     if not base_dirs:
         return None
 
-    home_dir = Path.home()
-    try:
-        home_dir_resolved = home_dir.expanduser().resolve(strict=False)
-    except (OSError, RuntimeError, ValueError):
-        home_dir_resolved = home_dir
+    home_dir_resolved = _get_resolved_home_dir()
 
     candidates = _build_gguf_candidates(clean, base_dirs, home_dir_resolved)
     for base_dir, candidate in candidates:

@@ -6,4 +6,5 @@ IMPORT_EXCEPTIONS: tuple[type[BaseException], ...] = (
     ImportError,
     AttributeError,
     TypeError,
+    ValueError,
 )

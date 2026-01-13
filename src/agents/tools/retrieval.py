@@ -9,8 +9,9 @@ import time
 from pathlib import Path
 from typing import Annotated, Any
 
+from langchain.tools import ToolRuntime
 from langchain_core.tools import tool
-from langgraph.prebuilt import InjectedState, ToolRuntime
+from langgraph.prebuilt import InjectedState
 from llama_index.core import Document
 from loguru import logger
 
@@ -162,19 +163,33 @@ def retrieve_documents(
 
 def _extract_indexes(state: dict | None, runtime: ToolRuntime | None):
     # Prefer runtime context (not persisted) for heavy objects like indexes.
+    # Fall back to state.tools_data for any missing entries.
     runtime_ctx = runtime.context if runtime is not None else None
+
+    # Start with runtime values if available
+    v = None
+    kg = None
+    r = None
+
     if isinstance(runtime_ctx, dict):
         v = runtime_ctx.get("vector")
         kg = runtime_ctx.get("kg")
         r = runtime_ctx.get("retriever")
-        if any(x is not None for x in (v, kg, r)):
-            return v, kg, r
 
+    # Fall back to tools_data for missing entries
     tools_data = state.get("tools_data") if state else None
-    if not tools_data:
+    if tools_data:
+        if v is None:
+            v = tools_data.get("vector")
+        if kg is None:
+            kg = tools_data.get("kg")
+        if r is None:
+            r = tools_data.get("retriever")
+
+    if not any((v, kg, r)):
         logger.warning("No tools data available in state, using fallback")
-        return None, None, None
-    return tools_data.get("vector"), tools_data.get("kg"), tools_data.get("retriever")
+
+    return v, kg, r
 
 
 # Fast-path via ToolFactory.create_tools_from_indexes was removed for clarity

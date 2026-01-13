@@ -273,14 +273,13 @@ def pdf_pages_to_image_documents(
             "phash": phash,
             "page_text": page_text,
         }
-        if doc_id:
-            meta.update(
-                {
-                    "doc_id": doc_id,
-                    "document_id": doc_id,
-                    "page_id": f"{doc_id}::page::{i}",
-                }
-            )
+        meta.update(
+            {
+                "doc_id": doc_id,
+                "document_id": doc_id,
+                "page_id": f"{doc_id}::page::{i}",
+            }
+        )
         if str(path).endswith(".enc"):
             meta.update(
                 {

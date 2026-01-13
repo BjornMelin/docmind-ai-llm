@@ -101,7 +101,7 @@ def setup_logging(log_level: str = "INFO", log_file: str | None = None) -> None:
             level=log_level,
             format=(
                 "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | "
-                f"{prefix if obs_enabled else ''}"
+                f"{prefix}"
                 "{name}:{function}:{line} - {message}"
             ),
             rotation="10 MB",

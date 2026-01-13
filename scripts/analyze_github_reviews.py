@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import argparse
 import csv
-import io
 import json
 import os
+import sys
 import tempfile
 from collections import defaultdict
 from pathlib import Path
@@ -23,17 +23,21 @@ def should_exclude(file_path: str) -> bool:
     return any(pattern in file_path for pattern in PROCESSED_FILES)
 
 
-def extract_threads(json_file: Path) -> list[dict[str, Any]]:
-    """Parse JSON and extract unresolved threads."""
+def extract_threads(json_file: Path) -> list[dict[str, Any]] | None:
+    """Parse JSON and extract unresolved threads.
+
+    Returns:
+        List of unresolved review threads, or None if file not found or JSON is invalid.
+    """
     try:
         with json_file.open(encoding="utf-8") as handle:
             data = json.load(handle)
     except FileNotFoundError:
-        print(f"Error: File not found at {json_file}")
-        return []
+        print(f"Error: File not found at {json_file}", file=sys.stderr)
+        return None
     except json.JSONDecodeError as exc:
-        print(f"Error: Invalid JSON in {json_file}: {exc}")
-        return []
+        print(f"Error: Invalid JSON in {json_file}: {exc}", file=sys.stderr)
+        return None
 
     return data.get("unresolved_review_threads", [])
 
@@ -59,11 +63,16 @@ def get_issue_summary(thread: dict[str, Any]) -> str:
     return "No comment"
 
 
-def get_line_number(location: dict[str, Any] | None) -> int | str:
-    """Extract line number from location."""
+def get_line_number(location: dict[str, Any] | None) -> int | None:
+    """Extract line number from location, or None if missing."""
     if isinstance(location, dict):
-        return location.get("start_line", "N/A")
-    return "N/A"
+        return location.get("start_line")
+    return None
+
+
+def _get_issue_line_key(issue: dict[str, Any]) -> int:
+    """Get sortable line number for an issue (999999 when line is None)."""
+    return issue["line"] if issue["line"] is not None else 999999
 
 
 def _resolve_json_path(arg_path: str | None) -> Path | None:
@@ -92,10 +101,12 @@ def main() -> None:  # noqa: PLR0915
 
     json_file = _resolve_json_path(args.json_file)
     if json_file is None:
-        print("Error: Provide --json-file or set DOCMIND_REVIEW_JSON.")
-        return
+        print("Error: Provide --json-file or set DOCMIND_REVIEW_JSON.", file=sys.stderr)
+        sys.exit(1)
 
     threads = extract_threads(json_file)
+    if threads is None:
+        sys.exit(1)
     print(f"Total unresolved threads in data: {len(threads)}\n")
 
     # Group by file and filter
@@ -143,15 +154,16 @@ def main() -> None:  # noqa: PLR0915
         # Sort by line number
         for issue in sorted(
             issues,
-            key=lambda x: x["line"] if isinstance(x["line"], int) else 999999,
+            key=_get_issue_line_key,
         ):
             line = issue["line"]
+            line_str = str(line) if line is not None else "N/A"
             summary = issue["summary"]
             has_code = issue["has_code"]
             comments = issue["comment_count"]
             print(
                 "  Line "
-                f"{line!s:6} | Code: {has_code:3} | Comments: {comments} | {summary}"
+                f"{line_str:6} | Code: {has_code:3} | Comments: {comments} | {summary}"
             )
 
     # Print CSV
@@ -160,27 +172,27 @@ def main() -> None:  # noqa: PLR0915
     print("=" * 120 + "\n")
 
     output_csv = Path(args.output_csv)
-    csv_buffer = io.StringIO()
-    writer = csv.writer(csv_buffer)
-    writer.writerow(["File", "Line", "Has Code Block", "Comments", "Issue Summary"])
+    with output_csv.open("w", encoding="utf-8", newline="") as csv_file:
+        writer = csv.writer(csv_file)
+        writer.writerow(["File", "Line", "Has Code Block", "Comments", "Issue Summary"])
 
-    for file_path in sorted(by_file.keys()):
-        for issue in sorted(
-            by_file[file_path],
-            key=lambda x: x["line"] if isinstance(x["line"], int) else 999999,
-        ):
-            writer.writerow(
-                [
-                    file_path,
-                    issue["line"],
-                    issue["has_code"],
-                    issue["comment_count"],
-                    issue["summary"],
-                ]
-            )
+        for file_path in sorted(by_file.keys()):
+            for issue in sorted(
+                by_file[file_path],
+                key=_get_issue_line_key,
+            ):
+                line_str = str(issue["line"]) if issue["line"] is not None else "N/A"
+                writer.writerow(
+                    [
+                        file_path,
+                        line_str,
+                        issue["has_code"],
+                        issue["comment_count"],
+                        issue["summary"],
+                    ]
+                )
 
-    csv_content = csv_buffer.getvalue()
-    output_csv.write_text(csv_content, encoding="utf-8", newline="")
+    csv_content = output_csv.read_text(encoding="utf-8")
     print(csv_content)
 
     # Summary stats

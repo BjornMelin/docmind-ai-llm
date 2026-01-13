@@ -788,15 +788,17 @@ def _should_generate_coverage(args: argparse.Namespace) -> bool:
         return True
     if args.paths:
         return False
-    return not (
-        args.fast
-        or args.unit
-        or args.integration
-        or args.extras
-        or args.performance
-        or args.gpu
-        or args.smoke
-        or args.validate_imports
+    return not any(
+        [
+            args.fast,
+            args.unit,
+            args.integration,
+            args.extras,
+            args.performance,
+            args.gpu,
+            args.smoke,
+            args.validate_imports,
+        ]
     )
 
 
@@ -808,6 +810,7 @@ def _finalize_run(runner: TestRunner) -> None:
         print(f"\n{failed_runs} test run(s) failed")
         sys.exit(1)
     print("\nAll test runs completed successfully")
+    sys.exit(0)
 
 
 def main() -> None:

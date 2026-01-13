@@ -266,7 +266,7 @@ def purge_session(conn: sqlite3.Connection, *, thread_id: str) -> dict[str, int]
         # `namespace=(user_id, session_type, thread_id, ...)` so `thread_id` maps to
         # `ns{NAMESPACE_THREAD_INDEX}` (e.g. ns2).
         try:
-            if 0 <= NAMESPACE_THREAD_INDEX <= 7:
+            if 0 <= NAMESPACE_THREAD_INDEX < _MAX_NS_DEPTH:
                 vec_sql = _NS_DELETE_VEC.get(NAMESPACE_THREAD_INDEX)
                 items_sql = _NS_DELETE_ITEMS.get(NAMESPACE_THREAD_INDEX)
                 if vec_sql and items_sql:

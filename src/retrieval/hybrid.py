@@ -186,9 +186,15 @@ class ServerHybridRetriever:
             with_payload=list(QDRANT_PAYLOAD_FIELDS),
         )
 
-    def _dedup_points(self, points: list[Any]) -> tuple[list[tuple[float, Any]], int]:
-        """Deduplicate points by key and return sorted list plus count."""
-        key_name = (self.params.dedup_key or "page_id").strip()
+    def _dedup_points(
+        self, points: list[Any], key_name: str
+    ) -> tuple[list[tuple[float, Any]], int]:
+        """Deduplicate points by key and return sorted list plus count.
+
+        Args:
+            points: List of Qdrant points to deduplicate.
+            key_name: Metadata key used for deduplication.
+        """
         best: dict[str, tuple[float, Any]] = {}
         for p in points:
             payload = getattr(p, "payload", {}) or {}
@@ -305,7 +311,7 @@ class ServerHybridRetriever:
         key_name = (self.params.dedup_key or "page_id").strip()
         points = getattr(result, "points", []) or getattr(result, "result", [])
         input_count = len(points)
-        dedup_sorted, unique_count = self._dedup_points(points)
+        dedup_sorted, unique_count = self._dedup_points(points, key_name)
         nodes = self._build_nodes(dedup_sorted)
 
         # Telemetry (PII-safe; no query text)

@@ -122,6 +122,7 @@ CONTEXT_TRIM_STRATEGY = "last"
 PARALLEL_TOOL_CALLS_ENABLED = True
 MEMORY_CONSOLIDATION_MAX_WORKERS = 2
 MEMORY_CONSOLIDATION_TIMEOUT_S = 10.0
+MEMORY_CONSOLIDATION_RELEASE_GRACE_S = 30.0
 
 
 def _shared_llm_attempts() -> int:
@@ -392,6 +393,9 @@ class MultiAgentCoordinator:
                 # langgraph-supervisor currently relies on the deprecated
                 # `langgraph.prebuilt.create_react_agent`; suppress that warning
                 # until an upstream release removes the call (latest as of 0.0.31).
+                # TODO: Track upstream langgraph-supervisor release; remove suppression
+                # when create_react_agent move is fixed
+                # (target: langgraph-supervisor >0.0.31).
                 warnings.filterwarnings(
                     "ignore",
                     message=r"create_react_agent has been moved.*",
@@ -1186,10 +1190,13 @@ class MultiAgentCoordinator:
         user_id: str = "local",
         checkpoint_id: str,
     ) -> str | None:
-        """Fork a new branch head from a prior checkpoint (SPEC-041 / ADR-058)."""
-        if not self._ensure_setup():
-            return None
-        if self.compiled_graph is None:
+        """Fork a new branch head from a prior checkpoint (SPEC-041 / ADR-058).
+
+        Fetches the checkpoint state first to verify metadata is present, then
+        uses update_state with as_node="__copy__" for time-travel fork.
+        Requires LangGraph >=0.2.0+ with checkpoint persistence support.
+        """
+        if not self._ensure_setup() or self.compiled_graph is None:
             return None
 
         cfg: dict[str, Any] = {
@@ -1198,15 +1205,49 @@ class MultiAgentCoordinator:
             "checkpoint_id": str(checkpoint_id),
         }
         config: RunnableConfig = {"configurable": cfg}
+
+        # First, fetch the checkpoint to verify it exists and preserve metadata
+        try:
+            source_state = self.compiled_graph.get_state(config)
+            if not source_state or not source_state.values:
+                logger.debug(
+                    "Checkpoint not found or empty (thread_id=%s checkpoint_id=%s)",
+                    thread_id,
+                    checkpoint_id,
+                )
+                return None
+        except (RuntimeError, ValueError, AttributeError) as exc:
+            logger.debug(
+                "Failed to fetch checkpoint (thread_id=%s checkpoint_id=%s): %s",
+                thread_id,
+                checkpoint_id,
+                exc,
+            )
+            return None
+
+        # Now fork the checkpoint using update_state with __copy__ node
         try:
             # LangGraph special update that clones the selected checkpoint into a
             # new head (time-travel fork) without running the workflow.
+            # Note: as_node="__copy__" is LangGraph 0.2.0+ API for
+            # metadata preservation.
             new_config = self.compiled_graph.update_state(
                 config, None, as_node="__copy__"
             )
-        except Exception as exc:
+        except (RuntimeError, ValueError, AttributeError, TypeError) as exc:
+            # Specific exception handling for LangGraph API errors
             logger.debug(
                 "Checkpoint fork failed (thread_id=%s checkpoint_id=%s): %s",
+                thread_id,
+                checkpoint_id,
+                exc,
+            )
+            return None
+        except Exception as exc:
+            # Catch any unexpected exceptions but log them for debugging
+            logger.debug(
+                "Unexpected error during checkpoint fork "
+                "(thread_id=%s checkpoint_id=%s): %s",
                 thread_id,
                 checkpoint_id,
                 exc,
@@ -1374,6 +1415,29 @@ class MultiAgentCoordinator:
 
         def _watch_future() -> None:
             should_release = True
+            released = threading.Event()
+
+            def _release_once(reason: str) -> None:
+                if released.is_set():
+                    return
+                released.set()
+                logger.debug(
+                    "Releasing memory consolidation slot ({}) for thread {}",
+                    reason,
+                    thread_id,
+                )
+                _release_slot()
+
+            def _release_if_stuck() -> None:
+                if future.done():
+                    return
+                logger.warning(
+                    "Memory consolidation still running after timeout+grace "
+                    "for thread {}",
+                    thread_id,
+                )
+                _release_once("grace-timeout")
+
             try:
                 future.result(timeout=MEMORY_CONSOLIDATION_TIMEOUT_S)
             except FuturesTimeoutError:
@@ -1388,12 +1452,36 @@ class MultiAgentCoordinator:
                         "thread {}",
                         thread_id,
                     )
-                    should_release = False
+
+                    # Attach callback to release slot when future eventually completes.
+                    # This prevents semaphore leak when task doesn't respond to cancel.
+                    def _on_future_done(fut: Any) -> None:
+                        with contextlib.suppress(Exception):
+                            fut.result()  # Log any exception but don't propagate
+                        _release_once("done")
+
+                    try:
+                        future.add_done_callback(_on_future_done)
+                        should_release = False  # Callback/timer will handle release
+                        threading.Timer(
+                            MEMORY_CONSOLIDATION_RELEASE_GRACE_S, _release_if_stuck
+                        ).start()
+                    except (RuntimeError, TypeError) as exc:
+                        # If callback cannot be added (rare; future may be done),
+                        # release immediately as fallback
+                        logger.debug(
+                            "Could not attach done callback for thread {}: {}; "
+                            "releasing slot immediately",
+                            thread_id,
+                            exc,
+                        )
+                        _release_once("callback-failed")
+                        should_release = False  # Already released, avoid double-release
             except Exception as exc:
                 logger.debug("Memory consolidation task failed: {}", exc)
             finally:
                 if should_release:
-                    _release_slot()
+                    _release_once("completed")
 
         threading.Thread(
             target=_watch_future,

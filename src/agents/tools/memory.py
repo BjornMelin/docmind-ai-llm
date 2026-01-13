@@ -113,8 +113,16 @@ def _merge_tags(
     for tag_list in (existing_tags, candidate.tags):
         if isinstance(tag_list, list):
             merged.extend(str(tag) for tag in tag_list if tag is not None)
-    merged = [t for i, t in enumerate(merged) if t and t not in merged[:i]]
-    return merged or None
+
+    # Order-preserving deduplication using a set for O(n) performance
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for tag in merged:
+        if tag and tag not in seen:
+            seen.add(tag)
+            deduped.append(tag)
+
+    return deduped or None
 
 
 def _normalize_content(text: Any) -> str:

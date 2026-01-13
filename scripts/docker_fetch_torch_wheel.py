@@ -14,6 +14,12 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import unquote, urlparse
 
+# Minimum acceptable torch wheel size (bytes) for HTTP 416 fallback heuristic.
+# PyTorch wheels are typically several hundred MB; 50 MB is a conservative lower
+# bound used only when no checksum is available to avoid re-downloading files
+# that are likely complete.
+MIN_ACCEPTABLE_WHEEL_SIZE = 50 * 1024 * 1024
+
 
 class _TorchWheelIndexParser(HTMLParser):
     def __init__(self, needle_prefix: str) -> None:
@@ -240,12 +246,13 @@ def _download_once(url: str, dest: Path) -> None:
         url: HTTPS URL to download.
         dest: Destination file path.
     """
-    existing = dest.stat().st_size if dest.exists() else 0
+    existed = dest.exists()
+    existing = dest.stat().st_size if existed else 0
     headers = {"User-Agent": "docmind-docker"}
     if existing:
         headers["Range"] = f"bytes={existing}-"
     req = urllib.request.Request(url, headers=headers)  # noqa: S310
-    file_mode = "r+b" if dest.exists() else "wb"
+    file_mode = "r+b" if existed else "wb"
     with _open_https_request(req, timeout=60) as resp, dest.open(file_mode) as fh:
         if existing and resp.status == 200:
             fh.seek(0)
@@ -276,7 +283,9 @@ def _handle_416(dest: Path, sha256: str | None) -> bool:
     """Handle HTTP 416 (Range Not Satisfiable) for a resume attempt.
 
     When a checksum is available, validates the existing file. Without a checksum,
-    uses a conservative minimum-size heuristic to decide whether to keep the file.
+    uses the MIN_ACCEPTABLE_WHEEL_SIZE heuristic to decide whether to keep the
+    file: PyTorch wheels are typically several hundred MB, so files smaller than
+    50 MB are assumed incomplete and deleted for re-download.
 
     Args:
         dest: Existing destination file path.
@@ -294,8 +303,7 @@ def _handle_416(dest: Path, sha256: str | None) -> bool:
         dest.unlink()
         return False
     file_size = dest.stat().st_size
-    min_size = 50 * 1024 * 1024
-    if file_size < min_size:
+    if file_size < MIN_ACCEPTABLE_WHEEL_SIZE:
         print(f"File too small ({file_size} bytes); re-downloading.", flush=True)
         dest.unlink()
         return False
