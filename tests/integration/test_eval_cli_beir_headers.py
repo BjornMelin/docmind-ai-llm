@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from tests.integration.eval_cli_helpers import run_beir_cli
 
 
+@pytest.mark.integration
 def test_beir_cli_writes_dynamic_headers(tmp_path: Path) -> None:
     """Ensure leaderboard CSVs contain dynamic metric headers for BEIR runs."""
     run_beir_cli(tmp_path, sample_count=1)

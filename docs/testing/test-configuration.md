@@ -197,25 +197,25 @@ without services or UI.
 - Unit + Integration (default, offline):
 
   ```bash
-  uv run pytest -q
+  uv run pytest -q    # -q for clean output; use -v for verbose debugging
   ```
 
 - With E2E (requires local UI/testable environment):
 
   ```bash
-  DOCMIND_RUN_E2E=1 uv run pytest -q tests/e2e
+  DOCMIND_RUN_E2E=1 uv run pytest -q tests/e2e    # -q for clean output; use -v for verbose debugging
   ```
 
 - With System tests (requires local services/models):
 
   ```bash
-  DOCMIND_RUN_SYSTEM=1 uv run pytest -q tests/system
+  DOCMIND_RUN_SYSTEM=1 uv run pytest -q tests/system    # -q for clean output; use -v for verbose debugging
   ```
 
 - Full run including E2E + System (CI stage with services up):
 
   ```bash
-  DOCMIND_RUN_E2E=1 DOCMIND_RUN_SYSTEM=1 uv run pytest -q
+  DOCMIND_RUN_E2E=1 DOCMIND_RUN_SYSTEM=1 uv run pytest -q    # -q for clean output; use -v for verbose debugging
   ```
 
 ### Patterns to avoid (best practices)

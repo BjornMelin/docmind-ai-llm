@@ -112,14 +112,28 @@ def test_ensure_setup_wraps_llm_when_native_retry_assignment_fails(
         assert coord.llamaindex_llm == coord._shared_llm_wrapper
 
 
-def test_run_agent_workflow_marks_timeout_and_handles_model_dump(monkeypatch) -> None:
+@pytest.fixture
+def workflow_result_fixture() -> dict[str, object]:
+    """Reusable fixture for coordinator state/result shape."""
+    return {
+        "messages": [],
+        "total_start_time": 0.0,
+        "timed_out": False,
+        "deadline_s": 0.0,
+        # Add other common fields as needed
+    }
+
+
+def test_run_agent_workflow_marks_timeout_and_handles_model_dump(
+    monkeypatch, workflow_result_fixture
+) -> None:
     coord = MultiAgentCoordinator(max_agent_timeout=1.0)
 
     class _State:
         """Test mock implementing state protocol."""
 
         def model_dump(self) -> dict:  # type: ignore[no-untyped-def]
-            return {"messages": []}
+            return workflow_result_fixture.copy()
 
     compiled = Mock()
     compiled.stream.return_value = iter([_State()])
@@ -137,13 +151,15 @@ def test_run_agent_workflow_marks_timeout_and_handles_model_dump(monkeypatch) ->
     assert out.get("deadline_s") == 1.0
 
 
-def test_run_agent_workflow_returns_initial_state_when_stream_empty() -> None:
+def test_run_agent_workflow_returns_initial_state_when_stream_empty(
+    workflow_result_fixture,
+) -> None:
     """Test _run_agent_workflow returns init state when graph stream is empty."""
     coord = MultiAgentCoordinator(max_agent_timeout=1.0)
     compiled = Mock()
     compiled.stream.return_value = iter(())
     coord.compiled_graph = compiled
-    initial = {"total_start_time": 0.0, "messages": []}
+    initial = workflow_result_fixture.copy()
     out = coord._run_agent_workflow(
         initial,
         thread_id="t",

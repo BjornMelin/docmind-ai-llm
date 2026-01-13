@@ -17,21 +17,17 @@ related_specs: ["SPEC-042"]
 
 Implement and/or verify:
 
-- `multimodal_search` router tool exists and is enabled by default.
+- **Server-side Hybrid Prerequisites**:
+  - Environment variable `DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=true` is set.
+  - Qdrant exposes named vectors `text-dense` and `text-sparse` (with an IDF modifier applied) for `ServerHybridRetriever` to work.
+  - Implementation uses the Query API with `Prefetch`/`FusionQuery` for fusion.
+- `multimodal_search` router/tool is enabled by default so RRF fusion, dedup, deterministic caps, sanitized sources, and contextual recall operate correctly.
 - Retrieval fuses:
   - text hybrid retrieval (`ServerHybridRetriever`)
   - image retrieval (SigLIP text→image)
 - RRF fusion + dedup are deterministic and capped.
 - Returned sources are sanitized (no runtime-only paths) but keep artifact refs.
 - Contextual recall works when retrieval returns empty.
-
-## Configuration requirements
-
-- Enable server-side hybrid retrieval:
-  - `DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=true`
-- Ensure the Qdrant text collection has the required named vectors:
-  - `text-dense` (dense embedding vector)
-  - `text-sparse` (sparse embedding vector with IDF modifier)
 
 ## Notes on contextual recall
 
