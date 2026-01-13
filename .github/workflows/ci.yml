@@ -52,6 +52,10 @@ jobs:
           uvx ruff format --check .
           uvx ruff check --fix --exit-non-zero-on-fix .
 
+      - name: Quality Gate - Pyright
+        run: |
+          uv run pyright --threads 4
+
       - name: Quality Gate - No TODO/FIXME/XXX placeholders
         run: |
           if rg -n "\\b(TODO|FIXME|XXX)\\b" src tests docs scripts tools; then

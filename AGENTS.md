@@ -27,6 +27,7 @@ and docs under `docs/specs/` + `docs/developers/adrs/`.
 - Verify (batch): after a batch of edits, run lint/type on touched paths + focused tests.
   - Lint (all): `uv run ruff format . && uv run ruff check . --fix`
   - Type (paths): `uv run pyright --threads 4 <paths>`
+  - Tools-only (when `tools/` changed): `uv run pyright --threads 4 tools`
   - Tests (focused): `uv run pytest <tests/...> -vv` (or `-k <expr>` for a narrow slice)
 - Verify (final): before finishing the task/prompt, run full lint/type then full tests: `uv run ruff format . && uv run ruff check . --fix && uv run pyright --threads 4 && uv run python scripts/run_tests.py`
 - Tests (fast): `uv run python scripts/run_tests.py --fast`
@@ -186,12 +187,6 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 - AppTest: render-time budgets (looser in CI) + deterministic stubs.
 - Prefer patching real consumer seams, not `src.app` (see `docs/developers/testing-notes.md`).
 
-## Browser automation
-
-Use `agent-browser` for web automation (`agent-browser --help`).
-
-Workflow: `open <url>` → `snapshot -i` → `click @e1` / `fill @e2 "text"` → re-snapshot after page changes.
-
 ## Docs
 
 - Specs: `docs/specs/_index.md`
@@ -199,15 +194,33 @@ Workflow: `open <url>` → `snapshot -i` → `click @e1` / `fill @e2 "text"` →
 - When behavior changes, update README and the owning spec/ADR.
 - Keep active docs pointing at real `src/...` paths (avoid doc drift).
 
-<!-- opensrc:start -->
+## Browser Automation
 
-## opensrc Reference Library
+Use `agent-browser` for web automation. Run `agent-browser --help` for all commands.
 
-`opensrc/` is a read-only snapshot library for dependency internals/edge cases (see `opensrc/sources.json`). It is excluded from git and Ruff linting.
+Core workflow:
 
-- Prefer repo code + official docs first; use `opensrc/` only when behavior is subtle.
-- When citing internals in ADRs/SPECs/incident docs, cite exact `opensrc/...` paths + versions.
-- Fetch (non-interactive): `npx opensrc <package-or-repo> --modify=false`
-- Manage: `npx opensrc list`, `npx opensrc remove <name>`
+1. `agent-browser open <url>` - Navigate to page
+2. `agent-browser snapshot -i` - Get elements with refs (@e1, @e2)
+3. `agent-browser click @e1` / `fill @e2 "text"` - Interact using refs
+4. Re-snapshot after page changes
 
-<!-- opensrc:end -->
+## Source Code Reference
+
+Source code for deps is available in `opensrc/` for deeper understanding of implementation details.
+
+See `opensrc/sources.json` for the list of available packages and their versions.
+
+Use this source code when you need to understand how a package works internally, not just its types/interface.
+
+### Fetching Additional Source Code
+
+To fetch source code for a package or repository you need to understand, run:
+
+```bash
+# NOTE: append the --modify=false to all commands
+npx opensrc <package>           # npm package (e.g., npx opensrc zod)
+npx opensrc pypi:<package>      # Python package (e.g., npx opensrc pypi:requests)
+npx opensrc crates:<package>    # Rust crate (e.g., npx opensrc crates:serde)
+npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
+```

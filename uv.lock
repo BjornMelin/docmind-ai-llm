@@ -1034,6 +1034,7 @@ performance = [
 quality = [
     { name = "coverage", extra = ["toml"] },
     { name = "pre-commit" },
+    { name = "pyright", extra = ["nodejs"] },
     { name = "pytest-mock" },
     { name = "pytest-timeout" },
     { name = "pytest-xdist" },
@@ -1141,6 +1142,7 @@ performance = [{ name = "numba", specifier = ">=0.61.0" }]
 quality = [
     { name = "coverage", extras = ["toml"], specifier = ">=7.6.0" },
     { name = "pre-commit", specifier = ">=4.0.1" },
+    { name = "pyright", extras = ["nodejs"], specifier = ">=1.1.407,<1.2.0" },
     { name = "pytest-mock", specifier = ">=3.14.0" },
     { name = "pytest-timeout", specifier = ">=2.3.1" },
     { name = "pytest-xdist", specifier = ">=3.6.0" },
