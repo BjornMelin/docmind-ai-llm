@@ -257,7 +257,7 @@ def _check_cuda_compatibility(
     test_results: dict[str, bool],
     *,
     cwd: Path | None = None,
-) -> bool:
+) -> bool | None:  # type: ignore[return-value]  # sys.exit() when compatibility_only=True
     """Check CUDA availability and optionally exit after compatibility summary."""
     print("\n🔧 Step 2: CUDA Compatibility Check")
     cuda_available = check_cuda_availability(cwd=cwd)
@@ -376,8 +376,6 @@ def _run_memory_leak_check(
         memory = monitor_gpu_memory(cwd=cwd)
         memory_samples.append(float(memory["used"]))
         time.sleep(10)
-    if len(memory_samples) < 3:
-        return
     trend = memory_samples[-1] - memory_samples[0]
     if trend > 500:
         print(f"⚠️  Potential memory leak detected: {trend}MB increase")

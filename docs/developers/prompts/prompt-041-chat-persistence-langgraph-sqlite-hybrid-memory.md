@@ -4,7 +4,7 @@ Implements `ADR-057` + `SPEC-041`.
 
 **Read first (repo truth):**
 
-- ADR: `docs/developers/adrs/ADR-057-chat-persistence-langgraph-sqlite-hybrid-memory.md`
+- ADR: `docs/developers/adrs/superseded/ADR-057-chat-persistence-langgraph-sqlite-hybrid-memory.md`
 - SPEC: `docs/specs/spec-041-chat-persistence-agentic-memory-langgraph-sqlite.md`
 - Requirements: `docs/specs/requirements.md` (FR-022, FR-030..032, NFR-SEC-001/002/003/004)
 - RTM: `docs/specs/traceability.md`

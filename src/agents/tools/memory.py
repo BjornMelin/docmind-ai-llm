@@ -127,7 +127,9 @@ def _content_matches(a: str | None, b: str | None) -> bool:
     return a.strip().casefold() == b.strip().casefold()
 
 
-def _prepare_policy(policy: MemoryConsolidationPolicy | None) -> MemoryConsolidationPolicy:
+def _prepare_policy(
+    policy: MemoryConsolidationPolicy | None,
+) -> MemoryConsolidationPolicy:
     if policy is not None:
         return policy
     return MemoryConsolidationPolicy(
@@ -299,6 +301,121 @@ class _SuppressTelemetry:
         )
 
 
+def _recent_dialogue(messages: list[AnyMessage]) -> list[AnyMessage]:
+    """Return the most recent human/assistant dialogue slice.
+
+    Excludes tool/system messages and starts at the last human message.
+    """
+    last_user_index: int | None = None
+    for idx in range(len(messages) - 1, -1, -1):
+        if getattr(messages[idx], "type", None) == "human":
+            last_user_index = idx
+            break
+    if last_user_index is None:
+        return []
+
+    dialogue: list[AnyMessage] = []
+    for msg in messages[last_user_index:]:
+        if getattr(msg, "type", None) in {"human", "ai"}:
+            dialogue.append(msg)
+    return dialogue
+
+
+def _conversation_text(dialogue: list[AnyMessage]) -> str:
+    """Build a stable text representation for extraction prompts."""
+    try:
+        return get_buffer_string(dialogue, human_prefix="User", ai_prefix="Assistant")
+    except Exception:
+        return "\n".join(
+            f"{'User' if getattr(m, 'type', None) == 'human' else 'Assistant'}: "
+            f"{_normalize_content(getattr(m, 'content', m))}"
+            for m in dialogue
+        )
+
+
+def _extract_prompt(text: str, policy: MemoryConsolidationPolicy) -> str:
+    return (
+        "You extract long-term user memories. Only use facts/preferences/"
+        "todos/project state explicitly stated by the user. Ignore assistant "
+        "suggestions or hallucinations. Return at most "
+        f"{policy.max_candidates_per_turn} items.\n\n"
+        "Conversation:\n"
+        f"{text}\n\n"
+        "Respond with structured JSON."
+    )
+
+
+def _strip_code_fences(content: str) -> str:
+    if "```json" in content:
+        return content.split("```json")[1].split("```")[0].strip()
+    if "```" in content:
+        return content.split("```")[1].split("```")[0].strip()
+    return content
+
+
+def _invoke_extraction_llm(llm: Any, prompt: str) -> MemoryExtractionResult | None:
+    structured_llm: Any | None = None
+    if hasattr(llm, "with_structured_output"):
+        try:
+            structured_llm = llm.with_structured_output(MemoryExtractionResult)
+        except Exception as exc:
+            logger.debug(
+                "Structured output unavailable for memory extraction: {}",
+                type(exc).__name__,
+            )
+            structured_llm = None
+
+    if structured_llm is not None:
+        response = structured_llm.invoke(prompt)
+        if isinstance(response, MemoryExtractionResult):
+            return response
+        if isinstance(response, dict):
+            return MemoryExtractionResult.model_validate(response)
+        return None
+
+    response = llm.invoke(prompt)
+    content = getattr(response, "content", str(response))
+    payload = json.loads(_strip_code_fences(str(content)))
+    if isinstance(payload, dict):
+        payload = payload.get("memories", [])
+    return MemoryExtractionResult.model_validate({"memories": payload})
+
+
+def _candidates_from_extracted(
+    extracted: MemoryExtractionResult,
+    checkpoint_id: str,
+    policy: MemoryConsolidationPolicy,
+) -> list[MemoryCandidate]:
+    candidates: list[MemoryCandidate] = []
+    for item in extracted.memories[: policy.max_candidates_per_turn]:
+        content = _normalize_content(item.content)
+        if not content:
+            continue
+        try:
+            candidates.append(
+                MemoryCandidate(
+                    content=content,
+                    kind=item.kind,
+                    importance=float(item.importance),
+                    tags=item.tags,
+                    source_checkpoint_id=str(checkpoint_id),
+                )
+            )
+        except ValidationError as exc:
+            logger.debug("Invalid memory candidate skipped: {}", type(exc).__name__)
+    return candidates
+
+
+def _dedupe_candidates(candidates: list[MemoryCandidate]) -> list[MemoryCandidate]:
+    deduped: dict[tuple[str, str], MemoryCandidate] = {}
+    for cand in candidates:
+        key = (cand.kind, cand.content.casefold())
+        existing = deduped.get(key)
+        if existing is None or cand.importance > existing.importance:
+            deduped[key] = cand
+    return list(deduped.values())
+
+
 def extract_memory_candidates(
     messages: list[AnyMessage],
     checkpoint_id: str,
@@ -311,107 +428,18 @@ def extract_memory_candidates(
         return []
 
     policy = _prepare_policy(policy)
-
-    # Focus on most recent user/assistant messages; skip tool/system noise.
-    logger.debug("Extracting memory candidates from {} messages", len(messages))
-    last_messages: list[AnyMessage] = []
-    last_user_index = None
-    for idx in range(len(messages) - 1, -1, -1):
-        if getattr(messages[idx], "type", None) == "human":
-            last_user_index = idx
-            break
-    if last_user_index is None:
-        return []
-    for msg in messages[last_user_index:]:
-        if getattr(msg, "type", None) in {"human", "ai"}:
-            last_messages.append(msg)
-
-    if not last_messages:
+    dialogue = _recent_dialogue(messages)
+    if not dialogue:
         return []
 
+    logger.debug("Extracting memory candidates from {} messages", len(dialogue))
+    prompt = _extract_prompt(_conversation_text(dialogue), policy)
     try:
-        conversation_text = get_buffer_string(
-            last_messages, human_prefix="User", ai_prefix="Assistant"
-        )
-    except Exception:
-        conversation_text = "\n".join(
-            f"{'User' if getattr(m, 'type', None) == 'human' else 'Assistant'}: "
-            f"{_normalize_content(getattr(m, 'content', m))}"
-            for m in last_messages
-        )
-
-    try:
-        prompt = (
-            "You extract long-term user memories. Only use facts/preferences/"
-            "todos/project state explicitly stated by the user. Ignore assistant "
-            "suggestions or hallucinations. Return at most "
-            f"{policy.max_candidates_per_turn} items.\n\n"
-            "Conversation:\n"
-            f"{conversation_text}\n\n"
-            "Respond with structured JSON."
-        )
-
-        structured_llm = None
-        if hasattr(llm, "with_structured_output"):
-            try:
-                structured_llm = llm.with_structured_output(MemoryExtractionResult)
-            except Exception as exc:
-                logger.debug(
-                    "Structured output unavailable for memory extraction: {}",
-                    type(exc).__name__,
-                )
-
-        extracted: MemoryExtractionResult | None = None
-        if structured_llm is not None:
-            response = structured_llm.invoke(prompt)
-            if isinstance(response, MemoryExtractionResult):
-                extracted = response
-            elif isinstance(response, dict):
-                extracted = MemoryExtractionResult.model_validate(response)
-        else:
-            response = llm.invoke(prompt)
-            content = getattr(response, "content", str(response))
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0].strip()
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0].strip()
-            data = json.loads(content)
-            if isinstance(data, dict):
-                data = data.get("memories", [])
-            extracted = MemoryExtractionResult.model_validate({"memories": data})
-
+        extracted = _invoke_extraction_llm(llm, prompt)
         if extracted is None:
             return []
-
-        candidates: list[MemoryCandidate] = []
-        for item in extracted.memories[: policy.max_candidates_per_turn]:
-            content = _normalize_content(item.content)
-            if not content:
-                continue
-            try:
-                candidates.append(
-                    MemoryCandidate(
-                        content=content,
-                        kind=item.kind,
-                        importance=float(item.importance),
-                        tags=item.tags,
-                        source_checkpoint_id=str(checkpoint_id),
-                    )
-                )
-            except ValidationError as exc:
-                logger.debug(
-                    "Invalid memory candidate skipped: {}", type(exc).__name__
-                )
-        if not candidates:
-            return []
-
-        # Deduplicate within the turn (keep highest importance).
-        deduped: dict[tuple[str, str], MemoryCandidate] = {}
-        for cand in candidates:
-            key = (cand.kind, cand.content.casefold())
-            if key not in deduped or cand.importance > deduped[key].importance:
-                deduped[key] = cand
-        return list(deduped.values())
+        candidates = _candidates_from_extracted(extracted, checkpoint_id, policy)
+        return _dedupe_candidates(candidates)
     except Exception as exc:
         logger.warning("Memory extraction failed: {}", type(exc).__name__)
         return []
@@ -445,12 +473,16 @@ def consolidate_memory_candidates(
             # but usually distance-based). DocMindSqliteStore normalizes search results.
             score = getattr(best_match, "score", 0.0)
 
-            existing_value = best_match.value if isinstance(best_match.value, dict) else None
+            existing_value = (
+                best_match.value if isinstance(best_match.value, dict) else None
+            )
             existing_kind = (
                 existing_value.get("kind") if isinstance(existing_value, dict) else None
             )
             existing_content = (
-                existing_value.get("content") if isinstance(existing_value, dict) else None
+                existing_value.get("content")
+                if isinstance(existing_value, dict)
+                else None
             )
             existing_importance = (
                 float(existing_value.get("importance", 0.5))
@@ -472,7 +504,9 @@ def consolidate_memory_candidates(
                         )
                     else:
                         actions.append(
-                            ConsolidationAction(action="NOOP", existing_id=best_match.key)
+                            ConsolidationAction(
+                                action="NOOP", existing_id=best_match.key
+                            )
                         )
                 else:
                     actions.append(ConsolidationAction(action="ADD", candidate=cand))
@@ -491,7 +525,9 @@ def consolidate_memory_candidates(
                         )
                     else:
                         actions.append(
-                            ConsolidationAction(action="NOOP", existing_id=best_match.key)
+                            ConsolidationAction(
+                                action="NOOP", existing_id=best_match.key
+                            )
                         )
                 else:
                     if cand.importance >= existing_importance:
@@ -505,7 +541,9 @@ def consolidate_memory_candidates(
                         )
                     else:
                         actions.append(
-                            ConsolidationAction(action="NOOP", existing_id=best_match.key)
+                            ConsolidationAction(
+                                action="NOOP", existing_id=best_match.key
+                            )
                         )
                 continue
 

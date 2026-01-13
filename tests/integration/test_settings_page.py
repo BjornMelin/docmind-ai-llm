@@ -11,6 +11,8 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture(name="settings_app_test")
 def fixture_settings_app_test(tmp_path, monkeypatch) -> AppTest:
@@ -277,8 +279,11 @@ def _apply_provider(
     _click_apply(app)
 
 
-def _reset_settings_defaults() -> None:
-    """Reset global settings to defaults to avoid cross-test pollution."""
+@pytest.fixture
+def reset_settings_after_test() -> None:
+    """Reset global settings to defaults after test to avoid cross-test pollution."""
+    yield
+    # Cleanup: reset settings to defaults
     import importlib
 
     settings_mod = importlib.import_module("src.config.settings")
@@ -286,7 +291,9 @@ def _reset_settings_defaults() -> None:
 
 
 def test_settings_toggle_providers_and_apply(
-    settings_app_test: AppTest, monkeypatch: pytest.MonkeyPatch
+    settings_app_test: AppTest,
+    monkeypatch: pytest.MonkeyPatch,
+    reset_settings_after_test,
 ) -> None:
     """Toggle each provider and Apply runtime, asserting LLM kind per provider.
 
@@ -351,5 +358,3 @@ def test_settings_toggle_providers_and_apply(
         allow_gguf_base=True,
     )
     assert _settings.llm_backend == "llamacpp"
-
-    _reset_settings_defaults()

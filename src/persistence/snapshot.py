@@ -748,9 +748,8 @@ class SnapshotManager:
             "corpus_hash": corpus_hash,
             "config_hash": config_hash,
             "versions": versions or {},
+            "graph_exports": graph_exports or [],
         }
-        if graph_exports:
-            metadata["graph_exports"] = graph_exports
         write_manifest(tmp_dir, metadata)
 
     def finalize_snapshot(self, tmp_dir: Path) -> Path:

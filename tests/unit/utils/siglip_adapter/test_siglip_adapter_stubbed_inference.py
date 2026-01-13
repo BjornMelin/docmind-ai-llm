@@ -8,16 +8,8 @@ pytestmark = pytest.mark.unit
 
 
 def test_siglip_embedding_text_and_image_with_stubbed_model() -> None:
-    try:
-        import torch  # type: ignore
-    except ImportError:  # pragma: no cover
-        pytest.skip("torch not installed")
-
-    try:
-        from PIL import Image  # type: ignore
-    except ImportError:  # pragma: no cover
-        pytest.skip("Pillow not installed")
-
+    torch = pytest.importorskip("torch")  # type: ignore
+    pil_image = pytest.importorskip("PIL.Image")  # type: ignore
     import numpy as np
 
     from src.utils.siglip_adapter import SiglipEmbedding
@@ -45,6 +37,7 @@ def test_siglip_embedding_text_and_image_with_stubbed_model() -> None:
             )
 
     emb = SiglipEmbedding(model_id="stub", device="cpu")
+    # Inject stubs to bypass lazy HuggingFace model loading
     emb._model = _Model()  # type: ignore[attr-defined]
     emb._proc = _Proc()  # type: ignore[attr-defined]
     emb._dim = 4  # type: ignore[attr-defined]
@@ -59,7 +52,7 @@ def test_siglip_embedding_text_and_image_with_stubbed_model() -> None:
     for row in text_batch:
         assert float(np.linalg.norm(row)) == pytest.approx(1.0, rel=1e-4)
 
-    img = Image.new("RGB", (32, 32), color=(255, 0, 0))
+    img = pil_image.new("RGB", (32, 32), color=(255, 0, 0))
     v = emb.get_image_embedding(img)
     assert v.shape == (4,)
     assert float(np.linalg.norm(v)) == pytest.approx(1.0, rel=1e-4)

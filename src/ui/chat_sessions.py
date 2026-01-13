@@ -54,8 +54,15 @@ def _maybe_seed_from_query_params() -> None:
         return
     if "chat" in qp and "chat_thread_id" not in st.session_state:
         st.session_state["chat_thread_id"] = str(qp.get("chat") or "")
-    if "checkpoint" in qp and "chat_resume_checkpoint_id" not in st.session_state:
-        st.session_state["chat_resume_checkpoint_id"] = str(qp.get("checkpoint") or "")
+    # SPEC-041 prefers `?branch=<checkpoint_id>` for time-travel links.
+    if "chat_resume_checkpoint_id" not in st.session_state:
+        if "branch" in qp:
+            st.session_state["chat_resume_checkpoint_id"] = str(qp.get("branch") or "")
+        elif "checkpoint" in qp:
+            # Back-compat: accept older links.
+            st.session_state["chat_resume_checkpoint_id"] = str(
+                qp.get("checkpoint") or ""
+            )
 
 
 def ensure_active_session(conn: sqlite3.Connection) -> ChatSession:
@@ -152,8 +159,12 @@ def _render_new_delete_controls(conn: sqlite3.Connection, active: ChatSession) -
 
 def _handle_rename(conn: sqlite3.Connection, active: ChatSession) -> None:
     """Render the rename control for the active session."""
-    new_title = st.text_input("Rename", value=active.title)
-    if new_title and new_title != active.title and st.button("Save name"):
+    new_title = st.text_input("Rename", value=active.title, key="chat_session_rename")
+    if (
+        new_title
+        and new_title != active.title
+        and st.button("Save name", key="chat_session_rename_save")
+    ):
         rename_session(conn, thread_id=active.thread_id, title=new_title)
         st.rerun()
 
@@ -185,9 +196,14 @@ def render_time_travel_sidebar(*, checkpoints: list[dict[str, object]]) -> None:
         if not ids:
             st.caption("No checkpoints yet.")
             return
-        picked = st.selectbox("Checkpoint", options=ids, index=0)
-        if st.button("Resume from checkpoint"):
+        picked = st.selectbox(
+            "Checkpoint",
+            options=ids,
+            index=0,
+            key="chat_time_travel_checkpoint",
+        )
+        if st.button("Resume from checkpoint", key="chat_time_travel_resume"):
             st.session_state["chat_resume_checkpoint_id"] = picked
             with contextlib.suppress(Exception):
-                st.query_params["checkpoint"] = picked
+                st.query_params["branch"] = picked
             st.rerun()

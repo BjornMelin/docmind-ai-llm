@@ -55,6 +55,15 @@ def test_get_or_init_user_id_defaults_to_local() -> None:
 def test_seed_from_query_params_sets_session_state() -> None:
     import streamlit as st  # type: ignore
 
+    st.query_params.update({"chat": "t1", "branch": "c1"})
+    cs._maybe_seed_from_query_params()  # type: ignore[attr-defined]
+    assert st.session_state["chat_thread_id"] == "t1"
+    assert st.session_state["chat_resume_checkpoint_id"] == "c1"
+
+
+def test_seed_from_query_params_accepts_checkpoint_backcompat() -> None:
+    import streamlit as st  # type: ignore
+
     st.query_params.update({"chat": "t1", "checkpoint": "c1"})
     cs._maybe_seed_from_query_params()  # type: ignore[attr-defined]
     assert st.session_state["chat_thread_id"] == "t1"
@@ -149,7 +158,7 @@ def test_render_time_travel_sidebar_sets_checkpoint(monkeypatch) -> None:
 
     cs.render_time_travel_sidebar(checkpoints=[{"checkpoint_id": "c1"}])
     assert st.session_state["chat_resume_checkpoint_id"] == "c1"
-    assert st.query_params.get("checkpoint") == "c1"
+    assert st.query_params.get("branch") == "c1"
     assert reruns["n"] == 1
 
 

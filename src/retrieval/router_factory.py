@@ -86,7 +86,11 @@ def _build_vector_tool(
             vector_post,
             similarity_top_k=int(getattr(cfg.retrieval, "top_k", 10)),
         )
-    except (TypeError, AttributeError, ValueError):
+    except (TypeError, AttributeError, ValueError) as exc:
+        logger.warning(
+            "Vector query engine fallback: using default configuration ({exc})",
+            exc=exc,
+        )
         vector_engine = vector_index.as_query_engine()
 
     return query_engine_tool_cls(
@@ -228,15 +232,15 @@ def _maybe_add_graph_tool(
     the_llm: Any,
 ) -> None:
     """Add GraphRAG tool when enabled and available."""
-    if (
-        pg_index is None
-        or getattr(pg_index, "property_graph_store", None) is None
-        or not (
-            bool(cfg.is_graphrag_enabled())
-            if hasattr(cfg, "is_graphrag_enabled")
-            else bool(getattr(cfg, "enable_graphrag", True))
-        )
-    ):
+    if pg_index is None or getattr(pg_index, "property_graph_store", None) is None:
+        return
+
+    graphrag_enabled = (
+        cfg.is_graphrag_enabled()
+        if hasattr(cfg, "is_graphrag_enabled")
+        else getattr(cfg, "enable_graphrag", True)
+    )
+    if not graphrag_enabled:
         return
     try:
         graph_depth = int(
@@ -351,7 +355,7 @@ def build_router_engine(
     except (AttributeError, TypeError, ValueError):  # pragma: no cover - defensive
         use_rerank_flag = True
 
-    the_llm = llm if llm is not None else None
+    the_llm = llm
     get_pp = _safe_get_postprocessors()
     tools: list[Any] = [
         _build_vector_tool(

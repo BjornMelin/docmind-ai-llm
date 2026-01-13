@@ -3,7 +3,7 @@
 This module intentionally mirrors the lightweight patterns recommended in the
 official LangGraph tutorials and the ``langgraph-supervisor-py`` reference
 implementation. The agent simply orchestrates the shared
-``retrieve_documents`` tool through ``create_react_agent`` and only contains
+``retrieve_documents`` tool through ``create_agent`` and only contains
 small amounts of glue code for metrics and result normalization.
 """
 
@@ -15,6 +15,7 @@ from contextlib import suppress
 from functools import wraps
 from typing import Any, cast
 
+from langchain.agents import create_agent
 from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.errors import (
@@ -27,7 +28,6 @@ from langgraph.errors import (
     NodeInterrupt,
     TaskNotFound,
 )
-from langgraph.prebuilt import create_react_agent
 from llama_index.core.memory import ChatMemoryBuffer
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -216,7 +216,7 @@ class RetrievalAgent:
         """Initialize the agent with its language model and shared tool state.
 
         Args:
-            llm: Large language model provided to ``create_react_agent``.
+            llm: Large language model provided to ``create_agent``.
             tools_data: Shared retrieval configuration injected into the tool.
         """
         self.llm = llm
@@ -229,7 +229,7 @@ class RetrievalAgent:
             "graphrag": 0,
             "fallback": 0,
         }
-        self.agent = create_react_agent(
+        self.agent = create_agent(
             model=self.llm,
             tools=[retrieve_documents],
             name="retrieval_agent",

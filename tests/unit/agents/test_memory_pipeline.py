@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -20,13 +20,13 @@ from src.agents.tools.memory import (
 )
 
 
-class FakeStore:
+class _FakeStore:
     def __init__(self, items: list[SearchItem]) -> None:
         self.items = items
         self.put_calls: list[dict] = []
         self.deleted: list[str] = []
 
-    def search(self, namespace, *, limit=10, offset=0, query=None, filter=None):
+    def search(self, namespace, *, limit=10, offset=0, query=None, filt=None):
         return self.items[offset : offset + limit]
 
     def put(self, namespace, key, value, index=None, ttl=None):
@@ -73,7 +73,11 @@ def test_consolidate_memory_candidates_noop():
     store = MagicMock()
     existing_item = MagicMock()
     existing_item.key = "mem_1"
-    existing_item.value = {"content": "Existing fact", "kind": "fact", "importance": 0.9}
+    existing_item.value = {
+        "content": "Existing fact",
+        "kind": "fact",
+        "importance": 0.9,
+    }
     existing_item.score = 0.95
     store.search.return_value = [existing_item]
 
@@ -91,11 +95,18 @@ def test_consolidate_memory_candidates_noop():
 
 
 def test_consolidate_memory_candidates_update():
-    """Test consolidation when similar memory exists and candidate is higher importance."""
+    """Test consolidation when similar memory exists.
+
+    Candidate is higher importance.
+    """
     store = MagicMock()
     existing_item = MagicMock()
     existing_item.key = "mem_1"
-    existing_item.value = {"content": "Old preference", "kind": "preference", "importance": 0.2}
+    existing_item.value = {
+        "content": "Old preference",
+        "kind": "preference",
+        "importance": 0.2,
+    }
     existing_item.score = 0.9
     store.search.return_value = [existing_item]
 
@@ -118,7 +129,11 @@ def test_consolidate_memory_candidates_score_none_fallback():
     store = MagicMock()
     existing_item = MagicMock()
     existing_item.key = "mem_1"
-    existing_item.value = {"content": "Existing fact", "kind": "fact", "importance": 0.7}
+    existing_item.value = {
+        "content": "Existing fact",
+        "kind": "fact",
+        "importance": 0.7,
+    }
     existing_item.score = None
     store.search.return_value = [existing_item]
 
@@ -136,14 +151,14 @@ def test_consolidate_memory_candidates_score_none_fallback():
 
 def test_apply_consolidation_policy_ttl_and_eviction():
     """Apply TTL to low-importance items and evict when over cap."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     namespace = ("memories", "user1")
     items = [
         SearchItem(namespace, "k1", {"importance": 0.1}, now, now, score=None),
         SearchItem(namespace, "k2", {"importance": 0.9}, now, now, score=None),
         SearchItem(namespace, "k3", {"importance": 0.2}, now, now, score=None),
     ]
-    store = FakeStore(items)
+    store = _FakeStore(items)
 
     policy = MemoryConsolidationPolicy(
         similarity_threshold=0.85,
@@ -180,9 +195,7 @@ def test_extract_memory_candidates_structured_output():
     structured = MagicMock()
     structured.invoke.return_value = MemoryExtractionResult(
         memories=[
-            ExtractedMemory(
-                content="fact1", kind="fact", importance=0.5, tags=["t"]
-            )
+            ExtractedMemory(content="fact1", kind="fact", importance=0.5, tags=["t"])
         ]
     )
 
@@ -201,7 +214,9 @@ def test_extract_memory_candidates_json_fallback():
     """Test extraction when structured output is unavailable."""
     llm = MagicMock(spec=["invoke"])
     llm.invoke.return_value = MagicMock(
-        content='{"memories": [{"content": "fact1", "kind": "fact", "importance": 0.5}]}'
+        content=(
+            '{"memories": [{"content": "fact1", "kind": "fact", "importance": 0.5}]}'
+        )
     )
 
     messages = [HumanMessage(content="Remember that I like cats")]

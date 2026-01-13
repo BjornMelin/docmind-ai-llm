@@ -70,6 +70,7 @@ def clean_streamlit_session(monkeypatch):
     )
     monkeypatch.setattr(st, "chat_message", _chat_message, raising=False)
     monkeypatch.setattr(st, "chat_input", lambda *_a, **_k: None, raising=False)
+    monkeypatch.setattr(st, "divider", lambda *_a, **_k: None, raising=False)
     monkeypatch.setattr(
         st,
         "write_stream",
@@ -578,6 +579,7 @@ def test_render_memory_sidebar_delete_flow(monkeypatch, clean_streamlit_session)
             self.key = "k1"
             self.value = {"content": "hello"}
             self.score = 0.5
+            self.namespace = ("memories", "u1", "t1")
 
     deleted: list[tuple] = []
 

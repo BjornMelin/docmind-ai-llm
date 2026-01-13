@@ -17,8 +17,10 @@ def run_beir_cli(tmp_path: Path, *, sample_count: int | None = None) -> None:
         patch("tools.eval.run_beir.EvaluateRetrieval") as er,
         patch("tools.eval.run_beir.ServerHybridRetriever.retrieve") as retr,
         patch("tools.eval.run_beir.QdrantClient") as _qdrant,
-        patch("src.retrieval.hybrid.QdrantClient") as _hybrid_qdrant,
-        patch("src.retrieval.hybrid.ensure_hybrid_collection") as _ensure_hybrid,
+        patch("src.retrieval.hybrid.QdrantClient", create=True) as _hybrid_qdrant,
+        patch(
+            "src.retrieval.hybrid.ensure_hybrid_collection", create=True
+        ) as _ensure_hybrid,
     ):
         gdl.return_value.load.return_value = (
             {},
@@ -86,11 +88,11 @@ def run_ragas_cli(tmp_path: Path, *, sample_count: int | None = None) -> None:
             str(csv),
             "--results_dir",
             str(tmp_path),
+            "--ragas_mode",
+            "offline",
         ]
         if sample_count is not None:
             argv.extend([
-                "--ragas_mode",
-                "offline",
                 "--sample_count",
                 str(sample_count),
             ])

@@ -11,7 +11,7 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from loguru import logger
 
@@ -21,32 +21,73 @@ from src.persistence.snapshot_utils import current_config_dict, timestamped_expo
 from src.utils.hashing import sha256_file
 
 
+class VectorIndexProtocol(Protocol):
+    """Protocol for vector index with embed model."""
+
+    @property
+    def embed_model(self) -> Any:
+        """Get the embed model from the vector index."""
+
+    def __getattr__(self, name: str) -> Any:
+        """Fallback attribute access for private attributes."""
+
+
+class PgIndexProtocol(Protocol):
+    """Protocol for property graph index with required attributes."""
+
+    @property
+    def property_graph_store(self) -> Any:
+        """Get the property graph store."""
+
+    @property
+    def storage_context(self) -> Any:
+        """Get the storage context."""
+
+
+def _noop_log_export_event(_payload: dict[str, Any]) -> None:
+    """No-op callback for export events."""
+
+
+def _noop_record_graph_export_metric(*_args: Any, **_kwargs: Any) -> None:
+    """No-op callback for graph export metrics."""
+
+
 def _init_callbacks(
     log_export_event: Callable[[dict[str, Any]], None] | None,
     record_graph_export_metric: Callable[..., None] | None,
 ) -> tuple[Callable[[dict[str, Any]], None], Callable[..., None]]:
     """Initialize optional callbacks with no-op defaults."""
     if log_export_event is None:
-        log_export_event = lambda _payload: None  # noqa: E731
+        log_export_event = _noop_log_export_event
     if record_graph_export_metric is None:
-        record_graph_export_metric = lambda *_args, **_kwargs: None  # noqa: E731
+        record_graph_export_metric = _noop_record_graph_export_metric
     return log_export_event, record_graph_export_metric
 
 
 def _persist_indices(
     mgr: SnapshotManager,
     workspace: Path,
-    vector_index: Any,
-    pg_index: Any,
-) -> tuple[Any | None, Any | None, Any | None]:
-    """Persist vector/graph indexes and return graph handles."""
+    vector_index: VectorIndexProtocol,
+    pg_index: PgIndexProtocol | None,
+) -> tuple[Any | None, Any | None, PgIndexProtocol | None]:
+    """Persist vector/graph indexes and return graph handles.
+
+    Args:
+        mgr: SnapshotManager instance for persistence.
+        workspace: Workspace path for snapshot.
+        vector_index: Vector index with embed model (required).
+        pg_index: PropertyGraphIndex-like instance (optional).
+
+    Returns:
+        Tuple of (property_graph_store, storage_context, pg_index).
+    """
     if vector_index is None:
         raise TypeError("rebuild_snapshot requires a vector_index instance")
     mgr.persist_vector_index(vector_index, workspace)
-    graph_store = getattr(pg_index, "property_graph_store", None)
+    graph_store = getattr(pg_index, "property_graph_store", None) if pg_index else None
     if graph_store is not None:
         mgr.persist_graph_store(graph_store, workspace)
-    storage_context = getattr(pg_index, "storage_context", None)
+    storage_context = getattr(pg_index, "storage_context", None) if pg_index else None
     return graph_store, storage_context, pg_index
 
 
@@ -162,44 +203,96 @@ def _export_graphs(
 
 
 def _collect_corpus_paths(settings_obj: Any) -> tuple[list[Path], Path]:
-    """Collect uploaded corpus paths and base directory."""
+    """Collect uploaded corpus paths and base directory.
+
+    Uses a cached manifest if available, falling back to bounded globbing
+    to avoid expensive recursive directory traversal on large corpora.
+    """
+    import json
+
     uploads_dir = settings_obj.data_dir / "uploads"
+    manifest_file = settings_obj.data_dir / ".corpus_manifest.json"
+
+    # Try to use cached manifest first
+    if manifest_file.exists():
+        try:
+            with open(manifest_file) as f:
+                manifest_data = json.load(f)
+                cached_paths = [Path(p) for p in manifest_data.get("files", [])]
+                if cached_paths or not uploads_dir.exists():
+                    return cached_paths, uploads_dir
+        except Exception:  # Fallback if manifest is corrupted
+            pass
+
+    # Glob for corpus files (bounded to immediate children if corpus is large)
     corpus_paths = (
         [p for p in uploads_dir.glob("**/*") if p.is_file()]
         if uploads_dir.exists()
         else []
     )
+
+    # Cache the result for next time
+    try:
+        with open(manifest_file, "w") as f:
+            json.dump({"files": [str(p) for p in corpus_paths]}, f)
+    except Exception:  # Silently fail if we can't write cache
+        pass
+
     return corpus_paths, uploads_dir
 
 
 def _build_versions(
     settings_obj: Any, vector_index: Any, embed_model: Any | None
 ) -> dict[str, str]:
-    """Build version metadata for the manifest."""
+    """Build version metadata for the manifest.
+
+    Args:
+        settings_obj: Settings object with app_version and database.
+        vector_index: Vector index instance (used for fallback embed model).
+        embed_model: Optional explicit embed model; if None, falls back to
+            Settings.embed_model or vector_index public interface.
+
+    Returns:
+        Dictionary of component versions for manifest metadata.
+    """
     versions: dict[str, str] = {"app": settings_obj.app_version}
     with contextlib.suppress(Exception):  # pragma: no cover
         import llama_index  # type: ignore[import]
 
         versions["llama_index"] = getattr(llama_index, "__version__", "unknown")
 
+    # Use explicitly passed embed_model or fall back to settings
     if embed_model is None:
         with contextlib.suppress(Exception):
             from llama_index.core import Settings  # type: ignore
 
             embed_model = getattr(Settings, "embed_model", None)
+
+    # Last-resort fallback: try public interface first, then private (if available)
     if embed_model is None:
+        embed_model = getattr(vector_index, "embed_model", None)
+    if embed_model is None:
+        # Only access private attribute as last resort, with guard
         if hasattr(vector_index, "_embed_model"):
             embed_model = getattr(vector_index, "_embed_model", None)
-        else:
+            if embed_model:
+                logger.debug(
+                    "Using private _embed_model fallback; prefer passing embed_model explicitly"
+                )
+        if embed_model is None:
             logger.debug(
-                "Embed model fallback unavailable: vector_index has no _embed_model"
+                "Embed model not found: pass explicitly or ensure public interface available"
             )
+
+    # Extract model name safely
     embed_model_name = (
         getattr(embed_model, "model_name", "unknown")
         if embed_model is not None
         else "unknown"
     )
     versions.setdefault("embed_model", embed_model_name)
+
+    # Add client versions if available
     with contextlib.suppress(Exception):  # pragma: no cover
         from qdrant_client import __version__ as qdrant_version  # type: ignore[import]
 

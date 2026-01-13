@@ -31,10 +31,10 @@ import time
 from collections.abc import Callable
 from typing import Any, cast
 
+from langchain.agents import create_agent
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.prebuilt import create_react_agent
 from langgraph_supervisor import create_supervisor
 from langgraph_supervisor.handoff import create_forward_message_tool
 
@@ -337,11 +337,12 @@ class MultiAgentCoordinator:
             )
 
             agents: dict[str, Any] = {
-                name: create_react_agent(
+                name: create_agent(
                     model,
                     tools=tool_loader(),
                     state_schema=MultiAgentState,
                     name=name,
+                    store=self.store,
                 )
                 for name, tool_loader in agent_specs
             }

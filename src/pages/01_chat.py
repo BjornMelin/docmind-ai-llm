@@ -251,20 +251,13 @@ def _render_sources_fragment() -> None:
 def _render_memory_sidebar(user_id: str, thread_id: str) -> None:
     """Render a simple memory review UI (ADR-057/SPEC-041)."""
     store = _get_memory_store()
-    with st.sidebar:
-        st.subheader("Memories")
-        scope = st.selectbox(
-            "Scope",
-            options=["session", "user"],
-            index=0,
-            key="memory_scope",
-        )
-        ns = (
-            ("memories", str(user_id), str(thread_id))
-            if scope == "session"
-            else ("memories", str(user_id))
-        )
 
+    def memory_namespace(*, scope: str) -> tuple[str, ...]:
+        if scope == "session":
+            return ("memories", str(user_id), str(thread_id))
+        return ("memories", str(user_id))
+
+    def render_add(*, ns: tuple[str, ...]) -> None:
         add = st.text_input("Add memory", key="memory_add")
         last_saved = st.session_state.get("_memory_last_saved")
         if st.button("Save memory", key="memory_save") and add.strip():
@@ -280,31 +273,82 @@ def _render_memory_sidebar(user_id: str, thread_id: str) -> None:
                 st.session_state["memory_add"] = ""
                 st.rerun()
 
-        q = st.text_input("Search", key="memory_search")
-        if q.strip():
-            results = store.search(ns, query=q.strip(), limit=10)
-        else:
-            results = store.search(ns, query=None, limit=10)
-
+    def render_results(*, ns: tuple[str, ...]) -> None:
+        q = st.text_input("Search", key="memory_search").strip()
+        results = store.search(ns, query=q or None, limit=10)
         if not results:
             st.caption("No memories stored.")
             return
+
         for item in results:
-            content = None
-            try:
-                content = item.value.get("content")
-            except Exception:
-                content = None
+            value = getattr(item, "value", None)
+            content = value.get("content") if isinstance(value, dict) else None
             st.caption(f"{item.key} · score={getattr(item, 'score', None)}")
             if content:
                 st.write(str(content))
 
             confirm_key = f"mem_del_confirm__{item.key}"
             confirm = st.checkbox("Confirm", key=confirm_key)
-            if st.button("Delete", key=f"mem_del_{item.key}", disabled=not confirm):
-                store.delete(ns, str(item.key))
+            if st.button(
+                "Delete",
+                key=f"mem_del_{item.key}",
+                disabled=not confirm,
+            ):
+                item_namespace = getattr(item, "namespace", ns)
+                store.delete(item_namespace, str(item.key))
                 st.session_state.pop(confirm_key, None)
                 st.rerun()
+
+    def purge_namespace(*, ns: tuple[str, ...]) -> int:
+        purged = 0
+        while True:
+            batch = store.search(ns, query=None, limit=5000)
+            if not batch:
+                break
+            for item in batch:
+                store.delete(getattr(item, "namespace", ns), str(item.key))
+            purged += len(batch)
+            if len(batch) < 5000:
+                break
+        return purged
+
+    def render_purge(*, ns: tuple[str, ...], scope: str) -> None:
+        st.divider()
+        st.caption("Danger zone")
+        purge_confirm_key = f"mem_purge_confirm__{scope}__{user_id}__{thread_id}"
+        purge_confirm = st.checkbox(
+            "Confirm purge (irreversible)",
+            key=purge_confirm_key,
+        )
+        if st.button(
+            "Purge scope memories",
+            type="primary",
+            key=f"mem_purge__{scope}__{user_id}__{thread_id}",
+            disabled=not purge_confirm,
+        ):
+            purged = purge_namespace(ns=ns)
+            logger.info(
+                "Purged {} memory items (scope={} user_id={} thread_id={})",
+                purged,
+                scope,
+                user_id,
+                thread_id,
+            )
+            st.session_state.pop(purge_confirm_key, None)
+            st.rerun()
+
+    with st.sidebar:
+        st.subheader("Memories")
+        scope = st.selectbox(
+            "Scope",
+            options=["session", "user"],
+            index=0,
+            key="memory_scope",
+        )
+        ns = memory_namespace(scope=scope)
+        render_add(ns=ns)
+        render_results(ns=ns)
+        render_purge(ns=ns, scope=scope)
 
 
 def _ensure_router_engine() -> None:
