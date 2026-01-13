@@ -68,7 +68,8 @@ def timestamped_export_path(out_dir: Path, extension: str) -> Path:
     ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     candidate = out_dir / f"graph_export-{ts}.{extension}"
     counter = 1
-    while candidate.exists():
+    max_attempts = 1000  # Safety limit to prevent infinite loops
+    while candidate.exists() and counter < max_attempts:
         candidate = out_dir / f"graph_export-{ts}-{counter}.{extension}"
         counter += 1
     return candidate

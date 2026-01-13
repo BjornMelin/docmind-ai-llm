@@ -589,7 +589,7 @@ def _render_reports(analyzer: CoverageAnalyzer, args: argparse.Namespace) -> Non
         print("\n" + report)
     if args.html:
         if COVERAGE_HTML_DIR.exists():
-            print(f"📊 HTML coverage report: {COVERAGE_HTML_DIR}/index.html")
+            print(f"📊 HTML coverage report: {COVERAGE_HTML_DIR / 'index.html'}")
         else:
             print("HTML coverage report not found. Run --collect to generate.")
 

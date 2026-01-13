@@ -220,8 +220,8 @@ def get_image_embedder(
 ) -> ImageEmbedder:  # pragma: no cover - simple factory
     """Return an ImageEmbedder with the requested backbone.
 
-    Default backbone is SigLIP (preferred). Accepts "openclip_vitl14",
-    "openclip_vith14", or "siglip_base".
+    Default backbone is SigLIP (preferred). Accepts "auto", "openclip_vitl14",
+    "openclip_vith14", "siglip_base", or "bge_visualized".
     """
     from src.models.embeddings import ImageEmbedder
 

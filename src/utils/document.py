@@ -29,14 +29,19 @@ def _sanitize_doc_metadata(
     meta: dict[str, Any], *, source_filename: str
 ) -> dict[str, Any]:
     out = dict(meta or {})
-    # Drop common path keys.
+    # Drop common path keys to enforce path hygiene.
     for key in ("source_path", "file_path", "path"):
         out.pop(key, None)
     # Normalize `source` to basename (Unstructured/LlamaIndex frequently use
-    # paths here).
+    # absolute or relative paths here). Only keep the filename component.
     src = out.get("source")
     if isinstance(src, str) and ("/" in src or "\\" in src or src.startswith("file:")):
-        out["source"] = Path(src).name
+        # Extract only the filename component, stripping any path
+        try:
+            out["source"] = Path(src).name or source_filename
+        except (ValueError, TypeError):
+            # Fallback if Path parsing fails
+            out["source"] = source_filename
     out.setdefault("source_filename", source_filename)
     return out
 

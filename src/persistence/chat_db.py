@@ -12,6 +12,7 @@ creates DocMind-owned tables only.
 from __future__ import annotations
 
 import contextlib
+import logging
 import sqlite3
 import uuid
 from dataclasses import dataclass
@@ -21,6 +22,8 @@ from src.config.settings import DocMindSettings, settings
 from src.persistence.memory_store import NAMESPACE_THREAD_INDEX
 from src.persistence.path_utils import resolve_path_under_data_dir
 from src.utils.time import now_ms
+
+logger = logging.getLogger(__name__)
 
 CHAT_SESSION_TABLE = "chat_session"
 
@@ -252,22 +255,24 @@ def purge_session(conn: sqlite3.Connection, *, thread_id: str) -> None:
         # Namespace layout is positional (SPEC-041):
         # `namespace=(user_id, session_type, thread_id, ...)` so `thread_id` maps to
         # `ns{NAMESPACE_THREAD_INDEX}` (e.g. ns2).
-        if NAMESPACE_THREAD_INDEX != 2:
-            raise ValueError(
-                "Unexpected namespace layout: expected thread_id at ns2 "
-                f"(NAMESPACE_THREAD_INDEX={NAMESPACE_THREAD_INDEX})"
-            )
         try:
-            conn.execute(
-                "DELETE FROM docmind_store_vec WHERE ns2=?;",
-                (tid,),
-            )
-            conn.execute(
-                "DELETE FROM docmind_store_items WHERE ns2=?;",
-                (tid,),
-            )
+            if NAMESPACE_THREAD_INDEX == 2:
+                conn.execute(
+                    "DELETE FROM docmind_store_vec WHERE ns2=?;",
+                    (tid,),
+                )
+                conn.execute(
+                    "DELETE FROM docmind_store_items WHERE ns2=?;",
+                    (tid,),
+                )
+            else:
+                logger.debug(
+                    "Skipping memory store cleanup; namespace layout differs "
+                    "(NAMESPACE_THREAD_INDEX=%s)",
+                    NAMESPACE_THREAD_INDEX,
+                )
         except sqlite3.OperationalError:
-            # Tables not created yet.
+            # Tables not created yet; fail gracefully.
             pass
 
         conn.execute(

@@ -9,8 +9,25 @@ def resolve_path_under_data_dir(*, path: Path, data_dir: Path, label: str) -> Pa
     """Resolve a path anchored under data_dir.
 
     Validates that the final path and all components within data_dir are not symlinks.
-    Note: symlink checks for existing paths only; callers creating new paths should use
-    safe file flags (O_NOFOLLOW) to prevent TOCTOU attacks.
+    Absolute paths are expanded; relative paths are anchored under data_dir if they are
+    simple filenames (parent == '.'), otherwise treated as relative to cwd and validated
+    to still resolve under data_dir.
+
+    Args:
+        path: Path to resolve (absolute or relative).
+        data_dir: Base directory; final path must be under this directory.
+        label: Human-readable label for error messages.
+
+    Returns:
+        Resolved absolute path, guaranteed to be under data_dir and free of symlinks.
+
+    Raises:
+        ValueError: If the path is a symlink, contains symlink components, or escapes
+        data_dir.
+
+    Note:
+        Symlink checks apply only to existing paths. Callers creating new paths should
+        use safe file flags (O_NOFOLLOW) to prevent TOCTOU attacks.
     """
     if path.is_absolute():
         candidate = path.expanduser()

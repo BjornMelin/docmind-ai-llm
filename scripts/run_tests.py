@@ -37,6 +37,7 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -115,11 +116,8 @@ class TestRunner:
                 with contextlib.suppress(OSError):
                     path.unlink()
             else:
-                subprocess.run(
-                    ["rm", "-rf", str(path)],
-                    cwd=self.project_root,
-                    check=False,
-                )
+                with contextlib.suppress(OSError):
+                    shutil.rmtree(path)
 
     def clean_artifacts(self) -> None:
         """Clean test artifacts and caches."""
@@ -138,25 +136,20 @@ class TestRunner:
 
         for pattern in artifacts_to_clean:
             if pattern.startswith("*."):
-                # Use find for file patterns
-                subprocess.run(
-                    ["find", ".", "-name", pattern, "-delete"],
-                    cwd=self.project_root,
-                    capture_output=True,
-                    check=False,
-                )
+                # Use glob for file patterns
+                for path in self.project_root.rglob(pattern):
+                    with contextlib.suppress(OSError):
+                        path.unlink()
             else:
-                # Remove directories
+                # Remove directories or files
                 path = self.project_root / pattern
                 if path.exists():
                     if path.is_file():
-                        path.unlink()
+                        with contextlib.suppress(OSError):
+                            path.unlink()
                     else:
-                        subprocess.run(
-                            ["rm", "-rf", str(path)],
-                            cwd=self.project_root,
-                            check=False,
-                        )
+                        with contextlib.suppress(OSError):
+                            shutil.rmtree(path)
 
         print("✅ Artifacts cleaned")
 
