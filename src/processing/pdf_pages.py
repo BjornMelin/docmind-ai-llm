@@ -237,31 +237,23 @@ def pdf_pages_to_image_documents(
     doc_id = str(document_id or pdf_path.stem or "document")
 
     for i, path, _rect, phash, page_text in entries:
+        step = "put_file"
+        ref = None
         try:
             ref = store.put_file(path)
-        except (OSError, ValueError) as exc:
-            logger.exception(
-                "ArtifactStore.put_file failed for PDF page image "
-                "(page={}, path={}, phash={})",
-                i,
-                path,
-                phash,
-            )
-            failed_pages.append((i, f"put_file: {exc}"))
-            continue
-
-        try:
+            step = "resolve_path"
             resolved_path = store.resolve_path(ref)
         except (OSError, ValueError) as exc:
             logger.exception(
-                "ArtifactStore.resolve_path failed for PDF page image "
+                "ArtifactStore.{} failed for PDF page image "
                 "(page={}, path={}, phash={}, ref={})",
+                step,
                 i,
                 path,
                 phash,
                 ref,
             )
-            failed_pages.append((i, f"resolve_path: {exc}"))
+            failed_pages.append((i, f"{step}: {exc}"))
             continue
 
         meta: dict[str, Any] = {

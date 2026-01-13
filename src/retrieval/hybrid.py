@@ -81,7 +81,7 @@ class ServerHybridRetriever:
         try:
             ensure_hybrid_collection(self._client, self.params.collection)
         except (
-            *QDRANT_SCHEMA_EXCEPTIONS,
+            QDRANT_SCHEMA_EXCEPTIONS
         ) as exc:  # pragma: no cover - defensive best-effort
             logger.debug("Hybrid schema ensure skipped: %s", exc)
 
@@ -139,7 +139,9 @@ class ServerHybridRetriever:
         return qmodels.FusionQuery(fusion=qmodels.Fusion.RRF)
 
     def _build_prefetch(
-        self, dense_vec: Any, sparse_vec: Any | None
+        self,
+        dense_vec: np.ndarray,
+        sparse_vec: qmodels.SparseVector | None,
     ) -> list[qmodels.Prefetch]:
         """Build prefetch queries for dense and optional sparse vectors."""
         prefetch: list[qmodels.Prefetch] = []
@@ -212,7 +214,7 @@ class ServerHybridRetriever:
         self, dedup_sorted: list[tuple[float, Any]]
     ) -> list[NodeWithScore]:
         """Convert deduplicated points into NodeWithScore items."""
-        points = [p for _score, p in dedup_sorted[: self.params.fused_top_k]]
+        points = [p for _, p in dedup_sorted[: self.params.fused_top_k]]
         return build_text_nodes(
             points,
             top_k=int(self.params.fused_top_k),

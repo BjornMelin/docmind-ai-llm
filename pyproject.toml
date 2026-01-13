@@ -465,3 +465,38 @@ enable_quality_gate_enforcement = true
 enable_intelligent_test_selection = true
 enable_fast_feedback_mode = true
 enable_deployment_gate_validation = true
+
+# Pyright Type Checking Configuration - Optimized for Performance
+[tool.pyright]
+include = ["src", "tests", "scripts"]
+exclude = [
+    "**/__pycache__",
+    ".venv",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".benchmarks",
+    "cache",
+    "data",
+    "docs",
+    "examples",
+    "logs",
+    "storage",
+    "templates",
+    "tests",
+    "tools",
+    "unused",
+    "opensrc",
+    "embeddings_cache",
+    "htmlcov",
+    ".opencode",
+    ".codex",
+    "**/*.egg-info",
+]
+pythonVersion = "3.11"
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "standard"
+reportMissingTypeStubs = "none"
+# Disable library code analysis for faster type checking
+# Trade-off: Less complete type info for untyped libraries (mitigated by reportMissingTypeStubs = "none")
+useLibraryCodeForTypes = false

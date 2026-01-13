@@ -159,26 +159,18 @@ class MultimodalFusionRetriever:
         self._text = text_retriever or ServerHybridRetriever(
             HybridParams(
                 collection=settings.database.qdrant_collection,
-                fused_top_k=int(getattr(settings.retrieval, "fused_top_k", 60)),
-                prefetch_sparse=int(
-                    getattr(settings.retrieval, "prefetch_sparse_limit", 400)
-                ),
-                prefetch_dense=int(
-                    getattr(settings.retrieval, "prefetch_dense_limit", 200)
-                ),
-                fusion_mode=str(getattr(settings.retrieval, "fusion_mode", "rrf")),
-                dedup_key=str(getattr(settings.retrieval, "dedup_key", "page_id")),
+                fused_top_k=settings.retrieval.fused_top_k,
+                prefetch_sparse=settings.retrieval.prefetch_sparse_limit,
+                prefetch_dense=settings.retrieval.prefetch_dense_limit,
+                fusion_mode=settings.retrieval.fusion_mode,
+                dedup_key=settings.retrieval.dedup_key,
             )
         )
         self._image = image_retriever or ImageSiglipRetriever(
             ImageSearchParams(collection=settings.database.qdrant_image_collection)
         )
-        self._fused_top_k = int(
-            fused_top_k or getattr(settings.retrieval, "fused_top_k", 60)
-        )
-        self._dedup_key = str(
-            dedup_key or getattr(settings.retrieval, "dedup_key", "page_id")
-        )
+        self._fused_top_k = fused_top_k or settings.retrieval.fused_top_k
+        self._dedup_key = dedup_key or settings.retrieval.dedup_key
 
     def close(self) -> None:
         """Close underlying retrievers (best-effort)."""
@@ -235,12 +227,12 @@ class MultimodalFusionRetriever:
             score = float(getattr(nws, "score", 0.0) or 0.0)
             meta = getattr(nws.node, "metadata", {}) or {}
             key = str(meta.get(key_name) or nws.node.node_id)
-            cur = best.get(key)
-            if cur is None or score > cur[0]:
-                best[key] = (score, nws)
+            best[key] = max(
+                best.get(key, (score, nws)), (score, nws), key=lambda x: x[0]
+            )
 
         dedup_sorted = sorted(best.values(), key=lambda x: (-x[0], x[1].node.node_id))
-        out = [nws for _score, nws in dedup_sorted[: self._fused_top_k]]
+        out = [nws for _, nws in dedup_sorted[: self._fused_top_k]]
 
         latency_ms = int((time.perf_counter() - t0) * 1000)
 

@@ -11,7 +11,6 @@ Key behaviors:
 - Optional structured-output flag for vLLM (SPEC-007 prep)
 """
 
-import logging
 import os
 import threading
 from contextlib import suppress
@@ -269,18 +268,16 @@ def _configure_llm() -> None:
         provider = settings.llm_backend
         model_name = settings.model or settings.vllm.model
         base_url = getattr(settings, "backend_base_url_normalized", None)
+        streaming = bool(getattr(settings, "llm_streaming_enabled", True))
         logger.info(
-            "LLM configured via factory: provider={} model={} base_url={}",
+            "LLM configured via factory: provider={} model={} base_url={} streaming={}",
             provider,
             model_name,
             base_url,
+            streaming,
         )
-        streaming = bool(getattr(settings, "llm_streaming_enabled", True))
-        logger.info("counter.provider_used: {}", provider)
-        logger.info("counter.streaming_enabled: {}", streaming)
     except (ImportError, RuntimeError, ValueError, OSError) as exc:
         logger.opt(exception=True).warning("Could not configure LLM: {}", exc)
-        logging.getLogger(__name__).warning("Could not configure LLM: %s", exc)
         Settings.llm = None
 
 
@@ -338,7 +335,6 @@ def _configure_embeddings() -> None:
         )
     except (ImportError, RuntimeError, ValueError, OSError) as exc:
         logger.opt(exception=True).warning("Could not configure embeddings: {}", exc)
-        logging.getLogger(__name__).warning("Could not configure embeddings: %s", exc)
         Settings.embed_model = None
 
 

@@ -18,6 +18,9 @@ PROCESSED_FILES: frozenset[str] = frozenset(
     {"router_factory", "01_chat", "coordinator"}
 )
 
+# Sentinel value for missing line numbers (sorts to end of list)
+LINE_NONE_SENTINEL: int = sys.maxsize
+
 
 def should_exclude(file_path: str) -> bool:
     """Check if file is already processed."""
@@ -73,8 +76,8 @@ def get_line_number(location: dict[str, Any] | None) -> int | None:
 
 
 def _get_issue_line_key(issue: dict[str, Any]) -> int:
-    """Get sortable line number for an issue (999999 when line is None)."""
-    return issue["line"] if issue["line"] is not None else 999999
+    """Get sortable line number for an issue (LINE_NONE_SENTINEL when line is None)."""
+    return issue["line"] if issue["line"] is not None else LINE_NONE_SENTINEL
 
 
 def _resolve_json_path(arg_path: str | None) -> Path | None:

@@ -55,9 +55,18 @@ def test_configure_llm_happy_path(monkeypatch, fake_settings):
 
 
 @pytest.mark.unit
-def test_configure_llm_security_failure(monkeypatch, fake_settings, caplog):
+def test_configure_llm_security_failure(monkeypatch, fake_settings):
     fake_settings.llm = object()
     monkeypatch.setattr("src.config.integrations.settings", MagicMock())
+
+    from loguru import logger as loguru_logger
+
+    messages: list[str] = []
+
+    def _sink(msg):  # type: ignore[no-untyped-def]
+        messages.append(str(msg.record.get("message", "")))
+
+    sink_id = loguru_logger.add(_sink, level="WARNING")
     with (
         patch(
             "src.config.integrations.settings._validate_endpoints_security",
@@ -65,9 +74,13 @@ def test_configure_llm_security_failure(monkeypatch, fake_settings, caplog):
         ),
         patch("src.config.integrations.build_llm"),
     ):
-        _configure_llm()
+        try:
+            _configure_llm()
+        finally:
+            loguru_logger.remove(sink_id)
+
         assert fake_settings.llm is None
-        assert any("blocked" in record.message for record in caplog.records)
+        assert any("blocked" in m for m in messages)
 
 
 @pytest.mark.unit
@@ -80,16 +93,29 @@ def test_should_configure_embeddings_checks_existing(fake_settings):
 
 
 @pytest.mark.unit
-def test_configure_embeddings_handles_failure(monkeypatch, fake_settings, caplog):
+def test_configure_embeddings_handles_failure(monkeypatch, fake_settings):
     fake_settings.embed_model = None
     monkeypatch.setattr("src.config.integrations.settings", MagicMock())
+
+    from loguru import logger as loguru_logger
+
+    messages: list[str] = []
+
+    def _sink(msg):  # type: ignore[no-untyped-def]
+        messages.append(str(msg.record.get("message", "")))
+
+    sink_id = loguru_logger.add(_sink, level="WARNING")
     with patch(
         "src.config.integrations.HuggingFaceEmbedding",
         side_effect=RuntimeError("embed error"),
     ):
-        _configure_embeddings()
+        try:
+            _configure_embeddings()
+        finally:
+            loguru_logger.remove(sink_id)
+
         assert fake_settings.embed_model is None
-        assert any("embed error" in record.message for record in caplog.records)
+        assert any("embed error" in m for m in messages)
 
 
 @pytest.mark.unit

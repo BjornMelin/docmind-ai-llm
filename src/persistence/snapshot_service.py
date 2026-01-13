@@ -95,7 +95,7 @@ def _persist_indices(
 def _export_graphs(
     *,
     workspace: Path,
-    pg_index: Any,
+    pg_index: PgIndexProtocol | None,
     vector_index: Any,
     graph_store: Any,
     storage_context: Any,

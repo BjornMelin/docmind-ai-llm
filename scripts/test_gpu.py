@@ -276,7 +276,8 @@ def _print_compatibility_summary_and_exit(
     gpu_status = "OK" if test_results["hardware"] else "FAIL"
     print(f"   GPU: {gpu_status} {gpu_info['name']}")
     cuda_status = "OK" if test_results["cuda"] else "FAIL"
-    print(f"   CUDA: {cuda_status} Available")
+    cuda_text = "Available" if test_results["cuda"] else "Not available"
+    print(f"   CUDA: {cuda_status} {cuda_text}")
     vram_status = "OK" if gpu_info["memory_total"] >= 12000 else "WARN"
     print(f"   VRAM: {vram_status} {gpu_info['memory_total']}MB")
     if test_results["hardware"] and test_results["cuda"]:

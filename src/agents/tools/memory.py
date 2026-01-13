@@ -318,7 +318,7 @@ class _SuppressTelemetry:
                 exc_type=exc_type.__name__,
                 exc=exc,
             )
-            return is_expected
+            return True
         return False
 
 

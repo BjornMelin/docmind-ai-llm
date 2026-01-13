@@ -653,7 +653,7 @@ def main() -> int:
         exit_code = _run_coverage_checks(analyzer, args)
         _render_reports(analyzer, args)
         exit_code = max(exit_code, _report_failures_and_warnings(analyzer))
-    except (OSError, ValueError, json.JSONDecodeError, subprocess.TimeoutExpired) as e:
+    except (OSError, ValueError, subprocess.TimeoutExpired) as e:
         logger.exception("Unexpected error during coverage checking")
         print(f"ERROR: Unexpected error: {e}")
         exit_code = 2

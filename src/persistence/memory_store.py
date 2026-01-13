@@ -304,6 +304,7 @@ class DocMindSqliteStore(BaseStore):
         "_closed",
         "_conn",
         "_filter_fetch_cap",
+        "_in_batch",
         "_lock",
         "_path",
         "_tokenized_fields",
@@ -361,6 +362,7 @@ class DocMindSqliteStore(BaseStore):
             ]
 
         self._vec_enabled = False
+        self._in_batch = False
         self._setup_schema()
 
     def close(self) -> None:
@@ -395,15 +397,17 @@ class DocMindSqliteStore(BaseStore):
 
     # BaseStore API
     def batch(self, ops: Iterable[StoreOp]) -> list[Result]:
-        """Execute a batch of store operations synchronously.
+        """Execute a batch of store operations atomically.
 
-        **Note**: Batch operations currently allow partial commits if a handler
-        calls commit() internally (e.g., _handle_put). For true ACID guarantees,
-        refactor handlers to defer commits and call batch-level transaction control.
+        All operations are wrapped in a single IMMEDIATE transaction.
+        Individual handlers suppress commits when _in_batch is True; the batch
+        method commits once after all ops succeed, or rolls back on any exception.
+        This ensures atomicity: all ops commit together or none do.
         """
         results: list[Result] = []
         with self._lock:
             self._conn.execute("BEGIN IMMEDIATE")
+            self._in_batch = True
             try:
                 for op in ops:
                     if isinstance(op, GetOp):
@@ -419,6 +423,9 @@ class DocMindSqliteStore(BaseStore):
             except Exception:
                 self._conn.rollback()
                 raise
+            finally:
+                self._in_batch = False
+            self._conn.commit()
         return results
 
     async def abatch(self, ops: Iterable[StoreOp]) -> list[Result]:
@@ -561,7 +568,8 @@ class DocMindSqliteStore(BaseStore):
                 """,
                 (now, expires_at_ms, int(row["item_id"])),
             )
-            self._conn.commit()
+            if not self._in_batch:
+                self._conn.commit()
 
         return Item(
             value=value,
@@ -594,7 +602,8 @@ class DocMindSqliteStore(BaseStore):
                     "DELETE FROM docmind_store_items WHERE item_id=?;",
                     (item_id,),
                 )
-                self._conn.commit()
+                if not self._in_batch:
+                    self._conn.commit()
             return None
 
         value_json = json.dumps(op.value, ensure_ascii=False, separators=(",", ":"))
@@ -668,7 +677,8 @@ class DocMindSqliteStore(BaseStore):
             except Exception as exc:  # pragma: no cover - fail-open
                 logger.warning("Memory embedding update failed; continuing: {}", exc)
 
-        self._conn.commit()
+        if not self._in_batch:
+            self._conn.commit()
         return Item(
             value=op.value,
             key=key,

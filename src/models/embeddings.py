@@ -189,7 +189,7 @@ class TextEmbedder:
         )
         # Best-effort inference of dense dimension
         try:  # pragma: no cover - relies on backend specifics
-            out = self._backend.encode(
+            out = self._backend.encode(  # type: ignore[union-attr]
                 ["a"],
                 batch_size=1,
                 max_length=16,

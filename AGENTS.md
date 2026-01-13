@@ -23,10 +23,13 @@ and docs under `docs/specs/` + `docs/developers/adrs/`.
 
 - Setup: `uv sync && cp .env.example .env`
 - Run: `streamlit run src/app.py` (or `./scripts/run_app.sh`)
-- Env: prefer `uv run ...` (uses the project env, typically `.venv`)
-- Verify (fix + typecheck): `uv run ruff format . && uv run ruff check . --fix && uv run pyright`
-- Verify (tests): `uv run python scripts/run_tests.py --fast`
-- Tests (all): `uv run python scripts/run_tests.py`
+- Env: prefer `uv run ...` (uses the project env, typically `.venv`).
+- Verify (batch): after a batch of edits, run lint/type on touched paths + focused tests.
+  - Lint (all): `uv run ruff format . && uv run ruff check . --fix`
+  - Type (paths): `uv run pyright --threads 4 <paths>`
+  - Tests (focused): `uv run pytest <tests/...> -vv` (or `-k <expr>` for a narrow slice)
+- Verify (final): before finishing the task/prompt, run full lint/type then full tests: `uv run ruff format . && uv run ruff check . --fix && uv run pyright --threads 4 && uv run python scripts/run_tests.py`
+- Tests (fast): `uv run python scripts/run_tests.py --fast`
 - Coverage: `uv run python scripts/run_tests.py --coverage`
 - Coverage report: `uv run python scripts/check_coverage.py --collect --report --html`
 - Quality gates (CI): `uv run python scripts/run_quality_gates.py --ci --report`
@@ -103,7 +106,7 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 - Use LlamaIndex `IngestionPipeline` with `TokenTextSplitter` (and optional `TitleExtractor`).
 - Prefer `UnstructuredReader` when installed; fall back to plain-text read.
 - Cache: DuckDB KV store (`DOCMIND_CACHE__DIR`, `DOCMIND_CACHE__FILENAME`).
-- PDF page images: PyMuPDF render; optional AES-GCM (`DOCMIND_IMG_AES_KEY_BASE64`, `DOCMIND_IMG_DELETE_PLAINTEXT`).
+- PDF page images: PyMuPDF rendering; optional AES-GCM (`DOCMIND_IMG_AES_KEY_BASE64`, `DOCMIND_IMG_DELETE_PLAINTEXT`).
 - Multimodal artifacts: store page images/thumbnails as content-addressed `ArtifactRef` in the local ArtifactStore (`DOCMIND_ARTIFACTS__*`).
 
 ## Retrieval
