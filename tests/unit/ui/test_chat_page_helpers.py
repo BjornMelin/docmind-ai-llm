@@ -527,6 +527,8 @@ def test_visual_search_helpers(monkeypatch, clean_streamlit_session):
             return None
 
     monkeypatch.setattr(mm, "ImageSiglipRetriever", _Retriever)
+    # Mock the cached retriever getter to bypass @st.cache_resource in test context
+    monkeypatch.setattr(page, "_get_image_siglip_retriever", _Retriever)
 
     pts = page._query_visual_search(object(), top_k=1)
     assert isinstance(pts, list)

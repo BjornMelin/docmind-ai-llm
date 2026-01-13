@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.retrieval.hybrid import ServerHybridRetriever, HybridParams
+from src.retrieval.hybrid import HybridParams, ServerHybridRetriever
 
 
 class _Point:

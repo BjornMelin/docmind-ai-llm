@@ -11,7 +11,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from src.retrieval.hybrid import ServerHybridRetriever, HybridParams
+from src.retrieval.hybrid import HybridParams, ServerHybridRetriever
 
 
 class _Point:

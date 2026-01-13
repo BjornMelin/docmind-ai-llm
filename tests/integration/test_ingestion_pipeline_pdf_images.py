@@ -45,9 +45,9 @@ class DummyEmbedding(BaseEmbedding):
 
 
 def _skip_if_no_pymupdf() -> None:
-    try:
-        import fitz  # noqa: F401
-    except ImportError:
+    import importlib.util
+
+    if importlib.util.find_spec("fitz") is None:
         pytest.skip("PyMuPDF not available")
 
 
@@ -93,26 +93,28 @@ def test_ingestion_pdf_images_exports_and_index_wiring(
     # Stub the heavy ingestion pipeline execution.
     class _Pipeline:  # pragma: no cover - test stub
         def __init__(self) -> None:
-            self.docstore = SimpleNamespace(persist=lambda _p: None)
+            self.docstore = SimpleNamespace(persist=lambda _: None)
             self.transformations = []
 
-        async def arun(self, documents):  # type: ignore[no-untyped-def]
+        async def arun(self, documents: Sequence[object]) -> list[object]:
             del documents
             return []
 
     monkeypatch.setattr(
         "src.processing.ingestion_pipeline.build_ingestion_pipeline",
-        lambda *_a, **_k: (_Pipeline(), tmp_path / "cache.duckdb", None),
+        lambda *_a, **_k: (_Pipeline(), tmp_path / "cache.duckdb", None),  # pyright: ignore[unused-param]
     )
     monkeypatch.setattr(
         "src.processing.ingestion_pipeline._resolve_embedding",
-        lambda *_a, **_k: None,
+        lambda *_a, **_k: None,  # pyright: ignore[unused-param]
     )
 
     captured: dict[str, object] = {"records": None}
 
     def _fake_index(
-        *_a: object, records: Sequence[dict[str, Any]], **_k: object
+        *_a: object,
+        records: Sequence[dict[str, Any]],
+        **_k: object,  # pyright: ignore[unused-param]
     ) -> int:
         captured["records"] = list(records)
         return len(records)

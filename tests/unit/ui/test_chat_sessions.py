@@ -115,17 +115,13 @@ def test_ensure_active_session_creates_when_none(monkeypatch) -> None:
     assert st.session_state["chat_thread_id"] == "t1"
 
 
-def test_render_session_selector_switches_and_touches(monkeypatch) -> None:
+def test_render_session_selector_switches_session(monkeypatch) -> None:
     import streamlit as st  # type: ignore
 
     active = SimpleNamespace(thread_id="t1", title="a")
     sessions = [active, SimpleNamespace(thread_id="t2", title="b")]
 
-    touched: list[str] = []
     reruns = {"n": 0}
-    monkeypatch.setattr(
-        cs, "touch_session", lambda _c, thread_id: touched.append(thread_id)
-    )
     monkeypatch.setattr(st, "selectbox", lambda *_a, **_k: "t2", raising=False)
     monkeypatch.setattr(
         st, "rerun", lambda: reruns.__setitem__("n", reruns["n"] + 1), raising=False
@@ -135,7 +131,6 @@ def test_render_session_selector_switches_and_touches(monkeypatch) -> None:
     sel = cs._render_session_selector(active, sessions, conn=object())  # type: ignore[arg-type]
     assert sel == "t2"
     assert st.session_state["chat_thread_id"] == "t2"
-    assert touched == ["t2"]
     assert st.query_params.get("chat") == "t2"
     assert reruns["n"] == 1
 

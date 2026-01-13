@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from qdrant_client import models as qmodels
 
-from src.retrieval.hybrid import ServerHybridRetriever, HybridParams
+from src.retrieval.hybrid import HybridParams, ServerHybridRetriever
 
 
 def _mk_point(pid: str, did: str, score: float, payload: dict | None = None):

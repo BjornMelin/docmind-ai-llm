@@ -10,7 +10,7 @@ class _P:
 
 @pytest.mark.unit
 def test_dedup_before_final_truncation(monkeypatch):
-    from src.retrieval.hybrid import ServerHybridRetriever, HybridParams
+    from src.retrieval.hybrid import HybridParams, ServerHybridRetriever
 
     class _Res:
         def __init__(self, points):

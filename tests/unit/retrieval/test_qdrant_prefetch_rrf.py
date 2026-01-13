@@ -4,7 +4,7 @@ from qdrant_client import models as qmodels
 
 @pytest.mark.unit
 def test_rrf_prefetch_and_limit(monkeypatch):
-    from src.retrieval.hybrid import ServerHybridRetriever, HybridParams
+    from src.retrieval.hybrid import HybridParams, ServerHybridRetriever
 
     calls = {}
 
