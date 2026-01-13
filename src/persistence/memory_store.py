@@ -748,27 +748,53 @@ class DocMindSqliteStore(BaseStore):
         return items
 
     def _handle_list_namespaces(self, op: ListNamespacesOp) -> list[tuple[str, ...]]:
-        cur = self._conn.execute(
-            "SELECT DISTINCT ns_key FROM docmind_store_items "
-            "ORDER BY ns_key LIMIT ? OFFSET ?;",
-            (int(op.limit), int(op.offset)),
-        )
-        raw = [str(r["ns_key"]) for r in cur.fetchall()]
-        namespaces = [tuple(x.split(_NS_DELIM)) if x else () for x in raw]
         if not op.match_conditions:
+            cur = self._conn.execute(
+                "SELECT DISTINCT ns_key FROM docmind_store_items "
+                "ORDER BY ns_key LIMIT ? OFFSET ?;",
+                (int(op.limit), int(op.offset)),
+            )
+            raw = [str(r["ns_key"]) for r in cur.fetchall()]
+            namespaces = [tuple(x.split(_NS_DELIM)) if x else () for x in raw]
             return (
                 namespaces
                 if op.max_depth is None
                 else [ns[: op.max_depth] for ns in namespaces]
             )
 
-        filtered = [
-            ns
-            for ns in namespaces
-            if all(_match_namespace(ns, cond) for cond in (op.match_conditions or ()))
-        ]
-        if op.max_depth is not None:
-            filtered = [ns[: op.max_depth] for ns in filtered]
+        requested_limit = max(0, int(op.limit))
+        requested_offset = max(0, int(op.offset))
+        if requested_limit == 0:
+            return []
+
+        batch_size = max(100, requested_limit * 2)
+        filtered: list[tuple[str, ...]] = []
+        matched_seen = 0
+        sql_offset = 0
+        conditions = op.match_conditions or ()
+        while True:
+            cur = self._conn.execute(
+                "SELECT DISTINCT ns_key FROM docmind_store_items "
+                "ORDER BY ns_key LIMIT ? OFFSET ?;",
+                (batch_size, sql_offset),
+            )
+            rows = cur.fetchall()
+            if not rows:
+                break
+            sql_offset += len(rows)
+            for r in rows:
+                ns = tuple(str(r["ns_key"]).split(_NS_DELIM)) if r["ns_key"] else ()
+                if not all(_match_namespace(ns, cond) for cond in conditions):
+                    continue
+                matched_seen += 1
+                if matched_seen <= requested_offset:
+                    continue
+                if op.max_depth is not None:
+                    ns = ns[: op.max_depth]
+                filtered.append(ns)
+                if len(filtered) >= requested_limit:
+                    return filtered
+
         return filtered
 
     # Query helpers

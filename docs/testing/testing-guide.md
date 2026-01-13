@@ -473,7 +473,11 @@ uv run python -m pytest -m "requires_gpu" --timeout=600
 #### Current Coverage Status
 
 - **Target Coverage**: 80% line coverage (global)
-- **Branch Coverage**: Not enforced by default
+- **Branch Coverage**: Not enforced by default. Consider adding branch coverage
+  as a future enhancement: start with a lower threshold (e.g., 60%) and raise
+  it over time. Example command:
+  `uv run python -m pytest --cov=src --cov-branch --cov-report=term-missing --cov-fail-under=80 tests/`
+  (you can lower `--cov-fail-under` initially for branch coverage).
 - **Critical Modules**: Agents, Core, Models, Config should meet or exceed target
 
 #### Coverage Commands
@@ -487,6 +491,10 @@ uv run python -m pytest --cov=src --cov-report=html tests/unit/
 
 # Coverage with quality gates
 uv run python -m pytest --cov=src --cov-fail-under=80 tests/
+
+# Coverage with branch metrics (start lower and ratchet up)
+uv run python -m pytest --cov=src --cov-branch --cov-report=term-missing \
+  --cov-fail-under=60 tests/
 ```
 
 ## Test Development Guidelines
