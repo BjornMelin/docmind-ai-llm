@@ -56,12 +56,15 @@ def test_pdf_pages_to_image_documents_builds_metadata_and_artifact_refs(
     assert len(docs) == 2
     assert docs[0].metadata["page"] == 1
     assert docs[0].metadata["phash"] == "ph1"
+    assert docs[0].metadata["doc_id"] == "doc"
+    assert docs[0].metadata["page_id"] == "doc::page::1"
     assert docs[0].metadata["source_filename"] == "doc.pdf"
     assert docs[0].metadata["image_artifact_id"] == "a"
 
     assert docs[1].metadata["page"] == 2
     assert docs[1].metadata["encrypted"] is True
     assert docs[1].metadata["kid"] == "kid1"
+    assert docs[1].metadata["page_id"] == "doc::page::2"
     assert docs[1].metadata["image_artifact_id"] == "b"
 
 

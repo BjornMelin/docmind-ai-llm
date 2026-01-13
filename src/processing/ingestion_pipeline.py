@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import re
 import time
 from collections.abc import Sequence
 from pathlib import Path
@@ -53,6 +54,53 @@ else:
     ReaderType = Any
 
 _TRACER = trace.get_tracer("docmind.ingestion")
+
+_ROMAN_MAP: dict[str, int] = {
+    "I": 1,
+    "V": 5,
+    "X": 10,
+    "L": 50,
+    "C": 100,
+    "D": 500,
+    "M": 1000,
+}
+
+
+def _roman_to_int(value: str) -> int | None:
+    """Convert a roman numeral to int; return None for invalid/empty values."""
+    if not value:
+        return None
+    total = 0
+    prev = 0
+    for ch in reversed(value):
+        cur = _ROMAN_MAP.get(ch)
+        if cur is None:
+            return None
+        if cur < prev:
+            total -= cur
+        else:
+            total += cur
+            prev = cur
+    return total if total > 0 else None
+
+
+def _parse_page_number(raw: Any) -> int | None:
+    """Best-effort page number parser (ints, digits, roman numerals)."""
+    if raw is None or isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        return raw if raw > 0 else None
+    if isinstance(raw, float):
+        return int(raw) if raw.is_integer() and raw > 0 else None
+    text = str(raw).strip()
+    if not text:
+        return None
+    digits = re.search(r"\d+", text)
+    if digits:
+        value = int(digits.group())
+        return value if value > 0 else None
+    roman = re.sub(r"[^IVXLCDM]", "", text.upper())
+    return _roman_to_int(roman)
 
 
 def _ensure_cache_path(cfg: IngestionConfig) -> Path:
@@ -225,6 +273,15 @@ def _document_from_input(
         doc.doc_id = item.document_id
         doc.metadata.update(item.metadata)
         doc.metadata.setdefault("document_id", item.document_id)
+        page_raw = (
+            doc.metadata.get("page_number")
+            or doc.metadata.get("page")
+            or doc.metadata.get("page_no")
+            or doc.metadata.get("page_num")
+        )
+        page_no = _parse_page_number(page_raw)
+        if page_no and not doc.metadata.get("page_id"):
+            doc.metadata["page_id"] = f"{item.document_id}::page::{page_no}"
         # Do not persist raw filesystem paths in node metadata.
         # Keep stable identifiers (document_id, sha256, source_filename) instead.
         src = doc.metadata.get("source")
@@ -443,7 +500,6 @@ def _build_page_image_records(
 
 def _index_page_images_orchestrator(
     records: list[Any],
-    store: ArtifactStore,
     cfg: IngestionConfig,
     *,
     purge_doc_ids: set[str] | None = None,
@@ -483,26 +539,11 @@ def _index_page_images_orchestrator(
         with contextlib.suppress(Exception):
             client.close()
 
-    pruned = 0
-    try:
-        artifacts_cfg = getattr(app_settings, "artifacts", None)
-        max_mb = int(getattr(artifacts_cfg, "max_total_mb", 0) or 0)
-        if max_mb > 0:
-            pruned = store.prune(
-                max_total_bytes=max_mb * 1024 * 1024,
-                min_age_seconds=int(
-                    getattr(artifacts_cfg, "gc_min_age_seconds", 0) or 0
-                ),
-            )
-    except Exception:
-        pruned = 0
-
     return {
         "image_index.collection": app_settings.database.qdrant_image_collection,
         "image_index.indexed": int(indexed),
         "image_index.purged_points": int(purged_points),
         "image_index.latency_ms": int((time.time() - t0) * 1000),
-        "image_index.artifact_gc_deleted": int(pruned),
     }
 
 
@@ -542,7 +583,7 @@ def _index_page_images(
 
     try:
         orchestration = _index_page_images_orchestrator(
-            records, store, cfg, purge_doc_ids=purge_doc_ids
+            records, cfg, purge_doc_ids=purge_doc_ids
         )
         return {
             "image_index.enabled": True,
@@ -558,6 +599,26 @@ def _index_page_images(
             "image_index.skipped": skipped,
             "image_index.error_type": type(exc).__name__,
         }
+
+
+def _prune_artifacts_best_effort() -> int:
+    """Prune artifact store to enforce size budget (best-effort)."""
+    try:
+        artifacts_cfg = getattr(app_settings, "artifacts", None)
+        max_mb = int(getattr(artifacts_cfg, "max_total_mb", 0) or 0)
+        if max_mb <= 0:
+            return 0
+        store = ArtifactStore.from_settings(app_settings)
+        return int(
+            store.prune(
+                max_total_bytes=max_mb * 1024 * 1024,
+                min_age_seconds=int(
+                    getattr(artifacts_cfg, "gc_min_age_seconds", 0) or 0
+                ),
+            )
+        )
+    except Exception:
+        return 0
 
 
 async def ingest_documents(
@@ -599,6 +660,7 @@ async def ingest_documents(
         pipeline.docstore.persist(str(docstore_path))
 
     img_index_meta = _index_page_images(exports, cfg)
+    artifact_gc_deleted = _prune_artifacts_best_effort()
 
     corpus_paths = [Path(item.source_path) for item in inputs if item.source_path]
     base_dir: Path | None = None
@@ -622,6 +684,7 @@ async def ingest_documents(
         "docstore_enabled": bool(docstore_path),
         "docstore_filename": docstore_path.name if docstore_path else None,
         **img_index_meta,
+        "artifact_gc_deleted": int(artifact_gc_deleted),
     }
 
     return IngestionResult(
@@ -687,6 +750,7 @@ def reindex_page_images_sync(
             )
         )
     meta = _index_page_images(exports, cfg, purge_doc_ids=purge_doc_ids)
+    meta["artifact_gc_deleted"] = int(_prune_artifacts_best_effort())
     return {
         "document_count": len([i for i in inputs if i.source_path is not None]),
         "export_count": len(exports),

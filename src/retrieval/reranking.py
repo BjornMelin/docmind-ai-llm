@@ -547,9 +547,11 @@ class MultimodalReranker(BaseNodePostprocessor):
         seen: set[str] = set()
         out: list[NodeWithScore] = []
         for n in fused:
-            if n.node.node_id in seen:
+            meta = getattr(n.node, "metadata", {}) or {}
+            key = str(meta.get("page_id") or n.node.node_id)
+            if key in seen:
                 continue
-            seen.add(n.node.node_id)
+            seen.add(key)
             out.append(n)
             if len(out) >= settings.retrieval.reranking_top_k:
                 break

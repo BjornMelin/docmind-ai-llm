@@ -458,49 +458,23 @@ def _query_visual_search(upload: Any, top_k: int) -> list[Any]:
         st.warning("Pillow is required for visual search.")
         return []
 
-    from qdrant_client import QdrantClient
+    from src.retrieval.multimodal_fusion import ImageSearchParams, ImageSiglipRetriever
 
-    from src.utils.siglip_adapter import SiglipEmbedding
-    from src.utils.storage import get_client_config
-
-    embedder = SiglipEmbedding()
     img = Image.open(upload)  # type: ignore[arg-type]
-    vec = embedder.get_image_embedding(img)
-    client = QdrantClient(**get_client_config())
-    try:
-        result = client.query_points(
-            collection_name=settings.database.qdrant_image_collection,
-            query=vec.tolist(),
-            using="siglip",
-            limit=int(top_k),
-            with_payload=[
-                "doc_id",
-                "page_id",
-                "page_no",
-                "modality",
-                "image_artifact_id",
-                "image_artifact_suffix",
-                "thumbnail_artifact_id",
-                "thumbnail_artifact_suffix",
-                "phash",
-            ],
+    retriever = ImageSiglipRetriever(
+        ImageSearchParams(
+            collection=settings.database.qdrant_image_collection, top_k=int(top_k)
         )
+    )
+    try:
+        return retriever.retrieve_by_image(img, top_k=int(top_k))
     finally:
-        with contextlib.suppress(Exception):
-            client.close()
-
-    pts = getattr(result, "points", None) or getattr(result, "result", None) or []
-    if not isinstance(pts, list):
-        try:
-            pts = list(pts)
-        except TypeError:
-            pts = []
-    return pts
+        retriever.close()
 
 
-def _render_visual_results(points: list[Any], top_k: int) -> None:
+def _render_visual_results(nodes: list[Any], top_k: int) -> None:
     """Render visual search results in the sidebar."""
-    if not points:
+    if not nodes:
         st.caption("No matches.")
         return
 
@@ -510,11 +484,17 @@ def _render_visual_results(points: list[Any], top_k: int) -> None:
         open_image_encrypted = None
 
     store = ArtifactStore.from_settings(settings)
-    st.caption(f"Matches: {len(points)}")
-    for p in points[: int(top_k)]:
-        payload = getattr(p, "payload", {}) or {}
-        doc_id = payload.get("doc_id") or "-"
-        page_no = payload.get("page_no") or "-"
+    st.caption(f"Matches: {len(nodes)}")
+    for item in nodes[: int(top_k)]:
+        node = getattr(item, "node", None)
+        payload = getattr(node, "metadata", {}) or {}
+        doc_id = payload.get("doc_id") or payload.get("document_id") or "-"
+        page_no = (
+            payload.get("page_no")
+            or payload.get("page")
+            or payload.get("page_number")
+            or "-"
+        )
         st.caption(f"doc={doc_id} page={page_no}")
 
         thumb_id = payload.get("thumbnail_artifact_id")

@@ -504,34 +504,30 @@ def test_visual_search_helpers(monkeypatch, clean_streamlit_session):
     monkeypatch.setitem(sys.modules, "PIL", pil)
     monkeypatch.setitem(sys.modules, "PIL.Image", pil_image)
 
-    siglip_adapter = ModuleType("src.utils.siglip_adapter")
+    mm = importlib.import_module("src.retrieval.multimodal_fusion")
 
-    class _Vec:
-        def tolist(self) -> list[float]:
-            return [0.1, 0.2]
+    class _Retriever:
+        def __init__(self, *_a, **_k):  # type: ignore[no-untyped-def]
+            return None
 
-    class _SiglipEmbedding:
-        def get_image_embedding(self, _img):  # type: ignore[no-untyped-def]
-            return _Vec()
-
-    siglip_adapter.SiglipEmbedding = _SiglipEmbedding  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "src.utils.siglip_adapter", siglip_adapter)
-    monkeypatch.setattr("src.utils.storage.get_client_config", lambda: {})
-
-    class _Client:
-        def __init__(self, **_k):  # type: ignore[no-untyped-def]
-            self.closed = False
-
-        def query_points(self, **_k):  # type: ignore[no-untyped-def]
-            p = SimpleNamespace(payload={"doc_id": "d", "page_no": 1})
-            return SimpleNamespace(points=(p,))
+        def retrieve_by_image(self, *_a, **_k):  # type: ignore[no-untyped-def]
+            return [
+                SimpleNamespace(
+                    node=SimpleNamespace(
+                        metadata={
+                            "doc_id": "d",
+                            "page_no": 1,
+                            "thumbnail_artifact_id": "a",
+                            "thumbnail_artifact_suffix": ".png",
+                        }
+                    )
+                )
+            ]
 
         def close(self) -> None:
-            self.closed = True
+            return None
 
-    qdrant = ModuleType("qdrant_client")
-    qdrant.QdrantClient = _Client  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "qdrant_client", qdrant)
+    monkeypatch.setattr(mm, "ImageSiglipRetriever", _Retriever)
 
     pts = page._query_visual_search(object(), top_k=1)
     assert isinstance(pts, list)
@@ -542,10 +538,6 @@ def test_visual_search_helpers(monkeypatch, clean_streamlit_session):
             return Path("img.png")
 
     monkeypatch.setattr(page.ArtifactStore, "from_settings", lambda _s: _Store())
-    pts[0].payload.update({
-        "thumbnail_artifact_id": "a",
-        "thumbnail_artifact_suffix": ".png",
-    })
     page._render_visual_results(pts, top_k=1)
     assert clean_streamlit_session["images"]
 

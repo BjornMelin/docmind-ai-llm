@@ -203,6 +203,7 @@ def pdf_pages_to_image_documents(
     pdf_path: Path,
     dpi: int = 200,
     output_dir: Path | None = None,
+    document_id: str | None = None,
     *,
     encrypt: bool | None = None,
 ) -> tuple[list[ImageDocument], Path]:
@@ -212,6 +213,7 @@ def pdf_pages_to_image_documents(
         pdf_path: Path to the PDF file
         dpi: Render resolution (dots per inch)
         output_dir: Directory to save images. Created if ``None``.
+        document_id: Optional stable document identifier for metadata linkage.
         encrypt: Whether to encrypt rendered outputs (defaults to settings).
 
     Returns:
@@ -232,6 +234,7 @@ def pdf_pages_to_image_documents(
     # Store rendered images as content-addressed artifacts and reference jailed
     # artifact paths in ImageDocument nodes.
     store = ArtifactStore.from_settings(settings)
+    doc_id = str(document_id or pdf_path.stem or "document")
 
     for i, path, _rect, phash, page_text in entries:
         try:
@@ -270,6 +273,12 @@ def pdf_pages_to_image_documents(
             "phash": phash,
             "page_text": page_text,
         }
+        if doc_id:
+            meta.update({
+                "doc_id": doc_id,
+                "document_id": doc_id,
+                "page_id": f"{doc_id}::page::{i}",
+            })
         if str(path).endswith(".enc"):
             meta.update({
                 "encrypted": True,

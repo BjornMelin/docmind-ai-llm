@@ -19,6 +19,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
+from typing import Any
 
 from llama_index.core.schema import NodeWithScore, QueryBundle
 from loguru import logger
@@ -78,15 +79,12 @@ class ImageSiglipRetriever:
         except Exception:  # pragma: no cover - defensive
             return
 
-    def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:
-        """Retrieve image nodes for a text query."""
-        qtext = query.query_str if isinstance(query, QueryBundle) else str(query)
-        try:
-            vec = self._embedder.get_text_embedding(qtext)
-        except Exception as exc:  # pragma: no cover - fail open
-            logger.debug("SigLIP text embedding failed: {}", exc)
-            return []
-
+    def _query_vec(self, vec: Any, *, top_k: int | None = None) -> list[NodeWithScore]:
+        limit = int(top_k or self.params.top_k)
+        if hasattr(vec, "tolist"):
+            vec_list = vec.tolist()
+        else:
+            vec_list = list(vec) if not isinstance(vec, list) else vec
         if not self._collection_checked:
             try:
                 from src.retrieval.image_index import ensure_siglip_image_collection
@@ -94,7 +92,7 @@ class ImageSiglipRetriever:
                 ensure_siglip_image_collection(
                     self._client,
                     self.params.collection,
-                    dim=len(vec),
+                    dim=len(vec_list),
                 )
             except Exception as exc:  # pragma: no cover - best effort
                 logger.debug("SigLIP collection check failed: {}", exc)
@@ -103,9 +101,9 @@ class ImageSiglipRetriever:
         try:
             result = self._client.query_points(
                 collection_name=self.params.collection,
-                query=vec.tolist(),
+                query=vec_list,
                 using=self.params.using,
-                limit=int(self.params.top_k),
+                limit=limit,
                 with_payload=list(self.params.with_payload),
             )
         except Exception as exc:  # pragma: no cover - fail open
@@ -114,12 +112,33 @@ class ImageSiglipRetriever:
 
         nodes = nodes_from_query_result(
             result,
-            top_k=int(self.params.top_k),
+            top_k=limit,
             id_keys=("page_id",),
             prefer_point_id=False,
         )
 
         return nodes
+
+    def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:
+        """Retrieve image nodes for a text query."""
+        qtext = query.query_str if isinstance(query, QueryBundle) else str(query)
+        try:
+            vec = self._embedder.get_text_embedding(qtext)
+        except Exception as exc:  # pragma: no cover - fail open
+            logger.debug("SigLIP text embedding failed: {}", exc)
+            return []
+        return self._query_vec(vec)
+
+    def retrieve_by_image(
+        self, image: Any, *, top_k: int | None = None
+    ) -> list[NodeWithScore]:
+        """Retrieve image nodes for an image query."""
+        try:
+            vec = self._embedder.get_image_embedding(image)
+        except Exception as exc:  # pragma: no cover - fail open
+            logger.debug("SigLIP image embedding failed: {}", exc)
+            return []
+        return self._query_vec(vec, top_k=top_k)
 
 
 class MultimodalFusionRetriever:
