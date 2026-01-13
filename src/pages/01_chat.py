@@ -302,15 +302,28 @@ def _render_memory_results(store: DocMindSqliteStore, ns: tuple[str, ...]) -> No
 
 def _purge_memory_namespace(store: DocMindSqliteStore, ns: tuple[str, ...]) -> int:
     purged = 0
-    while True:
+    max_batches = 100
+    for _ in range(max_batches):
         batch = store.search(ns, query=None, limit=5000)
         if not batch:
             break
+        
+        batch_deleted = 0
         for item in batch:
-            store.delete(getattr(item, "namespace", ns), str(item.key))
-        purged += len(batch)
+            try:
+                store.delete(getattr(item, "namespace", ns), str(item.key))
+                batch_deleted += 1
+            except Exception:
+                logger.debug("Failed to delete memory item {}", item.key, exc_info=True)
+        
+        if batch_deleted == 0:
+            logger.warning("Purge stuck: failed to delete any items in batch")
+            break
+            
+        purged += batch_deleted
         if len(batch) < 5000:
             break
+            
     return purged
 
 

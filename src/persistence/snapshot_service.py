@@ -20,6 +20,8 @@ from src.persistence.snapshot import SnapshotManager
 from src.persistence.snapshot_utils import current_config_dict, timestamped_export_path
 from src.utils.hashing import sha256_file
 
+MAX_CORPUS_FILES = 10_000
+
 
 class VectorIndexProtocol(Protocol):
     """Protocol for vector index with embed model."""
@@ -81,8 +83,6 @@ def _persist_indices(
     Returns:
         Tuple of (property_graph_store, storage_context, pg_index).
     """
-    if vector_index is None:
-        raise TypeError("rebuild_snapshot requires a vector_index instance")
     mgr.persist_vector_index(vector_index, workspace)
     graph_store = getattr(pg_index, "property_graph_store", None) if pg_index else None
     if graph_store is not None:
@@ -222,11 +222,17 @@ def _collect_corpus_paths(settings_obj: Any) -> tuple[list[Path], Path]:
                 return cached_paths, uploads_dir
 
     # Glob for corpus files (bounded to immediate children if corpus is large)
-    corpus_paths = (
-        [p for p in uploads_dir.glob("**/*") if p.is_file()]
-        if uploads_dir.exists()
-        else []
-    )
+    corpus_paths: list[Path] = []
+    if uploads_dir.exists():
+        for i, p in enumerate(uploads_dir.rglob("*")):
+            if i >= MAX_CORPUS_FILES:
+                logger.warning(
+                    "Corpus file scan capped at {}; snapshot hash may be partial.",
+                    MAX_CORPUS_FILES,
+                )
+                break
+            if p.is_file():
+                corpus_paths.append(p)
 
     # Cache the result for next time
     with contextlib.suppress(Exception), open(manifest_file, "w") as f:

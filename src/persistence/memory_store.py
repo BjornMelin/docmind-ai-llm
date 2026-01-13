@@ -35,7 +35,7 @@ from src.utils.time import now_ms
 
 try:  # pragma: no cover - optional native dependency
     import sqlite_vec
-except Exception:  # pragma: no cover - defensive
+except (ImportError, ModuleNotFoundError):  # pragma: no cover - defensive
     sqlite_vec = None  # type: ignore[assignment]
 
 from langgraph.store.base import (

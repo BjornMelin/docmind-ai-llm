@@ -238,7 +238,7 @@ def _maybe_add_graph_tool(
     graphrag_enabled = (
         cfg.is_graphrag_enabled()
         if hasattr(cfg, "is_graphrag_enabled")
-        else getattr(cfg, "enable_graphrag", True)
+        else getattr(cfg, "enable_graphrag", False)
     )
     if not graphrag_enabled:
         return
@@ -379,7 +379,7 @@ def build_router_engine(
         kg_requested = bool(pg_index is not None and cfg.is_graphrag_enabled())
     else:
         kg_requested = bool(
-            pg_index is not None and getattr(cfg, "enable_graphrag", True)
+            pg_index is not None and getattr(cfg, "enable_graphrag", False)
         )
 
     with router_build_span(

@@ -10,6 +10,8 @@ from types import ModuleType, SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 
 class _StubCoordinator:
     """Lightweight stub coordinator used for isolation in tests."""
@@ -30,7 +32,7 @@ class _StubToolFactory:
 
 
 def install_mock_torch(
-    monkeypatch: Any,
+    monkeypatch: pytest.MonkeyPatch,
     *,
     include_cuda_props: bool = True,
     include_device: bool = False,
@@ -59,14 +61,16 @@ def install_mock_torch(
     return mock_torch
 
 
-def install_heavy_dependencies(monkeypatch: Any, dependencies: Iterable[str]) -> None:
+def install_heavy_dependencies(
+    monkeypatch: pytest.MonkeyPatch, dependencies: Iterable[str]
+) -> None:
     """Mock heavy optional dependencies if they are not already loaded."""
     for module in dependencies:
         if module not in sys.modules:
             monkeypatch.setitem(sys.modules, module, MagicMock())
 
 
-def install_mock_ollama(monkeypatch: Any) -> MagicMock:
+def install_mock_ollama(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     """Mock ollama client boundary calls."""
     mock_ollama = MagicMock()
     mock_ollama.list.return_value = {
@@ -78,7 +82,7 @@ def install_mock_ollama(monkeypatch: Any) -> MagicMock:
     return mock_ollama
 
 
-def install_dependency_injector(monkeypatch: Any) -> None:
+def install_dependency_injector(monkeypatch: pytest.MonkeyPatch) -> None:
     """Mock dependency_injector for import resolution."""
     mock_dependency_injector = MagicMock()
     mock_dependency_injector.wiring = MagicMock()
@@ -100,7 +104,7 @@ def install_dependency_injector(monkeypatch: Any) -> None:
     )
 
 
-def install_llama_index_core(monkeypatch: Any) -> None:
+def install_llama_index_core(monkeypatch: pytest.MonkeyPatch) -> None:
     """Mock minimal LlamaIndex core objects used by E2E tests."""
     li_pkg = ModuleType("llama_index")
     li_pkg.__path__ = []  # mark as package
@@ -194,7 +198,7 @@ def install_llama_index_core(monkeypatch: Any) -> None:
     monkeypatch.setitem(sys.modules, "llama_index.core.vector_stores", MagicMock())
 
 
-def install_agent_stubs(monkeypatch: Any) -> None:
+def install_agent_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
     """Provide lightweight stubs for src.agents imports."""
     agents_coord = ModuleType("src.agents.coordinator")
     agents_coord.MultiAgentCoordinator = _StubCoordinator

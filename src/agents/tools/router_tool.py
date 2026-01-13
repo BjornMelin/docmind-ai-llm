@@ -51,12 +51,16 @@ def _resolve_router_engine(
 
 def _extract_response_text(resp: Any) -> str:
     """Extract response text from a router engine response."""
-    return str(
-        getattr(resp, "response", None)
-        or getattr(resp, "text", None)
-        or getattr(resp, "message", None)
-        or resp
-    )
+    val = getattr(resp, "response", None)
+    if val is not None:
+        return str(val)
+    val = getattr(resp, "text", None)
+    if val is not None:
+        return str(val)
+    val = getattr(resp, "message", None)
+    if val is not None:
+        return str(val)
+    return str(resp)
 
 
 def _extract_selected_strategy(resp: Any) -> str | None:
@@ -127,7 +131,7 @@ def router_tool(
                 span.set_attribute("router.success", False)
                 span.set_attribute("router.error", message)
                 logger.error(message)
-                raise RuntimeError(message)
+                return json.dumps({"error": message})
 
             try:
                 resp = router_engine.query(query)
@@ -154,8 +158,6 @@ def router_tool(
             return json.dumps(payload)
 
         except Exception as exc:
-            if isinstance(exc, RuntimeError):
-                raise
             span.set_attribute("router.success", False)
             span.set_attribute("router.error", str(exc))
             logger.error("router_tool failed: {}", exc)

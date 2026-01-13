@@ -231,6 +231,8 @@ def test_chat_time_travel_fork_drops_future_messages(
 
     # Drive the time-travel UI to resume from the chosen checkpoint.
     checkpoint_select.set_value(fork_checkpoint)
+    # Prevent AppTest from re-submitting the previous chat input trigger value on reruns.
+    app.chat_input[0].set_value(None)
     resume_btn = next(
         b
         for b in app.button
