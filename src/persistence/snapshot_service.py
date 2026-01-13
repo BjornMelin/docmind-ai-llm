@@ -215,14 +215,11 @@ def _collect_corpus_paths(settings_obj: Any) -> tuple[list[Path], Path]:
 
     # Try to use cached manifest first
     if manifest_file.exists():
-        try:
-            with open(manifest_file) as f:
-                manifest_data = json.load(f)
-                cached_paths = [Path(p) for p in manifest_data.get("files", [])]
-                if cached_paths or not uploads_dir.exists():
-                    return cached_paths, uploads_dir
-        except Exception:  # Fallback if manifest is corrupted
-            pass
+        with contextlib.suppress(Exception), open(manifest_file) as f:
+            manifest_data = json.load(f)
+            cached_paths = [Path(p) for p in manifest_data.get("files", [])]
+            if cached_paths or not uploads_dir.exists():
+                return cached_paths, uploads_dir
 
     # Glob for corpus files (bounded to immediate children if corpus is large)
     corpus_paths = (
@@ -232,11 +229,8 @@ def _collect_corpus_paths(settings_obj: Any) -> tuple[list[Path], Path]:
     )
 
     # Cache the result for next time
-    try:
-        with open(manifest_file, "w") as f:
-            json.dump({"files": [str(p) for p in corpus_paths]}, f)
-    except Exception:  # Silently fail if we can't write cache
-        pass
+    with contextlib.suppress(Exception), open(manifest_file, "w") as f:
+        json.dump({"files": [str(p) for p in corpus_paths]}, f)
 
     return corpus_paths, uploads_dir
 
