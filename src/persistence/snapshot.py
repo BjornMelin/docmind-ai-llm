@@ -679,7 +679,17 @@ __all__ = [
 
 
 class SnapshotManager:
-    """Convenience wrapper for UI components expecting a class API."""
+    """Convenience wrapper for creating and persisting immutable snapshots.
+
+    Snapshots store serialized vector indices, property graphs, and exports within
+    an immutable directory structure. Per ADR-058, paths stored in manifest.jsonl
+    are **snapshot-internal relative references only**—never absolute paths or
+    stable external identifiers. These paths are confined to the snapshot boundary
+    and are not exposed via the public API.
+
+    Callers should use load_manifest_entries() to read manifest metadata, which
+    validates all paths remain within the snapshot directory boundary.
+    """
 
     def __init__(self, storage_dir: Path) -> None:
         """Initialize the manager with the provided storage directory.
@@ -730,6 +740,16 @@ class SnapshotManager:
         graph_exports: list[dict[str, Any]] | None = None,
     ) -> None:
         """Write manifest metadata describing the snapshot contents.
+
+        Writes three files to tmp_dir: manifest.jsonl (entries), manifest.meta.json
+        (metadata), and manifest.checksum (SHA256 of manifest.jsonl).
+
+        **Important invariant (ADR-058):** Paths written to manifest.jsonl are
+        snapshot-internal relative references (relative to tmp_dir), confined to
+        the snapshot boundary, and are NOT stable external identifiers. These paths
+        must never be persisted elsewhere or exposed outside the snapshot boundary.
+        Use load_manifest_entries() to safely read entries with built-in path
+        validation.
 
         Args:
             tmp_dir: Temporary snapshot workspace directory.

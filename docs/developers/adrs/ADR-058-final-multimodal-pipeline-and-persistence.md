@@ -84,7 +84,14 @@ Weighted decision criteria:
 - No base64 blobs in Qdrant or SQLite; fewer latency and storage risks.
 - Persistence/time travel enables “what did that chart show?” across restarts.
 
-### Tradeoffs / future extensions (not required for baseline correctness)
+### Tradeoffs & Limitations
+
+- **Performance:** RRF (rank-based reciprocal rank fusion) fusion adds latency compared to single-retrieval approaches. Future optimization: implement late-interaction fusion at the Qdrant level for reduced app-side processing.
+- **Storage:** Duplicate artifacts (original images + thumbnails) increase storage requirements. Mitigation: aggressive artifact pruning policies and optional S3 offload.
+- **Complexity:** Content-addressed artifact storage adds cognitive overhead for developers working with images/artifacts. Mitigation: stable `ArtifactRef` API hides complexity; comprehensive examples in docs.
+- **Migration:** Existing deployments with pre-ArtifactRef data require explicit migration path. Approach: implement `migrate_legacy_artifact_paths()` in snapshot upgrade procedures.
+
+### Future Extensions (not required for baseline correctness)
 
 - Server-side late-interaction in Qdrant (ColPali multivectors + MaxSim) can be added as an optional optimization path; current design keeps late-interaction local via reranking.
 
@@ -100,7 +107,16 @@ Key files:
 
 ## Verification
 
-Fast tier:
+### Success Criteria
+
+- All linting, formatting, and type-checking passes (ruff, pyright)
+- Fast-tier unit tests pass (coverage ≥ 80% for multimodal/persistence code)
+- Integration tests validate multimodal ingestion, retrieval, and persistence flows
+- No type errors or unsafe type ignores in snapshot/artifact/persistence modules
+
+### Verification Tiers
+
+#### Fast tier (local, <60s)
 
 ```bash
 uv run ruff format .
@@ -108,3 +124,24 @@ uv run ruff check . --fix
 uv run pyright
 uv run python scripts/run_tests.py --fast
 ```
+
+**Success criteria:** All checks pass, unit tests complete without errors.
+
+#### Integration tier (local or CI, ~5min)
+
+```bash
+uv run python scripts/run_tests.py --integration
+```
+
+**Validates:**
+
+- `tests/integration/test_multimodal_ingestion.py` — PDF image rendering, artifact creation, SigLIP indexing
+- `tests/integration/test_retrieval_multimodal_fusion.py` — text/image retrieval fusion, RRF scoring
+- `tests/integration/test_persistence_chat_db.py` — LangGraph SqliteSaver, session persistence
+- `tests/integration/test_memory_store.py` — long-term memory, semantic search with artifacts
+
+#### System tier (GPU, slow, optional)
+
+Full end-to-end validation with real models, GPU-accelerated ingestion, and large-scale persistence tests.
+
+**Validates:** All multimodal paths under realistic load, artifact cleanup, memory leaks.
