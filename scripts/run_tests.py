@@ -32,6 +32,7 @@ Usage:
 """
 
 import argparse
+import contextlib
 import importlib.util
 import json
 import os
@@ -96,6 +97,30 @@ class TestRunner:
         except (ImportError, AttributeError, ValueError):
             return False
 
+    def _reset_coverage_artifacts(self) -> None:
+        """Remove stale coverage artifacts to keep reports reproducible."""
+        coverage_dir = self.project_root / "coverage"
+        coverage_dir.mkdir(parents=True, exist_ok=True)
+
+        stale_paths = [
+            coverage_dir / ".coverage",
+            self.project_root / "coverage.json",
+            self.project_root / "coverage.xml",
+            self.project_root / "htmlcov",
+        ]
+        for path in stale_paths:
+            if not path.exists():
+                continue
+            if path.is_file():
+                with contextlib.suppress(OSError):
+                    path.unlink()
+            else:
+                subprocess.run(
+                    ["rm", "-rf", str(path)],
+                    cwd=self.project_root,
+                    check=False,
+                )
+
     def clean_artifacts(self) -> None:
         """Clean test artifacts and caches."""
         print("🧹 Cleaning test artifacts...")
@@ -106,6 +131,7 @@ class TestRunner:
             "coverage.xml",
             "coverage.json",
             ".coverage",
+            "coverage/.coverage",
             "__pycache__",
             "*.pyc",
         ]
@@ -398,6 +424,7 @@ class TestRunner:
         print("\nRunning Tiered Test Strategy")
         print("=" * 50)
         print("Tier 1: Unit Tests (mocked dependencies)")
+        self._reset_coverage_artifacts()
         result_unit = self.run_unit_tests()
 
         if result_unit.exit_code != 0:
@@ -405,7 +432,23 @@ class TestRunner:
             return
 
         print("\nTier 2: Integration Tests (lightweight models)")
-        result_integration = self.run_integration_tests()
+        # Append coverage from Tier 1 so coverage reporting reflects both tiers.
+        command = [
+            "uv",
+            "run",
+            "pytest",
+            "tests/integration/",
+            "-v",
+            "--tb=short",
+            "--cov=src",
+            "--cov-append",
+            "--cov-fail-under=0",
+            "--cov-report=term-missing",
+            "--durations=10",
+        ]
+        result_integration = self.run_command(
+            command, "Integration Tests (Tier 2 - Lightweight models)"
+        )
 
         if result_integration.exit_code != 0:
             print("Integration tests failed. Stopping tiered execution.")
@@ -465,6 +508,20 @@ else:
         ]
         self.run_command(coverage_cmd, "Coverage Report")
 
+        # Always generate fresh report artifacts so analysis is never stale.
+        self.run_command(
+            ["uv", "run", "coverage", "json", "-o", "coverage.json"],
+            "Coverage JSON",
+        )
+        self.run_command(
+            ["uv", "run", "coverage", "xml", "-o", "coverage.xml"],
+            "Coverage XML",
+        )
+        self.run_command(
+            ["uv", "run", "coverage", "html", "-d", "htmlcov"],
+            "Coverage HTML",
+        )
+
         # Generate coverage analysis if coverage.json exists
         coverage_json = self.project_root / "coverage.json"
         if coverage_json.exists():
@@ -510,11 +567,13 @@ else:
 
             # Identify critical files
             critical_files = [
-                "src/models/core.py",
-                "src/utils/core.py",
-                "src/utils/document.py",
-                "src/utils/database.py",
-                "src/utils/monitoring.py",
+                "src/config/settings.py",
+                "src/models/embeddings.py",
+                "src/persistence/chat_db.py",
+                "src/persistence/memory_store.py",
+                "src/persistence/snapshot.py",
+                "src/retrieval/hybrid.py",
+                "src/retrieval/router_factory.py",
                 "src/agents/coordinator.py",
                 "src/agents/tool_factory.py",
                 "src/agents/tools/router_tool.py",
@@ -522,6 +581,9 @@ else:
                 "src/agents/tools/retrieval.py",
                 "src/agents/tools/synthesis.py",
                 "src/agents/tools/validation.py",
+                "src/utils/core.py",
+                "src/utils/document.py",
+                "src/utils/monitoring.py",
                 "src/app.py",
             ]
 

@@ -397,18 +397,6 @@ omit = [
     "test_logs/*",
     "cache/*",
     "logs/*",
-    "src/agents/*",
-    "src/app.py",
-    "src/containers.py",
-    "src/core/*",
-    "src/dspy_integration.py",
-    "src/prompting/*",
-    "src/retrieval/*",
-    "src/utils/security.py",
-    "src/utils/storage.py",
-    "src/utils/telemetry.py",
-    "src/models/embeddings.py",
-    "src/processing/pdf_pages.py",
 ]
 branch = true
 data_file = "coverage/.coverage"
