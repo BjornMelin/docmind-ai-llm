@@ -105,6 +105,101 @@ def test_graph_artifacts_construction(mock_llamaindex: None) -> None:
     assert hasattr(artifacts.query_engine, "retriever")
 
 
+def test_graph_artifacts_include_node_postprocessors(mock_llamaindex: None) -> None:
+    factory = build_llama_index_factory()
+    pg_index = _FakePropertyGraphIndex()
+    post = object()
+    artifacts = factory.build_graph_artifacts(
+        property_graph_index=pg_index, node_postprocessors=[post]
+    )
+    assert getattr(artifacts.query_engine, "node_postprocessors", None) == [post]
+
+
+def test_get_index_builder_returns_none_when_modules_missing(
+    mock_llamaindex: None,
+) -> None:
+    factory = build_llama_index_factory()
+    factory._modules = SimpleNamespace(property_graph_index_cls=None)  # type: ignore[attr-defined]
+    assert factory.get_index_builder() is None
+
+
+def test_property_graph_index_builder_requires_from_documents() -> None:
+    from src.retrieval import llama_index_adapter as lia
+
+    builder = lia._PropertyGraphIndexBuilder(object())  # type: ignore[attr-defined]
+    with pytest.raises(MissingLlamaIndexError):
+        builder.build_from_documents(documents=[])
+
+
+def test_resolve_llama_index_version_missing_all_distributions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.retrieval import llama_index_adapter as lia
+
+    def _raise(_dist: str) -> str:
+        raise lia.metadata.PackageNotFoundError()
+
+    monkeypatch.setattr(lia.metadata, "version", _raise)
+    with pytest.raises(MissingLlamaIndexError):
+        lia._resolve_llama_index_version()
+
+
+def test_resolve_llama_index_version_too_old(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.retrieval import llama_index_adapter as lia
+
+    monkeypatch.setattr(lia.metadata, "version", lambda _dist: "0.1.0")
+    with pytest.raises(MissingLlamaIndexError):
+        lia._resolve_llama_index_version()
+
+
+def test_build_real_adapter_pydantic_selector_branches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.retrieval import llama_index_adapter as lia
+
+    monkeypatch.setattr(lia, "llama_index_available", lambda: True)
+
+    def _fake_import_module(name: str):
+        if name == "llama_index.core.query_engine":
+            return SimpleNamespace(
+                RouterQueryEngine=object(), RetrieverQueryEngine=object()
+            )
+        if name == "llama_index.core.selectors":
+            return SimpleNamespace(LLMSingleSelector=object())
+        if name == "llama_index.core.tools":
+            return SimpleNamespace(QueryEngineTool=object(), ToolMetadata=object())
+        raise ImportError(name)
+
+    monkeypatch.setattr(lia, "import_module", _fake_import_module)
+    adapter = lia._build_real_adapter()
+    assert adapter.get_pydantic_selector(llm=None) is None
+
+    class _Pydantic:
+        @staticmethod
+        def from_defaults(llm=None):  # type: ignore[no-untyped-def]
+            return "SEL"
+
+    def _fake_import_with_pydantic(name: str):
+        if name == "llama_index.core.query_engine":
+            return SimpleNamespace(
+                RouterQueryEngine=object(), RetrieverQueryEngine=object()
+            )
+        if name == "llama_index.core.selectors":
+            return SimpleNamespace(
+                LLMSingleSelector=object(), PydanticSingleSelector=_Pydantic
+            )
+        if name == "llama_index.core.tools":
+            return SimpleNamespace(QueryEngineTool=object(), ToolMetadata=object())
+        raise ImportError(name)
+
+    monkeypatch.setattr(lia, "import_module", _fake_import_with_pydantic)
+    adapter = lia._build_real_adapter()
+    llm = SimpleNamespace(metadata=SimpleNamespace(is_function_calling_model=False))
+    assert adapter.get_pydantic_selector(llm=llm) is None
+    llm.metadata.is_function_calling_model = True
+    assert adapter.get_pydantic_selector(llm=llm) == "SEL"
+
+
 def test_graph_factory_missing_dependency_raises(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
