@@ -668,6 +668,14 @@ def _enforce_namespace_limits(
         if len(batch) < batch_size:
             break
         offset += batch_size
+        # Safeguard: cap total items to prevent unbounded memory usage
+        if len(items) > max_items * 10:
+            logger.warning(
+                "Namespace {} has excessive items ({}); capping eviction scan",
+                namespace,
+                len(items),
+            )
+            break
 
     if len(items) <= max_items:
         return 0

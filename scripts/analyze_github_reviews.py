@@ -44,6 +44,10 @@ def extract_threads(json_file: Path) -> list[dict[str, Any]] | None:
         print(f"Error: Invalid JSON in {json_file}: {exc}", file=sys.stderr)
         return None
 
+    if not isinstance(data, dict):
+        print(f"Error: Expected JSON object in {json_file}", file=sys.stderr)
+        return None
+
     return data.get("unresolved_review_threads", [])
 
 
@@ -241,6 +245,7 @@ def main() -> None:
     print(csv_content)
 
     output_csv = Path(args.output_csv)
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
     output_csv.write_text(csv_content, encoding="utf-8")
 
     _print_statistics(by_file)

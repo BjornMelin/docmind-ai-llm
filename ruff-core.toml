@@ -1,0 +1,5 @@
+# Stricter lint configuration for core library code (src/).
+extend = "pyproject.toml"
+
+[lint.pylint]
+max-positional-args = 6

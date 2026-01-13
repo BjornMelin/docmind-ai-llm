@@ -305,7 +305,7 @@ class ServerHybridRetriever:
             result = self._query_qdrant(prefetch, fused_fetch_k)
         # Network/remote path: treat common connectivity or query errors as empty result
         except QDRANT_SCHEMA_EXCEPTIONS as exc:  # pragma: no cover
-            logger.warning("Qdrant hybrid query failed: %s", exc)
+            logger.warning("Qdrant hybrid query failed: {}", exc)
             # Dense-only fallback via vector index is not available here; return empty
             return []
 

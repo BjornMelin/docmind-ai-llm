@@ -209,9 +209,62 @@ def _export_graphs(
     return exports_meta
 
 
-def _collect_corpus_paths(  # noqa: PLR0912, PLR0915
-    settings_obj: Any,
-) -> tuple[list[Path], Path]:
+def _is_corpus_cache_valid(
+    cached_paths: list[Path],
+    uploads_dir: Path,
+    manifest_mtime: float,
+) -> bool:
+    """Return True if cached corpus manifest is still valid."""
+    missing = [p for p in cached_paths if not p.exists()]
+    if missing:
+        logger.debug(
+            "Corpus manifest cache invalidated; {} missing files detected",
+            len(missing),
+        )
+        return False
+
+    file_count = 0
+    current_paths: list[Path] = []
+    for p in islice(uploads_dir.rglob("*"), MAX_CORPUS_FILES + 1):
+        if p.is_file():
+            file_count += 1
+            current_paths.append(p)
+            # Break early if count already differs
+            if file_count > len(cached_paths):
+                break
+    if file_count != len(cached_paths):
+        logger.debug(
+            "Corpus manifest cache invalidated; cached_count={} current_count={}",
+            len(cached_paths),
+            file_count,
+        )
+        return False
+
+    # Compare path sets to detect renames or moved files
+    cached_path_set = {str(p) for p in cached_paths}
+    current_path_set = {str(p) for p in current_paths}
+    if cached_path_set != current_path_set:
+        logger.debug(
+            "Corpus manifest cache invalidated; path set differs "
+            "(cached: {}, current: {})",
+            len(cached_path_set),
+            len(current_path_set),
+        )
+        return False
+
+    sample_size = min(50, len(cached_paths))
+    for p in cached_paths[:sample_size]:
+        try:
+            if p.stat().st_mtime > manifest_mtime:
+                logger.debug("Corpus manifest cache invalidated; newer files found")
+                return False
+        except OSError:
+            continue
+
+    return True
+
+
+def _collect_corpus_paths(settings_obj: Any) -> tuple[list[Path], Path]:
     """Collect uploaded corpus paths and base directory.
 
     Uses a cached manifest if available, falling back to bounded globbing
@@ -242,56 +295,10 @@ def _collect_corpus_paths(  # noqa: PLR0912, PLR0915
             except OSError:
                 manifest_mtime = 0.0
                 uploads_mtime = 0.0
-            if uploads_mtime <= manifest_mtime:
-                missing = [p for p in cached_paths if not p.exists()]
-                if not missing:
-                    file_count = 0
-                    current_paths: list[Path] = []
-                    for p in islice(uploads_dir.rglob("*"), MAX_CORPUS_FILES + 1):
-                        if p.is_file():
-                            file_count += 1
-                            current_paths.append(p)
-                            # Break early if count already differs
-                            if file_count > len(cached_paths):
-                                break
-                    if file_count != len(cached_paths):
-                        logger.debug(
-                            "Corpus manifest cache invalidated; cached_count={} "
-                            "current_count={}",
-                            len(cached_paths),
-                            file_count,
-                        )
-                    else:
-                        # Compare path sets to detect renames or moved files
-                        cached_path_set = {str(p) for p in cached_paths}
-                        current_path_set = {str(p) for p in current_paths}
-                        if cached_path_set != current_path_set:
-                            logger.debug(
-                                "Corpus manifest cache invalidated; path set differs "
-                                "(cached: {}, current: {})",
-                                len(cached_path_set),
-                                len(current_path_set),
-                            )
-                        else:
-                            sample_size = min(50, len(cached_paths))
-                            newer_found = False
-                            for p in cached_paths[:sample_size]:
-                                try:
-                                    if p.stat().st_mtime > manifest_mtime:
-                                        newer_found = True
-                                        break
-                                except OSError:
-                                    continue
-                            if not newer_found:
-                                return cached_paths, uploads_dir
-                            logger.debug(
-                                "Corpus manifest cache invalidated; newer files found"
-                            )
-                else:
-                    logger.debug(
-                        "Corpus manifest cache invalidated; {} missing files detected",
-                        len(missing),
-                    )
+            if uploads_mtime <= manifest_mtime and _is_corpus_cache_valid(
+                cached_paths, uploads_dir, manifest_mtime
+            ):
+                return cached_paths, uploads_dir
 
     # Glob for corpus files (bounded to immediate children if corpus is large)
     corpus_paths: list[Path] = []

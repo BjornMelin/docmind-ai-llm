@@ -188,7 +188,12 @@ class MultimodalFusionRetriever:
             self._image.close()
 
     def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:
-        """Retrieve fused multimodal results."""
+        """Retrieve fused multimodal results.
+
+        Notes:
+            Text retrieval is intentionally prioritized; image retrieval uses
+            the remaining latency budget.
+        """
         qtext = query.query_str if isinstance(query, QueryBundle) else str(query)
         t0 = time.perf_counter()
 
@@ -204,6 +209,7 @@ class MultimodalFusionRetriever:
             try:
                 text_nodes = text_future.result(timeout=text_timeout_s)
             except FuturesTimeoutError:
+                # cancel() is best-effort and typically no-ops once running.
                 text_future.cancel()
                 logger.warning("Text retrieval timed out")
                 text_nodes = []
@@ -214,6 +220,7 @@ class MultimodalFusionRetriever:
             elapsed = time.perf_counter() - t0
             remaining_time = max(0.0, image_timeout_s - elapsed)
             if remaining_time <= 0.0:
+                # cancel() is best-effort and typically no-ops once running.
                 image_future.cancel()
                 logger.warning("Image retrieval budget exhausted")
                 image_nodes = []
@@ -221,6 +228,7 @@ class MultimodalFusionRetriever:
                 try:
                     image_nodes = image_future.result(timeout=remaining_time)
                 except FuturesTimeoutError:
+                    # cancel() is best-effort and typically no-ops once running.
                     image_future.cancel()
                     logger.warning("Image retrieval timed out")
                     image_nodes = []

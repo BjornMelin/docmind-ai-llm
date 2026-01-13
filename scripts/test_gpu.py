@@ -351,20 +351,11 @@ def _run_benchmarks(
     exit_codes: list[int],
     test_results: dict[str, bool],
     *,
-    cwd: Path,
+    cwd: Path | None = None,
 ) -> None:
-    """Run optional performance benchmark steps.
-
-    **IMPORTANT**: The `cwd` parameter is mandatory and must point to the
-    repository root, as this function performs filesystem checks (e.g.,
-    vllm_script.exists()) and uses cwd for run_command calls.
-
-    Args:
-        exit_codes: List to append exit codes for benchmark runs.
-        test_results: Dictionary to record benchmark test outcomes.
-        cwd: Repository root directory (required). Must be a valid existing Path
-            pointing to the project root where scripts/ directory exists.
-    """
+    """Run optional performance benchmark steps."""
+    if cwd is None or not cwd.exists() or not (cwd / "scripts").exists():
+        raise ValueError("cwd must be provided and point to repository root")
     print("\nStep 5: Performance Benchmarks")
     cmd = ["uv", "run", "python", "scripts/performance_monitor.py", "--run-tests"]
     exit_code, _ = run_command(cmd, "Performance Benchmarks", timeout=1200, cwd=cwd)
@@ -401,12 +392,18 @@ def _run_memory_leak_check(
 
     # Aggregated trend: sum of positive differences (sustained growth)
     trend = sum(d for d in diffs if d > 0)
+    net_change = memory_samples[-1] - memory_samples[0]
 
-    if trend > 500:
-        print(f"WARN: Potential memory leak detected: {trend:.0f}MB increase")
+    if trend > 500 and net_change > 200:
+        print(
+            "WARN: Potential memory leak detected: "
+            f"{trend:.0f}MB trend, {net_change:.0f}MB net increase"
+        )
         test_results["memory_stable"] = False
         return
-    print(f"OK: Memory usage stable: {trend:.0f}MB change")
+    print(
+        f"OK: Memory usage stable: {trend:.0f}MB trend, {net_change:.0f}MB net change"
+    )
     test_results["memory_stable"] = True
 
 

@@ -52,6 +52,11 @@ jobs:
           uvx ruff format --check .
           uvx ruff check --fix --exit-non-zero-on-fix .
 
+      - name: Quality Gate - Ruff (core limits)
+        run: |
+          uvx ruff check src --config ruff-core.toml
+          echo "::notice::Core lint uses stricter max-positional-args; review core API surfaces periodically."
+
       - name: Quality Gate - Pyright
         run: |
           uv run pyright --threads 4
