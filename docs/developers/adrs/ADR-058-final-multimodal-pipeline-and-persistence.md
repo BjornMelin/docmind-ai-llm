@@ -5,6 +5,14 @@
 **Supersedes (as integrated source of truth):** ADR-037 (multimodal reranking), ADR-057 (chat persistence + memory)  
 **Related:** SPEC-041, SPEC-042, ADR-009, ADR-011, ADR-031, ADR-047, ADR-055
 
+## Dependencies & Security Constraints
+
+- `langgraph-checkpoint-sqlite==3.0.1` (pinned; versions `<3.0.1` have known CVEs affecting checkpoint integrity)
+- `sqlite-vec` (runtime dependency used by LangGraph checkpointing; required for vector-backed SQLite)
+- Optional multimodal deps (fail-open): `transformers` + `torch` (SigLIP model execution/embeddings; multimodal search is disabled if unavailable)
+
+Verification (upstream snapshot reference): `opensrc/langgraph-checkpoint-sqlite@3.0.1/`.
+
 ## Context
 
 DocMind must ship a **final-release** multimodal experience that works end-to-end:

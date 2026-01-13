@@ -803,6 +803,10 @@ class DocMindSettings(BaseSettings):
             if candidate.is_absolute():
                 continue
             if candidate.parent != Path("."):
+                # _normalize_persistence_paths: only relocate bare filenames.
+                # If `candidate` includes any parent directory
+                # (`candidate.parent != Path(".")`), preserve it as-is rather than
+                # forcing it under `data_dir`.
                 continue
             target = getattr(self, section, None)
             if target is None:

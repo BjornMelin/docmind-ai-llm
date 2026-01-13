@@ -512,7 +512,20 @@ def consolidate_memory_candidates(
                     actions.append(ConsolidationAction(action="ADD", candidate=cand))
                 continue
 
-            if float(score) >= threshold and existing_kind == cand.kind:
+            score_value = float(score)
+            # Consolidation decision rule:
+            # - Only consider UPDATE/NOOP when `score_value >= threshold` and
+            #   `existing_kind == cand.kind`.
+            # - If `_content_matches(existing_content, cand.content)`
+            #   (exact/near-exact), require `cand.importance > existing_importance`
+            #   before UPDATE; otherwise NOOP.
+            #   Exact duplicates are stricter to avoid churn.
+            # - If the match is semantic-only (the `else` branch), allow
+            #   `cand.importance >= existing_importance` so equal-importance candidates
+            #   can replace older entries.
+            # - Updates merge tags via `_merge_tags(existing_value, cand)` and record a
+            #   `ConsolidationAction(..., existing_id=best_match.key, ...)`.
+            if score_value >= threshold and existing_kind == cand.kind:
                 if _content_matches(existing_content, cand.content):
                     if cand.importance > existing_importance:
                         cand.tags = _merge_tags(existing_value, cand)

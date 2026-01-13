@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-import types as types_
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from types import ModuleType, SimpleNamespace
@@ -118,7 +117,7 @@ def install_llama_index_core(monkeypatch: pytest.MonkeyPatch) -> None:
         context_window = 4096
         num_output = 512
 
-    li_core.Settings = _DummySettings
+    li_core.Settings = _DummySettings  # type: ignore[attr-defined]
 
     class _DummyDocument:
         def __init__(
@@ -127,7 +126,7 @@ def install_llama_index_core(monkeypatch: pytest.MonkeyPatch) -> None:
             self.text = text
             self.metadata = metadata or {}
 
-    li_core.Document = _DummyDocument
+    li_core.Document = _DummyDocument  # type: ignore[attr-defined]
 
     class _DummyStorageContext:
         """Minimal storage context shim used in tests."""
@@ -144,14 +143,14 @@ def install_llama_index_core(monkeypatch: pytest.MonkeyPatch) -> None:
         ) -> _DummyStorageContext:
             return cls(vector_store=vector_store, image_store=image_store)
 
-    li_core.StorageContext = _DummyStorageContext
+    li_core.StorageContext = _DummyStorageContext  # type: ignore[attr-defined]
 
     class _DummyPGI:
         """Placeholder for PropertyGraphIndex import compatibility in tests."""
 
         pass
 
-    li_core.PropertyGraphIndex = _DummyPGI
+    li_core.PropertyGraphIndex = _DummyPGI  # type: ignore[attr-defined]
 
     li_llms = ModuleType("llama_index.core.llms")
 
@@ -162,7 +161,7 @@ def install_llama_index_core(monkeypatch: pytest.MonkeyPatch) -> None:
             self.role = role
             self.content = content
 
-    li_llms.ChatMessage = _ChatMessage
+    li_llms.ChatMessage = _ChatMessage  # type: ignore[attr-defined]
 
     li_indices = ModuleType("llama_index.core.indices")
 
@@ -173,21 +172,21 @@ def install_llama_index_core(monkeypatch: pytest.MonkeyPatch) -> None:
         def from_documents(cls, *_args: Any, **_kwargs: Any) -> _DummyMMIndex:
             return cls()
 
-    li_indices.MultiModalVectorStoreIndex = _DummyMMIndex
+    li_indices.MultiModalVectorStoreIndex = _DummyMMIndex  # type: ignore[attr-defined]
 
     class _DummyVSI:
         pass
 
-    li_core.VectorStoreIndex = _DummyVSI
+    li_core.VectorStoreIndex = _DummyVSI  # type: ignore[attr-defined]
 
     li_retrievers = ModuleType("llama_index.core.retrievers")
 
     class _DummyBaseRetriever:
         pass
 
-    li_retrievers.BaseRetriever = _DummyBaseRetriever
+    li_retrievers.BaseRetriever = _DummyBaseRetriever  # type: ignore[attr-defined]
 
-    li_pkg.core = li_core
+    li_pkg.core = li_core  # type: ignore[attr-defined]
 
     monkeypatch.setitem(sys.modules, "llama_index", li_pkg)
     monkeypatch.setitem(sys.modules, "llama_index.core", li_core)
@@ -201,36 +200,36 @@ def install_llama_index_core(monkeypatch: pytest.MonkeyPatch) -> None:
 def install_agent_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
     """Provide lightweight stubs for src.agents imports."""
     agents_coord = ModuleType("src.agents.coordinator")
-    agents_coord.MultiAgentCoordinator = _StubCoordinator
+    agents_coord.MultiAgentCoordinator = _StubCoordinator  # type: ignore[attr-defined]
 
     agents_factory = ModuleType("src.agents.tool_factory")
-    agents_factory.ToolFactory = _StubToolFactory
+    agents_factory.ToolFactory = _StubToolFactory  # type: ignore[attr-defined]
 
     monkeypatch.setitem(sys.modules, "src.agents.coordinator", agents_coord)
     monkeypatch.setitem(sys.modules, "src.agents.tool_factory", agents_factory)
 
 
-def build_isolated_modules() -> dict[str, types_.ModuleType]:
+def build_isolated_modules() -> dict[str, ModuleType]:
     """Build isolated module stubs for workflow testing."""
-    src_pkg = types_.ModuleType("src")
-    agents_pkg = types_.ModuleType("src.agents")
-    utils_pkg = types_.ModuleType("src.utils")
+    src_pkg = ModuleType("src")
+    agents_pkg = ModuleType("src.agents")
+    utils_pkg = ModuleType("src.utils")
 
-    coord_mod = types_.ModuleType("src.agents.coordinator")
-    coord_mod.MultiAgentCoordinator = _StubCoordinator
+    coord_mod = ModuleType("src.agents.coordinator")
+    coord_mod.MultiAgentCoordinator = _StubCoordinator  # type: ignore[attr-defined]
 
-    tf_mod = types_.ModuleType("src.agents.tool_factory")
-    tf_mod.ToolFactory = _StubToolFactory
+    tf_mod = ModuleType("src.agents.tool_factory")
+    tf_mod.ToolFactory = _StubToolFactory  # type: ignore[attr-defined]
 
-    src_pkg.agents = agents_pkg
-    src_pkg.utils = utils_pkg
+    src_pkg.agents = agents_pkg  # type: ignore[attr-defined]
+    src_pkg.utils = utils_pkg  # type: ignore[attr-defined]
 
     return {
         "src": src_pkg,
         "src.agents": agents_pkg,
         "src.utils": utils_pkg,
-        "src.utils.core": types_.ModuleType("src.utils.core"),
-        "src.utils.document": types_.ModuleType("src.utils.document"),
+        "src.utils.core": ModuleType("src.utils.core"),
+        "src.utils.document": ModuleType("src.utils.document"),
         "src.agents.coordinator": coord_mod,
         "src.agents.tool_factory": tf_mod,
     }

@@ -112,6 +112,35 @@ def ensure_siglip_image_collection(
         logger.warning("ensure_siglip_image_collection skipped: %s", exc)
 
 
+def _siglip_expected_dim(embedder: Any) -> int:
+    expected = _DEFAULT_SIGLIP_DIM
+    ensure_loaded = getattr(embedder, "_ensure_loaded", None)
+    if callable(ensure_loaded):
+        with contextlib.suppress(Exception):
+            ensure_loaded()
+    with contextlib.suppress(Exception):
+        expected = int(
+            getattr(embedder, "_dim", None)
+            or getattr(embedder, "dim", None)
+            or _DEFAULT_SIGLIP_DIM
+        )
+    return expected
+
+
+def _page_image_record_identifier(rec: PageImageRecord) -> str:
+    for attr in ("id", "page_id"):
+        val = getattr(rec, attr, None)
+        if val:
+            return str(val)
+    image_path = getattr(rec, "image_path", None)
+    if image_path:
+        return str(Path(image_path).name)
+    doc_id = getattr(rec, "doc_id", None)
+    if doc_id:
+        return str(doc_id)
+    return "<unknown>"
+
+
 def index_page_images_siglip(
     client: QdrantClient,
     collection_name: str,
@@ -124,18 +153,7 @@ def index_page_images_siglip(
     if not records:
         return 0
 
-    expected_dim = _DEFAULT_SIGLIP_DIM
-    ensure_loaded = getattr(embedder, "_ensure_loaded", None)
-    if callable(ensure_loaded):
-        with contextlib.suppress(Exception):
-            ensure_loaded()
-    with contextlib.suppress(Exception):
-        expected_dim = int(
-            getattr(embedder, "_dim", None)
-            or getattr(embedder, "dim", None)
-            or _DEFAULT_SIGLIP_DIM
-        )
-
+    expected_dim = _siglip_expected_dim(embedder)
     ensure_siglip_image_collection(client, collection_name, dim=expected_dim)
 
     # Best-effort short-circuit when existing phash matches (avoid re-embed).
@@ -176,21 +194,31 @@ def index_page_images_siglip(
                 )
 
     indexed = 0
-    for i in range(0, len(to_embed), max(1, int(batch_size))):
-        batch = to_embed[i : i + max(1, int(batch_size))]
+    batch_size_int = max(1, int(batch_size))
+    for i in range(0, len(to_embed), batch_size_int):
+        batch = to_embed[i : i + batch_size_int]
         imgs = [_load_rgb_image(r.image_path) for r in batch]
         vecs = embedder.get_image_embeddings(imgs, batch_size=len(imgs))
         if not isinstance(vecs, np.ndarray):
             vecs = np.asarray(vecs, dtype=np.float32)
-        points: list[qmodels.PointStruct] = []
-        if len(vecs) != len(batch):
+
+        expected = len(batch)
+        got = len(vecs)
+        matched = min(expected, got)
+        if expected != got:
+            skipped_ids = [_page_image_record_identifier(r) for r in batch[matched:]]
             logger.warning(
-                "Embedding count mismatch: expected %d, got %d",
-                len(batch),
-                len(vecs),
+                "Embedding count mismatch; expected len(batch)={} got len(vecs)={}; "
+                "indexing {} and skipping {} records: {}",
+                expected,
+                got,
+                matched,
+                len(skipped_ids),
+                skipped_ids,
             )
-            continue
-        for r, vec in zip(batch, vecs, strict=False):
+
+        points: list[qmodels.PointStruct] = []
+        for r, vec in zip(batch[:matched], vecs[:matched], strict=False):
             pid = r.point_id()
             points.append(
                 qmodels.PointStruct(
@@ -199,8 +227,10 @@ def index_page_images_siglip(
                     payload=_build_payload(r),
                 )
             )
-        client.upsert(collection_name=collection_name, points=points)
-        indexed += len(points)
+
+        if points:
+            client.upsert(collection_name=collection_name, points=points)
+            indexed += len(points)
 
     return indexed
 

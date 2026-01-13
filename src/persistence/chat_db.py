@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.config.settings import DocMindSettings, settings
+from src.persistence.memory_store import NAMESPACE_THREAD_INDEX
 from src.persistence.path_utils import resolve_path_under_data_dir
 from src.utils.time import now_ms
 
@@ -247,7 +248,15 @@ def purge_session(conn: sqlite3.Connection, *, thread_id: str) -> None:
             with contextlib.suppress(sqlite3.OperationalError):
                 conn.execute(stmt, (tid,))
 
-        # DocMind memory store tables (best-effort; may not exist yet)
+        # DocMind memory store tables (best-effort; may not exist yet).
+        # Namespace layout is positional (SPEC-041):
+        # `namespace=(user_id, session_type, thread_id, ...)` so `thread_id` maps to
+        # `ns{NAMESPACE_THREAD_INDEX}` (e.g. ns2).
+        if NAMESPACE_THREAD_INDEX != 2:
+            raise ValueError(
+                "Unexpected namespace layout: expected thread_id at ns2 "
+                f"(NAMESPACE_THREAD_INDEX={NAMESPACE_THREAD_INDEX})"
+            )
         try:
             conn.execute(
                 "DELETE FROM docmind_store_vec WHERE ns2=?;",

@@ -9,6 +9,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from loguru import logger
 
 from src.persistence.artifacts import ArtifactRef
 from src.retrieval.image_index import (
@@ -150,6 +151,74 @@ def test_index_page_images_upserts_embeddings_when_needed(
     assert indexed == 1
     assert client.upsert_calls
     assert len(client.upsert_calls[0]) == 1
+
+
+def test_index_page_images_handles_embedding_count_mismatch(
+    monkeypatch, tmp_path: Path
+) -> None:
+    client = _Client()
+    client.exists = True
+
+    rec1 = PageImageRecord(
+        doc_id="d1",
+        page_no=1,
+        image=ArtifactRef(sha256="i1", suffix=".webp"),
+        image_path=tmp_path / "p1.webp",
+        phash="new",
+    )
+    rec2 = PageImageRecord(
+        doc_id="d1",
+        page_no=2,
+        image=ArtifactRef(sha256="i2", suffix=".webp"),
+        image_path=tmp_path / "p2.webp",
+        phash="new",
+    )
+    client._retrieve_points = []
+
+    class _Embed:
+        def get_image_embeddings(self, imgs: list[object], batch_size: int = 1):  # type: ignore[no-untyped-def]
+            assert len(imgs) == batch_size
+            return np.ones((batch_size - 1, 768), dtype=np.float32)
+
+    monkeypatch.setattr(
+        "src.retrieval.image_index._load_rgb_image", lambda _p: object()
+    )
+
+    indexed = index_page_images_siglip(
+        client,  # type: ignore[arg-type]
+        "img",
+        [rec1, rec2],
+        embedder=_Embed(),
+        batch_size=2,
+    )
+
+    assert indexed == 1
+    assert client.upsert_calls
+    assert len(client.upsert_calls[0]) == 1
+
+    messages: list[str] = []
+
+    def _sink(msg):
+        messages.append(str(msg))
+
+    sink_id = logger.add(_sink, level="WARNING")
+    try:
+        # Trigger another mismatch to capture the warning through loguru.
+        index_page_images_siglip(
+            client,  # type: ignore[arg-type]
+            "img",
+            [rec1, rec2],
+            embedder=_Embed(),
+            batch_size=2,
+        )
+    finally:
+        logger.remove(sink_id)
+
+    joined = "\n".join(messages)
+    assert "Embedding count mismatch" in joined
+    assert "len(batch)=2" in joined
+    assert "len(vecs)=1" in joined
+    assert "p2.webp" in joined
 
 
 def test_collect_artifact_refs_for_doc_id_extracts_image_and_thumbnail() -> None:

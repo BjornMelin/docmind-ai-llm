@@ -375,7 +375,7 @@ def _run_memory_leak_check(
     for i in range(5):
         print(f"   Sample {i + 1}/5...")
         memory = monitor_gpu_memory(cwd=cwd)
-        memory_samples.append(float(memory["used"]))
+        memory_samples.append(memory["used"])
         time.sleep(10)
     trend = memory_samples[-1] - memory_samples[0]
     if trend > 500:

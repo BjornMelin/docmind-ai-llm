@@ -63,6 +63,11 @@ VEC_TABLE = "docmind_store_vec"
 # Namespace representation
 _NS_DELIM = "\x1f"
 _MAX_NS_DEPTH = 8
+
+# Namespace layout: (user_id, session_type, thread_id, ...)
+# Used by chat session purge logic (SPEC-041).
+NAMESPACE_THREAD_INDEX = 2
+
 # Oversample to compensate for vec0 offset limitations.
 VEC0_OVERSAMPLE = 256
 

@@ -192,6 +192,13 @@ def test_chat_time_travel_fork_drops_future_messages(
     assert not app.exception
     assert _user_texts(app) == ["one", "two"]
 
+    # AppTest uses a trigger-based widget for st.chat_input. Submit an empty
+    # value to clear any stale trigger payloads before interacting with the
+    # time-travel sidebar widgets.
+    app = app.chat_input[0].set_value("").run()
+    assert not app.exception
+    assert _user_texts(app) == ["one", "two"]
+
     thread_id = str(app.session_state["chat_thread_id"] or "")
     assert thread_id
 
@@ -231,8 +238,6 @@ def test_chat_time_travel_fork_drops_future_messages(
 
     # Drive the time-travel UI to resume from the chosen checkpoint.
     checkpoint_select.set_value(fork_checkpoint)
-    # Prevent AppTest from re-submitting the previous chat input trigger value on reruns.
-    app.chat_input[0].set_value(None)
     resume_btn = next(
         b
         for b in app.button

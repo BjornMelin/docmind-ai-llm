@@ -77,7 +77,8 @@ def resolve_adapter(
     return get_adapter()
 
 
-# Register default adapter eagerly so callers can rely on lookups.
+# Register default adapter lazily on first lookup —
+# `ensure_default_adapter()` is intentionally not called here.
 # ensure_default_adapter()
 
 

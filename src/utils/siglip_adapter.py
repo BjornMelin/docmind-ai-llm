@@ -5,12 +5,10 @@ numpy vector, suitable for MultiModalVectorStoreIndex flows that expect a
 CLIP-like interface.
 """
 
-import logging
 from typing import Any
 
 import numpy as np
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 class SiglipEmbedding:
@@ -179,7 +177,7 @@ class SiglipEmbedding:
             inputs = self._proc(  # type: ignore[call-arg]
                 text=[str(text)],
                 return_tensors="pt",
-                padding=True,
+                padding="max_length",
                 truncation=True,
             )
             input_ids = inputs.get("input_ids")
@@ -271,7 +269,7 @@ class SiglipEmbedding:
                 inputs = self._proc(  # type: ignore[call-arg]
                     text=batch,
                     return_tensors="pt",
-                    padding=True,
+                    padding="max_length",
                     truncation=True,
                 )
                 input_ids = inputs.get("input_ids")

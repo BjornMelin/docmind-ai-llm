@@ -47,7 +47,7 @@ ArtifactRef:
 ### 3.2 Vectors
 
 - Named vector: `siglip`
-  - Size: 768 (default, from SigLIP base)
+  - Size: 768 (from `google/siglip-base-patch16-224` via `transformers>=4.55.0,<4.58.0`)
   - Distance: cosine
 
 ### 3.3 Payload schema (thin)

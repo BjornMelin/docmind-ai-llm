@@ -189,13 +189,13 @@ def _iter_edges(
             j += 1
 
 
-def _render_rel_map_jsonl(
+def _build_rel_map_rows(
     *,
     store: Any,
     seed_node_ids: Sequence[str],
     depth: int,
-) -> list[str]:
-    """Best-effort conversion of store rel_map to JSONL lines."""
+) -> list[dict[str, Any]]:
+    """Best-effort conversion of store rel_map to dict rows."""
     if not (hasattr(store, "get") and hasattr(store, "get_rel_map")):
         return []
     try:
@@ -205,9 +205,7 @@ def _render_rel_map_jsonl(
         logger.debug("get_rel_map(nodes, depth=...) failed", exc_info=True)
         return []
 
-    import json
-
-    lines: list[str] = []
+    rows: list[dict[str, Any]] = []
     for path_idx, rel_path in enumerate(rel_paths):
         try:
             for head, tail, maybe_edge, path_depth in _iter_edges(rel_path, depth):
@@ -215,18 +213,34 @@ def _render_rel_map_jsonl(
                     _relation_label(maybe_edge) if maybe_edge is not None else "related"
                 )
                 sources = list({*(_source_ids(head) + _source_ids(tail))})
-                row = {
+                rows.append({
                     "subject": _node_identifier(head),
                     "relation": relation,
                     "object": _node_identifier(tail),
                     "depth": path_depth,
                     "path_id": path_idx,
                     "source_ids": sources,
-                }
-                lines.append(json.dumps(row, ensure_ascii=False))
+                })
         except TypeError:  # pragma: no cover - defensive
             continue
-    return lines
+    return rows
+
+
+def _render_rel_map_jsonl(
+    *,
+    store: Any,
+    seed_node_ids: Sequence[str],
+    depth: int,
+) -> list[str]:
+    """Best-effort conversion of store rel_map to JSONL lines."""
+    import json
+
+    return [
+        json.dumps(row, ensure_ascii=False)
+        for row in _build_rel_map_rows(
+            store=store, seed_node_ids=seed_node_ids, depth=depth
+        )
+    ]
 
 
 def export_graph_jsonl(
@@ -298,10 +312,7 @@ def export_graph_parquet(
     except ImportError:  # pragma: no cover - optional dependency
         return
 
-    import json
-
-    lines = _render_rel_map_jsonl(store=store, seed_node_ids=node_ids, depth=int(depth))
-    rows = [json.loads(line) for line in lines if str(line).strip()]
+    rows = _build_rel_map_rows(store=store, seed_node_ids=node_ids, depth=int(depth))
     if not rows:
         return
 

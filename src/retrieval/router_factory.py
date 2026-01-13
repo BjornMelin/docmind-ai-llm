@@ -12,6 +12,7 @@ registry-backed helpers in ``src.retrieval.graph_config``.
 
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
@@ -298,9 +299,23 @@ def _select_router(
     the_llm: Any,
 ) -> Any:
     """Instantiate a router query engine for the assembled tools."""
-    selector = adapter.get_pydantic_selector(
-        the_llm
-    ) or adapter.LLMSingleSelector.from_defaults(llm=the_llm)
+    selector = adapter.get_pydantic_selector(the_llm)
+    if selector is None:
+        if the_llm is None:
+            raise ValueError(
+                "Unable to build router selector: `the_llm` is None and "
+                "LLMSingleSelector.from_defaults requires an LLM."
+            )
+        try:
+            selector = adapter.LLMSingleSelector.from_defaults(llm=the_llm)
+        except Exception as exc:  # pragma: no cover - defensive
+            selector = adapter.get_pydantic_selector(the_llm)
+            if selector is None:
+                raise RuntimeError(
+                    "Failed to build router selector via "
+                    "LLMSingleSelector.from_defaults(llm=the_llm)."
+                ) from exc
+
     return adapter.RouterQueryEngine(
         selector=selector,
         query_engine_tools=tools,
@@ -356,6 +371,12 @@ def build_router_engine(
         use_rerank_flag = True
 
     the_llm = llm
+    if the_llm is None:
+        with contextlib.suppress(Exception):
+            from src.config.llm_factory import build_llm
+
+            the_llm = build_llm(cfg)
+
     get_pp = _safe_get_postprocessors()
     tools: list[Any] = [
         _build_vector_tool(
