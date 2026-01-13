@@ -291,14 +291,15 @@ class _SuppressTelemetry:
         tb: object | None,
     ) -> bool:
         if exc_type is not None:
-            logger.debug(
-                "memory tool telemetry suppressed: {exc_type}: {exc}",
+            is_expected = issubclass(exc_type, (OSError, RuntimeError, ValueError))
+            log_func = logger.debug if is_expected else logger.warning
+            log_func(
+                "memory tool telemetry error: {exc_type}: {exc}",
                 exc_type=exc_type.__name__,
                 exc=exc,
             )
-        return exc_type is not None and issubclass(
-            exc_type, (OSError, RuntimeError, ValueError)
-        )
+            return is_expected
+        return False
 
 
 def _recent_dialogue(messages: list[AnyMessage]) -> list[AnyMessage]:

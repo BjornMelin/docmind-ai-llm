@@ -25,7 +25,7 @@ Architecture Decision:
 
 from typing import Annotated, Any, NotRequired
 
-from langchain.agents.middleware.types import AgentState
+from langchain.agents import AgentState
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field

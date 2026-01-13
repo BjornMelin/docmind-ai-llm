@@ -209,6 +209,10 @@ def _collect_corpus_paths(settings_obj: Any) -> tuple[list[Path], Path]:
 
     Uses a cached manifest if available, falling back to bounded globbing
     to avoid expensive recursive directory traversal on large corpora.
+
+    Note: The manifest cache is best-effort and not invalidated when files change.
+    If corpus files are added/removed after caching, the cache may be stale.
+    Delete .corpus_manifest.json in the data directory to force a refresh.
     """
     import json
 
@@ -237,8 +241,11 @@ def _collect_corpus_paths(settings_obj: Any) -> tuple[list[Path], Path]:
                 corpus_paths.append(p)
 
     # Cache the result for next time
-    with contextlib.suppress(Exception), open(manifest_file, "w") as f:
-        json.dump({"files": [str(p) for p in corpus_paths]}, f)
+    try:
+        with open(manifest_file, "w") as f:
+            json.dump({"files": [str(p) for p in corpus_paths]}, f)
+    except Exception:  # noqa: S110 - Best-effort caching, ignore failures
+        pass
 
     return corpus_paths, uploads_dir
 
