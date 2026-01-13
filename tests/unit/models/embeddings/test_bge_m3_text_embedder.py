@@ -45,3 +45,34 @@ def test_text_embedder_empty_inputs():
     out = t.encode_text([], return_dense=True, return_sparse=True)
     assert out["dense"].shape == (0, 1024)
     assert out["sparse"] == []
+
+
+@pytest.mark.unit
+def test_text_embedder_lazy_loads_flagembedding_backend(monkeypatch):
+    """Exercise the FlagEmbedding import path without importing the real backend."""
+    import sys
+    from types import ModuleType
+
+    class _StubBGEM3:
+        def __init__(
+            self, _model_name: str, *, use_fp16: bool, devices: list[str]
+        ) -> None:
+            self.use_fp16 = bool(use_fp16)
+            self.devices = list(devices)
+
+        def encode(self, texts: list[str], **_kwargs):
+            n = len(texts)
+            dense = np.zeros((n, 8), dtype=np.float32)
+            sparse = [{1: 0.5} for _ in range(n)]
+            return {"dense_vecs": dense, "lexical_weights": sparse}
+
+    stub_mod = ModuleType("FlagEmbedding")
+    stub_mod.BGEM3FlagModel = _StubBGEM3  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "FlagEmbedding", stub_mod)
+
+    t = TextEmbedder(device="cpu")
+    out = t.encode_text(
+        ["hello"], return_dense=True, return_sparse=True, normalize=False
+    )
+    assert out["dense"].shape == (1, 8)
+    assert out["sparse"] == [{1: 0.5}]
