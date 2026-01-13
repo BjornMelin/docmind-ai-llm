@@ -145,9 +145,7 @@ def test_retrieval_agent_success_path(monkeypatch: pytest.MonkeyPatch):
         "graphrag_used": False,
     }
 
-    monkeypatch.setattr(
-        mod, "create_agent", lambda *_, **__: _make_stub_agent(payload)
-    )
+    monkeypatch.setattr(mod, "create_agent", lambda *_, **__: _make_stub_agent(payload))
 
     agent = mod.RetrievalAgent(llm=None, tools_data={})
     assert agent.total_retrievals == 0
@@ -177,9 +175,7 @@ def test_retrieval_agent_falls_back_on_bad_payload(monkeypatch: pytest.MonkeyPat
         "query_optimized": "q",
     }
 
-    monkeypatch.setattr(
-        mod, "create_agent", lambda *_, **__: _bad_payload_agent()
-    )
+    monkeypatch.setattr(mod, "create_agent", lambda *_, **__: _bad_payload_agent())
     monkeypatch.setattr(mod, "retrieve_documents", _DummyTool(fallback_payload))
 
     agent = mod.RetrievalAgent(llm=None, tools_data={})

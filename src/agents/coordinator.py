@@ -61,7 +61,7 @@ from src.dspy_integration import DSPyLlamaIndexRetriever, is_dspy_available
 from src.telemetry.opentelemetry import configure_observability
 
 # Import agent-specific models
-from .models import AgentResponse, MultiAgentState
+from .models import AgentResponse, MultiAgentGraphState, MultiAgentState
 
 _COORDINATOR_TRACER = trace.get_tracer("docmind.agents.coordinator")
 _COORDINATOR_LATENCY = None
@@ -340,7 +340,7 @@ class MultiAgentCoordinator:
                 name: create_agent(
                     model,
                     tools=tool_loader(),
-                    state_schema=MultiAgentState,
+                    state_schema=MultiAgentGraphState,
                     name=name,
                     store=self.store,
                 )
@@ -1193,7 +1193,9 @@ class MultiAgentCoordinator:
 
         try:
             # 1. Get current checkpoint info for source tracking
-            config = {"configurable": {"thread_id": thread_id, "user_id": user_id}}
+            config: RunnableConfig = {
+                "configurable": {"thread_id": thread_id, "user_id": user_id}
+            }
             checkpoint_id = "latest"
             if self.compiled_graph:
                 state = self.compiled_graph.get_state(config)

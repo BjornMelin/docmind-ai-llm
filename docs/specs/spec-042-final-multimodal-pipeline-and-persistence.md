@@ -67,6 +67,10 @@ Optional:
 
 - `phash: str | null`
 - `bbox: list[float] | null`
+  - If present, must be exactly 4 floats: `[x, y, width, height]`.
+  - Units: pixels (top-left origin).
+  - Example: `[100.0, 200.0, 50.0, 30.0]` (x=100, y=200, w=50, h=30).
+  - Out-of-bounds/negative values should be clamped or ignored by consumers, not crash.
 - `text: str | null` (best-effort page text for grounding)
 
 Forbidden:

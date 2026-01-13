@@ -5,11 +5,12 @@ numpy vector, suitable for MultiModalVectorStoreIndex flows that expect a
 CLIP-like interface.
 """
 
-from __future__ import annotations
-
+import logging
 from typing import Any
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 class SiglipEmbedding:
@@ -230,6 +231,12 @@ class SiglipEmbedding:
                     feats = feats / feats.norm(dim=-1, keepdim=True)
                     out.append(feats.detach().cpu().numpy().astype(np.float32))
         except Exception:
+            logger.debug(
+                "siglip batch embedding failed for images count=%d dim=%s",
+                len(images),
+                self._dim,
+                exc_info=True,
+            )
             dim = int(self._dim or 768)
             return np.zeros((len(images), dim), dtype=np.float32)
         return (
@@ -279,6 +286,12 @@ class SiglipEmbedding:
                     feats = feats / feats.norm(dim=-1, keepdim=True)
                     out.append(feats.detach().cpu().numpy().astype(np.float32))
         except Exception:
+            logger.debug(
+                "siglip batch embedding failed for texts count=%d dim=%s",
+                len(texts),
+                self._dim,
+                exc_info=True,
+            )
             dim = int(self._dim or 768)
             return np.zeros((len(texts), dim), dtype=np.float32)
         return (

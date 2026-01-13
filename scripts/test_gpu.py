@@ -26,7 +26,7 @@ import sys
 import time
 from io import StringIO
 from pathlib import Path
-from typing import TypedDict
+from typing import NoReturn, TypedDict
 
 
 class GPUInfo(TypedDict):
@@ -251,25 +251,26 @@ def _require_gpu_info(*, cwd: Path | None = None) -> GPUInfo:
     return gpu_info
 
 
-def _check_cuda_compatibility(
-    gpu_info: GPUInfo,
-    compatibility_only: bool,
+def check_cuda_compatibility_status(
     test_results: dict[str, bool],
     *,
     cwd: Path | None = None,
 ) -> bool:
-    """Check CUDA availability and optionally exit after compatibility summary."""
+    """Check CUDA availability and update results."""
     print("\n🔧 Step 2: CUDA Compatibility Check")
     cuda_available = check_cuda_availability(cwd=cwd)
     test_results["hardware"] = True
     test_results["cuda"] = cuda_available
     if not cuda_available:
         print("❌ CUDA not available - GPU tests will fail")
-        if not compatibility_only:
-            sys.exit(1)
-    if not compatibility_only:
-        return cuda_available
+    return cuda_available
 
+
+def _print_compatibility_summary_and_exit(
+    gpu_info: GPUInfo,
+    test_results: dict[str, bool],
+) -> NoReturn:
+    """Print hardware compatibility summary and exit."""
     print("\n📋 Hardware Compatibility Summary:")
     print(f"   GPU: {'✅' if test_results['hardware'] else '❌'} {gpu_info['name']}")
     cuda_status = "✅" if test_results["cuda"] else "❌"
@@ -449,9 +450,13 @@ def main() -> None:
     test_results: dict[str, bool] = {}
 
     gpu_info = _require_gpu_info(cwd=project_root)
-    _check_cuda_compatibility(
-        gpu_info, args.compatibility, test_results, cwd=project_root
-    )
+    cuda_available = check_cuda_compatibility_status(test_results, cwd=project_root)
+
+    if args.compatibility:
+        _print_compatibility_summary_and_exit(gpu_info, test_results)
+
+    if not cuda_available:
+        sys.exit(1)
 
     final_memory: dict[str, float] | None
     if args.quick:

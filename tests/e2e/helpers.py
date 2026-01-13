@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 import types as types_
-from collections.abc import Iterable
+from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from types import ModuleType, SimpleNamespace
 from typing import Any
@@ -262,7 +262,7 @@ def configure_hardware_mocks(mock_detect: MagicMock, mock_validate: MagicMock) -
 
 
 @contextmanager
-def patch_async_workflow_dependencies():
+def patch_async_workflow_dependencies() -> Generator[tuple[AsyncMock, Any], None, None]:
     """Patch async workflow dependencies used across E2E tests."""
     with (
         patch(
@@ -279,7 +279,7 @@ def patch_async_workflow_dependencies():
 
 
 @contextmanager
-def patch_document_loader():
+def patch_document_loader() -> Generator[AsyncMock, None, None]:
     """Patch the async document loader for E2E tests."""
     with patch(
         "src.utils.document.load_documents_unstructured",
@@ -290,7 +290,7 @@ def patch_document_loader():
 
 
 @contextmanager
-def patch_hardware_validation():
+def patch_hardware_validation() -> Generator[tuple[MagicMock, MagicMock], None, None]:
     """Patch hardware detection and startup validation."""
     with (
         patch("src.utils.core.detect_hardware", create=True) as mock_detect,

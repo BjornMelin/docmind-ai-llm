@@ -1,4 +1,4 @@
-"""Integration tests for chat persistence + time travel (SPEC-041 / ADR-057).
+"""Integration tests for chat persistence + time travel (SPEC-041 / ADR-058).
 
 These tests use Streamlit AppTest and a lightweight coordinator stub that
 persists messages via LangGraph SqliteSaver so the UI can restore history and
@@ -21,11 +21,11 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import StateGraph
 from streamlit.testing.v1 import AppTest
 
-from src.agents.models import AgentResponse, MultiAgentState
+from src.agents.models import AgentResponse, MultiAgentGraphState
 
 
 def _build_echo_graph(*, checkpointer: SqliteSaver):
-    graph: StateGraph = StateGraph(MultiAgentState)
+    graph: StateGraph = StateGraph(MultiAgentGraphState)
 
     def _respond(state: dict[str, Any]) -> dict[str, Any]:
         messages = state.get("messages", [])
@@ -192,18 +192,27 @@ def test_chat_time_travel_fork_drops_future_messages(
     assert not app.exception
     assert _user_texts(app) == ["one", "two"]
 
-    thread_id = str(app.session_state.get("chat_thread_id") or "")
+    thread_id = str(app.session_state["chat_thread_id"] or "")
     assert thread_id
 
-    # Find a checkpoint whose state includes "one" but not "two".
+    checkpoint_select = next(
+        sb for sb in app.selectbox if str(getattr(sb, "label", "")) == "Checkpoint"
+    )
+    candidate_ids = [str(opt) for opt in getattr(checkpoint_select, "options", [])]
+    assert candidate_ids, "expected checkpoint options to be present"
+
+    # Find a checkpoint (visible in the UI selectbox) whose state includes "one"
+    # but not "two".
     conn = sqlite3.connect(str(tmp_path / "chat.db"), check_same_thread=False)
     try:
         saver = SqliteSaver(conn)
         saver.setup()
         graph = _build_echo_graph(checkpointer=saver)
-        cfg = {"configurable": {"thread_id": thread_id, "user_id": "local"}}
         fork_checkpoint: str | None = None
-        for snap in graph.get_state_history(cfg, limit=50):
+        for candidate in candidate_ids:
+            snap = graph.get_state({
+                "configurable": {"thread_id": thread_id, "checkpoint_id": candidate}
+            })
             values = getattr(snap, "values", None)
             if not isinstance(values, dict):
                 continue
@@ -213,25 +222,22 @@ def test_chat_time_travel_fork_drops_future_messages(
                 if isinstance(m, HumanMessage)
             ]
             if "one" in user_msgs and "two" not in user_msgs:
-                conf = snap.config.get("configurable", {}) if snap.config else {}
-                fork_checkpoint = str(conf.get("checkpoint_id") or "")
+                assert "two" not in user_msgs
+                fork_checkpoint = candidate
                 break
         assert fork_checkpoint, "expected to locate a fork checkpoint"
     finally:
         conn.close()
 
     # Drive the time-travel UI to resume from the chosen checkpoint.
-    checkpoint_select = next(
-        sb for sb in app.selectbox if str(getattr(sb, "label", "")) == "Checkpoint"
-    )
-    app = checkpoint_select.set_value(fork_checkpoint).run()
+    checkpoint_select.set_value(fork_checkpoint)
     resume_btn = next(
         b
         for b in app.button
         if str(getattr(b, "label", "")) == "Resume from checkpoint"
     )
     app = resume_btn.click().run()
-    assert app.session_state.get("chat_resume_checkpoint_id") == fork_checkpoint
+    assert app.session_state["chat_resume_checkpoint_id"] == fork_checkpoint
 
     app = app.chat_input[0].set_value("forked").run()
     assert not app.exception

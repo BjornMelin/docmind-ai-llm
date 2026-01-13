@@ -329,7 +329,7 @@ class RetrievalAgent:
             payload["context"] = context
 
         response = self.agent.invoke(
-            payload,
+            cast(Any, payload),
             config={"recursion_limit": RECURSION_LIMIT},
         )
         return self._parser.parse_response(response)

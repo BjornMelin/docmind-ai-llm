@@ -23,8 +23,9 @@ Architecture Decision:
     the hybrid organization strategy.
 """
 
-from typing import Annotated, Any
+from typing import Annotated, Any, NotRequired
 
+from langchain.agents.middleware.types import AgentState
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field
@@ -70,6 +71,35 @@ class AgentResponse(BaseModel):
     fallback_used: bool = Field(
         default=False, description="Whether fallback to basic RAG was used"
     )
+
+
+class MultiAgentGraphState(AgentState[Any]):
+    """TypedDict state schema for LangChain/LangGraph agent graphs.
+
+    ``langchain.agents.create_agent`` requires a ``TypedDict`` that extends
+    ``AgentState``. The Pydantic ``MultiAgentState`` model remains the local
+    validation/serialization helper used by DocMind code and tests.
+    """
+
+    tools_data: NotRequired[dict[str, Any]]
+    routing_decision: NotRequired[dict[str, Any]]
+    planning_output: NotRequired[dict[str, Any]]
+    retrieval_results: NotRequired[list[dict[str, Any]]]
+    synthesis_result: NotRequired[dict[str, Any]]
+    validation_result: NotRequired[dict[str, Any]]
+    agent_timings: NotRequired[dict[str, float]]
+    total_start_time: NotRequired[float]
+    parallel_execution_active: NotRequired[bool]
+    token_reduction_achieved: NotRequired[float]
+    context_trimmed: NotRequired[bool]
+    tokens_trimmed: NotRequired[int]
+    kv_cache_usage_gb: NotRequired[float]
+    output_mode: NotRequired[str]
+    errors: NotRequired[list[str]]
+    fallback_used: NotRequired[bool]
+    remaining_steps: NotRequired[int]
+    timed_out: NotRequired[bool]
+    deadline_s: NotRequired[float]
 
 
 class MultiAgentState(BaseModel):

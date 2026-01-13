@@ -133,7 +133,7 @@ def startup_init(cfg: "DocMindSettings" = settings) -> None:
             cfg.database.sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
         if hasattr(cfg, "chat") and getattr(cfg.chat, "sqlite_path", None):
             # Defensive: chat DB dir should not block startup
-            with suppress(Exception):
+            with suppress(OSError):
                 cfg.chat.sqlite_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Telemetry env bridge (local JSONL sink still honored elsewhere)
