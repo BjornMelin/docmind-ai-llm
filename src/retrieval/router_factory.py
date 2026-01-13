@@ -12,7 +12,6 @@ registry-backed helpers in ``src.retrieval.graph_config``.
 
 from __future__ import annotations
 
-import contextlib
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
@@ -40,6 +39,12 @@ else:
     RouterQueryEngineType = Any
 
 _WARNING_FLAGS: dict[str, bool] = {"hybrid": False, "graph": False, "multimodal": False}
+
+
+def _reset_warnings() -> None:
+    """Reset warning flags for test isolation."""
+    _WARNING_FLAGS.clear()
+    _WARNING_FLAGS.update({"hybrid": False, "graph": False, "multimodal": False})
 
 
 def _coerce_top_k(value: Any) -> int | None:
@@ -181,9 +186,9 @@ def _maybe_add_hybrid_tool(
 ) -> None:
     """Add hybrid search tool when enabled."""
     try:
-        from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
+        from src.retrieval.hybrid import HybridParams, ServerHybridRetriever
 
-        params = _HybridParams(
+        params = HybridParams(
             collection=cfg.database.qdrant_collection,
             fused_top_k=int(getattr(cfg.retrieval, "fused_top_k", 60)),
             prefetch_sparse=int(getattr(cfg.retrieval, "prefetch_sparse_limit", 400)),
@@ -262,10 +267,10 @@ def _maybe_add_graph_tool(
                 similarity_top_k=graph_top_k,
                 node_postprocessors=graph_post,
             )
-        except TypeError as exc:
+        except TypeError:
             logger.debug(
-                "Graph query engine lacks node_postprocessors; retrying ({exc})",
-                exc=exc,
+                "Graph query engine does not support node_postprocessors; "
+                "retrying without"
             )
             artifacts = build_graph_query_engine(
                 pg_index,
@@ -289,7 +294,7 @@ def _maybe_add_graph_tool(
     except MissingGraphAdapterError as exc:
         _warn_once("graph", GRAPH_DEPENDENCY_HINT, reason=str(exc))
     except (ValueError, TypeError, AttributeError, ImportError) as exc:
-        logger.debug("Graph tool construction skipped: %s", exc)
+        logger.debug("Graph tool construction skipped: {exc}", exc=exc)
 
 
 def _select_router(
@@ -308,12 +313,10 @@ def _select_router(
                 else adapter.LLMSingleSelector.from_defaults()
             )
         except Exception as exc:  # pragma: no cover - defensive
-            selector = adapter.get_pydantic_selector(the_llm)
-            if selector is None:
-                raise RuntimeError(
-                    "Failed to build router selector via "
-                    "LLMSingleSelector.from_defaults(llm=the_llm)."
-                ) from exc
+            raise RuntimeError(
+                "Failed to build router selector via "
+                "LLMSingleSelector.from_defaults(llm=the_llm)."
+            ) from exc
 
     try:
         return adapter.RouterQueryEngine(
@@ -378,10 +381,12 @@ def build_router_engine(
 
     the_llm = llm
     if the_llm is None:
-        with contextlib.suppress(Exception):
+        try:
             from src.config.llm_factory import build_llm
 
             the_llm = build_llm(cfg)
+        except ImportError:
+            logger.debug("LLM factory import failed; proceeding without LLM")
 
     get_pp = _safe_get_postprocessors()
     tools: list[Any] = [

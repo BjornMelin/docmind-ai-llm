@@ -32,7 +32,9 @@ from src.utils.telemetry import log_jsonl
 
 
 @dataclass
-class _HybridParams:
+class HybridParams:
+    """Configuration for server-side hybrid retrieval (RRF/DBSF fusion)."""
+
     collection: str
     fused_top_k: int = 60
     prefetch_sparse: int = 400
@@ -57,7 +59,7 @@ class ServerHybridRetriever:
 
     def __init__(
         self,
-        params: _HybridParams,
+        params: HybridParams,
         client: QdrantClient | None = None,
         client_factory: Callable[[], QdrantClient] | None = None,
     ) -> None:
@@ -317,4 +319,4 @@ class ServerHybridRetriever:
         return nodes
 
 
-__all__ = ["ServerHybridRetriever"]
+__all__ = ["HybridParams", "ServerHybridRetriever"]

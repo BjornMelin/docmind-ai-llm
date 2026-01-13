@@ -199,7 +199,7 @@ def _render_sources_fragment() -> None:
     store = ArtifactStore.from_settings(settings)
     try:
         from src.utils.images import open_image_encrypted
-    except Exception:
+    except ImportError:
         open_image_encrypted = None
     thread_id = str(st.session_state.get("active_thread_id") or "default")
     max_show = min(50, len(sources))
@@ -307,6 +307,8 @@ def _render_memory_results(store: DocMindSqliteStore, ns: tuple[str, ...]) -> No
 def _purge_memory_namespace(store: DocMindSqliteStore, ns: tuple[str, ...]) -> int:
     purged = 0
     max_batches = 100
+    total_failures = 0
+    max_failures = 50
     for _ in range(max_batches):
         batch = store.search(ns, query=None, limit=5000)
         if not batch:
@@ -319,9 +321,13 @@ def _purge_memory_namespace(store: DocMindSqliteStore, ns: tuple[str, ...]) -> i
                 batch_deleted += 1
             except Exception:
                 logger.debug("Failed to delete memory item {}", item.key, exc_info=True)
+                total_failures += 1
 
         if batch_deleted == 0:
             logger.warning("Purge stuck: failed to delete any items in batch")
+            break
+        if total_failures >= max_failures:
+            logger.warning("Purge aborted: too many failures ({})", total_failures)
             break
 
         purged += batch_deleted
@@ -526,26 +532,29 @@ def _visual_search_inputs() -> tuple[Any | None, int, bool]:
         return up, int(top_k), bool(run)
 
 
+@st.cache_resource
+def _get_image_siglip_retriever() -> Any:
+    """Get cached ImageSiglipRetriever to avoid reconnection overhead."""
+    from src.retrieval.multimodal_fusion import ImageSearchParams, ImageSiglipRetriever
+
+    return ImageSiglipRetriever(
+        ImageSearchParams(
+            collection=settings.database.qdrant_image_collection, top_k=10
+        )
+    )
+
+
 def _query_visual_search(upload: Any, top_k: int) -> list[Any]:
     """Execute a SigLIP-powered visual search against Qdrant."""
     try:
         from PIL import Image  # type: ignore
-    except Exception:
+    except ImportError:
         st.warning("Pillow is required for visual search.")
         return []
 
-    from src.retrieval.multimodal_fusion import ImageSearchParams, ImageSiglipRetriever
-
     img = Image.open(upload)  # type: ignore[arg-type]
-    retriever = ImageSiglipRetriever(
-        ImageSearchParams(
-            collection=settings.database.qdrant_image_collection, top_k=int(top_k)
-        )
-    )
-    try:
-        return retriever.retrieve_by_image(img, top_k=int(top_k))
-    finally:
-        retriever.close()
+    retriever = _get_image_siglip_retriever()
+    return retriever.retrieve_by_image(img, top_k=int(top_k))
 
 
 def _render_visual_results(nodes: list[Any], top_k: int) -> None:
@@ -556,7 +565,7 @@ def _render_visual_results(nodes: list[Any], top_k: int) -> None:
 
     try:
         from src.utils.images import open_image_encrypted
-    except Exception:
+    except ImportError:
         open_image_encrypted = None
 
     store = ArtifactStore.from_settings(settings)
