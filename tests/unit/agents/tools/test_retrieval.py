@@ -6,6 +6,7 @@ Split and adapted from legacy tests/unit/agents/test_tools.py.
 from __future__ import annotations
 
 import json
+import sys
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -276,3 +277,192 @@ class TestParsingBoundaries:
 
         assert len(data["documents"]) == 1
         assert data["documents"][0]["content"].startswith("{'unexpected': 'format'")
+
+
+class TestAdditionalCoverage:
+    """Targeted branch coverage for helper paths."""
+
+    def test_safe_query_for_log_truncates_long_input(self):
+        """_safe_query_for_log truncates and adds an ellipsis."""
+        import src.agents.tools.retrieval as mod
+
+        out = mod._safe_query_for_log("x " * 200, max_len=10)
+        assert out.endswith("…")
+        assert len(out) <= 11
+
+    def test_extract_indexes_prefers_runtime_context(self):
+        """_extract_indexes prefers runtime.context over persisted state."""
+        import src.agents.tools.retrieval as mod
+
+        runtime = type(
+            "R", (), {"context": {"vector": "rv", "kg": "rk", "retriever": "rr"}}
+        )()
+        v, kg, r = mod._extract_indexes(
+            {"tools_data": {"vector": "sv"}}, runtime=runtime
+        )
+        assert (v, kg, r) == ("rv", "rk", "rr")
+
+    def test_optimize_queries_generates_variants_when_dspy_returns_none(
+        self, monkeypatch
+    ):
+        """_optimize_queries adds variants for short queries when DSPy returns none."""
+        import src.agents.tools.retrieval as mod
+
+        fake = type(sys)("src.dspy_integration")
+
+        class DSPyLlamaIndexRetriever:  # pragma: no cover - stub
+            @staticmethod
+            def optimize_query(_q: str):  # type: ignore[no-untyped-def]
+                return {"refined": "ref", "variants": []}
+
+        fake.DSPyLlamaIndexRetriever = DSPyLlamaIndexRetriever  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "src.dspy_integration", fake)
+
+        refined, variants = mod._optimize_queries("AI", use_dspy=True)
+        assert refined == "ref"
+        assert len(variants) == 2
+
+    def test_graphrag_fallback_marks_strategy_used_as_hybrid(self, monkeypatch):
+        """GraphRAG fallback path reports strategy_used='hybrid'."""
+        import src.agents.tools.retrieval as mod
+
+        monkeypatch.setattr(
+            mod, "_run_graphrag", lambda *_a, **_k: ([{"content": "x"}], True)
+        )
+        data = json.loads(
+            retrieve_documents.invoke({
+                "query": "q",
+                "strategy": "graphrag",
+                "use_dspy": False,
+                "use_graphrag": True,
+                "state": {"tools_data": {"kg": object()}},
+            })
+        )
+        assert data["strategy_used"] == "hybrid"
+        assert data["documents"]
+
+    def test_contextual_recall_includes_recent_sources_when_retrieval_empty(self):
+        """Contextual queries can reuse previously persisted sources."""
+        mock_state = {
+            "tools_data": {"vector": MagicMock()},
+            "synthesis_result": {
+                "documents": [{"content": "c", "metadata": {"doc_id": "d1"}}]
+            },
+        }
+
+        with patch("src.agents.tool_factory.ToolFactory") as mock_factory:
+            tool = Mock()
+            tool.call.return_value = []
+            mock_factory.create_vector_search_tool.return_value = tool
+
+            data = json.loads(
+                retrieve_documents.invoke({
+                    "query": "that chart",
+                    "strategy": "vector",
+                    "use_dspy": False,
+                    "state": mock_state,
+                })
+            )
+
+        assert data["documents"]
+        assert data["strategy_used"].endswith("+recall")
+
+    def test_vector_strategy_errors_when_vector_index_missing(self):
+        """Vector strategy fails with a clear error when vector index is absent."""
+        data = json.loads(
+            retrieve_documents.invoke({
+                "query": "q",
+                "strategy": "vector",
+                "use_dspy": False,
+                "state": {"tools_data": {"kg": object()}},
+            })
+        )
+        assert "No vector index available" in data.get("error", "")
+
+    def test_hybrid_empty_primary_falls_back_to_vector(self):
+        """Hybrid can fall back to vector search when primary returns no docs."""
+        mock_state = {"tools_data": {"vector": MagicMock(), "retriever": MagicMock()}}
+
+        with patch("src.agents.tool_factory.ToolFactory") as mock_factory:
+            hybrid = Mock()
+            hybrid.call.return_value = []
+            vector = Mock()
+            vector.call.return_value = [{"content": "doc", "score": 1.0}]
+            mock_factory.create_hybrid_search_tool.return_value = hybrid
+            mock_factory.create_vector_search_tool.return_value = vector
+
+            data = json.loads(
+                retrieve_documents.invoke({
+                    "query": "q",
+                    "strategy": "hybrid",
+                    "use_dspy": False,
+                    "state": mock_state,
+                })
+            )
+        assert data["documents"]
+        assert data["strategy_used"] == "vector"
+
+    def test_deduplicate_documents_empty_returns_empty(self):
+        """_deduplicate_documents returns empty list for empty input."""
+        import src.agents.tools.retrieval as mod
+
+        assert mod._deduplicate_documents([]) == []
+
+    def test_recall_recent_sources_uses_latest_retrieval_results(self):
+        """_recall_recent_sources chooses the most recent retrieval batch."""
+        import src.agents.tools.retrieval as mod
+
+        out = mod._recall_recent_sources({
+            "retrieval_results": [
+                {"documents": [{"content": "old", "metadata": {"doc_id": "1"}}]},
+                {"documents": [{"content": "new", "metadata": {"doc_id": "2"}}]},
+            ]
+        })
+        assert out
+        assert out[0]["content"] == "new"
+
+    def test_sanitize_document_dict_applies_basename_to_source(self):
+        """_sanitize_document_dict replaces path-like sources with basenames."""
+        import src.agents.tools.retrieval as mod
+
+        cleaned = mod._sanitize_document_dict({"content": "x", "source": "/abs/a.pdf"})
+        assert cleaned["source"] == "a.pdf"
+
+    def test_parse_tool_result_handles_source_nodes_none(self):
+        """_parse_tool_result handles LlamaIndex-like objects with None nodes."""
+        import src.agents.tools.retrieval as mod
+
+        class _R:
+            source_nodes = None
+
+        docs = mod._parse_tool_result(_R())
+        assert docs
+        assert isinstance(docs[0], dict)
+
+    def test_parse_tool_result_get_content_branch_and_text_error(self):
+        """_parse_tool_result uses get_content and falls back on text errors."""
+        import src.agents.tools.retrieval as mod
+
+        class _NodeNoText:
+            def get_content(self):  # type: ignore[no-untyped-def]
+                return "gc"
+
+        class _NodeBadText:
+            @property
+            def text(self):  # type: ignore[no-untyped-def]
+                raise RuntimeError("boom")
+
+            def __str__(self) -> str:
+                return "fallback"
+
+        class _Nws:
+            def __init__(self, node):  # type: ignore[no-untyped-def]
+                self.node = node
+                self.score = 0.1
+
+        class _R:
+            def __init__(self) -> None:
+                self.source_nodes = [_Nws(_NodeNoText()), _Nws(_NodeBadText())]
+
+        docs = mod._parse_tool_result(_R())
+        assert [d["content"] for d in docs] == ["gc", "fallback"]
