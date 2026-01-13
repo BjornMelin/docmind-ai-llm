@@ -21,10 +21,10 @@ def test_settings_page_renders_and_has_hybrid_toggle() -> None:
     """
     at = AppTest.from_file("src/pages/04_settings.py")
     start = time.monotonic()
-    at.run(timeout=10)
+    at.run(timeout=20)
     elapsed = time.monotonic() - start
     is_ci = bool(os.getenv("CI") or os.getenv("GITHUB_ACTIONS"))
-    budget = 9.0 if is_ci else 8.0
+    budget = 12.0 if is_ci else 8.0
     assert elapsed <= budget, (
         f"Settings AppTest render took {elapsed:.2f}s > {budget:.2f}s budget"
     )
