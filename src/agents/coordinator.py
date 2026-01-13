@@ -310,7 +310,7 @@ class MultiAgentCoordinator:
             return True
 
         except (RuntimeError, ValueError, AttributeError, ImportError) as e:
-            logger.error("Failed to setup coordinator: %s", e)
+            logger.error("Failed to setup coordinator ({}): {}", type(e).__name__, e)
             return False
 
     def _setup_agent_graph(self) -> None:
@@ -625,12 +625,12 @@ class MultiAgentCoordinator:
         response = AgentResponse(
             content=("The multi-agent system timed out while processing your request."),
             sources=[],
-            metadata={"fallback_used": False, "reason": "timeout"},
+            metadata={"fallback_used": True, "reason": "timeout"},
             validation_score=0.0,
             processing_time=processing_time,
             optimization_metrics={"timeout": True},
         )
-        return response, False
+        return response, True
 
     def _handle_workflow_result(
         self,
@@ -1237,6 +1237,9 @@ class MultiAgentCoordinator:
         user_id: str,
     ) -> None:
         """Perform background memory consolidation."""
+        logger.debug(
+            "Starting background memory consolidation for thread {}", thread_id
+        )
         if self.store is None:
             return
 
