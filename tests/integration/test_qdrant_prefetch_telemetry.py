@@ -57,7 +57,7 @@ def test_qdrant_prefetch_fusionquery_telemetry(
 
     monkeypatch.setattr(hmod, "log_jsonl", _cap)
 
-    params = hmod._HybridParams(
+    params = hmod.HybridParams(
         collection="c",
         fused_top_k=5,
         prefetch_sparse=8,

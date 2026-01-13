@@ -10,7 +10,7 @@ class _P:
 
 @pytest.mark.unit
 def test_dedup_before_final_truncation(monkeypatch):
-    from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
+    from src.retrieval.hybrid import ServerHybridRetriever, HybridParams
 
     class _Res:
         def __init__(self, points):
@@ -32,7 +32,7 @@ def test_dedup_before_final_truncation(monkeypatch):
     monkeypatch.setattr("src.retrieval.hybrid.QdrantClient", _FakeClient)
 
     retr = ServerHybridRetriever(
-        _HybridParams(
+        HybridParams(
             collection="test",
             fused_top_k=2,
             prefetch_sparse=5,

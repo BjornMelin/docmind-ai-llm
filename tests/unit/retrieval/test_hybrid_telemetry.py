@@ -64,7 +64,7 @@ def test_hybrid_retrieval_telemetry_emits_backend_and_timeout(monkeypatch):  # t
 
     monkeypatch.setattr(hmod, "get_settings_embed_model", lambda: _Embed())
 
-    params = hmod._HybridParams(
+    params = hmod.HybridParams(
         collection="c",
         fused_top_k=5,
         prefetch_sparse=10,

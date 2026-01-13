@@ -26,7 +26,7 @@ from loguru import logger
 from qdrant_client import QdrantClient
 
 from src.config import settings
-from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
+from src.retrieval.hybrid import HybridParams, ServerHybridRetriever
 from src.retrieval.rrf import rrf_merge
 from src.utils.qdrant_utils import nodes_from_query_result
 from src.utils.siglip_adapter import SiglipEmbedding
@@ -162,7 +162,7 @@ class MultimodalFusionRetriever:
     ) -> None:
         """Create a fusion retriever from text and image components."""
         self._text = text_retriever or ServerHybridRetriever(
-            _HybridParams(
+            HybridParams(
                 collection=settings.database.qdrant_collection,
                 fused_top_k=int(getattr(settings.retrieval, "fused_top_k", 60)),
                 prefetch_sparse=int(

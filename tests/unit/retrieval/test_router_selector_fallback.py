@@ -72,7 +72,7 @@ def test_selector_fallback_to_llm(monkeypatch):  # type: ignore[no-untyped-def]
             pass
 
     hyr_mod.ServerHybridRetriever = _DummyHybridRetriever
-    hyr_mod._HybridParams = _Params  # type: ignore[attr-defined]
+    hyr_mod.HybridParams = _Params  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "src.retrieval.hybrid", hyr_mod)
 
     from src.config.settings import settings as _settings

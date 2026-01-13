@@ -4,7 +4,7 @@ from qdrant_client import models as qmodels
 
 @pytest.mark.unit
 def test_dbsf_fusion_selected(monkeypatch):
-    from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
+    from src.retrieval.hybrid import ServerHybridRetriever, HybridParams
 
     class _Res:
         def __init__(self):
@@ -21,7 +21,7 @@ def test_dbsf_fusion_selected(monkeypatch):
     monkeypatch.setattr("src.retrieval.hybrid.QdrantClient", _FakeClient)
 
     retr = ServerHybridRetriever(
-        _HybridParams(
+        HybridParams(
             collection="test",
             fused_top_k=10,
             prefetch_sparse=2,
