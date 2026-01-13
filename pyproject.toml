@@ -468,7 +468,7 @@ enable_deployment_gate_validation = true
 
 # Pyright Type Checking Configuration - Optimized for Performance
 [tool.pyright]
-include = ["src", "tests", "scripts"]
+include = ["src", "tests", "scripts", "tools"]
 exclude = [
     "**/__pycache__",
     ".venv",
@@ -478,12 +478,9 @@ exclude = [
     "cache",
     "data",
     "docs",
-    "examples",
     "logs",
     "storage",
     "templates",
-    "tests",
-    "tools",
     "unused",
     "opensrc",
     "embeddings_cache",
