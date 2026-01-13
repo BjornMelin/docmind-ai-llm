@@ -15,6 +15,8 @@ render/rerank time.
 from __future__ import annotations
 
 import contextlib
+import math
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
@@ -71,6 +73,7 @@ class ImageSiglipRetriever:
         self._client = client or QdrantClient(**get_client_config())
         self._embedder = embedder or SiglipEmbedding()
         self._collection_checked = False
+        self._collection_check_lock = threading.Lock()
 
     def close(self) -> None:
         """Close underlying client (best-effort)."""
@@ -86,21 +89,26 @@ class ImageSiglipRetriever:
         else:
             vec_list = list(vec) if not isinstance(vec, list) else vec
         if not self._collection_checked:
-            try:
-                from src.retrieval.image_index import ensure_siglip_image_collection
+            with self._collection_check_lock:
+                # Double-check after acquiring lock to avoid redundant calls
+                if not self._collection_checked:
+                    try:
+                        from src.retrieval.image_index import (
+                            ensure_siglip_image_collection,
+                        )
 
-                ensure_siglip_image_collection(
-                    self._client,
-                    self.params.collection,
-                    dim=len(vec_list),
-                )
-            except Exception as exc:  # pragma: no cover - best effort
-                logger.warning("SigLIP collection check failed: {}", exc)
-            self._collection_checked = True
+                        ensure_siglip_image_collection(
+                            self._client,
+                            self.params.collection,
+                            dim=len(vec_list),
+                        )
+                    except Exception as exc:  # pragma: no cover - best effort
+                        logger.warning("SigLIP collection check failed: {}", exc)
+                    self._collection_checked = True
 
         try:
-            timeout_ms = int(getattr(settings.retrieval, "siglip_timeout_ms", 2000))
-            timeout_s = max(1, (timeout_ms + 999) // 1000)
+            timeout_ms = settings.retrieval.siglip_timeout_ms
+            timeout_s = max(1, math.ceil(timeout_ms / 1000))
             result = self._client.query_points(
                 collection_name=self.params.collection,
                 query=vec_list,

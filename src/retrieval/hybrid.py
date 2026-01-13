@@ -234,7 +234,7 @@ class ServerHybridRetriever:
     ) -> None:
         """Emit retrieval telemetry in a PII-safe form."""
         try:
-            latency_ms = int((time.time() - t0) * 1000)
+            latency_ms = int((time.perf_counter() - t0) * 1000)
             fusion_mode = (self.params.fusion_mode or "rrf").lower()
             try:
                 from src.config import settings as _settings  # local import
@@ -287,7 +287,7 @@ class ServerHybridRetriever:
         """
         qtext = query.query_str if isinstance(query, QueryBundle) else str(query)
 
-        t0 = time.time()
+        t0 = time.perf_counter()
         dense_vec = self._embed_dense(qtext)
         sparse_vec = self._encode_sparse(qtext)
 

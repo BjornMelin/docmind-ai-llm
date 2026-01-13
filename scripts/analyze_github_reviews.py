@@ -49,11 +49,9 @@ def extract_threads(json_file: Path) -> list[dict[str, Any]] | None:
 
 def get_code_block_indicator(thread: dict[str, Any]) -> bool:
     """Check if thread has suggested code."""
-    for comment in thread.get("comments", []):
-        body = comment.get("body", "")
-        if "```" in body:
-            return True
-    return False
+    return any(
+        "```" in comment.get("body", "") for comment in thread.get("comments", [])
+    )
 
 
 def get_issue_summary(thread: dict[str, Any]) -> str:
@@ -95,7 +93,90 @@ def _resolve_json_path(arg_path: str | None) -> Path | None:
     return Path(env_path) if env_path else None
 
 
-def main() -> None:  # noqa: PLR0915
+def _print_console_report(by_file: dict[str, list[dict[str, Any]]]) -> None:
+    """Print formatted console report of unresolved threads grouped by file."""
+    print("=" * 120)
+    excluded = ", ".join(sorted(PROCESSED_FILES))
+    print(f"UNRESOLVED REVIEW THREADS (excluding {excluded})")
+    print("=" * 120)
+    print()
+
+    for file_path in sorted(by_file.keys()):
+        issues = by_file[file_path]
+        print(f"\n{file_path}")
+        print(f"  Count: {len(issues)} threads")
+        print("-" * 120)
+
+        for issue in sorted(issues, key=_get_issue_line_key):
+            line = issue["line"]
+            line_str = str(line) if line is not None else "N/A"
+            summary = issue["summary"]
+            has_code = issue["has_code"]
+            comments = issue["comment_count"]
+            print(
+                "  Line "
+                f"{line_str:6} | Code: {has_code:3} | Comments: {comments} | {summary}"
+            )
+
+
+def _generate_csv(by_file: dict[str, list[dict[str, Any]]]) -> str:
+    """Generate CSV content from grouped issues."""
+    csv_buffer = io.StringIO()
+    writer = csv.writer(csv_buffer)
+    writer.writerow(["File", "Line", "Has Code Block", "Comments", "Issue Summary"])
+
+    for file_path in sorted(by_file.keys()):
+        for issue in sorted(by_file[file_path], key=_get_issue_line_key):
+            line_str = str(issue["line"]) if issue["line"] is not None else "N/A"
+            writer.writerow(
+                [
+                    file_path,
+                    line_str,
+                    issue["has_code"],
+                    issue["comment_count"],
+                    issue["summary"],
+                ]
+            )
+
+    return csv_buffer.getvalue()
+
+
+def _print_statistics(by_file: dict[str, list[dict[str, Any]]]) -> None:
+    """Compute and print summary statistics."""
+    print("\n" + "=" * 120)
+    print("SUMMARY STATISTICS")
+    print("=" * 120)
+    total_threads = sum(len(issues) for issues in by_file.values())
+    total_with_code = sum(
+        1
+        for issues in by_file.values()
+        for issue in issues
+        if issue["has_code"] == "Yes"
+    )
+    print(f"Total unresolved threads (excl. processed): {total_threads}")
+    if total_threads == 0:
+        print("Threads with code suggestions: 0 (0%)")
+        print("Threads without code: 0 (0%)")
+    else:
+        print(
+            "Threads with code suggestions: "
+            f"{total_with_code} ({100 * total_with_code / total_threads:.0f}%)"
+        )
+        print(
+            "Threads without code: "
+            f"{total_threads - total_with_code} "
+            f"({100 * (total_threads - total_with_code) / total_threads:.0f}%)"
+        )
+    print(f"Files with issues: {len(by_file)}")
+
+    print("\nTop files by thread count:")
+    sorted_files = sorted(by_file.items(), key=lambda x: len(x[1]), reverse=True)
+    for file_path, issues in sorted_files[:10]:
+        code_count = sum(1 for i in issues if i["has_code"] == "Yes")
+        print(f"  {len(issues):2} threads | {code_count:2} with code | {file_path}")
+
+
+def main() -> None:
     """Run the review thread summarizer CLI."""
     parser = argparse.ArgumentParser(
         description="Summarize unresolved GitHub PR review threads."
@@ -129,7 +210,6 @@ def main() -> None:  # noqa: PLR0915
     for thread in threads:
         file_path = thread.get("file", "unknown")
 
-        # Skip processed files
         if should_exclude(file_path):
             skipped_processed += 1
             continue
@@ -151,101 +231,19 @@ def main() -> None:  # noqa: PLR0915
     print(f"Skipped (already processed): {skipped_processed}")
     print(f"Unresolved threads to handle: {sum(len(v) for v in by_file.values())}\n")
 
-    # Print summary by file
-    print("=" * 120)
-    excluded = ", ".join(sorted(PROCESSED_FILES))
-    print(f"UNRESOLVED REVIEW THREADS (excluding {excluded})")
-    print("=" * 120)
-    print()
+    _print_console_report(by_file)
 
-    # Sort by file name
-    for file_path in sorted(by_file.keys()):
-        issues = by_file[file_path]
-        print(f"\n{file_path}")
-        print(f"  Count: {len(issues)} threads")
-        print("-" * 120)
-
-        # Sort by line number
-        for issue in sorted(
-            issues,
-            key=_get_issue_line_key,
-        ):
-            line = issue["line"]
-            line_str = str(line) if line is not None else "N/A"
-            summary = issue["summary"]
-            has_code = issue["has_code"]
-            comments = issue["comment_count"]
-            print(
-                "  Line "
-                f"{line_str:6} | Code: {has_code:3} | Comments: {comments} | {summary}"
-            )
-
-    # Print CSV
     print("\n\n" + "=" * 120)
     print("CSV OUTPUT (for spreadsheet import)")
     print("=" * 120 + "\n")
 
-    # Generate CSV content in memory
-    csv_buffer = io.StringIO()
-    writer = csv.writer(csv_buffer)
-    writer.writerow(["File", "Line", "Has Code Block", "Comments", "Issue Summary"])
-
-    for file_path in sorted(by_file.keys()):
-        for issue in sorted(
-            by_file[file_path],
-            key=_get_issue_line_key,
-        ):
-            line_str = str(issue["line"]) if issue["line"] is not None else "N/A"
-            writer.writerow(
-                [
-                    file_path,
-                    line_str,
-                    issue["has_code"],
-                    issue["comment_count"],
-                    issue["summary"],
-                ]
-            )
-
-    csv_content = csv_buffer.getvalue()
+    csv_content = _generate_csv(by_file)
     print(csv_content)
 
-    # Write CSV to file
     output_csv = Path(args.output_csv)
     output_csv.write_text(csv_content, encoding="utf-8")
 
-    # Summary stats
-    print("\n" + "=" * 120)
-    print("SUMMARY STATISTICS")
-    print("=" * 120)
-    total_threads = sum(len(issues) for issues in by_file.values())
-    total_with_code = sum(
-        1
-        for issues in by_file.values()
-        for issue in issues
-        if issue["has_code"] == "Yes"
-    )
-    print(f"Total unresolved threads (excl. processed): {total_threads}")
-    if total_threads == 0:
-        print("Threads with code suggestions: 0 (0%)")
-        print("Threads without code: 0 (0%)")
-    else:
-        print(
-            "Threads with code suggestions: "
-            f"{total_with_code} ({100 * total_with_code / total_threads:.0f}%)"
-        )
-        print(
-            "Threads without code: "
-            f"{total_threads - total_with_code} "
-            f"({100 * (total_threads - total_with_code) / total_threads:.0f}%)"
-        )
-    print(f"Files with issues: {len(by_file)}")
-
-    # Files with most threads (good targets for fixing)
-    print("\nTop files by thread count:")
-    sorted_files = sorted(by_file.items(), key=lambda x: len(x[1]), reverse=True)
-    for file_path, issues in sorted_files[:10]:
-        code_count = sum(1 for i in issues if i["has_code"] == "Yes")
-        print(f"  {len(issues):2} threads | {code_count:2} with code | {file_path}")
+    _print_statistics(by_file)
 
     print(f"\nCSV saved to: {output_csv}")
 

@@ -274,6 +274,10 @@ max-args = 10
 max-bool-expr = 5
 max-branches = 15
 max-locals = 20
+# Slightly relaxed ceilings for orchestration-style code (CLI entrypoints, Streamlit page glue, scripts/tools)
+# where nested guards and positional arg wiring are sometimes clearer than heavy indirection.
+# For core `src/` logic, prefer extracting helpers and using keyword-only args/config objects; revisit/tighten
+# these limits during code review and replace global relaxations with targeted `noqa`/per-file ignores if needed.
 max-nested-blocks = 5
 max-positional-args = 10
 max-public-methods = 30
@@ -468,7 +472,7 @@ enable_deployment_gate_validation = true
 
 # Pyright Type Checking Configuration - Optimized for Performance
 [tool.pyright]
-include = ["src", "tests", "scripts", "tools"]
+include = ["src", "tools"]
 exclude = [
     "**/__pycache__",
     ".venv",

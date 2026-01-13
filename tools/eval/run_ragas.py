@@ -131,7 +131,10 @@ def _as_float(x: Any) -> float:
     """Return a float from ragas metric results."""
     try:
         m = getattr(x, "mean", None)
-        return float(m()) if callable(m) else float(x)
+        if callable(m):
+            val = m()
+            return float(val) if val is not None else float("nan")  # type: ignore[arg-type]
+        return float(x) if x is not None else float("nan")  # type: ignore[arg-type]
     except Exception:  # pragma: no cover - defensive fallback
         return float("nan")
 
@@ -175,6 +178,9 @@ def main() -> None:
     )
 
     _ensure_ragas_loaded()
+
+    if evaluate is None:
+        raise ImportError("ragas not loaded")
 
     # Use ragas_mode to toggle minimal runtime behavior
     show_progress = args.ragas_mode == "online_smoke"

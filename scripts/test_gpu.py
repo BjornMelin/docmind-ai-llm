@@ -392,12 +392,21 @@ def _run_memory_leak_check(
         memory = monitor_gpu_memory(cwd=cwd)
         memory_samples.append(memory["used"])
         time.sleep(10)
-    trend = memory_samples[-1] - memory_samples[0]
+
+    # Compute per-interval differences to detect sustained trends
+    diffs = [
+        memory_samples[i + 1] - memory_samples[i]
+        for i in range(len(memory_samples) - 1)
+    ]
+
+    # Aggregated trend: sum of positive differences (sustained growth)
+    trend = sum(d for d in diffs if d > 0)
+
     if trend > 500:
-        print(f"WARN: Potential memory leak detected: {trend}MB increase")
+        print(f"WARN: Potential memory leak detected: {trend:.0f}MB increase")
         test_results["memory_stable"] = False
         return
-    print(f"OK: Memory usage stable: {trend}MB change")
+    print(f"OK: Memory usage stable: {trend:.0f}MB change")
     test_results["memory_stable"] = True
 
 

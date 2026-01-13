@@ -34,7 +34,7 @@ from src.config import settings
 from src.eval.common.determinism import set_determinism
 from src.eval.common.io import SCHEMA_VERSION, write_csv_row
 from src.eval.common.mapping import build_doc_mapping
-from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
+from src.retrieval.hybrid import HybridParams, ServerHybridRetriever
 
 
 def ensure_collection(client: QdrantClient, name: str) -> None:
@@ -91,11 +91,11 @@ def _ensure_beir_loaded() -> None:
     if GenericDataLoader is not None and EvaluateRetrieval is not None:
         return
     try:  # pragma: no cover
-        from beir.datasets.data_loader import (
-            GenericDataLoader as _GenericDataLoader,  # type: ignore
+        from beir.datasets.data_loader import (  # type: ignore
+            GenericDataLoader as _GenericDataLoader,
         )
-        from beir.retrieval.evaluation import (
-            EvaluateRetrieval as _EvaluateRetrieval,  # type: ignore
+        from beir.retrieval.evaluation import (  # type: ignore
+            EvaluateRetrieval as _EvaluateRetrieval,
         )
 
         GenericDataLoader = _GenericDataLoader  # type: ignore[assignment]
@@ -108,7 +108,7 @@ def _ensure_beir_loaded() -> None:
 
 def _build_retriever(collection: str) -> ServerHybridRetriever:
     """Create a hybrid retriever for evaluation."""
-    return ServerHybridRetriever(_HybridParams(collection=collection))
+    return ServerHybridRetriever(HybridParams(collection=collection))
 
 
 def _run_retrieval(
@@ -129,7 +129,8 @@ def _run_retrieval(
         for nws in nodes:
             did = (nws.node.metadata or {}).get("doc_id")
             if did:
-                doc_scores[str(did)] = float(nws.score)
+                score = getattr(nws, "score", 0.0)
+                doc_scores[str(did)] = float(score) if score is not None else 0.0
         results[qid] = doc_scores
     return qitems, results, per_query_nodes
 
@@ -142,6 +143,8 @@ def main() -> None:
     _validate_args(args)
     _ensure_beir_loaded()
 
+    if GenericDataLoader is None:
+        raise ImportError("beir.datasets.data_loader not loaded")
     _corpus, queries, qrels = GenericDataLoader(args.data_dir).load(split="test")
 
     client = QdrantClient(
@@ -155,6 +158,8 @@ def main() -> None:
     qitems, results, per_query_nodes = _run_retrieval(retr, queries, args.sample_count)
 
     # Restrict evaluation to the same query subset when --sample_count is used
+    if EvaluateRetrieval is None:
+        raise ImportError("beir.retrieval.evaluation not loaded")
     evaluator = EvaluateRetrieval()
     k_list = [int(args.k)]
     if 0 < args.sample_count < len(queries):

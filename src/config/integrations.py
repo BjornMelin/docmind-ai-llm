@@ -22,7 +22,6 @@ from loguru import logger
 from src.config.llm_factory import build_llm
 from src.models.embedding_constants import ImageBackboneName
 from src.telemetry.opentelemetry import setup_metrics, setup_tracing
-from src.utils.exceptions import IMPORT_EXCEPTIONS
 
 from .settings import DocMindSettings, settings
 
@@ -153,7 +152,11 @@ def startup_init(cfg: "DocMindSettings" = settings) -> None:
                 bool(getattr(cfg.retrieval, "enable_server_hybrid", False)),
                 str(getattr(cfg.retrieval, "fusion_mode", "rrf")),
             )
-        except IMPORT_EXCEPTIONS as exc:  # pragma: no cover - logging must not fail
+        except (
+            AttributeError,
+            TypeError,
+            ValueError,
+        ) as exc:  # pragma: no cover - logging must not fail
             logger.debug("Startup logging failed: {}", exc)
     except (
         OSError,

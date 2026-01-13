@@ -251,6 +251,9 @@ def _collect_corpus_paths(  # noqa: PLR0912, PLR0915
                         if p.is_file():
                             file_count += 1
                             current_paths.append(p)
+                            # Break early if count already differs
+                            if file_count > len(cached_paths):
+                                break
                     if file_count != len(cached_paths):
                         logger.debug(
                             "Corpus manifest cache invalidated; cached_count={} "
