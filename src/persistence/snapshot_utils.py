@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -9,6 +10,8 @@ from typing import Any
 
 from src.config.settings import settings as default_settings
 from src.persistence.hashing import compute_config_hash, compute_corpus_hash
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "collect_corpus_paths",
@@ -130,4 +133,10 @@ def timestamped_export_path(out_dir: Path, extension: str) -> Path:
     while candidate.exists() and counter < max_attempts:
         candidate = out_dir / f"graph_export-{ts}-{counter}.{extension}"
         counter += 1
+    if counter >= max_attempts:
+        logger.warning(
+            "Export path collision limit reached (%d); using path: %s",
+            max_attempts,
+            candidate,
+        )
     return candidate
