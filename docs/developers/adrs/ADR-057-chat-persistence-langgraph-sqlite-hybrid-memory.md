@@ -80,20 +80,20 @@ DocMind is offline-first and already uses LangGraph (supervisor pattern). We sho
 
 Weights: Complexity 40% · Performance 30% · Alignment 30% (10 = best)
 
-| Option                                                | Complexity (40%) | Perf (30%) | Alignment (30%) |    Total | Decision    |
-| ----------------------------------------------------- | ---------------: | ---------: | --------------: | -------: | ----------- |
+| Option                                                         | Complexity (40%) | Perf (30%) | Alignment (30%) |    Total | Decision    |
+| -------------------------------------------------------------- | ---------------: | ---------: | --------------: | -------: | ----------- |
 | **A: LangGraph SQLite + DocMind memory store + consolidation** |              9.2 |        9.0 |             9.7 | **9.26** | ✅ Selected |
-| B: LlamaIndex JSON store only                         |              9.5 |        7.5 |             6.5 |     8.00 | Rejected    |
-| C: Zep/Graphiti service                               |              6.0 |        8.5 |             6.5 |     6.95 | Rejected    |
-| D: Mem0 OSS                                           |              6.5 |        8.5 |             6.5 |     7.10 | Rejected    |
-| E: Letta/MemGPT service                               |              5.5 |        7.5 |             5.0 |     5.93 | Rejected    |
-| F: Custom (SQLite + Qdrant memory)                    |              7.5 |        9.0 |             9.0 |     8.15 | Rejected    |
+| B: LlamaIndex JSON store only                                  |              9.5 |        7.5 |             6.5 |     8.00 | Rejected    |
+| C: Zep/Graphiti service                                        |              6.0 |        8.5 |             6.5 |     6.95 | Rejected    |
+| D: Mem0 OSS                                                    |              6.5 |        8.5 |             6.5 |     7.10 | Rejected    |
+| E: Letta/MemGPT service                                        |              5.5 |        7.5 |             5.0 |     5.93 | Rejected    |
+| F: Custom (SQLite + Qdrant memory)                             |              7.5 |        9.0 |             9.0 |     8.15 | Rejected    |
 
 ## Decision
 
 We will implement chat persistence and agentic memory using **LangGraph’s persistence primitives**:
 
-1. Use `langgraph-checkpoint-sqlite==3.0.1`:
+1. Use `langgraph-checkpoint-sqlite>=3.0.1`:
    - `langgraph.checkpoint.sqlite.SqliteSaver` as the **thread checkpointer** (durable checkpoints per `thread_id`).
    - DocMind-managed SQLite memory store as the **long-term memory store** (KV + metadata filters + semantic search via `sqlite-vec`).
 2. Implement a **deterministic memory consolidation pipeline** (in-graph step) that:
@@ -106,7 +106,7 @@ This supersedes ADR-043 and ADR-021 by establishing **one canonical, final-relea
 
 ### Security Considerations
 
-- `langgraph-checkpoint-sqlite>=3.0.1` is required to address both:
+- `langgraph-checkpoint-sqlite>=3.0.1` is required to address both (allowing future security patches to be pulled in):
   - **CVE-2025-67644** (SQL injection via metadata filter keys in checkpoint list; patched in 3.0.1, released 2025-12-09)
   - **CVE-2025-64439** (JsonPlusSerializer RCE in versions < 3.0.0; patched in 3.0.0)
 
@@ -278,6 +278,6 @@ For user chat content:
 
 ### Ongoing Maintenance & Considerations
 
-- Keep `langgraph-checkpoint-sqlite` pinned at a version with known SQL-injection fixes for metadata filtering.
+- Keep `langgraph-checkpoint-sqlite>=3.0.1` as a floor constraint to ensure known SQL-injection fixes for metadata filtering are present, while allowing future security patches.
 - Maintain strict user/session scoping in namespaces and filters.
 - Add regression tests around checkpoint listing and filter key validation.

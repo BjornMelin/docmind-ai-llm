@@ -179,9 +179,12 @@ DOCMIND_IMG_DELETE_PLAINTEXT=false
 ```
 
 > **Note:** If enabling encryption, generate a secure 256-bit AES key:
+>
 > ```bash
 > python -c "import os, base64; print(base64.b64encode(os.urandom(32)).decode())"
 > ```
+>
+> **⚠️ Key Management:** Losing this key means permanent loss of access to encrypted images. Never commit keys to git—keep them in git-ignored `.env` for local development. For production, store keys in a secrets manager (e.g., AWS Secrets Manager, HashiCorp Vault) and have a key rotation strategy if needed.
 > Setting `DOCMIND_IMG_DELETE_PLAINTEXT=true` removes plaintext images after
 > successful encryption; `false` retains originals.
 
