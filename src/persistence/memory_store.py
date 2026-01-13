@@ -195,6 +195,8 @@ class DocMindSqliteStore(BaseStore):
     TTL values are interpreted as minutes.
     """
 
+    supports_ttl: bool = True
+
     __slots__ = (
         "_closed",
         "_conn",
