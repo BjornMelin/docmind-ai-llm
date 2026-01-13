@@ -194,6 +194,7 @@ all-specs-adrs.xml
 .cursorignore
 opensrc/
 .codex/
+.opencode/
 
 # Snapshot persistence artifacts
 storage/
