@@ -136,16 +136,18 @@ def _export_graphs(
             "sha256": sha,
         }
         exports_meta.append(metadata)
-        log_export_event({
-            "export_performed": True,
-            "export_type": f"graph_{fmt}",
-            "seed_count": metadata["seed_count"],
-            "dest_basename": path.name,
-            "context": "snapshot",
-            "duration_ms": metadata["duration_ms"],
-            "size_bytes": metadata["size_bytes"],
-            "sha256": sha,
-        })
+        log_export_event(
+            {
+                "export_performed": True,
+                "export_type": f"graph_{fmt}",
+                "seed_count": metadata["seed_count"],
+                "dest_basename": path.name,
+                "context": "snapshot",
+                "duration_ms": metadata["duration_ms"],
+                "size_bytes": metadata["size_bytes"],
+                "sha256": sha,
+            }
+        )
         record_graph_export_metric(
             f"graph_{fmt}",
             duration_ms=metadata["duration_ms"],
@@ -172,12 +174,14 @@ def _export_graphs(
             )
         except Exception as exc:
             logger.warning("Graph JSONL export failed (snapshot): {}", exc)
-            log_export_event({
-                "export_performed": False,
-                "export_type": "graph_jsonl",
-                "context": "snapshot",
-                "error": str(exc),
-            })
+            log_export_event(
+                {
+                    "export_performed": False,
+                    "export_type": "graph_jsonl",
+                    "context": "snapshot",
+                    "error": str(exc),
+                }
+            )
 
         parquet_path = timestamped_export_path(graph_dir, "parquet")
         try:
@@ -194,12 +198,14 @@ def _export_graphs(
             )
         except Exception as exc:
             logger.warning("Graph Parquet export failed (snapshot): {}", exc)
-            log_export_event({
-                "export_performed": False,
-                "export_type": "graph_parquet",
-                "context": "snapshot",
-                "error": str(exc),
-            })
+            log_export_event(
+                {
+                    "export_performed": False,
+                    "export_type": "graph_parquet",
+                    "context": "snapshot",
+                    "error": str(exc),
+                }
+            )
 
     return exports_meta
 
@@ -224,8 +230,22 @@ def _collect_corpus_paths(settings_obj: Any) -> tuple[list[Path], Path]:
         with contextlib.suppress(Exception), open(manifest_file) as f:
             manifest_data = json.load(f)
             cached_paths = [Path(p) for p in manifest_data.get("files", [])]
-            if cached_paths or not uploads_dir.exists():
+            if not uploads_dir.exists():
                 return cached_paths, uploads_dir
+            try:
+                manifest_mtime = manifest_file.stat().st_mtime
+                uploads_mtime = uploads_dir.stat().st_mtime
+            except OSError:
+                manifest_mtime = 0.0
+                uploads_mtime = 0.0
+            if uploads_mtime <= manifest_mtime:
+                missing = [p for p in cached_paths if not p.exists()]
+                if not missing:
+                    return cached_paths, uploads_dir
+                logger.debug(
+                    "Corpus manifest cache invalidated; {} missing files detected",
+                    len(missing),
+                )
 
     # Glob for corpus files (bounded to immediate children if corpus is large)
     corpus_paths: list[Path] = []

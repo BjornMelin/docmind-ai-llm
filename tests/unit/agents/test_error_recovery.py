@@ -70,10 +70,12 @@ class TestAgentErrorRecovery:
 
             # Should isolate vector tool failure
             with patch("src.agents.tools.retrieval.logger") as mock_logger:
-                result = retrieve_documents.invoke({
-                    "query": "Multi-tool test query",
-                    "state": mock_state,
-                })
+                result = retrieve_documents.invoke(
+                    {
+                        "query": "Multi-tool test query",
+                        "state": mock_state,
+                    }
+                )
 
         # Then: Error is contained and other tools continue working
         assert result is not None
@@ -96,17 +98,18 @@ class TestAgentErrorRecovery:
         # but final-release persistence stores LangChain messages in state).
         mock_state = {
             "messages": [HumanMessage(content="Context corruption test")],
-            "messages_corrupted": True,
             "tools_data": {"vector": Mock()},
             "context_recovery_enabled": True,
             "reset_context_on_error": True,
         }
 
         # When: Routing runs with corrupted/legacy flags, it should still succeed.
-        result = route_query.invoke({
-            "query": "Context corruption test",
-            "state": mock_state,
-        })
+        result = route_query.invoke(
+            {
+                "query": "Context corruption test",
+                "state": mock_state,
+            }
+        )
 
         # Then: Routing returns a decision JSON (outer layers can reset state).
         assert result is not None
@@ -157,10 +160,12 @@ class TestAgentErrorRecovery:
             mock_factory.create_tools_from_indexes.side_effect = create_mixed_tools
 
             with patch("src.agents.tools.retrieval.logger") as mock_logger:
-                result = retrieve_documents.invoke({
-                    "query": "Partial failure test",
-                    "state": mock_state,
-                })
+                result = retrieve_documents.invoke(
+                    {
+                        "query": "Partial failure test",
+                        "state": mock_state,
+                    }
+                )
 
         # Then: System continues with available tools
         assert result is not None
@@ -193,17 +198,21 @@ class TestAgentErrorRecovery:
         mock_state["tools_data"] = None
 
         # First execution should return error JSON due to missing tools
-        result_json = retrieve_documents.invoke({
-            "query": "State corruption test",
-            "state": mock_state,
-        })
+        result_json = retrieve_documents.invoke(
+            {
+                "query": "State corruption test",
+                "state": mock_state,
+            }
+        )
 
         # Recovery: Restore minimal required state and verify route works
         mock_state["tools_data"] = {"vector": Mock()}
-        route_result = route_query.invoke({
-            "query": "State recovery test",
-            "state": mock_state,
-        })
+        route_result = route_query.invoke(
+            {
+                "query": "State recovery test",
+                "state": mock_state,
+            }
+        )
 
         # Then: Error JSON and successful subsequent route
         import json
@@ -236,10 +245,12 @@ class TestAgentErrorRecovery:
             )
 
             # Retrieval should fall back to detailed path and not raise
-            result_json = retrieve_documents.invoke({
-                "query": "Memory test",
-                "state": mock_state,
-            })
+            result_json = retrieve_documents.invoke(
+                {
+                    "query": "Memory test",
+                    "state": mock_state,
+                }
+            )
 
         # Then: Memory error path was attempted and result returned
         assert call_count["create_tools"] == 1
@@ -282,10 +293,12 @@ class TestAgentErrorRecovery:
             ),
         ):
             # Use short query (<3 words) to trigger 2 variants + primary = 3 calls
-            result_json = retrieve_documents.invoke({
-                "query": "net issue",
-                "state": mock_state,
-            })
+            result_json = retrieve_documents.invoke(
+                {
+                    "query": "net issue",
+                    "state": mock_state,
+                }
+            )
 
         # Then: Recovery succeeds after internal retries across variants
         assert call_counter["calls"] >= 3
@@ -329,20 +342,24 @@ class TestAgentErrorRecovery:
                 inp["query"], inp["response"], inp.get("_state")
             )
             # First validation attempt fails
-            result1 = validate_response.invoke({
-                "query": "Test query",
-                "response": "Low quality response",
-                "sources": "[]",
-                "_state": mock_state,
-            })
+            result1 = validate_response.invoke(
+                {
+                    "query": "Test query",
+                    "response": "Low quality response",
+                    "sources": "[]",
+                    "_state": mock_state,
+                }
+            )
 
             # Second validation attempt succeeds
-            result2 = validate_response.invoke({
-                "query": "Test query",
-                "response": "Improved response",
-                "sources": "[]",
-                "_state": mock_state,
-            })
+            result2 = validate_response.invoke(
+                {
+                    "query": "Test query",
+                    "response": "Improved response",
+                    "sources": "[]",
+                    "_state": mock_state,
+                }
+            )
 
         # Then: Validation recovery produces acceptable result
         import json

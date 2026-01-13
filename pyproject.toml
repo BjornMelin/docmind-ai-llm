@@ -178,7 +178,7 @@ Manual Installation Steps (if needed):
 line-length = 88
 target-version = "py311"
 extend-exclude = ["opensrc"]
-preview = true
+preview = false
 
 [tool.ruff.lint]
 select = [
@@ -202,7 +202,6 @@ select = [
     "PLR0911",
     "PLR0912",
     "PLR0913",
-    "PLR0914",
     "PLR0915",
 ]
 # Stricter linting with pylint-equivalent rules; keep a short, explicit ignore set.

@@ -62,8 +62,9 @@ def _make_pdf(path: Path) -> None:
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("batch_size", [1, 64])
 def test_ingestion_pdf_images_exports_and_index_wiring(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, batch_size: int
 ) -> None:
     """Ingest a tiny PDF and assert page-image exports reach image indexer."""
     _skip_if_no_pymupdf()
@@ -87,6 +88,7 @@ def test_ingestion_pdf_images_exports_and_index_wiring(
         docstore_path=tmp_path / "cache" / "ingestion" / "docstore.json",
         enable_image_indexing=True,
         enable_image_encryption=False,
+        image_index_batch_size=batch_size,
     )
     inputs = [IngestionInput(document_id=doc_id, source_path=pdf_path)]
 
@@ -109,14 +111,16 @@ def test_ingestion_pdf_images_exports_and_index_wiring(
         lambda *_a, **_k: None,  # pyright: ignore[unused-param]
     )
 
-    captured: dict[str, object] = {"records": None}
+    captured: dict[str, object] = {"records": None, "batch_size": None}
 
     def _fake_index(
         *_a: object,
         records: Sequence[dict[str, Any]],
+        batch_size: int = 0,
         **_k: object,  # pyright: ignore[unused-param]
     ) -> int:
         captured["records"] = list(records)
+        captured["batch_size"] = batch_size
         return len(records)
 
     class _DummySiglip:  # pragma: no cover - avoid model init
@@ -141,3 +145,4 @@ def test_ingestion_pdf_images_exports_and_index_wiring(
     assert result.metadata.get("image_index.enabled") is True
     assert int(result.metadata.get("image_index.indexed", 0)) >= 1
     assert captured["records"] is not None
+    assert captured["batch_size"] == batch_size

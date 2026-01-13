@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from tests.integration.eval_cli_helpers import run_ragas_cli
 
 
+@pytest.mark.integration
 def test_ragas_cli_smoke(tmp_path: Path) -> None:
     """Ensure RAGAS CLI writes a leaderboard row with mocked evaluate/coordinator."""
     run_ragas_cli(tmp_path)

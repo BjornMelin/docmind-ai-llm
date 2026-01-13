@@ -251,7 +251,7 @@ def _require_gpu_info(*, cwd: Path | None = None) -> GPUInfo:
     return gpu_info
 
 
-def check_cuda_compatibility_status(
+def _check_cuda_compatibility_status(
     test_results: dict[str, bool],
     *,
     cwd: Path | None = None,
@@ -391,7 +391,7 @@ def _print_summary(
     test_results: dict[str, bool],
     total_failures: int,
     final_memory: dict[str, float] | None,
-) -> None:
+) -> NoReturn:
     """Print a final validation summary and exit with status."""
     print("\n" + "=" * 80)
     print("📋 GPU VALIDATION SUMMARY")
@@ -450,7 +450,7 @@ def main() -> None:
     test_results: dict[str, bool] = {}
 
     gpu_info = _require_gpu_info(cwd=project_root)
-    cuda_available = check_cuda_compatibility_status(test_results, cwd=project_root)
+    cuda_available = _check_cuda_compatibility_status(test_results, cwd=project_root)
 
     if args.compatibility:
         _print_compatibility_summary_and_exit(gpu_info, test_results)

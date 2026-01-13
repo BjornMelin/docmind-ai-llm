@@ -133,8 +133,10 @@ def startup_init(cfg: "DocMindSettings" = settings) -> None:
             cfg.database.sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
         if hasattr(cfg, "chat") and getattr(cfg.chat, "sqlite_path", None):
             # Defensive: chat DB dir should not block startup
-            with suppress(OSError):
+            try:
                 cfg.chat.sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                logger.opt(exception=exc).debug("Failed to ensure chat sqlite dir")
 
         # Telemetry env bridge (local JSONL sink still honored elsewhere)
         if not bool(getattr(cfg, "telemetry_enabled", True)):
@@ -211,7 +213,7 @@ def get_unified_embedder():  # pragma: no cover - simple factory
 
     device = "cuda" if settings.enable_gpu_acceleration else "cpu"
     text = TextEmbedder(model_name=settings.embedding.model_name, device=device)
-    image = ImageEmbedder(backbone="siglip_base", device=device)
+    image = ImageEmbedder(backbone=settings.embedding.image_backbone, device=device)
     return UnifiedEmbedder(text=text, image=image, strict_image_types=True)
 
 

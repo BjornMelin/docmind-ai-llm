@@ -102,7 +102,7 @@ class ImageSiglipRetriever:
             timeout_s = max(
                 1,
                 int(
-                    float(getattr(settings.retrieval, "image_timeout_ms", 5000))
+                    float(getattr(settings.retrieval, "siglip_timeout_ms", 150))
                     / 1000.0
                 ),
             )
@@ -248,15 +248,17 @@ class MultimodalFusionRetriever:
                 latency_ms,
             )
         with contextlib.suppress(Exception):
-            log_jsonl({
-                "retrieval.multimodal": True,
-                "retrieval.text_count": len(text_nodes),
-                "retrieval.image_count": len(image_nodes),
-                "retrieval.fused_count": len(out),
-                "retrieval.rrf_k": int(k_constant),
-                "dedup.key": key_name,
-                "retrieval.latency_ms": latency_ms,
-            })
+            log_jsonl(
+                {
+                    "retrieval.multimodal": True,
+                    "retrieval.text_count": len(text_nodes),
+                    "retrieval.image_count": len(image_nodes),
+                    "retrieval.fused_count": len(out),
+                    "retrieval.rrf_k": int(k_constant),
+                    "dedup.key": key_name,
+                    "retrieval.latency_ms": latency_ms,
+                }
+            )
 
         return out
 

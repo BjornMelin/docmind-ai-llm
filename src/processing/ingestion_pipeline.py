@@ -243,7 +243,7 @@ def _document_from_input(
             source_path = Path(item.source_path)
             docs = reader.load_data(  # type: ignore[call-arg]
                 file=source_path,
-                unstructured_kwargs={"filename": str(source_path)},
+                unstructured_kwargs={"filename": source_path.name},
             )
         except (
             TypeError,
@@ -468,15 +468,19 @@ def _build_page_image_records(
 
         # NOTE: This mutates export.metadata in-place so downstream consumers of
         # `exports` see stable artifact references.
-        export.metadata.update({
-            "image_artifact_id": img_ref.sha256,
-            "image_artifact_suffix": img_ref.suffix,
-        })
+        export.metadata.update(
+            {
+                "image_artifact_id": img_ref.sha256,
+                "image_artifact_suffix": img_ref.suffix,
+            }
+        )
         if thumb_ref is not None:
-            export.metadata.update({
-                "thumbnail_artifact_id": thumb_ref.sha256,
-                "thumbnail_artifact_suffix": thumb_ref.suffix,
-            })
+            export.metadata.update(
+                {
+                    "thumbnail_artifact_id": thumb_ref.sha256,
+                    "thumbnail_artifact_suffix": thumb_ref.suffix,
+                }
+            )
 
         try:
             records.append(

@@ -18,15 +18,17 @@ pytestmark = pytest.mark.unit
 
 def test_parse_tool_result_strips_runtime_paths_from_metadata() -> None:
     node = TextNode(text="x", id_="n1")
-    node.metadata.update({
-        "doc_id": "doc-1",
-        "modality": "pdf_page_image",
-        "image_artifact_id": "sha256",
-        "image_artifact_suffix": ".webp",
-        "image_path": "/abs/path.webp",
-        "thumbnail_path": "/abs/thumb.webp",
-        "source_path": "/abs/source.pdf",
-    })
+    node.metadata.update(
+        {
+            "doc_id": "doc-1",
+            "modality": "pdf_page_image",
+            "image_artifact_id": "sha256",
+            "image_artifact_suffix": ".webp",
+            "image_path": "/abs/path.webp",
+            "thumbnail_path": "/abs/thumb.webp",
+            "source_path": "/abs/source.pdf",
+        }
+    )
     resp = SimpleNamespace(source_nodes=[NodeWithScore(node=node, score=1.0)])
     docs = retrieval_tool._parse_tool_result(resp)
     assert docs
@@ -59,6 +61,38 @@ def test_contextual_recall_returns_last_sources_when_present() -> None:
     recalled = retrieval_tool._recall_recent_sources(state)
     assert recalled
     assert recalled[0]["metadata"]["image_artifact_id"] == "a"
+
+
+def test_contextual_recall_prefers_synthesis_result_documents() -> None:
+    state = {
+        "synthesis_result": {
+            "documents": [
+                {
+                    "content": "",
+                    "metadata": {
+                        "modality": "pdf_page_image",
+                        "image_artifact_id": "s",
+                        "thumbnail_artifact_id": "t",
+                    },
+                    "score": 1.0,
+                }
+            ]
+        },
+        "retrieval_results": [
+            {
+                "documents": [
+                    {
+                        "content": "",
+                        "metadata": {"image_artifact_id": "r"},
+                        "score": 1.0,
+                    }
+                ]
+            }
+        ],
+    }
+    recalled = retrieval_tool._recall_recent_sources(state)
+    assert recalled
+    assert recalled[0]["metadata"]["image_artifact_id"] == "s"
 
 
 def test_looks_contextual_matches_simple_pronoun_question() -> None:

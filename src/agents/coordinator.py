@@ -26,10 +26,10 @@ Example:
 
 import asyncio
 import contextlib
-import threading
 import time
 import warnings
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, cast
 
 from langchain.agents import create_agent
@@ -118,6 +118,8 @@ class ContextManager:
 COORDINATION_OVERHEAD_THRESHOLD = 0.2  # seconds (200ms target)
 CONTEXT_TRIM_STRATEGY = "last"
 PARALLEL_TOOL_CALLS_ENABLED = True
+MEMORY_CONSOLIDATION_MAX_WORKERS = 2
+MEMORY_CONSOLIDATION_TIMEOUT_S = 10.0
 
 
 def _shared_llm_attempts() -> int:
@@ -238,6 +240,10 @@ class MultiAgentCoordinator:
 
         # Lazy initialization
         self._setup_complete = False
+        self._memory_executor = ThreadPoolExecutor(
+            max_workers=MEMORY_CONSOLIDATION_MAX_WORKERS,
+            thread_name_prefix="docmind-memory",
+        )
 
         logger.info("MultiAgentCoordinator initialized (model: %s)", model_path)
 
@@ -521,14 +527,16 @@ class MultiAgentCoordinator:
             AgentResponse.optimization_metrics.
         """
         base = self._build_base_optimization_metrics_from_state(final_state)
-        base.update({
-            "coordination_overhead_ms": round(coordination_time * 1000, 2),
-            "meets_target": coordination_time < COORDINATION_OVERHEAD_THRESHOLD,
-            "token_reduction_achieved": final_state.get(
-                "token_reduction_achieved", 0.0
-            ),
-            "context_window_used": self.max_context_length,
-        })
+        base.update(
+            {
+                "coordination_overhead_ms": round(coordination_time * 1000, 2),
+                "meets_target": coordination_time < COORDINATION_OVERHEAD_THRESHOLD,
+                "token_reduction_achieved": final_state.get(
+                    "token_reduction_achieved", 0.0
+                ),
+                "context_window_used": self.max_context_length,
+            }
+        )
         return base
 
     def _record_query_metrics(self, latency_s: float, success: bool) -> None:
@@ -625,12 +633,12 @@ class MultiAgentCoordinator:
         response = AgentResponse(
             content=("The multi-agent system timed out while processing your request."),
             sources=[],
-            metadata={"fallback_used": True, "reason": "timeout"},
+            metadata={"fallback_used": False, "reason": "timeout"},
             validation_score=0.0,
             processing_time=processing_time,
             optimization_metrics={"timeout": True},
         )
-        return response, True
+        return response, False
 
     def _handle_workflow_result(
         self,
@@ -1140,10 +1148,12 @@ class MultiAgentCoordinator:
                 config = getattr(snap, "config", None)
                 conf = config.get("configurable") if isinstance(config, dict) else None
                 conf = conf if isinstance(conf, dict) else {}
-                out.append({
-                    "checkpoint_id": conf.get("checkpoint_id"),
-                    "checkpoint_ns": conf.get("checkpoint_ns", ""),
-                })
+                out.append(
+                    {
+                        "checkpoint_id": conf.get("checkpoint_id"),
+                        "checkpoint_ns": conf.get("checkpoint_ns", ""),
+                    }
+                )
         except Exception as exc:
             logger.debug("Checkpoint listing failed: %s", exc)
         return out
@@ -1219,8 +1229,7 @@ class MultiAgentCoordinator:
                 self._setup_complete and self.compiled_graph is not None
             ),
             # ADR-004: FP8 model variant used by default (suffix-based)
-            "adr_004_fp8_model": self.model_path
-            .upper()
+            "adr_004_fp8_model": self.model_path.upper()
             .split("/")[-1]
             .endswith("-FP8"),
             # Coordination under 200ms per turn
@@ -1244,6 +1253,18 @@ class MultiAgentCoordinator:
             return
 
         try:
+            start_time = time.monotonic()
+
+            def _timed_out() -> bool:
+                return (time.monotonic() - start_time) > MEMORY_CONSOLIDATION_TIMEOUT_S
+
+            if _timed_out():
+                logger.debug(
+                    "Memory consolidation timed out before start for thread {}",
+                    thread_id,
+                )
+                return
+
             # 1. Get current checkpoint info for source tracking
             config: RunnableConfig = {
                 "configurable": {"thread_id": thread_id, "user_id": user_id}
@@ -1255,6 +1276,10 @@ class MultiAgentCoordinator:
                     checkpoint_id = state.config.get("configurable", {}).get(
                         "checkpoint_id", "latest"
                     )
+
+            if _timed_out():
+                logger.debug("Memory consolidation timed out for thread {}", thread_id)
+                return
 
             policy = MemoryConsolidationPolicy(
                 similarity_threshold=float(settings.chat.memory_similarity_threshold),
@@ -1281,6 +1306,9 @@ class MultiAgentCoordinator:
             )
             if not candidates:
                 return
+            if _timed_out():
+                logger.debug("Memory consolidation timed out for thread {}", thread_id)
+                return
 
             # 3. Consolidate within the specific namespace
             # Namespace: ("memories", "{user_id}", "{thread_id}")
@@ -1288,6 +1316,9 @@ class MultiAgentCoordinator:
             actions = consolidate_memory_candidates(
                 candidates, self.store, namespace, policy=policy
             )
+            if _timed_out():
+                logger.debug("Memory consolidation timed out for thread {}", thread_id)
+                return
 
             # 4. Apply policy using the durable store
             apply_consolidation_policy(self.store, namespace, actions, policy=policy)
@@ -1305,12 +1336,9 @@ class MultiAgentCoordinator:
         """Schedule memory consolidation off the critical path."""
         if self.store is None:
             return
-        worker = threading.Thread(
-            target=self._consolidate_memories,
-            args=(final_state, thread_id, user_id),
-            daemon=True,
+        self._memory_executor.submit(
+            self._consolidate_memories, final_state, thread_id, user_id
         )
-        worker.start()
 
 
 # Factory function for coordinator

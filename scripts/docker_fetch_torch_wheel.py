@@ -245,17 +245,20 @@ def _download_once(url: str, dest: Path) -> None:
     if existing:
         headers["Range"] = f"bytes={existing}-"
     req = urllib.request.Request(url, headers=headers)  # noqa: S310
-    with _open_https_request(req, timeout=60) as resp, dest.open("ab") as fh:
+    file_mode = "r+b" if dest.exists() else "wb"
+    with _open_https_request(req, timeout=60) as resp, dest.open(file_mode) as fh:
         if existing and resp.status == 200:
             fh.seek(0)
             fh.truncate()
             existing = 0
-        total = resp.headers.get("Content-Range")
-        if total and "/" in total:
-            total = total.split("/")[-1].strip()
         else:
-            total = resp.headers.get("Content-Length")
-        total_int = int(total) if total and total.isdigit() else None
+            fh.seek(existing)
+        content_range = resp.headers.get("Content-Range")
+        if content_range and "/" in content_range:
+            total_str = content_range.split("/")[-1].strip()
+        else:
+            total_str = resp.headers.get("Content-Length")
+        total_int = int(total_str) if total_str and total_str.isdigit() else None
         downloaded = existing
         last_report = time.time()
         while True:

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -10,8 +9,6 @@ from typing import Any
 
 from src.config.settings import settings as default_settings
 from src.persistence.hashing import compute_config_hash, compute_corpus_hash
-
-logger = logging.getLogger(__name__)
 
 __all__ = [
     "collect_corpus_paths",
@@ -127,16 +124,17 @@ def timestamped_export_path(out_dir: Path, extension: str) -> Path:
         'graph_export-20240115T120030Z-42.json' if collision).
     """
     ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    candidate = out_dir / f"graph_export-{ts}.{extension}"
+    ext = extension.lstrip(".")
+    if not ext:
+        raise ValueError("extension must be a non-empty string")
+    candidate = out_dir / f"graph_export-{ts}.{ext}"
     counter = 1
     max_attempts = 1000  # Safety limit to prevent infinite loops
     while candidate.exists() and counter < max_attempts:
-        candidate = out_dir / f"graph_export-{ts}-{counter}.{extension}"
+        candidate = out_dir / f"graph_export-{ts}-{counter}.{ext}"
         counter += 1
-    if counter >= max_attempts:
-        logger.warning(
-            "Export path collision limit reached (%d); using path: %s",
-            max_attempts,
-            candidate,
+    if candidate.exists():
+        raise RuntimeError(
+            f"Failed to generate unique export path after {counter} attempts"
         )
     return candidate

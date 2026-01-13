@@ -45,6 +45,7 @@ from src.persistence.snapshot_utils import (
 )
 from src.retrieval.router_factory import build_router_engine
 from src.telemetry.opentelemetry import configure_observability
+from src.ui.artifacts import render_artifact_image
 from src.ui.chat_sessions import (
     ChatSelection,
     get_chat_db_conn,
@@ -197,10 +198,6 @@ def _render_sources_fragment() -> None:
         return
 
     store = ArtifactStore.from_settings(settings)
-    try:
-        from src.utils.images import open_image_encrypted
-    except ImportError:
-        open_image_encrypted = None
     thread_id = str(st.session_state.get("active_thread_id") or "default")
     max_show = min(50, len(sources))
     default_show = min(10, max_show)
@@ -233,18 +230,15 @@ def _render_sources_fragment() -> None:
                 elif img_id:
                     ref = ArtifactRef(sha256=str(img_id), suffix=str(img_sfx))
                 if ref is not None:
-                    try:
-                        img_path = store.resolve_path(ref)
-                        if str(img_path).endswith(".enc"):
-                            if open_image_encrypted is not None:
-                                with open_image_encrypted(str(img_path)) as im:
-                                    st.image(im, use_container_width=True)
-                            else:
-                                st.caption("Encryption support unavailable.")
-                        else:
-                            st.image(str(img_path), use_container_width=True)
-                    except Exception:
-                        st.caption("Image artifact unavailable (reindex to restore).")
+                    render_artifact_image(
+                        ref,
+                        store=store,
+                        use_container_width=True,
+                        missing_caption=(
+                            "Image artifact unavailable (reindex to restore)."
+                        ),
+                        encrypted_caption="Encryption support unavailable.",
+                    )
                 continue
 
             content = src.get("content") if isinstance(src, dict) else ""
@@ -432,11 +426,13 @@ def _render_staleness_badge() -> None:
                 with st.sidebar:
                     st.caption("Snapshot stale: content or config changed.")
                 with contextlib.suppress(Exception):
-                    log_jsonl({
-                        "snapshot_stale_detected": True,
-                        "snapshot_id": latest.name,
-                        "reason": "digest_mismatch",
-                    })
+                    log_jsonl(
+                        {
+                            "snapshot_stale_detected": True,
+                            "snapshot_id": latest.name,
+                            "reason": "digest_mismatch",
+                        }
+                    )
             else:
                 st.caption(f"Snapshot up-to-date: {latest.name}")
     except Exception as exc:
@@ -563,11 +559,6 @@ def _render_visual_results(nodes: list[Any], top_k: int) -> None:
         st.caption("No matches.")
         return
 
-    try:
-        from src.utils.images import open_image_encrypted
-    except ImportError:
-        open_image_encrypted = None
-
     store = ArtifactStore.from_settings(settings)
     st.caption(f"Matches: {len(nodes)}")
     for item in nodes[: int(top_k)]:
@@ -594,18 +585,13 @@ def _render_visual_results(nodes: list[Any], top_k: int) -> None:
         if ref is None:
             continue
 
-        try:
-            img_path = store.resolve_path(ref)
-            if str(img_path).endswith(".enc"):
-                if open_image_encrypted is not None:
-                    with open_image_encrypted(str(img_path)) as im:
-                        st.image(im, use_container_width=True)
-                else:
-                    st.caption("Encryption support unavailable.")
-            else:
-                st.image(str(img_path), use_container_width=True)
-        except Exception:
-            st.caption("Image artifact unavailable (reindex to restore).")
+        render_artifact_image(
+            ref,
+            store=store,
+            use_container_width=True,
+            missing_caption="Image artifact unavailable (reindex to restore).",
+            encrypted_caption="Encryption support unavailable.",
+        )
 
 
 def _render_visual_search_sidebar() -> None:

@@ -472,9 +472,9 @@ uv run python -m pytest -m "requires_gpu" --timeout=600
 
 #### Current Coverage Status
 
-- **Measured Coverage**: 3.51% (realistic baseline)
-- **Target Coverage**: 35% minimum for production
-- **Critical Modules**: Agents (40%), Core (35%), Models (80%), Config (60%)
+- **Target Coverage**: 80% line coverage (global)
+- **Branch Coverage**: Not enforced by default
+- **Critical Modules**: Agents, Core, Models, Config should meet or exceed target
 
 #### Coverage Commands
 
@@ -486,7 +486,7 @@ uv run python -m pytest --cov=src --cov-report=term-missing tests/unit/
 uv run python -m pytest --cov=src --cov-report=html tests/unit/
 
 # Coverage with quality gates
-uv run python -m pytest --cov=src --cov-fail-under=35 tests/
+uv run python -m pytest --cov=src --cov-fail-under=80 tests/
 ```
 
 ## Test Development Guidelines

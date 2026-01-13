@@ -12,24 +12,43 @@ creates DocMind-owned tables only.
 from __future__ import annotations
 
 import contextlib
-import logging
 import sqlite3
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+
+from loguru import logger
 
 from src.config.settings import DocMindSettings, settings
 from src.persistence.memory_store import NAMESPACE_THREAD_INDEX
 from src.persistence.path_utils import resolve_path_under_data_dir
 from src.utils.time import now_ms
 
-logger = logging.getLogger(__name__)
-
 CHAT_SESSION_TABLE = "chat_session"
 
 # DocMind store tables (memory store)
 STORE_ITEMS_TABLE = "docmind_store_items"
 STORE_VEC_TABLE = "docmind_store_vec"
+_NS_DELETE_VEC = {
+    0: "DELETE FROM docmind_store_vec WHERE ns0=?;",
+    1: "DELETE FROM docmind_store_vec WHERE ns1=?;",
+    2: "DELETE FROM docmind_store_vec WHERE ns2=?;",
+    3: "DELETE FROM docmind_store_vec WHERE ns3=?;",
+    4: "DELETE FROM docmind_store_vec WHERE ns4=?;",
+    5: "DELETE FROM docmind_store_vec WHERE ns5=?;",
+    6: "DELETE FROM docmind_store_vec WHERE ns6=?;",
+    7: "DELETE FROM docmind_store_vec WHERE ns7=?;",
+}
+_NS_DELETE_ITEMS = {
+    0: "DELETE FROM docmind_store_items WHERE ns0=?;",
+    1: "DELETE FROM docmind_store_items WHERE ns1=?;",
+    2: "DELETE FROM docmind_store_items WHERE ns2=?;",
+    3: "DELETE FROM docmind_store_items WHERE ns3=?;",
+    4: "DELETE FROM docmind_store_items WHERE ns4=?;",
+    5: "DELETE FROM docmind_store_items WHERE ns5=?;",
+    6: "DELETE FROM docmind_store_items WHERE ns6=?;",
+    7: "DELETE FROM docmind_store_items WHERE ns7=?;",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -238,9 +257,10 @@ def soft_delete_session(conn: sqlite3.Connection, *, thread_id: str) -> None:
     conn.commit()
 
 
-def purge_session(conn: sqlite3.Connection, *, thread_id: str) -> None:
+def purge_session(conn: sqlite3.Connection, *, thread_id: str) -> dict[str, int]:
     """Hard delete a session's persisted data (checkpoints + writes + memories)."""
     tid = str(thread_id)
+    deleted = {"langgraph": 0, "memory_store": 0, "session": 0}
     with conn:
         # LangGraph SqliteSaver tables (best-effort; may not exist yet)
         langgraph_deletes = (
@@ -249,33 +269,40 @@ def purge_session(conn: sqlite3.Connection, *, thread_id: str) -> None:
         )
         for stmt in langgraph_deletes:
             with contextlib.suppress(sqlite3.OperationalError):
-                conn.execute(stmt, (tid,))
+                cur = conn.execute(stmt, (tid,))
+                if cur.rowcount >= 0:
+                    deleted["langgraph"] += cur.rowcount
 
         # DocMind memory store tables (best-effort; may not exist yet).
         # Namespace layout is positional (SPEC-041):
         # `namespace=(user_id, session_type, thread_id, ...)` so `thread_id` maps to
         # `ns{NAMESPACE_THREAD_INDEX}` (e.g. ns2).
         try:
-            if NAMESPACE_THREAD_INDEX == 2:
-                conn.execute(
-                    "DELETE FROM docmind_store_vec WHERE ns2=?;",
-                    (tid,),
-                )
-                conn.execute(
-                    "DELETE FROM docmind_store_items WHERE ns2=?;",
-                    (tid,),
-                )
+            if 0 <= NAMESPACE_THREAD_INDEX <= 7:
+                vec_sql = _NS_DELETE_VEC.get(NAMESPACE_THREAD_INDEX)
+                items_sql = _NS_DELETE_ITEMS.get(NAMESPACE_THREAD_INDEX)
+                if vec_sql and items_sql:
+                    cur = conn.execute(vec_sql, (tid,))
+                    if cur.rowcount >= 0:
+                        deleted["memory_store"] += cur.rowcount
+                    cur = conn.execute(items_sql, (tid,))
+                    if cur.rowcount >= 0:
+                        deleted["memory_store"] += cur.rowcount
             else:
                 logger.debug(
                     "Skipping memory store cleanup; namespace layout differs "
-                    "(NAMESPACE_THREAD_INDEX=%s)",
+                    "(NAMESPACE_THREAD_INDEX={})",
                     NAMESPACE_THREAD_INDEX,
                 )
         except sqlite3.OperationalError:
             # Tables not created yet; fail gracefully.
             pass
 
-        conn.execute(
+        cur = conn.execute(
             "DELETE FROM chat_session WHERE thread_id=?;",
             (tid,),
         )
+        if cur.rowcount >= 0:
+            deleted["session"] += cur.rowcount
+    logger.debug("purge_session deleted counts: {}", deleted)
+    return deleted

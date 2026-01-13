@@ -30,7 +30,16 @@ def _sanitize_doc_metadata(
 ) -> dict[str, Any]:
     out = dict(meta or {})
     # Drop common path keys to enforce path hygiene.
-    for key in ("source_path", "file_path", "path"):
+    for key in (
+        "source_path",
+        "file_path",
+        "path",
+        "filename",
+        "file_directory",
+        "directory",
+        "uri",
+        "url",
+    ):
         out.pop(key, None)
     # Normalize `source` to basename (Unstructured/LlamaIndex frequently use
     # absolute or relative paths here). Only keep the filename component.
@@ -90,14 +99,14 @@ async def load_documents_unstructured(
                     docs.append(item)
                 continue
             except Exception as exc:
-                logger.debug(f"UnstructuredReader failed for {path.name}: {exc}")
+                logger.debug("UnstructuredReader failed for {}: {}", path.name, exc)
 
         try:
             text = await asyncio.to_thread(
                 path.read_text, encoding="utf-8", errors="ignore"
             )
         except Exception as exc:
-            logger.debug(f"Fallback text read failed for {path.name}: {exc}")
+            logger.debug("Fallback text read failed for {}: {}", path.name, exc)
             text = ""
         docs.append(
             Document(

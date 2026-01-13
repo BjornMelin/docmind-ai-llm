@@ -143,10 +143,10 @@ uv run python scripts/run_tests.py --integration
 
 **Validates:**
 
-- `tests/integration/test_multimodal_ingestion.py` — PDF image rendering, artifact creation, SigLIP indexing
-- `tests/integration/test_retrieval_multimodal_fusion.py` — text/image retrieval fusion, RRF scoring
-- `tests/integration/test_persistence_chat_db.py` — LangGraph SqliteSaver, session persistence
-- `tests/integration/test_memory_store.py` — long-term memory, semantic search with artifacts
+- `tests/integration/test_ingestion_pipeline_pdf_images.py` — PDF image rendering, artifact creation, SigLIP indexing
+- `tests/integration/test_unified_embeddings_in_retrieval_integration.py` — retrieval wiring for unified embeddings
+- `tests/integration/ui/test_chat_persistence_time_travel.py` — LangGraph SqliteSaver, session persistence
+- Memory store coverage is in unit tests (`tests/unit/persistence/test_memory_store_*`)
 
 #### System tier (GPU, slow, optional)
 

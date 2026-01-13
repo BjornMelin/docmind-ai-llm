@@ -531,6 +531,12 @@ class DocMindSqliteStore(BaseStore):
             # Sliding TTL: refresh access timestamp and extend expiry by the
             # same TTL delta.
             ttl_delta_ms = int(row["expires_at_ms"]) - int(row["accessed_at_ms"])
+            if ttl_delta_ms < 0:
+                logger.debug(
+                    "Negative TTL delta detected for key {} ({} ms); clamping to zero",
+                    op.key,
+                    ttl_delta_ms,
+                )
             expires_at_ms = now + max(0, ttl_delta_ms)
             self._conn.execute(
                 """
@@ -683,6 +689,11 @@ class DocMindSqliteStore(BaseStore):
             )
             sql_limit = fetch_limit
             sql_offset = 0
+            if fetch_limit >= self._filter_fetch_cap:
+                logger.debug(
+                    "Filter fetch cap reached ({}); results may be incomplete",
+                    self._filter_fetch_cap,
+                )
         else:
             sql_limit = requested_limit
             sql_offset = requested_offset
@@ -889,7 +900,7 @@ class DocMindSqliteStore(BaseStore):
                     value=value,
                     created_at=_ms_to_dt(int(r["created_at_ms"])),
                     updated_at=_ms_to_dt(int(r["updated_at_ms"])),
-                    score=float(1.0 - distance),
+                    score=float((2.0 - distance) / 2.0),
                 )
             )
         return items[requested_offset : requested_offset + requested_limit]

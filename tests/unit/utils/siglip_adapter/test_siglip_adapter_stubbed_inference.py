@@ -37,7 +37,8 @@ def test_siglip_embedding_text_and_image_with_stubbed_model() -> None:
             )
 
     emb = SiglipEmbedding(model_id="stub", device="cpu")
-    # Inject stubs to bypass lazy HuggingFace model loading
+    # Inject stubs into private attributes to bypass lazy HuggingFace loading.
+    # If SiglipEmbedding internals change, update these assignments accordingly.
     emb._model = _Model()  # type: ignore[attr-defined]
     emb._proc = _Proc()  # type: ignore[attr-defined]
     emb._dim = 4  # type: ignore[attr-defined]

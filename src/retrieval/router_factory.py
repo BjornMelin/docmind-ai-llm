@@ -387,6 +387,8 @@ def build_router_engine(
             the_llm = build_llm(cfg)
         except ImportError:
             logger.debug("LLM factory import failed; proceeding without LLM")
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.warning("LLM factory failed; proceeding without LLM: {}", exc)
 
     get_pp = _safe_get_postprocessors()
     tools: list[Any] = [

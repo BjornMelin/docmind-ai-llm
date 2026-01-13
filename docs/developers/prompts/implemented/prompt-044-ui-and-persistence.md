@@ -41,13 +41,13 @@ related_specs: ["SPEC-041", "SPEC-042"]
 
 ## Step-by-step
 
-1. Ensure chat DB path is anchored under `settings.data_dir` in tests and prod.
-2. Ensure chat sessions sidebar updates `st.query_params["chat"]` and reruns safely.
-3. Ensure time travel forks immediately from a checkpoint and triggers a rerun.
-4. Ensure multimodal sources render thumbnails:
+1. Anchor the chat DB path under `settings.data_dir` in tests and prod.
+2. Update the chat sessions sidebar to set `st.query_params["chat"]` and rerun safely.
+3. Trigger time travel forks immediately from a checkpoint and rerun.
+4. Render multimodal source thumbnails:
    - resolve `ArtifactRef`
    - decrypt `.enc` images at render-time using `open_image_encrypted`
-5. Ensure “Visual search” sidebar runs SigLIP image→image and renders results.
+5. Run “Visual search” sidebar SigLIP image→image and render results.
 6. Verify AppTest smoke:
    - `uv run python scripts/run_tests.py --fast`
 

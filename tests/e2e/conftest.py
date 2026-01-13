@@ -6,16 +6,10 @@ Skips E2E tests unless `DOCMIND_RUN_E2E=1` is set to keep CI fast.
 from __future__ import annotations
 
 import os
-import sys
-from pathlib import Path
 
 import pytest
 
 pytestmark = pytest.mark.e2e
-
-_PROJECT_ROOT = Path(__file__).parent.parent.parent
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
 
 
 def pytest_collection_modifyitems(config, items):  # type: ignore[no-untyped-def]

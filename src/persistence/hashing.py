@@ -75,7 +75,7 @@ def _canonicalize(value: Any) -> Any:
     - list/tuple: canonicalized elements
     - set/frozenset: sorted canonical elements
     - Path: POSIX path string for OS-independent representation
-    - float: normalized to 12-digit precision to avoid floating-point noise
+    - float: normalized to 12 significant digits to avoid floating-point noise
 
     Args:
         value: Any Python value (primitive, collection, or custom type).

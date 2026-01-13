@@ -26,6 +26,7 @@ from src.telemetry.opentelemetry import (
     configure_observability,
     record_graph_export_metric,
 )
+from src.ui.artifacts import render_artifact_image
 from src.ui.ingest_adapter import ingest_files
 from src.utils.storage import create_vector_store
 
@@ -299,10 +300,6 @@ def _render_export_images(items: list[dict[str, Any]], preview_limit: int) -> No
         preview_limit: Max number of images to render per document.
     """
     store = ArtifactStore.from_settings(settings)
-    try:
-        from src.utils.images import open_image_encrypted
-    except Exception:
-        open_image_encrypted = None
     cols = st.columns(4)
     for i, e in enumerate(items[: int(preview_limit)]):
         meta = e.get("metadata")
@@ -324,22 +321,14 @@ def _render_export_images(items: list[dict[str, Any]], preview_limit: int) -> No
             if ref is None:
                 st.caption(f"p{page_no or '?'} (no artifact ref)")
                 continue
-            try:
-                img_path = store.resolve_path(ref)
-                is_encrypted = img_path.name.endswith(".enc")
-                if is_encrypted:
-                    if open_image_encrypted is None:
-                        raise RuntimeError("Encrypted image support unavailable.")
-                    with open_image_encrypted(str(img_path)) as im:
-                        st.image(im, caption=f"p{page_no}", use_container_width=True)
-                else:
-                    st.image(
-                        str(img_path),
-                        caption=f"p{page_no}",
-                        use_container_width=True,
-                    )
-            except Exception:
-                st.caption(f"p{page_no or '?'} (missing)")
+            render_artifact_image(
+                ref,
+                store=store,
+                caption=f"p{page_no}",
+                use_container_width=True,
+                missing_caption=f"p{page_no or '?'} (missing)",
+                encrypted_caption="Encryption support unavailable.",
+            )
 
 
 def _render_maintenance_controls() -> None:
@@ -709,14 +698,16 @@ def _handle_manual_export(out_dir: Path, extension: str) -> None:
             )
         duration_ms = (time.perf_counter() - start) * 1000.0
         st.success(f"Exported {extension.upper()} to {out}")
-        _log_export_event({
-            "export_performed": True,
-            "export_type": f"graph_{extension}",
-            "seed_count": len(seeds),
-            "capped": len(seeds) >= cap,
-            "dest_path": str(out),
-            "context": "manual",
-        })
+        _log_export_event(
+            {
+                "export_performed": True,
+                "export_type": f"graph_{extension}",
+                "seed_count": len(seeds),
+                "capped": len(seeds) >= cap,
+                "dest_path": str(out),
+                "context": "manual",
+            }
+        )
         size_bytes = out.stat().st_size if out.exists() else None
         record_graph_export_metric(
             f"graph_{extension}",

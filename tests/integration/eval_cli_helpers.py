@@ -8,10 +8,12 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pandas as pd
+import pytest
 
 
 def run_beir_cli(tmp_path: Path, *, sample_count: int | None = None) -> None:
     """Run the BEIR CLI with mocked dependencies."""
+    pytest.importorskip("tools.eval.run_beir")
     with (
         patch("tools.eval.run_beir.GenericDataLoader") as gdl,
         patch("tools.eval.run_beir.EvaluateRetrieval") as er,
@@ -92,9 +94,11 @@ def run_ragas_cli(tmp_path: Path, *, sample_count: int | None = None) -> None:
             "offline",
         ]
         if sample_count is not None:
-            argv.extend([
-                "--sample_count",
-                str(sample_count),
-            ])
+            argv.extend(
+                [
+                    "--sample_count",
+                    str(sample_count),
+                ]
+            )
         with patch.object(sys, "argv", argv):
             ragas_main()

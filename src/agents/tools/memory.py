@@ -177,14 +177,16 @@ def remember(
     store.put(ns, mem_id, payload, index=["content"])
     elapsed_ms = (time.perf_counter() - start) * 1000.0
     with _SuppressTelemetry():
-        log_jsonl({
-            "chat.memory_saved": True,
-            "scope": scope,
-            "count": 1,
-            "latency_ms": round(elapsed_ms, 2),
-            "thread_id": thread_id,
-            "user_id": user_id,
-        })
+        log_jsonl(
+            {
+                "chat.memory_saved": True,
+                "scope": scope,
+                "count": 1,
+                "latency_ms": round(elapsed_ms, 2),
+                "thread_id": thread_id,
+                "user_id": user_id,
+            }
+        )
     return json.dumps({"ok": True, "memory_id": mem_id})
 
 
@@ -200,39 +202,45 @@ def recall_memories(
     store = runtime.store if runtime is not None else None
     config = runtime.config if runtime is not None else {}
     if store is None:
-        return json.dumps({
-            "ok": False,
-            "error": "memory store unavailable",
-            "memories": [],
-        })
+        return json.dumps(
+            {
+                "ok": False,
+                "error": "memory store unavailable",
+                "memories": [],
+            }
+        )
     ns = _namespace_from_config(config, scope=scope)
     user_id, thread_id = _ids_from_config(config)
     results = store.search(ns, query=str(query), limit=int(limit))
     elapsed_ms = (time.perf_counter() - start) * 1000.0
     with _SuppressTelemetry():
-        log_jsonl({
-            "chat.memory_searched": True,
-            "scope": scope,
-            "top_k": int(limit),
-            "latency_ms": round(elapsed_ms, 2),
-            "result_count": len(results),
-            "thread_id": thread_id,
-            "user_id": user_id,
-        })
+        log_jsonl(
+            {
+                "chat.memory_searched": True,
+                "scope": scope,
+                "top_k": int(limit),
+                "latency_ms": round(elapsed_ms, 2),
+                "result_count": len(results),
+                "thread_id": thread_id,
+                "user_id": user_id,
+            }
+        )
     # Return only structured memory content; do not include internal timings from store.
     out = []
     for item in results:
         value = getattr(item, "value", None)
         if not isinstance(value, dict):
             continue
-        out.append({
-            "id": getattr(item, "key", None),
-            "content": value.get("content"),
-            "kind": value.get("kind"),
-            "importance": value.get("importance"),
-            "tags": value.get("tags"),
-            "score": getattr(item, "score", None),
-        })
+        out.append(
+            {
+                "id": getattr(item, "key", None),
+                "content": value.get("content"),
+                "kind": value.get("kind"),
+                "importance": value.get("importance"),
+                "tags": value.get("tags"),
+                "score": getattr(item, "score", None),
+            }
+        )
     return json.dumps({"ok": True, "memories": out})
 
 
@@ -254,22 +262,26 @@ def forget_memory(
     except (OSError, ValueError, RuntimeError) as exc:
         logger.debug("forget_memory delete failed: {}", exc)
         with _SuppressTelemetry():
-            log_jsonl({
-                "chat.memory_deleted": False,
-                "scope": scope,
-                "error": str(exc),
-                "thread_id": thread_id,
-                "user_id": user_id,
-            })
+            log_jsonl(
+                {
+                    "chat.memory_deleted": False,
+                    "scope": scope,
+                    "error": str(exc),
+                    "thread_id": thread_id,
+                    "user_id": user_id,
+                }
+            )
         return json.dumps({"ok": False, "error": f"delete failed: {exc}"})
 
     with _SuppressTelemetry():
-        log_jsonl({
-            "chat.memory_deleted": True,
-            "scope": scope,
-            "thread_id": thread_id,
-            "user_id": user_id,
-        })
+        log_jsonl(
+            {
+                "chat.memory_deleted": True,
+                "scope": scope,
+                "thread_id": thread_id,
+                "user_id": user_id,
+            }
+        )
     return json.dumps({"ok": True})
 
 
@@ -462,6 +474,15 @@ def consolidate_memory_candidates(
         else policy.similarity_threshold
     )
     actions: list[ConsolidationAction] = []
+
+    def _with_merged_tags(
+        candidate: MemoryCandidate, existing_value: dict[str, Any] | None
+    ) -> MemoryCandidate:
+        merged_tags = _merge_tags(existing_value, candidate)
+        if merged_tags == candidate.tags:
+            return candidate
+        return candidate.model_copy(update={"tags": merged_tags})
+
     for cand in candidates:
         # Vector search for similar memories in the same namespace
         results = store.search(
@@ -495,12 +516,12 @@ def consolidate_memory_candidates(
                 # Fallback to exact match when semantic scores are unavailable.
                 if _content_matches(existing_content, cand.content):
                     if cand.importance > existing_importance:
-                        cand.tags = _merge_tags(existing_value, cand)
+                        updated_candidate = _with_merged_tags(cand, existing_value)
                         actions.append(
                             ConsolidationAction(
                                 action="UPDATE",
                                 existing_id=best_match.key,
-                                candidate=cand,
+                                candidate=updated_candidate,
                             )
                         )
                     else:
@@ -529,12 +550,12 @@ def consolidate_memory_candidates(
             if score_value >= threshold and existing_kind == cand.kind:
                 if _content_matches(existing_content, cand.content):
                     if cand.importance > existing_importance:
-                        cand.tags = _merge_tags(existing_value, cand)
+                        updated_candidate = _with_merged_tags(cand, existing_value)
                         actions.append(
                             ConsolidationAction(
                                 action="UPDATE",
                                 existing_id=best_match.key,
-                                candidate=cand,
+                                candidate=updated_candidate,
                             )
                         )
                     else:
@@ -545,12 +566,12 @@ def consolidate_memory_candidates(
                         )
                 else:
                     if cand.importance >= existing_importance:
-                        cand.tags = _merge_tags(existing_value, cand)
+                        updated_candidate = _with_merged_tags(cand, existing_value)
                         actions.append(
                             ConsolidationAction(
                                 action="UPDATE",
                                 existing_id=best_match.key,
-                                candidate=cand,
+                                candidate=updated_candidate,
                             )
                         )
                     else:

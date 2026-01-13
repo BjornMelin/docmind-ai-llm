@@ -131,6 +131,8 @@ class MultiAgentState(BaseModel):
         errors: List of errors encountered during processing
         fallback_used: Whether fallback RAG mode was used
         remaining_steps: Remaining steps for LangGraph supervisor
+        timed_out: Whether the workflow timed out
+        deadline_s: Absolute workflow deadline in seconds
     """
 
     # Core state
@@ -166,3 +168,5 @@ class MultiAgentState(BaseModel):
     remaining_steps: int = Field(
         default=10, description="Remaining steps for supervisor"
     )
+    timed_out: bool = Field(default=False)
+    deadline_s: float = Field(default=0.0)
