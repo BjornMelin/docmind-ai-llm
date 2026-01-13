@@ -277,11 +277,13 @@ def _build_versions(
             embed_model = getattr(vector_index, "_embed_model", None)
             if embed_model:
                 logger.debug(
-                    "Using private _embed_model fallback; prefer passing embed_model explicitly"
+                    "Using private _embed_model fallback; prefer passing "
+                    "embed_model explicitly"
                 )
         if embed_model is None:
             logger.debug(
-                "Embed model not found: pass explicitly or ensure public interface available"
+                "Embed model not found: pass explicitly or ensure public "
+                "interface available"
             )
 
     # Extract model name safely

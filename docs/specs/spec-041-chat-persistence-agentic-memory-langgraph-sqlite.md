@@ -10,8 +10,8 @@ related_requirements:
   - NFR-SEC-001: Offline-first; remote endpoints blocked by default.
   - NFR-SEC-002: Local data remains on device; logging excludes sensitive content.
   - NFR-REL-001: Crash-safe persistence and recovery.
-related_adrs: ["ADR-057", "ADR-011", "ADR-016", "ADR-024", "ADR-047", "ADR-055"]
-notes: "ADR-055 is currently 'Proposed' status; update reference when it advances to 'Accepted'."
+related_adrs: ["ADR-058", "ADR-057", "ADR-011", "ADR-016", "ADR-024", "ADR-047", "ADR-055"]
+notes: "ADR-058 is the integrated source of truth (supersedes ADR-057). ADR-055 is currently 'Proposed' status; update reference when it advances to 'Accepted'."
 ---
 
 ## Goals
@@ -315,7 +315,7 @@ Threats and controls:
 
 Update `docs/specs/requirements.md`:
 
-- Replace FR-022 “Source: SPEC-024/ADR-043” with “Source: SPEC-041/ADR-057”.
+- Replace FR-022 “Source: SPEC-024/ADR-043” with “Source: SPEC-041/ADR-058” (ADR-058 integrates ADR-057).
 - Add new FRs for session management, branching/time travel, and long-term memory management (review/purge).
 
 Update `docs/specs/traceability.md`:

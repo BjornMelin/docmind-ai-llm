@@ -287,11 +287,11 @@ def _garbage_collect(paths: SnapshotPaths) -> None:
     config = settings.snapshots
     keep = max(1, int(config.retention_count))
     grace = max(0, int(config.gc_grace_seconds))
-    versions = sorted([
+    versions = sorted(
         p
         for p in paths.base_dir.iterdir()
         if p.is_dir() and not p.name.startswith("_tmp-")
-    ])
+    )
     if len(versions) <= keep:
         return
     cutoff = datetime.now(UTC) - timedelta(seconds=grace)
@@ -589,11 +589,11 @@ def recover_snapshots(base_dir: Path | None = None) -> None:
         logger.debug("CURRENT pointer verified for %s", current_target)
         return
 
-    versions = sorted([
+    versions = sorted(
         p
         for p in paths.base_dir.iterdir()
         if p.is_dir() and not p.name.startswith("_tmp-")
-    ])
+    )
     if not versions:
         with suppress(FileNotFoundError):
             paths.current_file.unlink()
@@ -613,12 +613,29 @@ def _hash_file(path: Path) -> str:
 
 
 def _entries_valid(snapshot_dir: Path, entries: list[dict[str, Any]]) -> bool:
-    """Validate manifest entries against on-disk files and hashes."""
+    """Validate manifest entries against on-disk files and hashes.
+
+    Enforces path boundary: all resolved entry paths must remain within snapshot_dir
+    to prevent directory traversal attacks (e.g., ../../../etc/passwd).
+    """
+    base = snapshot_dir.resolve()
     for entry in entries:
         rel = entry.get("path")
         if not rel:
             return False
-        target = snapshot_dir / Path(rel)
+        try:
+            target = (snapshot_dir / Path(rel)).resolve()
+        except (
+            OSError,
+            RuntimeError,
+        ):  # pragma: no cover - defense against symlink loops
+            return False
+        # Enforce boundary: target must be inside the snapshot directory
+        try:
+            target.relative_to(base)
+        except ValueError:
+            # Path is outside snapshot_dir boundary
+            return False
         if not target.exists():
             return False
         if _hash_file(target) != entry.get("sha256"):

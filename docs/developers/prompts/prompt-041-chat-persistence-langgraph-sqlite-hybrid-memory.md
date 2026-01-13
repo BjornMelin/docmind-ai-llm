@@ -1,10 +1,11 @@
 # Implementation Prompt — Chat Persistence + Hybrid Agentic Memory (LangGraph SQLite)
 
-Implements `ADR-057` + `SPEC-041`.
+Implements `ADR-058` (Cognitive persistence; integrates `ADR-057`) + `SPEC-041`.
 
 **Read first (repo truth):**
 
-- ADR: `docs/developers/adrs/superseded/ADR-057-chat-persistence-langgraph-sqlite-hybrid-memory.md`
+- ADR (source of truth): `docs/developers/adrs/ADR-058-final-multimodal-pipeline-and-persistence.md`
+- ADR (superseded; history): `docs/developers/adrs/superseded/ADR-057-chat-persistence-langgraph-sqlite-hybrid-memory.md`
 - SPEC: `docs/specs/spec-041-chat-persistence-agentic-memory-langgraph-sqlite.md`
 - Requirements: `docs/specs/requirements.md` (FR-022, FR-030..032, NFR-SEC-001/002/003/004)
 - RTM: `docs/specs/traceability.md`
@@ -142,7 +143,7 @@ You must keep changes minimal, library-first, and maintainable.
 - Consolidation is implemented with explicit `ADD/UPDATE/DELETE/NOOP` operations and bounded retention/TTL (no unbounded growth).
 - No raw message content is emitted in telemetry/logs; DB paths are validated; remote endpoints remain blocked by default.
 - Tests added: unit tests for chat DB/session registry + AppTest integration for session restore and time travel fork.
-- Docs remain aligned: ADR-057 + SPEC-041 + requirements/RTM updated; superseded docs remain in `*/superseded/`.
+- Docs remain aligned: ADR-058 + SPEC-041 + requirements/RTM updated; superseded docs remain in `*/superseded/`.
 
 **In-scope modules/files (initial):**
 
