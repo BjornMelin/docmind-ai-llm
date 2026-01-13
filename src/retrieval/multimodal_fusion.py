@@ -187,6 +187,17 @@ class MultimodalFusionRetriever:
         with contextlib.suppress(Exception):
             self._image.close()
 
+    def _timeout_seconds(self) -> tuple[float, float]:
+        try:
+            text_timeout_ms = int(settings.retrieval.text_rerank_timeout_ms)
+        except (AttributeError, TypeError, ValueError):
+            text_timeout_ms = 5000
+        try:
+            image_timeout_ms = int(settings.retrieval.siglip_timeout_ms)
+        except (AttributeError, TypeError, ValueError):
+            image_timeout_ms = 5000
+        return text_timeout_ms / 1000.0, image_timeout_ms / 1000.0
+
     def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:
         """Retrieve fused multimodal results.
 
@@ -200,12 +211,7 @@ class MultimodalFusionRetriever:
         with ThreadPoolExecutor(max_workers=2) as executor:
             text_future = executor.submit(self._text.retrieve, qtext)
             image_future = executor.submit(self._image.retrieve, qtext)
-            text_timeout_s = (
-                float(getattr(settings.retrieval, "text_timeout_ms", 5000)) / 1000.0
-            )
-            image_timeout_s = (
-                float(getattr(settings.retrieval, "image_timeout_ms", 5000)) / 1000.0
-            )
+            text_timeout_s, image_timeout_s = self._timeout_seconds()
             try:
                 text_nodes = text_future.result(timeout=text_timeout_s)
             except FuturesTimeoutError:
@@ -233,7 +239,10 @@ class MultimodalFusionRetriever:
                     logger.warning("Image retrieval timed out")
                     image_nodes = []
 
-        k_constant = int(getattr(settings.retrieval, "rrf_k", 60))
+        try:
+            k_constant = int(settings.retrieval.rrf_k)
+        except (AttributeError, TypeError, ValueError):
+            k_constant = 60
         fused = rrf_merge([text_nodes, image_nodes], k_constant=k_constant)
 
         # Deduplicate by configured key (default: page_id).

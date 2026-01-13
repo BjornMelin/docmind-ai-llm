@@ -214,7 +214,7 @@ class ServerHybridRetriever:
         self, dedup_sorted: list[tuple[float, Any]]
     ) -> list[NodeWithScore]:
         """Convert deduplicated points into NodeWithScore items."""
-        points = [p for _, p in dedup_sorted[: self.params.fused_top_k]]
+        points = [p for _, p in dedup_sorted]
         return build_text_nodes(
             points,
             top_k=int(self.params.fused_top_k),

@@ -282,13 +282,17 @@ def _collect_corpus_paths(settings_obj: Any) -> tuple[list[Path], Path]:
     # Try to use cached manifest first
     if manifest_file.exists():
         manifest_data = None
-        with contextlib.suppress(Exception), manifest_file.open("r") as f:
+        with (
+            contextlib.suppress(json.JSONDecodeError, OSError),
+            manifest_file.open("r") as f,
+        ):
             manifest_data = json.load(f)
 
         if manifest_data is not None:
             cached_paths = [Path(p) for p in manifest_data.get("files", [])]
             if not uploads_dir.exists():
-                return cached_paths, uploads_dir
+                logger.debug("Uploads directory missing; returning empty corpus paths")
+                return [], uploads_dir
             try:
                 manifest_mtime = manifest_file.stat().st_mtime
                 uploads_mtime = uploads_dir.stat().st_mtime

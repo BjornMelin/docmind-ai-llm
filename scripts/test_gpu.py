@@ -28,6 +28,9 @@ from io import StringIO
 from pathlib import Path
 from typing import NoReturn, TypedDict
 
+# Minimum recommended VRAM for full DocMind AI functionality.
+MIN_RECOMMENDED_VRAM_MB = 12000
+
 
 class GPUInfo(TypedDict):
     """Structured GPU information returned by `nvidia-smi` queries."""
@@ -246,7 +249,7 @@ def _require_gpu_info(*, cwd: Path | None = None) -> GPUInfo:
     print(f"   Driver: {gpu_info['driver_version']}")
     if gpu_info["cuda_version"]:
         print(f"   CUDA: {gpu_info['cuda_version']}")
-    if gpu_info["memory_total"] < 12000:
+    if gpu_info["memory_total"] < MIN_RECOMMENDED_VRAM_MB:
         print("WARN: GPU has less than 12GB VRAM")
         print("   System tests may fail or run with reduced performance")
     return gpu_info
@@ -278,7 +281,9 @@ def _print_compatibility_summary_and_exit(
     cuda_status = "OK" if test_results["cuda"] else "FAIL"
     cuda_text = "Available" if test_results["cuda"] else "Not available"
     print(f"   CUDA: {cuda_status} {cuda_text}")
-    vram_status = "OK" if gpu_info["memory_total"] >= 12000 else "WARN"
+    vram_status = (
+        "OK" if gpu_info["memory_total"] >= MIN_RECOMMENDED_VRAM_MB else "WARN"
+    )
     print(f"   VRAM: {vram_status} {gpu_info['memory_total']}MB")
     if test_results["hardware"] and test_results["cuda"]:
         print("\nOK: GPU is compatible with DocMind AI")
@@ -351,11 +356,11 @@ def _run_benchmarks(
     exit_codes: list[int],
     test_results: dict[str, bool],
     *,
-    cwd: Path | None = None,
+    cwd: Path,
 ) -> None:
     """Run optional performance benchmark steps."""
-    if cwd is None or not cwd.exists() or not (cwd / "scripts").exists():
-        raise ValueError("cwd must be provided and point to repository root")
+    if not cwd.exists() or not (cwd / "scripts").exists():
+        raise ValueError("cwd must point to repository root with scripts/ directory")
     print("\nStep 5: Performance Benchmarks")
     cmd = ["uv", "run", "python", "scripts/performance_monitor.py", "--run-tests"]
     exit_code, _ = run_command(cmd, "Performance Benchmarks", timeout=1200, cwd=cwd)

@@ -30,6 +30,8 @@ from pydantic import BaseModel, Field, ValidationError
 from src.config import settings
 from src.utils.telemetry import log_jsonl
 
+MAX_RECALL_LIMIT = 100
+
 
 class MemoryCandidate(BaseModel):
     """A potential long-term memory extracted from conversation."""
@@ -176,6 +178,8 @@ def remember(
         and not isinstance(tags, (str, bytes))
     ):
         tags_value = list(tags)
+    # Clamp importance to valid range.
+    importance = max(0.0, min(1.0, float(importance)))
     payload: dict[str, Any] = {
         "content": str(content),
         "kind": str(kind),
@@ -219,7 +223,8 @@ def recall_memories(
         )
     ns = _namespace_from_config(config, scope=scope)
     user_id, thread_id = _ids_from_config(config)
-    results = store.search(ns, query=str(query), limit=int(limit))
+    safe_limit = max(1, min(MAX_RECALL_LIMIT, int(limit)))
+    results = store.search(ns, query=str(query), limit=safe_limit)
     elapsed_ms = (time.perf_counter() - start) * 1000.0
     with _SuppressTelemetry():
         log_jsonl(

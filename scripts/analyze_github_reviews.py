@@ -61,13 +61,12 @@ def get_code_block_indicator(thread: dict[str, Any]) -> bool:
 def get_issue_summary(thread: dict[str, Any]) -> str:
     """Extract first comment as summary, limit to 80 chars."""
     comments = thread.get("comments", [])
-    if comments:
-        body = comments[0].get("body", "").split("\n")[0]
-        # Remove markdown code blocks and extra spaces
-        body = body.replace("```", "").strip()
-        if body:
-            return body[:80]
-    return "No comment"
+    if not comments:
+        return "No comment"
+    body = comments[0].get("body", "").split("\n")[0]
+    # Remove markdown code blocks and extra spaces
+    body = body.replace("```", "").strip()
+    return body[:80] if body else "No comment"
 
 
 def get_line_number(location: dict[str, Any] | None) -> int | None:
