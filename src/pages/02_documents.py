@@ -183,7 +183,17 @@ def _render_image_exports(exports: list[dict[str, Any]]) -> None:
 
 
 def _filter_image_exports(exports: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Filter export entries down to image artifacts."""
+    """Filter export entries down to image artifacts.
+
+    Extracts all entries with image/* content types (e.g., image/png, image/jpeg).
+    Skips non-dict entries and non-image content types.
+
+    Args:
+        exports: List of export artifact dicts, each with optional 'content_type'.
+
+    Returns:
+        Filtered list containing only image artifacts.
+    """
     images: list[dict[str, Any]] = []
     for e in exports:
         if not isinstance(e, dict):
@@ -195,12 +205,32 @@ def _filter_image_exports(exports: list[dict[str, Any]]) -> list[dict[str, Any]]
 
 
 def _doc_id(meta: dict[str, Any]) -> str:
-    """Extract a display document id from export metadata."""
+    """Extract a display document id from export metadata.
+
+    Checks for 'doc_id' or 'document_id' fields in the metadata.
+    Falls back to '-' if neither field is present.
+
+    Args:
+        meta: Export metadata dict.
+
+    Returns:
+        Document ID string (e.g., 'doc-a1b2c3d4'), or '-' if not found.
+    """
     return str(meta.get("doc_id") or meta.get("document_id") or "-")
 
 
 def _page_no(meta: dict[str, Any]) -> int:
-    """Parse the page number from export metadata."""
+    """Parse the page number from export metadata.
+
+    Checks multiple field names (page_no, page, page_number) to accommodate
+    different export sources. Returns 0 if parsing fails or field is missing.
+
+    Args:
+        meta: Export metadata dict.
+
+    Returns:
+        Page number as int (1-indexed), or 0 if not found or invalid.
+    """
     raw = meta.get("page_no") or meta.get("page") or meta.get("page_number")
     try:
         return int(raw) if raw is not None else 0
@@ -211,7 +241,17 @@ def _page_no(meta: dict[str, Any]) -> int:
 def _group_exports_by_doc(
     images: list[dict[str, Any]],
 ) -> dict[str, list[dict[str, Any]]]:
-    """Group image exports by document id."""
+    """Group image exports by document id for efficient rendering.
+
+    Organizes exports by document, extracting metadata and using _doc_id
+    to determine the grouping key. Non-dict metadata is treated as empty dict.
+
+    Args:
+        images: List of image export dicts, each with optional 'metadata'.
+
+    Returns:
+        Dict mapping document IDs to lists of export artifacts for that document.
+    """
     by_doc: dict[str, list[dict[str, Any]]] = {}
     for e in images:
         meta = e.get("metadata")
@@ -221,7 +261,18 @@ def _group_exports_by_doc(
 
 
 def _preview_limit(by_doc: dict[str, list[dict[str, Any]]]) -> int:
-    """Render slider for preview limit and return selected value."""
+    """Render slider widget for preview limit and return selected value.
+
+    Displays an interactive slider to control how many images are shown per document.
+    Max value is capped at 128 to prevent UI slowdowns with large exports.
+    Defaults to 32 images when no documents present.
+
+    Args:
+        by_doc: Dict mapping document IDs to lists of exports.
+
+    Returns:
+        Selected preview limit as int, or default 32 if no exports.
+    """
     max_preview = min(128, max((len(items) for items in by_doc.values()), default=0))
     if not max_preview:
         return 32
@@ -237,7 +288,16 @@ def _preview_limit(by_doc: dict[str, list[dict[str, Any]]]) -> int:
 
 
 def _render_export_images(items: list[dict[str, Any]], preview_limit: int) -> None:
-    """Render page image thumbnails for a document."""
+    """Render page image thumbnails for a document in a 4-column grid.
+
+    Attempts to load and display thumbnail or full images from the artifact store.
+    Handles encrypted images when the encryption utility is available.
+    Limits display to preview_limit to avoid UI slowdown.
+
+    Args:
+        items: List of image export dicts, each with artifact metadata.
+        preview_limit: Max number of images to render per document.
+    """
     store = ArtifactStore.from_settings(settings)
     try:
         from src.utils.images import open_image_encrypted

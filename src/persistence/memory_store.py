@@ -88,6 +88,24 @@ def _ns_key(namespace: tuple[str, ...]) -> str:
 
 
 def _get_by_dotted_path(obj: Any, dotted_path: str) -> Any:
+    """Extract a value from a nested dict using dot notation.
+
+    Safely navigates nested dictionaries using a dotted path (e.g., 'a.b.c').
+    Returns None if any component is missing or if the current value is not a dict.
+
+    Args:
+        obj: Dictionary to navigate (or any object, treated as non-dict if not a dict).
+        dotted_path: Dot-separated path string (e.g., 'metadata.user.id').
+
+    Returns:
+        The value at the dotted path, or None if the path is invalid or missing.
+
+    Example:
+        >>> _get_by_dotted_path({'a': {'b': 42}}, 'a.b')
+        42
+        >>> _get_by_dotted_path({'a': {'b': 42}}, 'a.c')
+        None
+    """
     cur: Any = obj
     for part in dotted_path.split("."):
         if not part:
@@ -142,7 +160,37 @@ _FILTER_OPS: dict[str, Callable[[Any, Any], bool]] = {
 
 
 def _matches_filter_clause(extracted: Any, clause_value: Any) -> bool:
-    """Evaluate a filter clause against extracted values."""
+    """Evaluate a filter clause against extracted values.
+
+    Handles three clause types:
+    1. Operator dict (e.g., {'$gt': 10}): applies operators ($gt, $gte, $lt,
+       $lte, $eq, $ne)
+    2. Scalar value: direct equality check
+    3. None: checks if value is None
+
+    List values are handled via "any" semantics: if the extracted value is a
+    list, the clause matches if it matches any element in the list.
+
+    Args:
+        extracted: Value extracted from object being filtered (may be None
+            or list).
+        clause_value: The filter clause from query (scalar, operator dict, or
+            None).
+
+    Returns:
+        True if extracted value satisfies the clause, False otherwise.
+
+    Raises:
+        ValueError: If clause_value contains an unsupported operator.
+
+    Example:
+        >>> _matches_filter_clause(15, {'$gt': 10})
+        True
+        >>> _matches_filter_clause(5, {'$gt': 10})
+        False
+        >>> _matches_filter_clause([5, 15], {'$gt': 10})
+        True  # Matches because 15 > 10
+    """
     if isinstance(extracted, list):
         return any(_matches_filter_clause(v, clause_value) for v in extracted)
 
@@ -161,7 +209,35 @@ def _matches_filter_clause(extracted: Any, clause_value: Any) -> bool:
 
 
 def _match_namespace(ns: tuple[str, ...], cond: MatchCondition) -> bool:
-    """Check namespace against a match condition."""
+    """Check if namespace matches a condition with prefix/suffix matching.
+
+    Supports wildcard matching using '*' to skip individual namespace
+    components.
+    - Prefix match: namespace must start with condition path (e.g.,
+      ('user1', 'session1') matches prefix ('user1', '*'))
+    - Suffix match: namespace must end with condition path (e.g.,
+      ('org', 'user1', 'session1') matches suffix ('user1', 'session1'))
+
+    Args:
+        ns: The namespace tuple to test (e.g., ('user_id', 'session_type',
+            'thread_id')).
+        cond: MatchCondition with match_type ('prefix' or 'suffix') and
+            path components.
+
+    Returns:
+        True if namespace matches condition, False otherwise (including
+        unsupported match_type).
+
+    Example:
+        >>> cond_prefix = MatchCondition(path=('user1', '*'),
+        ...     match_type='prefix')
+        >>> _match_namespace(('user1', 'session1', 'thread1'), cond_prefix)
+        True
+        >>> cond_suffix = MatchCondition(path=('session1',),
+        ...     match_type='suffix')
+        >>> _match_namespace(('user1', 'session1'), cond_suffix)
+        True
+    """
     path = cond.path
     result = False
     if cond.match_type == "prefix" and len(path) <= len(ns):
@@ -185,6 +261,28 @@ def _match_namespace(ns: tuple[str, ...], cond: MatchCondition) -> bool:
 
 
 def _matches_filter(value: dict[str, Any], filt: dict[str, Any] | None) -> bool:
+    """Check if value object matches all clauses in a filter dict.
+
+    All clauses must match (AND semantics). Each key in the filter dict is a
+    dotted path used to extract a value from the object, then compared
+    against the clause value using _matches_filter_clause.
+
+    Args:
+        value: The object (typically an item dict) to filter.
+        filt: Filter dict mapping dotted paths to clause values, or None to
+            skip filtering.
+
+    Returns:
+        True if all clauses match (or filt is None), False if any clause
+        fails.
+
+    Example:
+        >>> obj = {'metadata': {'priority': 10, 'status': 'active'}}
+        >>> filt = {'metadata.priority': {'$gte': 5},
+        ...         'metadata.status': 'active'}
+        >>> _matches_filter(obj, filt)
+        True
+    """
     if not filt:
         return True
     for k, clause in filt.items():

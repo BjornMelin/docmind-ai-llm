@@ -68,7 +68,27 @@ def compute_config_hash(config: Mapping[str, Any]) -> str:
 
 
 def _canonicalize(value: Any) -> Any:
-    """Recursively canonicalise arbitrary values for hashing."""
+    """Recursively canonicalise arbitrary values for deterministic hashing.
+
+    Converts complex types to canonical JSON-serializable forms:
+    - Mapping: sorted by keys (nested canonicalization)
+    - list/tuple: canonicalized elements
+    - set/frozenset: sorted canonical elements
+    - Path: POSIX path string for OS-independent representation
+    - float: normalized to 12-digit precision to avoid floating-point noise
+
+    Args:
+        value: Any Python value (primitive, collection, or custom type).
+
+    Returns:
+        Canonical form suitable for JSON serialization and stable hashing.
+
+    Example:
+        >>> _canonicalize({'b': 1, 'a': 2})
+        {'a': 2, 'b': 1}  # Keys sorted
+        >>> _canonicalize(3.141592653589793)
+        3.14159265359  # Limited to 12 significant digits
+    """
     if isinstance(value, Mapping):
         return {key: _canonicalize(value[key]) for key in sorted(value)}
     if isinstance(value, (list, tuple)):
