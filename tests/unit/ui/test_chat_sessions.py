@@ -58,7 +58,7 @@ def test_seed_from_query_params_sets_session_state() -> None:
     st.query_params.update({"chat": "t1", "branch": "c1"})
     cs._maybe_seed_from_query_params()  # type: ignore[attr-defined]
     assert st.session_state["chat_thread_id"] == "t1"
-    assert st.session_state["chat_resume_checkpoint_id"] == "c1"
+    assert st.session_state["chat_time_travel_hint_checkpoint_id"] == "c1"
 
 
 def test_seed_from_query_params_accepts_checkpoint_backcompat() -> None:
@@ -67,7 +67,7 @@ def test_seed_from_query_params_accepts_checkpoint_backcompat() -> None:
     st.query_params.update({"chat": "t1", "checkpoint": "c1"})
     cs._maybe_seed_from_query_params()  # type: ignore[attr-defined]
     assert st.session_state["chat_thread_id"] == "t1"
-    assert st.session_state["chat_resume_checkpoint_id"] == "c1"
+    assert st.session_state["chat_time_travel_hint_checkpoint_id"] == "c1"
 
 
 def test_seed_from_query_params_no_query_params_attr(monkeypatch) -> None:
@@ -88,9 +88,7 @@ def test_seed_from_query_params_no_query_params_attr(monkeypatch) -> None:
     assert "chat_thread_id" not in st.session_state
 
 
-def test_render_session_sidebar_normalizes_resume_id(monkeypatch) -> None:
-    import streamlit as st  # type: ignore
-
+def test_render_session_sidebar_returns_selection(monkeypatch) -> None:
     active = SimpleNamespace(thread_id="t1", title="a")
     monkeypatch.setattr(cs, "_get_or_init_user_id", lambda: "local")
     monkeypatch.setattr(cs, "ensure_active_session", lambda _c: active)
@@ -100,13 +98,9 @@ def test_render_session_sidebar_normalizes_resume_id(monkeypatch) -> None:
     monkeypatch.setattr(cs, "_handle_rename", lambda *_a, **_k: None)
     monkeypatch.setattr(cs, "_handle_purge", lambda *_a, **_k: None)
 
-    st.session_state.pop("chat_resume_checkpoint_id", None)
     sel = cs.render_session_sidebar(conn=object())  # type: ignore[arg-type]
-    assert sel.resume_checkpoint_id is None
-
-    st.session_state["chat_resume_checkpoint_id"] = "c1"
-    sel = cs.render_session_sidebar(conn=object())  # type: ignore[arg-type]
-    assert sel.resume_checkpoint_id == "c1"
+    assert sel.thread_id == "t1"
+    assert sel.user_id == "local"
 
 
 def test_ensure_active_session_creates_when_none(monkeypatch) -> None:
@@ -146,7 +140,7 @@ def test_render_session_selector_switches_and_touches(monkeypatch) -> None:
     assert reruns["n"] == 1
 
 
-def test_render_time_travel_sidebar_sets_checkpoint(monkeypatch) -> None:
+def test_render_time_travel_sidebar_forks_on_resume(monkeypatch) -> None:
     import streamlit as st  # type: ignore
 
     monkeypatch.setattr(st, "selectbox", lambda *_a, **_k: "c1", raising=False)
@@ -156,10 +150,24 @@ def test_render_time_travel_sidebar_sets_checkpoint(monkeypatch) -> None:
         st, "rerun", lambda: reruns.__setitem__("n", reruns["n"] + 1), raising=False
     )
 
-    cs.render_time_travel_sidebar(checkpoints=[{"checkpoint_id": "c1"}])
-    assert st.session_state["chat_resume_checkpoint_id"] == "c1"
-    assert st.query_params.get("branch") == "c1"
+    touched: list[tuple] = []
+    monkeypatch.setattr(cs, "touch_session", lambda *_a, **_k: touched.append((_a, _k)))
+
+    class _Coord:
+        def fork_from_checkpoint(self, **_k):  # type: ignore[no-untyped-def]
+            return "c2"
+
+    cs.render_time_travel_sidebar(
+        coord=_Coord(),
+        conn=object(),  # type: ignore[arg-type]
+        thread_id="t1",
+        user_id="local",
+        checkpoints=[{"checkpoint_id": "c1"}],
+    )
+    assert st.session_state["chat_time_travel_hint_checkpoint_id"] == "c2"
+    assert st.query_params.get("branch") == "c2"
     assert reruns["n"] == 1
+    assert touched
 
 
 def test_render_time_travel_sidebar_no_resume_when_button_false(monkeypatch) -> None:
@@ -167,8 +175,19 @@ def test_render_time_travel_sidebar_no_resume_when_button_false(monkeypatch) -> 
 
     monkeypatch.setattr(st, "selectbox", lambda *_a, **_k: "c1", raising=False)
     monkeypatch.setattr(st, "button", lambda *_a, **_k: False, raising=False)
-    cs.render_time_travel_sidebar(checkpoints=[{"checkpoint_id": "c1"}])
-    assert "chat_resume_checkpoint_id" not in st.session_state
+
+    class _Coord:
+        def fork_from_checkpoint(self, **_k):  # type: ignore[no-untyped-def]
+            return "c2"
+
+    cs.render_time_travel_sidebar(
+        coord=_Coord(),
+        conn=object(),  # type: ignore[arg-type]
+        thread_id="t1",
+        user_id="local",
+        checkpoints=[{"checkpoint_id": "c1"}],
+    )
+    assert "chat_time_travel_hint_checkpoint_id" not in st.session_state
 
 
 def test_new_delete_controls_and_rename_and_purge(monkeypatch) -> None:
@@ -237,7 +256,7 @@ def test_new_delete_controls_and_rename_and_purge(monkeypatch) -> None:
         cs, "purge_session", lambda _c, thread_id: purged.append(thread_id)
     )
     st.session_state["chat_thread_id"] = active.thread_id
-    st.session_state["chat_resume_checkpoint_id"] = "c1"
+    st.session_state["chat_time_travel_hint_checkpoint_id"] = "c1"
     monkeypatch.setattr(st, "checkbox", lambda *_a, **_k: True, raising=False)
     monkeypatch.setattr(
         st,
@@ -248,4 +267,4 @@ def test_new_delete_controls_and_rename_and_purge(monkeypatch) -> None:
     cs._handle_purge(conn=object(), active=active)  # type: ignore[arg-type]
     assert purged == ["t1"]
     assert "chat_thread_id" not in st.session_state
-    assert "chat_resume_checkpoint_id" not in st.session_state
+    assert "chat_time_travel_hint_checkpoint_id" not in st.session_state

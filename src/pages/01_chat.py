@@ -158,9 +158,13 @@ def main() -> None:  # pragma: no cover - Streamlit page
     selection = render_session_sidebar(conn)
     coord = _get_coordinator()
     render_time_travel_sidebar(
+        coord=coord,
+        conn=conn,
+        thread_id=selection.thread_id,
+        user_id=selection.user_id,
         checkpoints=coord.list_checkpoints(
             thread_id=selection.thread_id, user_id=selection.user_id, limit=20
-        )
+        ),
     )
     _render_memory_sidebar(selection.user_id, selection.thread_id)
     _render_visual_search_sidebar()
@@ -307,7 +311,7 @@ def _purge_memory_namespace(store: DocMindSqliteStore, ns: tuple[str, ...]) -> i
         batch = store.search(ns, query=None, limit=5000)
         if not batch:
             break
-        
+
         batch_deleted = 0
         for item in batch:
             try:
@@ -315,15 +319,15 @@ def _purge_memory_namespace(store: DocMindSqliteStore, ns: tuple[str, ...]) -> i
                 batch_deleted += 1
             except Exception:
                 logger.debug("Failed to delete memory item {}", item.key, exc_info=True)
-        
+
         if batch_deleted == 0:
             logger.warning("Purge stuck: failed to delete any items in batch")
             break
-            
+
         purged += batch_deleted
         if len(batch) < 5000:
             break
-            
+
     return purged
 
 
@@ -482,9 +486,7 @@ def _handle_chat_prompt(
         settings_override=overrides,
         thread_id=selection.thread_id,
         user_id=selection.user_id,
-        checkpoint_id=selection.resume_checkpoint_id,
     )
-    st.session_state.pop("chat_resume_checkpoint_id", None)
     answer = getattr(resp, "content", str(resp))
     sources = getattr(resp, "sources", []) if resp is not None else []
 

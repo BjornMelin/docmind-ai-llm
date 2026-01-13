@@ -69,7 +69,7 @@ def _init_callbacks(
 def _persist_indices(
     mgr: SnapshotManager,
     workspace: Path,
-    vector_index: VectorIndexProtocol,
+    vector_index: VectorIndexProtocol | None,
     pg_index: PgIndexProtocol | None,
 ) -> tuple[Any | None, Any | None, PgIndexProtocol | None]:
     """Persist vector/graph indexes and return graph handles.
@@ -83,6 +83,8 @@ def _persist_indices(
     Returns:
         Tuple of (property_graph_store, storage_context, pg_index).
     """
+    if vector_index is None:
+        raise TypeError("vector_index is required")
     mgr.persist_vector_index(vector_index, workspace)
     graph_store = getattr(pg_index, "property_graph_store", None) if pg_index else None
     if graph_store is not None:

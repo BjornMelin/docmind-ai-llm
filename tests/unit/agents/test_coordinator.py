@@ -247,7 +247,7 @@ class TestMultiAgentCoordinator:
         with (
             patch("src.agents.coordinator.is_dspy_available", return_value=True),
             patch("src.agents.coordinator.DSPyLlamaIndexRetriever") as mock_dspy,
-            patch("src.agents.coordinator.create_react_agent") as mock_react,
+            patch("src.agents.coordinator.create_agent") as mock_agent_factory,
             patch("src.agents.coordinator.create_supervisor") as mock_supervisor,
             patch(
                 "src.agents.coordinator.create_forward_message_tool",
@@ -271,7 +271,7 @@ class TestMultiAgentCoordinator:
             assert coordinator.compiled_graph == mock_compiled
             mock_setup.assert_called_once()
             mock_dspy.assert_called_once_with(llm=coordinator.llamaindex_llm)
-            assert mock_react.call_count == 5
+            assert mock_agent_factory.call_count == 5
 
     @patch("src.config.setup_llamaindex")
     @patch("llama_index.core.Settings")
@@ -303,16 +303,16 @@ class TestMultiAgentCoordinator:
 
         assert result is True
 
-    @patch("src.agents.coordinator.create_react_agent")
+    @patch("src.agents.coordinator.create_agent")
     @patch("src.agents.coordinator.create_supervisor")
     @patch("src.agents.coordinator.create_forward_message_tool")
     def test_setup_agent_graph_success(
-        self, mock_forward_tool, mock_supervisor, mock_react_agent, mock_llm
+        self, mock_forward_tool, mock_supervisor, mock_agent_factory, mock_llm
     ):
         """Test successful agent graph setup."""
         # Setup mocks
         mock_agent = Mock()
-        mock_react_agent.return_value = mock_agent
+        mock_agent_factory.return_value = mock_agent
 
         mock_graph = Mock()
         mock_supervisor.return_value = mock_graph
@@ -327,7 +327,7 @@ class TestMultiAgentCoordinator:
         coordinator._setup_agent_graph()
 
         # Verify all agents were created
-        assert mock_react_agent.call_count == 5  # 5 agents
+        assert mock_agent_factory.call_count == 5  # 5 agents
 
         # Verify supervisor was created
         mock_supervisor.assert_called_once()
@@ -350,9 +350,9 @@ class TestMultiAgentCoordinator:
 
     @patch("src.agents.coordinator.create_supervisor")
     @patch("src.agents.coordinator.create_forward_message_tool")
-    @patch("src.agents.coordinator.create_react_agent")
+    @patch("src.agents.coordinator.create_agent")
     def test_supervisor_parameters_adr_011(
-        self, mock_react_agent, mock_forward_tool, mock_create_supervisor, mock_llm
+        self, mock_agent_factory, mock_forward_tool, mock_create_supervisor, mock_llm
     ):
         """Supervisor is created with modern ADR-011 parameters."""
         mock_graph = Mock()
@@ -372,10 +372,10 @@ class TestMultiAgentCoordinator:
         assert "post_model_hook" in kwargs
 
     @patch(
-        "src.agents.coordinator.create_react_agent",
+        "src.agents.coordinator.create_agent",
         side_effect=RuntimeError("Agent creation failed"),
     )
-    def test_setup_agent_graph_failure(self, mock_react_agent, mock_llm):
+    def test_setup_agent_graph_failure(self, mock_agent_factory, mock_llm):
         """Test agent graph setup failure handling."""
         coordinator = MultiAgentCoordinator()
         coordinator.llm = mock_llm

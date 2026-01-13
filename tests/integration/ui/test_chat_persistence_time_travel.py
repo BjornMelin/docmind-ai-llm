@@ -51,6 +51,26 @@ class _CoordinatorStub:
         self._checkpointer = checkpointer
         self._graph = _build_echo_graph(checkpointer=checkpointer)
 
+    def fork_from_checkpoint(
+        self,
+        *,
+        thread_id: str,
+        user_id: str = "local",
+        checkpoint_id: str,
+    ) -> str | None:
+        cfg: dict[str, Any] = {
+            "thread_id": str(thread_id),
+            "user_id": str(user_id),
+            "checkpoint_id": str(checkpoint_id),
+        }
+        new_config = self._graph.update_state(
+            {"configurable": cfg}, None, as_node="__copy__"
+        )
+        conf = new_config.get("configurable") if isinstance(new_config, dict) else None
+        conf = conf if isinstance(conf, dict) else {}
+        new_checkpoint_id = conf.get("checkpoint_id")
+        return str(new_checkpoint_id) if new_checkpoint_id else None
+
     def process_query(
         self,
         *,
@@ -244,7 +264,8 @@ def test_chat_time_travel_fork_drops_future_messages(
         if str(getattr(b, "label", "")) == "Resume from checkpoint"
     )
     app = resume_btn.click().run()
-    assert app.session_state["chat_resume_checkpoint_id"] == fork_checkpoint
+    assert not app.exception
+    assert _user_texts(app) == ["one"]
 
     app = app.chat_input[0].set_value("forked").run()
     assert not app.exception

@@ -450,9 +450,7 @@ def test_render_chat_history_and_handle_prompt(monkeypatch):
 
     conn = sqlite3.connect(":memory:")
     try:
-        selection = SimpleNamespace(
-            thread_id="t", user_id="u", resume_checkpoint_id=None
-        )
+        selection = SimpleNamespace(thread_id="t", user_id="u")
         page._handle_chat_prompt(_Coord(), selection, conn)
     finally:
         conn.close()

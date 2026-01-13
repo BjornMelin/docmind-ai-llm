@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import sqlite3
 from dataclasses import dataclass
+from typing import Any
 
 import streamlit as st
 
@@ -28,7 +29,6 @@ class ChatSelection:
 
     thread_id: str
     user_id: str
-    resume_checkpoint_id: str | None = None
 
 
 @st.cache_resource(show_spinner=False)
@@ -55,12 +55,14 @@ def _maybe_seed_from_query_params() -> None:
     if "chat" in qp and "chat_thread_id" not in st.session_state:
         st.session_state["chat_thread_id"] = str(qp.get("chat") or "")
     # SPEC-041 prefers `?branch=<checkpoint_id>` for time-travel links.
-    if "chat_resume_checkpoint_id" not in st.session_state:
+    if "chat_time_travel_hint_checkpoint_id" not in st.session_state:
         if "branch" in qp:
-            st.session_state["chat_resume_checkpoint_id"] = str(qp.get("branch") or "")
+            st.session_state["chat_time_travel_hint_checkpoint_id"] = str(
+                qp.get("branch") or ""
+            )
         elif "checkpoint" in qp:
             # Back-compat: accept older links.
-            st.session_state["chat_resume_checkpoint_id"] = str(
+            st.session_state["chat_time_travel_hint_checkpoint_id"] = str(
                 qp.get("checkpoint") or ""
             )
 
@@ -95,14 +97,9 @@ def render_session_sidebar(conn: sqlite3.Connection) -> ChatSelection:
         st.caption("Danger zone")
         _handle_purge(conn, active)
 
-    resume = st.session_state.get("chat_resume_checkpoint_id")
-    resume_id = str(resume) if resume else None
-    if not resume_id:
-        resume_id = None
     return ChatSelection(
         thread_id=str(st.session_state.get("chat_thread_id") or active.thread_id),
         user_id=user_id,
-        resume_checkpoint_id=resume_id,
     )
 
 
@@ -181,13 +178,20 @@ def _handle_purge(conn: sqlite3.Connection, active: ChatSession) -> None:
     ):
         purge_session(conn, thread_id=active.thread_id)
         st.session_state.pop("chat_thread_id", None)
-        st.session_state.pop("chat_resume_checkpoint_id", None)
+        st.session_state.pop("chat_time_travel_hint_checkpoint_id", None)
         st.session_state.pop("purge_confirm", None)
         st.rerun()
 
 
-def render_time_travel_sidebar(*, checkpoints: list[dict[str, object]]) -> None:
-    """Render time travel controls (sets `chat_resume_checkpoint_id`)."""
+def render_time_travel_sidebar(
+    *,
+    coord: Any,
+    conn: sqlite3.Connection,
+    thread_id: str,
+    user_id: str,
+    checkpoints: list[dict[str, object]],
+) -> None:
+    """Render time travel controls and fork checkpoints (SPEC-041)."""
     with st.sidebar:
         st.subheader("Time travel")
         st.caption("Resume from a prior checkpoint (creates a fork).")
@@ -196,14 +200,40 @@ def render_time_travel_sidebar(*, checkpoints: list[dict[str, object]]) -> None:
         if not ids:
             st.caption("No checkpoints yet.")
             return
+
+        widget_key = f"chat_time_travel_checkpoint__{thread_id}"
+        hint = str(st.session_state.get("chat_time_travel_hint_checkpoint_id") or "")
+        if widget_key not in st.session_state and hint in ids:
+            st.session_state[widget_key] = hint
+
         picked = st.selectbox(
             "Checkpoint",
             options=ids,
             index=0,
-            key="chat_time_travel_checkpoint",
+            key=widget_key,
         )
-        if st.button("Resume from checkpoint", key="chat_time_travel_resume"):
-            st.session_state["chat_resume_checkpoint_id"] = picked
+        if st.button(
+            "Resume from checkpoint", key=f"chat_time_travel_resume__{thread_id}"
+        ):
+            fork = getattr(coord, "fork_from_checkpoint", None)
+            if not callable(fork):
+                st.error("Time travel is unavailable (missing coordinator support).")
+                return
+
+            new_checkpoint_id = fork(
+                thread_id=thread_id, user_id=user_id, checkpoint_id=str(picked)
+            )
+            if not new_checkpoint_id:
+                st.error("Failed to fork from the selected checkpoint.")
+                return
+
+            touch_session(
+                conn, thread_id=thread_id, last_checkpoint_id=str(new_checkpoint_id)
+            )
+            st.session_state["chat_time_travel_hint_checkpoint_id"] = str(
+                new_checkpoint_id
+            )
             with contextlib.suppress(Exception):
-                st.query_params["branch"] = picked
+                st.query_params["chat"] = str(thread_id)
+                st.query_params["branch"] = str(new_checkpoint_id)
             st.rerun()

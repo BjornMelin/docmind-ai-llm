@@ -28,6 +28,7 @@ import asyncio
 import contextlib
 import threading
 import time
+import warnings
 from collections.abc import Callable
 from typing import Any, cast
 
@@ -360,17 +361,26 @@ class MultiAgentCoordinator:
             # - output_mode: "last_message" (structured metadata stays in state)
             # - add_handoff_messages: True (handoff propagation)
             # - include forward message tool in tools list
-            self.graph = create_supervisor(
-                agents=supervisor_agents,
-                model=model,
-                prompt=system_prompt,
-                parallel_tool_calls=PARALLEL_TOOL_CALLS_ENABLED,
-                output_mode="last_message",
-                add_handoff_messages=True,
-                pre_model_hook=self._create_pre_model_hook(),
-                post_model_hook=self._create_post_model_hook(),
-                tools=[forward_tool],
-            )
+            with warnings.catch_warnings():
+                # langgraph-supervisor currently relies on the deprecated
+                # `langgraph.prebuilt.create_react_agent`; suppress that warning
+                # until an upstream release removes the call (latest as of 0.0.31).
+                warnings.filterwarnings(
+                    "ignore",
+                    message=r"create_react_agent has been moved.*",
+                    category=DeprecationWarning,
+                )
+                self.graph = create_supervisor(
+                    agents=supervisor_agents,
+                    model=model,
+                    prompt=system_prompt,
+                    parallel_tool_calls=PARALLEL_TOOL_CALLS_ENABLED,
+                    output_mode="last_message",
+                    add_handoff_messages=True,
+                    pre_model_hook=self._create_pre_model_hook(),
+                    post_model_hook=self._create_post_model_hook(),
+                    tools=[forward_tool],
+                )
 
             # Store agents for reference
             self.agents = agents
@@ -1137,6 +1147,45 @@ class MultiAgentCoordinator:
         except Exception as exc:
             logger.debug("Checkpoint listing failed: %s", exc)
         return out
+
+    def fork_from_checkpoint(
+        self,
+        *,
+        thread_id: str,
+        user_id: str = "local",
+        checkpoint_id: str,
+    ) -> str | None:
+        """Fork a new branch head from a prior checkpoint (SPEC-041 / ADR-058)."""
+        if not self._ensure_setup():
+            return None
+        if self.compiled_graph is None:
+            return None
+
+        cfg: dict[str, Any] = {
+            "thread_id": str(thread_id),
+            "user_id": str(user_id),
+            "checkpoint_id": str(checkpoint_id),
+        }
+        config: RunnableConfig = {"configurable": cfg}
+        try:
+            # LangGraph special update that clones the selected checkpoint into a
+            # new head (time-travel fork) without running the workflow.
+            new_config = self.compiled_graph.update_state(
+                config, None, as_node="__copy__"
+            )
+        except Exception as exc:
+            logger.debug(
+                "Checkpoint fork failed (thread_id=%s checkpoint_id=%s): %s",
+                thread_id,
+                checkpoint_id,
+                exc,
+            )
+            return None
+
+        conf = new_config.get("configurable") if isinstance(new_config, dict) else None
+        conf = conf if isinstance(conf, dict) else {}
+        new_checkpoint_id = conf.get("checkpoint_id")
+        return str(new_checkpoint_id) if new_checkpoint_id else None
 
     def validate_system_status(self) -> dict[str, bool]:
         """Validate system components and performance."""

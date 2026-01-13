@@ -301,13 +301,12 @@ def _select_router(
     """Instantiate a router query engine for the assembled tools."""
     selector = adapter.get_pydantic_selector(the_llm)
     if selector is None:
-        if the_llm is None:
-            raise ValueError(
-                "Unable to build router selector: `the_llm` is None and "
-                "LLMSingleSelector.from_defaults requires an LLM."
-            )
         try:
-            selector = adapter.LLMSingleSelector.from_defaults(llm=the_llm)
+            selector = (
+                adapter.LLMSingleSelector.from_defaults(llm=the_llm)
+                if the_llm is not None
+                else adapter.LLMSingleSelector.from_defaults()
+            )
         except Exception as exc:  # pragma: no cover - defensive
             selector = adapter.get_pydantic_selector(the_llm)
             if selector is None:
@@ -316,12 +315,19 @@ def _select_router(
                     "LLMSingleSelector.from_defaults(llm=the_llm)."
                 ) from exc
 
-    return adapter.RouterQueryEngine(
-        selector=selector,
-        query_engine_tools=tools,
-        verbose=False,
-        llm=the_llm,
-    )
+    try:
+        return adapter.RouterQueryEngine(
+            selector=selector,
+            query_engine_tools=tools,
+            verbose=False,
+            llm=the_llm,
+        )
+    except TypeError:
+        return adapter.RouterQueryEngine(
+            selector=selector,
+            query_engine_tools=tools,
+            verbose=False,
+        )
 
 
 def _warn_once(key: str, message: str, *, reason: str) -> None:
