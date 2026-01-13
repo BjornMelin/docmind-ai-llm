@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import pytest
 
 from src.eval.common.sorters import canonical_sort, round6
@@ -10,6 +12,31 @@ def test_canonical_sort_tie_break_by_doc_id() -> None:
     items = [("b", 1.0), ("a", 1.0), ("c", 0.9)]
     out = canonical_sort(items)
     assert out == [("a", 1.0), ("b", 1.0), ("c", 0.9)]
+
+
+@pytest.mark.unit
+def test_canonical_sort_supports_dicts_and_objects() -> None:
+    @dataclass(frozen=True)
+    class _Obj:
+        doc_id: str
+        score: float
+
+    items = [
+        {"doc_id": "b", "score": 1.0},
+        _Obj(doc_id="a", score=1.0),
+        ("c", 0.9),
+    ]
+    out = canonical_sort(items)
+    assert out == [("a", 1.0), ("b", 1.0), ("c", 0.9)]
+
+
+@pytest.mark.unit
+def test_canonical_sort_rejects_unknown_shape() -> None:
+    class _Bad:
+        pass
+
+    with pytest.raises(TypeError, match="Unsupported item shape"):
+        canonical_sort([_Bad()])
 
 
 @pytest.mark.unit
