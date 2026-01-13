@@ -2,7 +2,7 @@
 
 Implements `ADR-043` + `SPEC-024`.
 
-> Status: Superseded by `docs/developers/prompts/prompt-041-chat-persistence-langgraph-sqlite-hybrid-memory.md` (implements ADR-057 + SPEC-041). Current linting uses Ruff (not Pylint).
+> Status: Superseded by `docs/developers/prompts/implemented/prompt-041-chat-persistence-langgraph-sqlite-hybrid-memory.md` (implements ADR-058 + SPEC-041). Current linting uses Ruff (not Pylint).
 
 **Read first (repo truth):**
 

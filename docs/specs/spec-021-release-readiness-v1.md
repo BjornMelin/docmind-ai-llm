@@ -16,7 +16,7 @@ related_adrs:
   - "ADR-035"
   - "ADR-041"
   - "ADR-042"
-  - "ADR-057"
+  - "ADR-058"
   - "ADR-044"
   - "ADR-045"
   - "ADR-046"
@@ -63,7 +63,7 @@ Each work package MUST ship with:
 | ---: | --- | --- | --- | --- |
 | 01 | Settings UI hardening + safe provider badge | ADR-041 | SPEC-022 | `docs/developers/prompts/prompt-022-settings-ui-hardening.md` |
 | 02 | Containerization hardening (Dockerfile + compose) | ADR-042 | SPEC-023 | `docs/developers/prompts/prompt-023-containerization-hardening.md` |
-| 03 | Chat persistence + hybrid agentic memory (LangGraph SQLite) | ADR-057 | SPEC-041 | `docs/developers/prompts/prompt-041-chat-persistence-langgraph-sqlite-hybrid-memory.md` |
+| 03 | Chat persistence + hybrid agentic memory (LangGraph SQLite) | ADR-058 | SPEC-041 | `docs/developers/prompts/implemented/prompt-041-chat-persistence-langgraph-sqlite-hybrid-memory.md` |
 | 04 | Keyword tool: sparse-only Qdrant retriever | ADR-044 | SPEC-025 | `docs/developers/prompts/prompt-025-keyword-tool-sparse-only.md` |
 | 05 | Ingestion API + legacy facade cleanup (`src.utils.document`) | ADR-045 | SPEC-026 | `docs/developers/prompts/prompt-026-ingestion-api-facade.md` |
 | 06 | Remove legacy `src/main.py` entrypoint | ADR-046 | SPEC-027 | `docs/developers/prompts/prompt-027-remove-legacy-main-entrypoint.md` |

@@ -43,7 +43,7 @@ related_specs: ["SPEC-041", "SPEC-042"]
 
 1. Ensure chat DB path is anchored under `settings.data_dir` in tests and prod.
 2. Ensure chat sessions sidebar updates `st.query_params["chat"]` and reruns safely.
-3. Ensure time travel sets `chat_resume_checkpoint_id` and triggers a rerun.
+3. Ensure time travel forks immediately from a checkpoint and triggers a rerun.
 4. Ensure multimodal sources render thumbnails:
    - resolve `ArtifactRef`
    - decrypt `.enc` images at render-time using `open_image_encrypted`

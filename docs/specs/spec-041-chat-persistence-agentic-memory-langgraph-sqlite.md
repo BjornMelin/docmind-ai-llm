@@ -4,7 +4,7 @@ title: Chat Persistence + Hybrid Agentic Memory (LangGraph SQLite Checkpointer +
 version: 1.0.0
 date: 2026-01-09
 owners: ["ai-arch"]
-status: Partial
+status: Implemented
 related_requirements:
   - FR-022: Persist chat history locally across refresh/restart with per-session clear/purge.
   - NFR-SEC-001: Offline-first; remote endpoints blocked by default.
@@ -313,12 +313,7 @@ Threats and controls:
 
 ## RTM Updates
 
-Update `docs/specs/requirements.md`:
+Completed:
 
-- Replace FR-022 “Source: SPEC-024/ADR-043” with “Source: SPEC-041/ADR-058” (ADR-058 integrates ADR-057).
-- Add new FRs for session management, branching/time travel, and long-term memory management (review/purge).
-
-Update `docs/specs/traceability.md`:
-
-- FR-022: point to new modules/tests and mark as `Planned`.
-- Add new rows for session management + time travel + memory review.
+- `docs/specs/requirements.md` now cites `SPEC-041/ADR-058` for FR-022 and includes FR-030..032 as implemented.
+- `docs/specs/traceability.md` includes FR-022 + FR-030..032 rows pointing to the current modules and tests.
