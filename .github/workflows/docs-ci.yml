@@ -1,5 +1,8 @@
 name: Documentation Quality Gates
 
+permissions:
+  contents: read
+
 on:
   pull_request:
     paths:
