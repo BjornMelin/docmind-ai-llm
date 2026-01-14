@@ -30,4 +30,4 @@ See also:
 
 - docs/api/examples/python-example.py for end‑to‑end examples
 - README.md (Environment Variables)
-- developers/configuration-reference.md
+- [Configuration Guide](../developers/configuration.md)

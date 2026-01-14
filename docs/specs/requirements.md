@@ -1,6 +1,6 @@
 # DocMind AI — Software Requirements Specification (SRS)
 
-Version: 1.5.0 • Date: 2026-01-09 • Owner: Eng/Arch
+Version: 2.0.0 • Date: 2026-01-14 • Owner: Eng/Arch
 Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking, GraphRAG, and multi-provider LLM runtimes.
 
 ## 0. Front-matter
@@ -29,114 +29,101 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 
 ## 2. Functional Requirements (FR-###)
 
-FR-001 The system **shall** ingest documents using Unstructured with `strategy=auto` and apply OCR fallback when needed. Source: ADR‑002; Accept: see AC‑FR‑001.<br>
-FR-002 The system **shall** build a LlamaIndex `IngestionPipeline` with per-node+transform caching (DuckDBKV). Source: ADR‑010; Accept: AC‑FR‑002.<br>
-FR-003 The system **shall** create canonical nodes with deterministic IDs and include `pdf_page_image` nodes for pages. Source: ADR‑002; Accept: AC‑FR‑003.<br>
-FR-004 The system **shall** embed text with BGE‑M3 and images with SigLIP by default (OpenCLIP MAY be selected explicitly). Source: ADR‑002; Accept: AC‑FR‑004.<br>
-FR-005 The system **shall** persist vectors in Qdrant with named vectors `text-dense` and `text-sparse` and perform server‑side hybrid queries via the Query API. Default fusion **SHALL** be RRF; DBSF MAY be enabled experimentally via environment when supported by Qdrant. The sparse index **SHALL** prefer FastEmbed BM42 with IDF modifier; fallback to BM25 when BM42 is unavailable. During hybrid queries, the system **shall** emit telemetry fields: `retrieval.fusion_mode`, `retrieval.prefetch_*_limit`, `retrieval.fused_limit`, `retrieval.return_count`, `retrieval.latency_ms`, `retrieval.sparse_fallback`, and `dedup.*`. Source: SPEC‑004/ADR‑005/006; Accept: AC‑FR‑005.<br>
-FR-006 The system **shall not** implement client-side fusion as default; all hybrid fusion **SHALL** occur server‑side in Qdrant. Source: SPEC‑004; Accept: AC‑FR‑006.<br>
-FR-007 The system **shall** rerank text with BGE‑reranker‑v2‑m3 and visual/page-image nodes with SigLIP text–image similarity by default; ColPali MAY be enabled when thresholds are met (visual‑heavy corpora, small K, sufficient GPU). Source: SPEC‑005/ADR‑037; Accept: AC‑FR‑007.<br>
-FR-008 The system **shall** run hybrid and reranking **always‑on** with internal caps/timeouts; no UI toggles. Ops overrides MAY be provided via environment variables. (canonical: `DOCMIND_RETRIEVAL__USE_RERANKING`, mapping to `settings.retrieval.use_reranking`). Source: ADR‑024; Accept: AC‑FR‑008.<br>
-FR-009 The system **shall** support optional GraphRAG via LlamaIndex PropertyGraphIndex using documented APIs only (e.g., `as_retriever`, `get_rel_map`) and a UI toggle. No custom synonym retriever. Compose RouterQueryEngine with vector+graph tools (fallback to vector when graph missing). Persist via SnapshotManager with manifest hashing, `graph_exports` metadata, and a single-writer lock. Graph exports SHALL be produced from `get_rel_map` to JSONL (required) and Parquet (optional) with telemetry recorded in manifest metadata. Source: ADR‑019/ADR‑038/SPEC‑006/SPEC‑014; Accept: AC‑FR‑009. (Status: Completed)<br>
-FR-009.1 The system **shall** display a staleness badge in Chat when manifest hashes differ, with tooltip copy exactly: “Snapshot is stale (content/config changed). Rebuild in Documents → Rebuild GraphRAG Snapshot.” The check MUST be local‑only (no network). Source: SPEC‑014; Accept: AC‑FR‑009.<br>
-FR-009.2 The system **shall** implement SnapshotManager single‑writer lock semantics with bounded timeout, `portalocker`-backed metadata (owner, heartbeat, ttl, takeover count), atomic `_tmp → <timestamp>` rename, and the tri-file manifest (`manifest.jsonl`, `manifest.meta.json`, `manifest.checksum`) plus `graph_exports` metadata. Source: SPEC‑014; Accept: AC‑FR‑009‑LOCK.<br>
-FR-009.3 The system **shall** provide exports with JSONL required and Parquet optional (guarded by PyArrow), using timestamped filenames (`graph_export-YYYYMMDDTHHMMSSZ.*`) stored under `graph/` and recording telemetry (`dest_path`, `seed_count`, `size_bytes`, `duration_ms`). Source: SPEC‑006; Accept: AC‑FR‑009.<br>
-FR-009.4 The system **shall** select export seeds deterministically, de‑duplicate, and cap at 32 items. Source: SPEC‑006; Accept: AC‑FR‑009‑SEEDS.<br>
-FR-009.5 The system **shall** validate export paths as non‑egress, sanitize file names, and block symlink targets. Source: SPEC‑011; Accept: AC‑FR‑009‑SEC.<br>
-FR-009.6 The system **shall** emit telemetry events for router selection, staleness detection, export actions, and traversal depth (where applicable). Source: SPEC‑012; Accept: AC‑FR‑OBS‑001.<br>
-FR-010 The system **shall** provide a multipage Streamlit UI using `st.Page`/`st.navigation` with Chat, Documents, Analytics, Settings. Source: ADR‑013/SPEC‑008; Accept: AC‑FR‑010.<br>
-FR-011 The system **shall** implement native chat streaming via `st.chat_message` + `st.chat_input` + `st.write_stream`. Source: ADR‑013/SPEC‑008; Accept: AC‑FR‑011.<br>
-FR-012 The system **shall** allow users to select an LLM provider among llama.cpp, vLLM, Ollama, LM Studio, and choose the model at runtime in UI and settings. Source: ADR‑009; Accept: AC‑FR‑012.<br>
-FR-013 The system **shall** provide OpenAI‑compatible client wiring for vLLM, Ollama, LM Studio, and llama.cpp server modes. Source: ADR‑009; Accept: AC‑FR‑013.<br>
-FR-014 The system **shall** run a LangGraph‑supervised multi‑agent flow with deterministic JSON‑schema outputs when available. Source: ADR‑001; Accept: AC‑FR‑014.<br>
-FR-015 The system **shall** persist ingestion cache via DuckDBKV and operational metadata via SQLite WAL. Source: ADR‑010; Accept: AC‑FR‑015.<br>
-FR-016 The system **shall** provide an evaluation harness for IR (BEIR/M‑BEIR) and E2E (RAGAS) runnable offline. Source: ADR‑011; Accept: AC‑FR‑016.<br>
-FR-017 The system **shall** collect minimal observability (latency, memory, top‑k, fusion mode, reranker hits) locally. (Status: Implemented)<br>
-FR-020 The system **shall** provide a file‑based prompt template system built on LlamaIndex `RichPromptTemplate` with YAML front matter metadata and presets (tones/roles/lengths). It SHALL expose minimal APIs to list templates, get metadata, render text prompts, and format chat messages, and SHALL fully replace legacy `src/prompts.py` constants without back‑compat shims. Source: ADR‑020/SPEC‑020; Accept: AC‑FR‑020.<br>
-FR-021 The system **shall** pre-validate Settings UI configuration before persisting changes and must not use unsafe HTML rendering in UI elements. Source: SPEC‑022/ADR‑041; Accept: AC‑FR‑021.<br>
-FR-022 The system **shall** persist Chat history locally across refresh/restart and provide per-session “clear/purge” actions. Source: SPEC‑041/ADR‑058; Accept: AC‑FR‑022. (Status: Implemented)<br>
-FR-023 The system **shall** provide a keyword/lexical retrieval tool for exact term lookups (gated by config; disabled by default). Source: SPEC‑025/ADR‑044; Accept: AC‑FR‑023. (Status: Implemented)<br>
-FR-024 The system **shall** provide a canonical programmatic ingestion API for local filesystem inputs and maintain a thin legacy facade for documentation compatibility. Source: SPEC‑026/ADR‑045; Accept: AC‑FR‑024.<br>
-FR-025 The system **shall** support background ingestion and snapshot rebuild jobs in the Documents UI with progress reporting and best-effort cancellation (no partial snapshot publication). Source: SPEC‑033/ADR‑052; Accept: AC‑FR‑025.<br>
-FR-026 The system **shall** support an optional semantic response cache with strict invalidation by corpus/config/model/template/params, and must not store raw prompts. Source: SPEC‑038/ADR‑035; Accept: AC‑FR‑026.<br>
-FR-027 The system **shall** support manual local backups (snapshots + cache + optional uploads/analytics) with retention/rotation and documented restore steps. Source: SPEC‑037/ADR‑033; Accept: AC‑FR‑027.<br>
-FR-028 The system **shall** support document analysis modes `auto | separate | combined` with deterministic, offline-safe execution and best-effort cancellation. Source: SPEC‑036/ADR‑023; Accept: AC‑FR‑028.<br>
-FR-029 The system **shall** enforce and propagate an agent decision timeout budget so nested tool/LLM calls cannot exceed it, and it SHALL fail gracefully when the deadline is exceeded. Source: SPEC‑040/ADR‑056; Accept: AC‑FR‑029.<br>
-FR-030 The system **shall** provide multi-session Chat management (create/rename/delete/select) and store session metadata locally. Source: SPEC‑041/ADR‑058; Accept: AC‑FR‑030. (Status: Implemented)<br>
-FR-031 The system **shall** support branching/time travel for Chat sessions: list checkpoints, fork from a checkpoint, and resume execution from the fork while preserving history. Source: SPEC‑041/ADR‑058; Accept: AC‑FR‑031. (Status: Implemented)<br>
-FR-032 The system **shall** support long-term memory (facts/preferences) with metadata-filtered recall and user-visible review/purge controls. Source: SPEC‑041/ADR‑058; Accept: AC‑FR‑032. (Status: Implemented)<br>
-FR‑SEC‑IMG‑ENC The system **shall** support optional encryption‑at‑rest for page images using AES‑GCM; metadata SHALL record `encrypted=true`, `alg`, and `kid`. Keys SHALL be provisioned via env/keystore and never logged in plaintext. Source: SPEC‑011; Accept: AC‑FR‑SEC‑IMG‑ENC.<br>
-FR‑SEC‑NET‑001 The system **shall** default to offline‑first behavior; remote endpoints are disabled unless explicitly allowlisted. LM Studio endpoints MUST end with `/v1`. Source: SPEC‑011/ADR‑024; Accept: AC‑FR‑SEC‑NET‑001.<br>
+| ID | Requirement | Source | Acceptance |
+| :--- | :--- | :--- | :--- |
+| **FR-001** | The system **shall** ingest documents using Unstructured with `strategy=auto` and apply OCR fallback when needed. | ADR‑002 | AC‑FR‑001 |
+| **FR-002** | The system **shall** build a LlamaIndex `IngestionPipeline` with per-node+transform caching (DuckDBKV). | ADR‑010 | AC‑FR‑002 |
+| **FR-003** | The system **shall** create canonical nodes with deterministic IDs and include `pdf_page_image` nodes for pages. | ADR‑002 | AC‑FR‑003 |
+| **FR-004** | The system **shall** embed text with BGE‑M3 and images with SigLIP by default (OpenCLIP MAY be selected explicitly). | ADR‑002 | AC‑FR‑004 |
+| **FR-005** | The system **shall** persist vectors in Qdrant with named vectors `text-dense` and `text-sparse` and perform server‑side hybrid queries via the Query API. Default fusion **SHALL** be RRF; DBSF MAY be enabled experimentally via environment when supported by Qdrant. The sparse index **SHALL** prefer FastEmbed BM42 with IDF modifier; fallback to BM25 when BM42 is unavailable. During hybrid queries, the system **shall** emit telemetry fields: `retrieval.fusion_mode`, `retrieval.prefetch_*_limit`, `retrieval.fused_limit`, `retrieval.return_count`, `retrieval.latency_ms`, `retrieval.sparse_fallback`, and `dedup.*`. | SPEC‑004/ADR‑005/006 | AC‑FR‑005 |
+| **FR-006** | The system **shall not** implement client-side fusion as default; all hybrid fusion **SHALL** occur server‑side in Qdrant. | SPEC‑004 | AC‑FR‑006 |
+| **FR-007** | The system **shall** rerank text with BGE‑reranker‑v2‑m3 and visual/page-image nodes with SigLIP text–image similarity by default; ColPali MAY be enabled when thresholds are met (visual‑heavy corpora, small K, sufficient GPU). | SPEC‑005/ADR‑037 | AC‑FR‑007 |
+| **FR-008** | The system **shall** run hybrid and reranking **always‑on** with internal caps/timeouts; no UI toggles. Ops overrides MAY be provided via environment variables (canonical: `DOCMIND_RETRIEVAL__USE_RERANKING`). | ADR‑024 | AC‑FR‑008 |
+| **FR-009** | The system **shall** support optional GraphRAG via LlamaIndex PropertyGraphIndex using documented APIs only (e.g., `as_retriever`, `get_rel_map`) and a UI toggle. Compose RouterQueryEngine with vector+graph tools (fallback to vector when graph missing). Persist via SnapshotManager with manifest hashing, `graph_exports` metadata, and a single-writer lock. | ADR‑019/ADR038/SPEC-014 | AC‑FR‑009 |
+| **FR-009.1** | The system **shall** display a staleness badge in Chat when manifest hashes differ, with tooltip copy exactly: “Snapshot is stale (content/config changed). Rebuild in Documents → Rebuild GraphRAG Snapshot.” The check MUST be local‑only (no network). | SPEC‑014 | AC‑FR‑009 |
+| **FR-009.2** | The system **shall** implement SnapshotManager single‑writer lock semantics with bounded timeout, `portalocker`-backed metadata, atomic `_tmp → <timestamp>` rename, and the tri-file manifest. | SPEC‑014 | AC‑FR‑009‑LOCK |
+| **FR-009.3** | The system **shall** provide exports with JSONL required and Parquet optional (guarded by PyArrow), using timestamped filenames stored under `graph/` and recording telemetry. | SPEC‑006 | AC‑FR‑009 |
+| **FR-009.4** | The system **shall** select export seeds deterministically, de‑duplicate, and cap at 32 items. | SPEC‑006 | AC‑FR‑009‑SEEDS |
+| **FR-009.5** | The system **shall** validate export paths as non‑egress, sanitize file names, and block symlink targets. | SPEC‑011 | AC‑FR‑009‑SEC |
+| **FR-009.6** | The system **shall** emit telemetry events for router selection, staleness detection, export actions, and traversal depth (where applicable). | SPEC‑012 | AC‑FR‑OBS‑001 |
+| **FR-010** | The system **shall** provide a multipage Streamlit UI using `st.Page`/`st.navigation` with Chat, Documents, Analytics, Settings. | ADR‑013/SPEC‑008 | AC‑FR‑010 |
+| **FR-011** | The system **shall** implement native chat streaming via `st.chat_message` + `st.chat_input` + `st.write_stream`. | ADR‑013/SPEC‑008 | AC‑FR‑011 |
+| **FR-012** | The system **shall** allow users to select an LLM provider among llama.cpp, vLLM, Ollama, LM Studio, and choose the model at runtime in UI and settings. | ADR‑009 | AC‑FR‑012 |
+| **FR-013** | The system **shall** provide OpenAI‑compatible client wiring for vLLM, Ollama, LM Studio, and llama.cpp server modes. | ADR‑009 | AC‑FR‑013 |
+| **FR-014** | The system **shall** run a LangGraph‑supervised multi‑agent flow with deterministic JSON‑schema outputs when available. | ADR‑001 | AC‑FR‑014 |
+| **FR-015** | The system **shall** persist ingestion cache via DuckDBKV and operational metadata via SQLite WAL. | ADR‑010 | AC‑FR‑015 |
+| **FR-016** | The system **shall** provide an evaluation harness for IR (BEIR/M‑BEIR) and E2E (RAGAS) runnable offline. | ADR‑011 | AC‑FR‑016 |
+| **FR-017** | The system **shall** collect minimal observability (latency, memory, top‑k, fusion mode, reranker hits) locally. | Status: Implemented | - |
+| **FR-020** | The system **shall** provide a file‑based prompt template system built on LlamaIndex `RichPromptTemplate` with YAML front matter metadata and presets. | ADR‑020/SPEC‑020 | AC‑FR‑020 |
+| **FR-021** | The system **shall** pre-validate Settings UI configuration before persisting changes and must not use unsafe HTML rendering in UI elements. | SPEC‑022/ADR‑041 | AC‑FR‑021 |
+| **FR-022** | The system **shall** persist Chat history locally across refresh/restart and provide per-session “clear/purge” actions via LangGraph `SqliteSaver` and `ArtifactRef` resolution. | SPEC‑041/ADR‑058 | AC‑FR‑022 |
+| **FR-023** | The system **shall** provide a keyword/lexical retrieval tool for exact term lookups (gated by config; disabled by default). | SPEC‑025/ADR‑044 | AC‑FR‑023 |
+| **FR-024** | The system **shall** provide a canonical programmatic ingestion API for local filesystem inputs and maintain a thin legacy facade for documentation compatibility. | SPEC‑026/ADR‑045 | AC‑FR‑024 |
+| **FR-025** | The system **shall** support background ingestion and snapshot rebuild jobs in the Documents UI with progress reporting and best-effort cancellation. | SPEC‑033/ADR‑052 | AC‑FR‑025 |
+| **FR-026** | The system **shall** support an optional semantic response cache with strict invalidation by corpus/config/model/template/params. | SPEC‑038/ADR‑035 | AC‑FR‑026 |
+| **FR-027** | The system **shall** support manual local backups (snapshots + cache + optional uploads/analytics) with retention/rotation and documented restore steps. | SPEC‑037/ADR‑033 | AC‑FR‑027 |
+| **FR-028** | The system **shall** support document analysis modes `auto \| separate \| combined` with deterministic, offline-safe execution. | SPEC‑036/ADR‑023 | AC‑FR‑028 |
+| **FR-029** | The system **shall** enforce and propagate an agent decision timeout budget so nested tool/LLM calls cannot exceed it. | SPEC‑040/ADR‑056 | AC‑FR‑029 |
+| **FR-030** | The system **shall** provide multi-session Chat management (create/rename/delete/select) and store session metadata locally in the DocMind registry. | SPEC‑041/ADR‑058 | AC‑FR‑030 |
+| **FR-031** | The system **shall** support branching/time travel for Chat sessions: list checkpoints, fork from a checkpoint, and resume execution. | SPEC‑041/ADR‑058 | AC‑FR‑031 |
+| **FR-032** | The system **shall** support long-term memory (facts/preferences) with metadata-filtered recall and user-visible review/purge controls. | SPEC‑041/ADR‑058 | AC‑FR‑032 |
+| **FR‑SEC‑IMG‑ENC** | The system **shall** support optional encryption‑at‑rest for page images using AES‑GCM; metadata SHALL record `encrypted=true`, `alg`, and `kid`. | SPEC‑011 | AC‑FR‑SEC‑IMG‑ENC |
+| **FR‑SEC‑NET‑001** | The system **shall** default to offline‑first behavior; remote endpoints are disabled unless explicitly allowlisted. | SPEC‑011/ADR‑024 | AC‑FR‑SEC‑NET‑001 |
 
 ## 3. Non‑Functional Requirements (NFR‑###) — ISO/IEC 25010
 
-### Functional suitability
-
-NFR‑FS‑001 The app **shall** achieve ≥0.7 nDCG@10 on a small bundled eval set (text RAG). Verification: test+analysis.<br>
-NFR‑FS‑002 With visual reranker on mixed corpora, Recall@20 **shall** improve ≥5% over no‑rerank baseline. Verification: test.<br>
-
-### Reliability
-
-NFR‑REL‑001 The app **shall** recover from vector store restarts without re‑ingestion (idempotent upsert). Verification: demo.<br>
-NFR‑REL‑002 Cache hits **shall** be deterministic across runs given same inputs and config. Verification: test.<br>
-
-### Performance efficiency
-
-NFR‑PERF‑001 Chat p50 end‑to‑end latency ≤2.0 s on mid‑GPU profile; ≤6.0 s on CPU‑only profile. Verification: test.<br>
-NFR‑PERF‑002 Rerank P95 for text top‑40 ≤150 ms on 4070‑class GPU; visual SigLIP top‑10 ≤150 ms; ColPali top‑10 ≤400 ms when enabled. Verification: test.<br>
-NFR‑PERF‑003 Qdrant hybrid query p50 ≤120–200 ms for fused_top_k=60 on local machine. Verification: test.<br>
-
-### Usability
-
-NFR‑USE‑001 Streamlit UI navigable with keyboard; forms avoid unnecessary reruns. Verification: inspection.<br>
-
-### Observability
-
-NFR‑OBS‑001 The app **shall** emit structured, local-first telemetry events (JSONL) for key actions (router selection, staleness detection, exports, job lifecycle) with sampling/rotation controls. Verification: test.<br>
-NFR‑OBS‑002 The app **shall** support optional OpenTelemetry tracing and metrics export when explicitly enabled; disabled by default and safe for offline operation. Verification: test.<br>
-
-### Security
-
-NFR‑SEC‑001 Default egress disabled; only local endpoints allowed unless explicitly configured. Verification: inspection.<br>
-NFR‑SEC‑002 Local data **shall** remain on device; logging excludes sensitive content.<br>
-NFR‑SEC‑003 Optional AES‑GCM encryption‑at‑rest available; off by default. Verification: test.<br>
-NFR-SEC-004 Streamlit UI **shall not** execute unsafe HTML/JS; `unsafe_allow_html=True` is prohibited in production UI. Verification: inspection+test.<br>
-
-### Compatibility
-
-NFR‑COMP‑001 Windows/macOS/Linux supported; Apple Metal via llama.cpp; AMD ROCm via vLLM. Verification: demo.<br>
-
-### Maintainability
-
-NFR‑MAINT‑001 Library‑first: app code **shall not** re‑implement features available in LlamaIndex/Qdrant/Streamlit. Verification: inspection.<br>
-NFR‑MAINT‑002 Pylint score ≥9.5; Ruff passes.<br>
-NFR-MAINT-003 No placeholder APIs (TODO/NotImplemented) in shipped production modules; docs/specs/RTM must match code. Verification: inspection+quality gates.<br>
-
-### Portability
-
-NFR‑PORT‑001 Single definitive architecture; no prod/local forks; configuration via settings/UI only. Verification: inspection.<br>
-NFR-PORT-002 Cross-platform paths and cache env overrides supported for local packaging and model predownload workflows. Verification: inspection.<br>
-NFR-PORT-003 Docker/compose artifacts **shall** run out-of-the-box for local deployments and be reproducible from `uv.lock`. Verification: manual run+inspection.<br>
+| Category | ID | Requirement | Verification |
+| :--- | :--- | :--- | :--- |
+| **Functional suitability** | **NFR‑FS‑001** | The app **shall** achieve ≥0.7 nDCG@10 on a small bundled eval set (text RAG). | test+analysis |
+| **Functional suitability** | **NFR‑FS‑002** | With visual reranker on mixed corpora, Recall@20 **shall** improve ≥5% over no‑rerank baseline. | test |
+| **Reliability** | **NFR‑REL‑001** | The app **shall** recover from vector store restarts without re‑ingestion (idempotent upsert). | demo |
+| **Reliability** | **NFR‑REL‑002** | Cache hits **shall** be deterministic across runs given same inputs and config. | test |
+| **Performance efficiency** | **NFR‑PERF‑001** | Chat p50 end‑to‑end latency ≤2.0 s on mid‑GPU profile; ≤6.0 s on CPU‑only profile. | test |
+| **Performance efficiency** | **NFR‑PERF‑002** | Rerank P95 for text top‑40 ≤150 ms on 4070‑class GPU; visual SigLIP top‑10 ≤150 ms; ColPali top‑10 ≤400 ms when enabled. | test |
+| **Performance efficiency** | **NFR‑PERF‑003** | Qdrant hybrid query p50 ≤120–200 ms for fused_top_k=60 on local machine. | test |
+| **Usability** | **NFR‑USE‑001** | Streamlit UI navigable with keyboard; forms avoid unnecessary reruns. | inspection |
+| **Observability** | **NFR‑OBS‑001** | The app **shall** emit structured, local-first telemetry events (JSONL) for key actions (router selection, staleness detection, exports, job lifecycle) with sampling/rotation controls. | test |
+| **Observability** | **NFR‑OBS‑002** | The app **shall** support optional OpenTelemetry tracing and metrics export when explicitly enabled; disabled by default and safe for offline operation. | test |
+| **Security** | **NFR‑SEC‑001** | Default egress disabled; only local endpoints allowed unless explicitly configured. | inspection |
+| **Security** | **NFR‑SEC‑002** | Local data **shall** remain on device; logging excludes sensitive content. | inspection |
+| **Security** | **NFR‑SEC‑003** | Optional AES‑GCM encryption‑at‑rest available; off by default. | test |
+| **Security** | **NFR-SEC-004** | Streamlit UI **shall not** execute unsafe HTML/JS; `unsafe_allow_html=True` is prohibited in production UI. | inspection+test |
+| **Compatibility** | **NFR‑COMP‑001** | Windows/macOS/Linux supported; Apple Metal via llama.cpp; AMD ROCm via vLLM. | demo |
+| **Maintainability** | **NFR‑MAINT‑001** | Library‑first: app code **shall not** re‑implement features available in LlamaIndex/Qdrant/Streamlit. | inspection |
+| **Maintainability** | **NFR‑MAINT‑002** | Pylint score ≥9.5; Ruff passes. | inspection |
+| **Maintainability** | **NFR-MAINT-003** | No placeholder APIs (TODO/NotImplemented) in shipped production modules; docs/specs/RTM must match code. | inspection+quality gates |
+| **Portability** | **NFR‑PORT‑001** | Single definitive architecture; no prod/local forks; configuration via settings/UI only. | inspection |
+| **Portability** | **NFR-PORT-002** | Cross-platform paths and cache env overrides supported for local packaging and model predownload workflows. | inspection |
+| **Portability** | **NFR-PORT-003** | Docker/compose artifacts **shall** run out-of-the-box for local deployments and be reproducible from `uv.lock`. | manual run+inspection |
 
 ## 4. Data and Interface Requirements
 
-- Vector store: Qdrant collection with named vectors `text-dense` (float32) and `text-sparse` (CSR), deterministic point IDs = SHA‑256(content). Hybrid queries enabled with server‑side fusion.<br>
-- Ingestion cache: DuckDBKV; pipeline caches node+transform hashes.<br>
-- LLM API: OpenAI‑compatible for vLLM/Ollama/LM Studio/llama.cpp server.<br>
-- UI contracts: `st.Page` navigation, chat stream, status blocks, fragments.<br>
-- Configuration schema: nested groups expose canonical policy surfaces.<br>
-  - `openai.*` fields normalize `base_url` to a single `/v1` suffix and accept placeholder `api_key` values for loopback servers, matching the OpenAI-compatible contracts for LM Studio and vLLM. Concrete examples live in the [configuration reference](../developers/configuration-reference.md#openai-compatible-local-servers-lm-studio-vllm-llamacpp).
+- Vector store: Qdrant collection with named vectors `text-dense` (float32) and `text-sparse` (CSR), deterministic point IDs = SHA‑256(content). Hybrid queries enabled with server‑side fusion.
+
+- Ingestion cache: DuckDBKV; pipeline caches node+transform hashes.
+
+- LLM API: OpenAI‑compatible for vLLM/Ollama/LM Studio/llama.cpp server.
+
+- UI contracts: `st.Page` navigation, chat stream, status blocks, fragments.
+
+- Configuration schema: nested groups expose canonical policy surfaces.
+
+  - `openai.*` fields normalize `base_url` to a single `/v1` suffix and accept placeholder `api_key` values for loopback servers, matching the OpenAI-compatible contracts for LM Studio and vLLM. Concrete examples live in the [Configuration Guide](../developers/configuration.md#llm-backend-selection).
+
   - `security.*` enforces local-first defaults. `allow_remote_endpoints` is false by default, remote hosts **must** appear in the `endpoint_allowlist`, and effective policy state is surfaced read-only in the UI.
+
   - `retrieval.hybrid.*` unifies server-side hybrid gating: `retrieval.enable_server_hybrid` (bool) plus `retrieval.fusion_mode` ∈ {`rrf`, `dbsf`}. No legacy client-side fusion flags remain.
 
 ## 5. Compliance, privacy, and security controls
 
-- Local‑first default, opt‑in remote endpoints; CORS disabled in Streamlit.<br>
-- License inventory: Apache‑2.0 (LlamaIndex, Qdrant client), MIT (BGE‑M3), OpenCLIP (MIT), SigLIP (Apache‑2.0).<br>
+- Local‑first default, opt‑in remote endpoints; CORS disabled in Streamlit.
+
+- License inventory: Apache‑2.0 (LlamaIndex, Qdrant client), MIT (BGE‑M3), OpenCLIP (MIT), SigLIP (Apache‑2.0).
 
 ## 6. Assumptions, dependencies, out-of-scope
 
-- Assumption: Qdrant running locally via docker or embedded (qdrant-local acceptable).<br>
+- Assumption: Qdrant running locally via docker or embedded (qdrant-local acceptable).
+
 - Out‑of‑scope: proprietary cloud LLMs.
 
 ## 7. Verification methods per requirement
@@ -146,6 +133,7 @@ NFR-PORT-003 Docker/compose artifacts **shall** run out-of-the-box for local dep
 ## 8. Traceability seeds
 
 - Linked ADRs: 001..012 consolidated set.
+
 - Code refs: e.g., src/config/llm_factory.py (provider wiring) and Streamlit UI (pages).
 
 ## Acceptance Criteria (Gherkin excerpts)

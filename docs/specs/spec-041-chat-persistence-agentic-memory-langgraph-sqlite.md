@@ -114,7 +114,7 @@ class LlamaIndexEmbeddingsAdapter(Embeddings):
 
 #### C) Memory extraction + consolidation (final-release)
 
-Long-term memory must not be an unbounded append-only log. Implement a deterministic, testable consolidation pipeline inspired by state-of-the-art “ADD/UPDATE/DELETE/NOOP” memory update patterns (see internal implementation in [src/agents/tools/memory.py](src/agents/tools/memory.py) and [src/persistence/memory_store.py](src/persistence/memory_store.py)):
+Long-term memory must not be an unbounded append-only log. Implement a deterministic, testable consolidation pipeline inspired by state-of-the-art “ADD/UPDATE/DELETE/NOOP” memory update patterns (see internal implementation in [src/agents/tools/memory.py](../../src/agents/tools/memory.py) and [src/persistence/memory_store.py](../../src/persistence/memory_store.py)):
 
 1. **Extract candidates** from the most recent conversation turn into a fixed schema:
    - memories must be small, user-relevant facts/preferences
@@ -213,7 +213,7 @@ Important Streamlit behavior:
 
 The system must list sessions and store user-friendly titles. The LangGraph checkpointer does not provide “list all thread_ids” as a stable public API.
 
-Implement a small session registry table in the Chat DB (see [src/persistence/chat_db.py](src/persistence/chat_db.py)):
+Implement a small session registry table in the Chat DB (see [src/persistence/chat_db.py](../../src/persistence/chat_db.py)):
 
 - `chat_session`
   - `thread_id TEXT PRIMARY KEY`
@@ -230,7 +230,7 @@ Indexes:
 
 ### Time travel UX semantics
 
-Expose in Chat sidebar (orchestrated by [src/agents/coordinator.py](src/agents/coordinator.py)):
+Expose in Chat sidebar (orchestrated by [src/agents/coordinator.py](../../src/agents/coordinator.py)):
 
 1. List checkpoints for current `thread_id` (reverse chronological).
 2. User selects one checkpoint to fork.

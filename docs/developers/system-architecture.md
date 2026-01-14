@@ -1,5 +1,8 @@
 # DocMind AI System Architecture Guide
 
+**Version:** 2.0.0  
+**Status:** Alpha (v2.0 Revision)
+
 ## Overview
 
 DocMind AI is a local-first AI document analysis system implementing a modern agentic RAG architecture with multi-agent coordination. This guide provides comprehensive architectural understanding of the unified configuration architecture (ADR-024) and the production-ready system that achieves 95% complexity reduction while maintaining full functionality.
@@ -21,66 +24,71 @@ DocMind AI employs a sophisticated multi-layer architecture optimized for local-
 
 ```mermaid
 graph TB
-    subgraph "User Interface Layer"
+    subgraph "Interface Layer"
         UI[Streamlit UI]
         API[FastAPI Endpoints]
+        TELEMETRY[Telemetry Sink]
     end
 
-    subgraph "Multi-Agent Orchestration Layer"
+    subgraph "Multi-Agent Orchestration (LangGraph)"
         SUP[LangGraph Supervisor]
         ROUTER[Router Agent]
         PLANNER[Planner Agent]
-        RETRIEVAL[Retrieval Agent]
-        SYNTHESIS[Synthesis Agent]
+        RETRIEVER[Retrieval Agent]
+        SYNTH[Synthesis Agent]
         VALIDATOR[Validator Agent]
+        
+        SUP <-> ROUTER
+        SUP <-> PLANNER
+        SUP <-> RETRIEVER
+        SUP <-> SYNTH
+        SUP <-> VALIDATOR
     end
 
-    subgraph "Processing Layer"
-        DOC[Document Processor]
-        EMB[BGE-M3 Embeddings]
-        RERANK[BGE-reranker-v2-m3]
+    subgraph "Processing & Retrieval Layer"
+        INGEST[Ingestion Pipeline]
+        EMBED[BGE-M3 / SigLIP]
+        FUSION[Multimodal Fusion]
+        RERANK[BGE-Reranker]
     end
 
-    subgraph "Storage Layer"
-        QDRANT[Qdrant Vector DB]
-        SQLITE[SQLite Session Store]
-        CACHE[Simple Cache]
-    end
-
-    subgraph "LLM Backend Layer"
-        VLLM[vLLM FlashInfer]
-        QWEN[Qwen3-4B-FP8]
+    subgraph "Storage & Persistence Layer"
+        QDRANT[(Qdrant Vector DB)]
+        SQLITE[(SQLite WAL / Chat DB)]
+        ARTIFACTS[(Artifact Store)]
+        
+        INGEST --> QDRANT
+        RETRIEVER --> QDRANT
+        RETRIEVER --> FUSION
+        SUP --> SQLITE
+        INGEST --> ARTIFACTS
     end
 
     UI --> SUP
     API --> SUP
-    SUP --> ROUTER
-    SUP --> PLANNER
-    SUP --> RETRIEVAL
-    SUP --> SYNTHESIS
-    SUP --> VALIDATOR
-
-    RETRIEVAL --> DOC
-    RETRIEVAL --> EMB
-    RETRIEVAL --> RERANK
-
-    EMB --> QDRANT
-    DOC --> SQLITE
-    RETRIEVAL --> CACHE
-
-    SYNTHESIS --> VLLM
-    VALIDATOR --> VLLM
-    VLLM --> QWEN
 
     style SUP fill:#ff9999
-    style VLLM fill:#99ccff
     style QDRANT fill:#ffcc99
-    style QWEN fill:#ccffcc
+    style ARTIFACTS fill:#ccffcc
 ```
 
 ### Core Components
 
 | Component               | Purpose                                                  | Technology                     | Performance Target   |
+| ----------------------- | -------------------------------------------------------- | ------------------------------ | -------------------- |
+| **Supervisor**          | LangGraph-based agent orchestration                      | LangGraph v0.2+                | < 200ms overhead     |
+| **VLLM Backend**        | High-performance local inference                         | vLLM (FP8 / FlashInfer)        | 120-180 tok/s        |
+| **Vector Store**        | Multi-vector and hybrid retrieval                        | Qdrant                         | < 50ms query latency |
+| **Persistence**         | Durable chat sessions and multimodal artifacts           | SQLite WAL + ArtifactRef       | Zero-loss integrity  |
+
+## Local-first Guarantees
+
+DocMind AI is architected with a strict **local-first** mandate (ADR-058):
+
+1. **On-device Persistence**: All conversation state and document metadata are stored in local SQLite databases with WAL (Write-Ahead Logging) enabled.
+2. **No Cloud Leakage**: Remote LLM endpoints are disabled by default. Embeddings (BGE-M3/SigLIP) run locally on the user's GPU/CPU.
+3. **Fail-open Multimodal**: If GPU acceleration or specialized libraries (e.g., `sqlite-vec`) are unavailable, the system fallbacks to basic text-only RAG without crashing.
+4. **Content-Addressed Artifacts**: Large binary blobs (images, thumbnails) are never stored in databases. They are stored as `ArtifactRef` (SHA-256) in a local filesystem store.
 | ----------------------- | -------------------------------------------------------- | ------------------------------ | -------------------- |
 | **Frontend**            | Document uploads, configuration, results, chat interface | Streamlit                      | Real-time streaming  |
 | **Multi-Agent System**  | 5-agent coordination for complex queries                 | LangGraph Supervisor           | <200ms coordination  |
@@ -490,35 +498,68 @@ response = coordinator.process_query(query)
 ```text
 src/
 ├── app.py                    # Main Streamlit application
-├── config/
-│   └── settings.py           # Unified configuration (single source of truth)
-├── agents/                   # Multi-agent coordination system
-│   ├── coordinator.py        # LangGraph supervisor orchestration
-│   ├── tools.py             # Shared agent tool functions (@tool decorators)
-│   ├── tool_factory.py      # Agent tool creation and management
-│   ├── retrieval.py         # Retrieval agent implementation
-│   └── models.py            # Agent data models and schemas
-├── cache/                    # Caching system
-│   └── simple_cache.py      # SQLite-based document cache (ADR-025)
-├── core/                     # Core processing modules
-│   └── infrastructure/      # System infrastructure
-├── processing/               # Document processing pipeline
-│   └── document_processor.py # Unstructured partition + LlamaIndex pipeline
-├── retrieval/                # Retrieval system components
-│   ├── embeddings.py        # BGE‑M3 + SigLIP (CLIP optional) embedding utilities
-│   ├── reranking.py         # Multimodal reranking (BGE text + SigLIP visual)
-│   └── router_factory.py    # RouterQueryEngine composition (tools + selector)
-├── storage/                  # Persistence models (see src.utils.storage for helpers)
-├── utils/                    # Utility modules
-│   ├── core.py              # Core utilities
-│   ├── document.py          # Document processing utilities
-│   ├── images.py            # Encrypted-safe image I/O helpers
-│   ├── monitoring.py        # Performance monitoring
-│   ├── siglip_adapter.py    # SigLIP CLIP-like adapter (get_image_embedding)
-│   └── vision_siglip.py     # Shared SigLIP loader (cached)
-└── models/                   # Pydantic data models
-    └── schemas.py           # API and response schemas
+├── config/                   # Unified configuration (BaseSettings)
+├── agents/                   # Agent implementation & Coordinator
+├── core/                     # Internal engine logic (Spacy, etc.)
+├── eval/                     # Evaluation harnesses (RAGas, custom)
+├── models/                   # Pydantic core schemas
+├── pages/                    # Streamlit multipage app views
+├── persistence/              # SQLite, Artifacts, Snapshots (ADR-058)
+├── processing/               # Ingestion pipeline & OCR
+├── prompting/                # Prompt templates & Registry
+├── retrieval/                # Vector, Hybrid, & Multimodal fusion
+├── telemetry/                # Observability & Data logging
+├── ui/                       # Reusable UI components
+└── utils/                    # cross-cutting helpers (Security, IO)
 ```
+
+#### Structural Parity Manifest (CI Validated)
+
+The following JSON block is used by `scripts/verify_structural_parity.py` to ensure documentation and codebase alignment. **Do not modify format.**
+
+```json
+{
+  "version": "2.0.0",
+  "canonical_src": [
+    "agents",
+    "config",
+    "core",
+    "eval",
+    "models",
+    "pages",
+    "persistence",
+    "processing",
+    "prompting",
+    "retrieval",
+    "telemetry",
+    "ui",
+    "utils"
+  ]
+}
+```
+
+## Cognitive Persistence & Storage
+
+DocMind AI implements a hierarchical persistence strategy optimized for reliability and low latency (ADR-058):
+
+### 1. Chat Persistence (LangGraph + SQLite)
+
+Thread state, including message history and agent intermediate steps, is persisted using the LangGraph `SqliteSaver`. This enables:
+
+- **Resilient Sessions**: Conversations survive application restarts.
+- **Time Travel**: Users can resume from any prior checkpoint/message id.
+
+### 2. Artifact Storage (ArtifactRef)
+
+Large binary files (PDF images, document thumbnails) are stored using a content-addressed filesystem store (`src/persistence/artifacts.py`).
+
+- **ArtifactRef**: Unique identifier comprising `sha256` and `extension`.
+- **Security**: A directory jail ensures artifacts are never served outside the designated data directory.
+- **Payload Integrity**: Vector DB entries and chat messages store only the `ArtifactRef`, never raw or relative paths.
+
+### 3. Vector Storage (Qdrant)
+
+Embeddings are stored in Qdrant with HNSW indexing. The system supports multi-collection routing (Text vs. Image collections) for hybrid RAG.
 
 ## Architectural Principles
 
@@ -629,5 +670,5 @@ except Exception as e:
 This architecture guide provides the foundation for understanding and contributing to DocMind AI. The system's unified approach ensures consistency, maintainability, and excellent performance while remaining approachable for new developers.
 
 For implementation details, see the [Developer Handbook](developer-handbook.md).
-For configuration specifics, see the [Configuration Reference](configuration-reference.md).
+For configuration specifics, see the [Configuration Guide](configuration.md).
 For operational procedures, see the [Operations Guide](operations-guide.md).

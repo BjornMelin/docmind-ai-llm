@@ -1,6 +1,6 @@
 # User Configuration
 
-This page summarizes common runtime configuration for DocMind AI. For a full developer‑level reference, see developers/configuration-reference.md. For quick examples, see the Environment Variables section in README.md.
+This page summarizes common runtime configuration for DocMind AI. For a full developer‑level reference, see [Configuration Guide](../developers/configuration.md). For quick examples, see the Environment Variables section in README.md.
 
 ## Core Settings
 

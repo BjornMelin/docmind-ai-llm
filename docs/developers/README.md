@@ -13,20 +13,19 @@ This directory contains documentation for DocMind AI developers. The documentati
 | **[Getting Started](getting-started.md)**                 | Complete 30-minute onboarding from zero to productive            | New developers                           | 30 min       |
 | **[System Architecture](system-architecture.md)**         | Deep understanding of multi-agent coordination and system design | Developers needing architectural context | 45 min       |
 | **[Developer Handbook](developer-handbook.md)**           | Practical implementation guidance, testing, and maintenance      | Active developers building features      | 60 min       |
-| **[Configuration Reference](configuration-reference.md)** | Complete configuration guide with GPU optimization               | DevOps, system administrators            | 30 min       |
+| **[Configuration Guide](configuration.md)**               | Complete configuration guide with GPU optimization               | DevOps, Developers, Admins               | 30 min       |
 | **[Operations Guide](operations-guide.md)**               | Production deployment and operational procedures                 | DevOps, SRE, production teams            | 45 min       |
 
 ### Specialized References
 
-| Guide                                                         | Purpose                                                          | Audience                               |
-| ------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------- |
-| **[Architecture Overview](architecture-overview.md)**         | Executive technical summary with performance specs               | Technical leads, architects            |
-| **[Cache Implementation Guide](cache.md)**                    | Wiring, configuration, operations, troubleshooting               | Developers integrating cache           |
-| **[Configuration Usage Guide](configuration-usage-guide.md)** | Practical how-to for env vars and settings helpers               | Developers, DevOps                     |
-| **[GraphRAG Adapters Guide](guides/graphrag-adapters.md)**    | Adapter protocol, registry wiring, and optional dependency lanes | Developers extending GraphRAG          |
-| **[Multimodal Pipeline Guide](guides/multimodal-pipeline.md)**| End-to-end PDF images → retrieval → UI → persistence             | Developers/operators shipping multimodal |
-| **[Testing Guide](../testing/testing-guide.md)**              | Canonical testing strategy and commands                          | QA engineers, developers writing tests |
-| **[CI/CD Pipeline](ci-cd-pipeline.md)**                       | Continuous integration and deployment workflows                  | DevOps engineers, release managers     |
+| Guide                                                            | Purpose                                                            | Audience                                    |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------- |
+| **[Architecture Overview](architecture-overview.md)**            | Executive technical summary with performance specs                 | Technical leads, architects                 |
+| **[Cache Implementation Guide](cache.md)**                       | Wiring, configuration, operations, troubleshooting                 | Developers integrating cache                |
+| **[GraphRAG Adapters Guide](guides/graphrag-adapters.md)**       | Adapter protocol, registry wiring, and optional dependency lanes   | Developers extending GraphRAG               |
+| **[Multimodal Pipeline Guide](guides/multimodal-pipeline.md)**   | End-to-end PDF images → retrieval → UI → persistence               | Developers/operators shipping multimodal    |
+| **[Testing Guide](../testing/testing-guide.md)**                 | Canonical testing strategy and commands                            | QA engineers, developers writing tests      |
+| **[CI/CD Pipeline](ci-cd-pipeline.md)**                          | Continuous integration and deployment workflows                    | DevOps engineers, release managers          |
 
 ### Documentation Framework
 
@@ -34,7 +33,7 @@ Following the **Divio Documentation System** for optimal developer experience:
 
 - **Tutorial** ([Getting Started](getting-started.md)) - Learning-oriented guidance
 - **How-to Guides** ([Developer Handbook](developer-handbook.md)) - Problem-solving oriented
-- **Reference** ([Configuration Reference](configuration-reference.md)) - Information-oriented
+- **Reference** ([Configuration Guide](configuration.md)) - Information-oriented reference and setup guide
 - **Explanation** ([System Architecture](system-architecture.md)) - Understanding-oriented
 - **Operations** ([Operations Guide](operations-guide.md)) - Production-oriented
 
@@ -45,19 +44,19 @@ Following the **Divio Documentation System** for optimal developer experience:
 1. **Start Here**: [Getting Started](getting-started.md) - 30-minute setup
 2. **Understand the System**: [System Architecture](system-architecture.md) - Core concepts
 3. **Learn Development Practices**: [Developer Handbook](developer-handbook.md) - Implementation patterns
-4. **Configure for Your Environment**: [Configuration Reference](configuration-reference.md) - Optimization
+4. **Configure for Your Environment**: [Configuration Guide](configuration.md) - Optimization
 
 ### Experienced Developer Quick Access
 
 1. **Implementation Guidance**: [Developer Handbook](developer-handbook.md) - Patterns and practices
 2. **Architecture Reference**: [System Architecture](system-architecture.md) - System design
-3. **Configuration Tuning**: [Configuration Reference](configuration-reference.md) - Performance optimization
+3. **Configuration Tuning**: [Configuration Guide](configuration.md) - Performance optimization
 4. **Cache Wiring**: [Cache Implementation](cache.md) - Wiring and operations
 
 ### DevOps/Production Teams
 
 1. **Deployment Procedures**: [Operations Guide](operations-guide.md) - Production deployment
-2. **Configuration Management**: [Configuration Reference](configuration-reference.md) - Environment setup
+2. **Configuration Management**: [Configuration Guide](configuration.md) - Environment setup
 3. **Performance Optimization**: [Operations Guide](operations-guide.md) - Production tuning
 
 ## Key Architectural Principles
@@ -97,7 +96,7 @@ uv run python scripts/performance_monitor.py --run-tests --check-regressions # P
 ### Configuration Pattern
 
 ```python
-# Always use this pattern (detailed in Configuration Reference)
+# Always use this pattern (detailed in Configuration Guide)
 from src.config import settings
 
 # Access any configuration
@@ -110,19 +109,18 @@ chunk_size = settings.processing.chunk_size
 
 | Issue Type                 | Primary Guide                                         | Secondary Resources                                              |
 | -------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------- |
-| **Setup Problems**         | [Getting Started](getting-started.md)                 | [Configuration Reference](configuration-reference.md)            |
+| **Setup Problems**         | [Getting Started](getting-started.md)                 | [Configuration Guide](configuration.md)                          |
 | **Architecture Questions** | [System Architecture](system-architecture.md)         | [Architecture Overview](architecture-overview.md), [ADRs](adrs/) |
 | **Implementation Help**    | [Developer Handbook](developer-handbook.md)           | [Cache Implementation](cache.md)                                 |
-| **Configuration Issues**   | [Configuration Reference](configuration-reference.md) | [Operations Guide](operations-guide.md)                          |
-| **Performance Problems**   | [Operations Guide](operations-guide.md)               | [Configuration Reference](configuration-reference.md)            |
-| **Production Deployment**  | [Operations Guide](operations-guide.md)               | [Configuration Reference](configuration-reference.md)            |
+| **Performance Problems**   | [Operations Guide](operations-guide.md)               | [Configuration Guide](configuration.md)                          |
+| **Production Deployment**  | [Operations Guide](operations-guide.md)               | [Configuration Guide](configuration.md)                          |
 | **Testing Issues**         | [Developer Handbook](developer-handbook.md)           | [Testing Guide](../testing/testing-guide.md)                     |
 
 ## Contributing
 
 1. **Read**: [Getting Started](getting-started.md) → [Developer Handbook](developer-handbook.md)
 2. **Understand**: [System Architecture](system-architecture.md) + relevant [ADRs](adrs/)
-3. **Configure**: [Configuration Reference](configuration-reference.md) for optimal development
+3. **Configure**: [Configuration Guide](configuration.md) for optimal development
 4. **Deploy**: [Operations Guide](operations-guide.md) for production considerations
 
 ## Architecture Decision Records (ADRs)
@@ -143,7 +141,6 @@ All architectural decisions are documented in the [adrs/](adrs/) directory. Key 
 | **Core Guides** (5)            | Essential documentation covering 90% of developer needs | Primary navigation  |
 | **Specialized References** (4) | Deep-dive topics for specific use cases                 | Secondary resources |
 | **ADRs** (26)                  | Architectural decisions and technical rationale         | Reference material  |
-| **Archived**                   | Historical documentation preserved for reference        | Legacy content      |
 
 ### Migration Notes
 
@@ -152,14 +149,9 @@ If you're looking for content from the previous documentation structure:
 - **Setup/Installation** → [Getting Started](getting-started.md)
 - **Architecture/Multi-Agent** → [System Architecture](system-architecture.md) + [Architecture Overview](architecture-overview.md)
 - **Development/Testing** → [Developer Handbook](developer-handbook.md) + [Testing Guide](../testing/testing-guide.md)
-- **Environment/Model Config** → [Configuration Reference](configuration-reference.md)
+- **Environment/Model Config** → [Configuration Guide](configuration.md)
 - **Deployment/Performance** → [Operations Guide](operations-guide.md)
 - **Cache/Components** → [Cache Implementation](cache.md)
-- **Historical Content** → [archived/](archived/) directory
-
-### Archived Documentation
-
-Previous documentation files have been moved to the `archived/` directory and remain available for reference, but the consolidated guides above contain all essential information in a better organized format.
 
 ## Documentation Standards
 

@@ -34,7 +34,7 @@ graph TD
 ### Agent Responsibilities
 
 | Agent | Primary Function | Key Capabilities |
-|-------|------------------|------------------|
+| --- | --- | --- |
 | **Query Router** | Query analysis and strategy selection | Route optimization, complexity assessment, strategy recommendation |
 | **Planning Agent** | Task decomposition and execution planning | Sub-task creation, priority assignment, resource estimation |
 | **Retrieval Expert** | Document search and information retrieval | Hybrid search, reranking, relevance scoring, caching |

@@ -4,14 +4,14 @@ fail_fast: true
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.0
+    rev: v0.14.11
     hooks:
       - id: ruff-format
       - id: ruff
         args: ["--force-exclude"]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v6.0.0
     hooks:
       - id: end-of-file-fixer
       - id: trailing-whitespace
@@ -23,9 +23,16 @@ repos:
       - id: check-added-large-files
         args: ["--maxkb=2000"]
 
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.47.0
+    hooks:
+      - id: markdownlint
+        files: ^docs/
+        args: ["--disable", "MD013", "MD033", "MD041", "--"]
+
 # Optional local policy guard; uncomment to prevent direct commits to main
 #  - repo: https://github.com/pre-commit/pre-commit-hooks
-#    rev: v4.6.0
+#    rev: v6.0.0
 #    hooks:
 #      - id: no-commit-to-branch
 #        args: ["--branch", "main"]

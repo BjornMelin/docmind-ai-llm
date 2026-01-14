@@ -16,39 +16,38 @@ classifiers = [
 ]
 dependencies = [
     # Application & Configuration (core runtime utilities)
-    "python-dotenv==1.1.1",             # Environment variable loading
-    "loguru>=0.7.3,<1.0.0",              # Structured logging
-    "tenacity>=9.1.2,<10.0.0",           # Robust retries
-    "pydantic==2.11.7",                  # Data validation & settings
-    "pydantic-settings==2.10.1",         # Settings management
+    "python-dotenv==1.1.1",
+    "loguru>=0.7.3,<1.0.0",
+    "tenacity>=9.1.2,<10.0.0",
+    "pydantic==2.11.7",
+    "pydantic-settings==2.10.1",
+    "cryptography>=46.0.0",                 # Image encryption at rest (ADR-058)
     # UI / App Framework
-    "streamlit>=1.52.2,<2.0.0",          # Local app UI
+    "streamlit>=1.52.2,<2.0.0",
     # Document Processing & NLP
     "unstructured[all-docs]>=0.18.26,<0.19.0",  # Multiformat parsing (PDF, DOCX, HTML, etc.)
-    "unstructured-ingest>=1.2.32,<2.0.0",       # Ingestion utilities
     "pymupdf==1.26.4",                   # PDF rendering/text extraction
-    "python-docx==1.2.0",                # DOCX parsing
     "pillow>=11.0.0,<12.0.0",            # Image handling
     "pyarrow>=21.0.0,<22.0.0",           # Columnar data interchange
     "spacy>=3.8.7,<4.0.0",               # NLP pipeline
     # ML/LLM Fundamentals
     "torch==2.7.1",                      # PyTorch runtime (vLLM 0.10.x compat)
     "transformers>=4.55.0,<4.58.0",      # HF model interfaces (vLLM 0.10.x + ColPali compat)
-    "tiktoken==0.11.0",                  # Tokenization utilities
-    "openai>=1.109.1,<2.0.0",            # OpenAI API client
+    "tiktoken==0.11.0",
+    "openai>=1.109.1,<2.0.0",
     "openai-whisper==20250625",          # Whisper speech-to-text (optional)
     # Local LLM Backends (CPU defaults; GPU in [gpu] extra)
-    "ollama==0.5.3",                     # Ollama client
-    "llama-cpp-python>=0.3.16,<0.4.0",   # llama.cpp bindings (CPU variant)
+    "ollama==0.5.3",
+    "llama-cpp-python>=0.3.16,<0.4.0",
     # Vector Databases & Clients
-    "qdrant-client>=1.15.1,<2.0.0",      # Qdrant client
+    "qdrant-client>=1.15.1,<2.0.0",
     # LlamaIndex (meta + selected integrations)
     "llama-index>=0.14.12,<0.15.0",
     "llama-index-vector-stores-qdrant>=0.9.0,<0.10.0",
-    "llama-index-vector-stores-duckdb>=0.5.1,<0.6.0",  # DuckDB vector-store
-    "llama-index-storage-kvstore-duckdb>=0.2.1,<0.3.0",  # DuckDB KV store (cache)
+    "llama-index-vector-stores-duckdb>=0.5.1,<0.6.0",
+    "llama-index-storage-kvstore-duckdb>=0.2.1,<0.3.0",
     "llama-index-llms-vllm>=0.6.1,<0.7.0",
-    "llama-index-llms-openai>=0.6.12,<0.7.0",
+    "llama-index-llms-openai>=0.6.13,<0.7.0",
     "llama-index-llms-ollama>=0.9.1,<1.0.0",
     "llama-index-llms-llama-cpp>=0.5.1,<0.6.0",
     "llama-index-llms-openai-like>=0.5.1,<0.6.0",
@@ -56,31 +55,33 @@ dependencies = [
     "llama-index-embeddings-clip>=0.5.1,<0.6.0",
     "llama-index-embeddings-fastembed>=0.5.0,<0.6.0",
     "llama-index-embeddings-openai>=0.5.1,<0.6.0",
+    "fastembed>=0.5.1",                  # Sparse vectors (BM42) CPU support (FR-005)
     "llama-index-readers-file>=0.5.6,<0.6.0",
     # Agentic Orchestration
-    "langgraph==1.0.5",                  # Graph-based orchestration (pin to avoid ToolRuntime API churn)
-    "langgraph-checkpoint-sqlite==3.0.1",  # Durable checkpoints + sqlite-vec
-    "langgraph-supervisor>=0.0.31,<0.1.0",  # Multi-agent supervisor
-    "langchain>=1.2.2,<2.0.0",           # Agent factory (create_agent) for LangGraph v1
-    "langchain-core>=1.2.6,<2.0.0",      # Shared interfaces
-    "langchain-openai>=1.1.6,<2.0.0",    # LangChain OpenAI bindings
+    "langgraph==1.0.5",                     # Graph-based orchestration (pin to avoid ToolRuntime API churn)
+    "langgraph-checkpoint-sqlite==3.0.1",   # Durable checkpoints (ADR-058)
+    "sqlite-vec>=0.1.6",                    # Semantic search in agentic memory (SPEC-041)
+    "langgraph-supervisor>=0.0.31,<0.1.0",
+    "langchain>=1.2.2,<2.0.0",              # Agent factory (create_agent) for LangGraph v1
+    "langchain-core>=1.2.6,<2.0.0",
+    "langchain-openai>=1.1.6,<2.0.0",
     # Retrieval & Reranking Extras
-    "FlagEmbedding>=1.3.5,<2.0.0",       # BGE-M3 unified embeddings
+    "FlagEmbedding>=1.3.5,<2.0.0",          # BGE-M3 unified embeddings
     "sentence-transformers>=5.2.0,<6.0.0",  # CrossEncoder reranking
     # Prompt Optimization
-    "dspy-ai>=3.1.0,<4.0.0",             # DSPy optimizer
-    "pyyaml>=6.0.3,<7.0.0",              # YAML parser for prompt templates
+    "dspy-ai>=3.1.0,<4.0.0",
+    "pyyaml>=6.0.3,<7.0.0",                 # YAML parser for prompt templates
     # Storage (local analytical DB used for cache KV store)
     # Keep <1.4.0 because llama-index DuckDB integrations currently cap DuckDB <1.4.0.
-    "duckdb>=1.3.2,<1.4.0",              # DuckDB engine
+    "duckdb>=1.3.2,<1.4.0",
     # Analytics & Visualization
-    "pandas>=2.2,<3.0",                 # DataFrames (required by DuckDB .df())
-    "plotly>=5.22,<6.0",                # Streamlit charts (px/go)
+    "pandas>=2.2,<3.0",
+    "plotly>=5.22,<6.0",
     # Observability
-    "opentelemetry-sdk>=1.39.1,<2.0.0",  # OTEL tracing/metrics SDK
-    "opentelemetry-exporter-otlp-proto-http>=1.39.1,<2.0.0",  # OTLP HTTP exporters
-    "opentelemetry-exporter-otlp-proto-grpc>=1.39.1,<2.0.0",  # OTLP gRPC exporters
-    "portalocker>=3.2.0,<4.0.0",         # Cross-platform snapshot locking
+    "opentelemetry-sdk>=1.39.1,<2.0.0",     # OTEL tracing/metrics SDK
+    "opentelemetry-exporter-otlp-proto-http>=1.39.1,<2.0.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.39.1,<2.0.0",
+    "portalocker>=3.2.0,<4.0.0",            # Cross-platform snapshot locking
 ]
 
 # Optional runtime features published as extras (PEP 621).
@@ -97,17 +98,13 @@ gpu = [
     "cmake>=3.26.4",                      # Required for CUDA builds
 ]
 llama = [
-    "llama-index-core>=0.14.12,<0.15.0",    # Core llama-index dependency
+    "llama-index-core>=0.14.12,<0.15.0",
 ]
 graph = [
     "llama-index-graph-stores-kuzu>=0.9.1,<1.0.0",
     "kuzu>=0.11.3,<1.0.0",
 ]
 observability = [
-    "opentelemetry-sdk>=1.39.1,<2.0.0",
-    "opentelemetry-exporter-otlp-proto-http>=1.39.1,<2.0.0",
-    "opentelemetry-exporter-otlp-proto-grpc>=1.39.1,<2.0.0",
-    "portalocker>=3.2.0,<4.0.0",
     "llama-index-observability-otel>=0.2.1,<0.3.0",
 ]
 multimodal = [

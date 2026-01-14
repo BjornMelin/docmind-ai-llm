@@ -71,7 +71,7 @@ Use a small typed structure:
 2. Render progress:
 
    - `@st.fragment(run_every="1s")` poller drains queue for the active job and updates a progress bar/status block
-  - **Polling interval rationale**: 1s balances UX responsiveness (users see updates quickly) with minimal overhead (one rerun/sec). Configurable via `DOCMIND_UI__PROGRESS_POLL_INTERVAL_SEC` if needed.
+   - **Polling interval rationale**: 1s balances UX responsiveness (users see updates quickly) with minimal overhead (one rerun/sec). Configurable via `DOCMIND_UI__PROGRESS_POLL_INTERVAL_SEC` if needed.
 
 3. Completion:
    - on success, update `st.session_state` with indices (routing configuration / router engine) and snapshot metadata (see ADR-052)

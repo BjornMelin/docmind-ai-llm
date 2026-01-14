@@ -1,6 +1,15 @@
-# DocMind AI Documentation Overview
+# DocMind AI Overview
 
-Welcome to the documentation for **DocMind AI**, a local-first document analysis system. This documentation is organized into sections for users, developers, API reference, and architectural decision records (ADRs).
+**Version:** 2.0.0  
+**Status:** Alpha (v2.0 Revision)
+
+DocMind AI is an advanced, local-first agentic RAG (Retrieval-Augmented Generation) system.
+
+## Documentation Navigation
+
+- [Technical Requirements](specs/requirements.md)
+- [System Architecture](developers/system-architecture.md)
+- [Contributing Guide](../CONTRIBUTING.md)
 
 ## Project Summary
 
@@ -33,7 +42,7 @@ Notes:
 ## Documentation Structure
 
 - **[Product Requirements Document (PRD)](PRD.md)**: Complete system requirements with validated performance specifications
-- **[User Documentation](user/)**:
+- **[User Documentation](user/getting-started.md)**:
   - [Getting Started](user/getting-started.md): Installation and setup
   - [Configuration](user/configuration.md): Basic settings and examples
   - [Troubleshooting & FAQ](user/troubleshooting-faq.md): Common issues and answers
@@ -42,12 +51,12 @@ Notes:
   - [Architecture Overview](developers/architecture-overview.md): High-level system view
   - [System Architecture](developers/system-architecture.md): Technical diagrams and flows
   - [Cache Implementation](developers/cache.md): Cache wiring and operations
-  - [Configuration Reference](developers/configuration-reference.md): Developer configuration details
+  - [Configuration Guide](developers/configuration.md): Developer configuration details
   - [CI/CD Pipeline](developers/ci-cd-pipeline.md): GitHub Actions pipeline (3.11 + 3.10)
   - [Operations Guide](developers/operations-guide.md): Deployment and operations
   - [Developer Handbook](developers/developer-handbook.md): Patterns and workflows
   - [Testing Guide](testing/testing-guide.md): How to write and run tests
-- **[API Documentation](api/)**:
+- **[API Documentation](api/api.md)**:
   - [API Reference](api/api.md): REST and Python API with examples
 - **Architectural Decision Records (ADRs)**:
   - [ADR Index](developers/adrs/): Complete collection of architectural decisions

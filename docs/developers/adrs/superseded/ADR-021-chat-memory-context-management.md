@@ -10,14 +10,14 @@ Related: 001, 003, 013, 043
 Tags: memory, chat, context, streamlit, sqlite
 References:
 - [LlamaIndex — Chat Memory](https://docs.llamaindex.ai/)
-- [ADR-057 — Chat Persistence + Hybrid Agentic Memory (LangGraph SQLite)](../ADR-057-chat-persistence-langgraph-sqlite-hybrid-memory.md)
+- [ADR-058 — Final Multimodal Pipeline and Persistence](../ADR-058-final-multimodal-pipeline-and-persistence.md)
 ---
 
 ## Description
 
 Adopt LlamaIndex ChatMemoryBuffer with SimpleChatStore (SQLite) for persistent chat history and context‑aware follow‑ups within a 128K context budget (ADR‑004/010). Use trimming/condensation as needed.
 
-> Status notice (2026-01-09): Superseded by ADR-057. DocMind adopts LangGraph-native persistence (SQLite checkpointer + store) with time travel and hybrid long-term memory for the final release.
+> Status notice (2026-01-09): Superseded by ADR-058. DocMind adopts LangGraph-native persistence (SQLite checkpointer + store) with time travel and hybrid long-term memory for the final release.
 
 ## Context
 
