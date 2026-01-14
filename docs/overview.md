@@ -1,6 +1,15 @@
-# DocMind AI Documentation Overview
+# DocMind AI Overview
 
-Welcome to the documentation for **DocMind AI**, a local-first document analysis system. This documentation is organized into sections for users, developers, API reference, and architectural decision records (ADRs).
+**Version:** 2.0.0  
+**Status:** Alpha (v2.0 Revision)
+
+DocMind AI is an advanced, local-first agentic RAG (Retrieval-Augmented Generation) system.
+
+## Documentation Navigation
+
+- [Technical Requirements](specs/requirements.md)
+- [System Architecture](developers/system-architecture.md)
+- [Contributing Guide](../CONTRIBUTING.md)
 
 ## Project Summary
 

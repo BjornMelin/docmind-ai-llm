@@ -141,7 +141,6 @@ All architectural decisions are documented in the [adrs/](adrs/) directory. Key 
 | **Core Guides** (5)            | Essential documentation covering 90% of developer needs | Primary navigation  |
 | **Specialized References** (4) | Deep-dive topics for specific use cases                 | Secondary resources |
 | **ADRs** (26)                  | Architectural decisions and technical rationale         | Reference material  |
-| **Archived**                   | Historical documentation preserved for reference        | Legacy content      |
 
 ### Migration Notes
 
@@ -153,11 +152,6 @@ If you're looking for content from the previous documentation structure:
 - **Environment/Model Config** → [Configuration Guide](configuration.md)
 - **Deployment/Performance** → [Operations Guide](operations-guide.md)
 - **Cache/Components** → [Cache Implementation](cache.md)
-- **Historical Content** → [archived/](archived/) directory
-
-### Archived Documentation
-
-Previous documentation files have been moved to the `archived/` directory and remain available for reference, but the consolidated guides above contain all essential information in a better organized format.
 
 ## Documentation Standards
 

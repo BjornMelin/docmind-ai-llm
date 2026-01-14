@@ -1,6 +1,6 @@
 # DocMind AI — Software Requirements Specification (SRS)
 
-Version: 1.5.0 • Date: 2026-01-09 • Owner: Eng/Arch
+Version: 2.0.0 • Date: 2026-01-14 • Owner: Eng/Arch
 Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking, GraphRAG, and multi-provider LLM runtimes.
 
 ## 0. Front-matter
@@ -56,7 +56,7 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 | **FR-017** | The system **shall** collect minimal observability (latency, memory, top‑k, fusion mode, reranker hits) locally. | Status: Implemented | - |
 | **FR-020** | The system **shall** provide a file‑based prompt template system built on LlamaIndex `RichPromptTemplate` with YAML front matter metadata and presets. | ADR‑020/SPEC‑020 | AC‑FR‑020 |
 | **FR-021** | The system **shall** pre-validate Settings UI configuration before persisting changes and must not use unsafe HTML rendering in UI elements. | SPEC‑022/ADR‑041 | AC‑FR‑021 |
-| **FR-022** | The system **shall** persist Chat history locally across refresh/restart and provide per-session “clear/purge” actions. | SPEC‑041/ADR‑058 | AC‑FR‑022 |
+| **FR-022** | The system **shall** persist Chat history locally across refresh/restart and provide per-session “clear/purge” actions via LangGraph `SqliteSaver` and `ArtifactRef` resolution. | SPEC‑041/ADR‑058 | AC‑FR‑022 |
 | **FR-023** | The system **shall** provide a keyword/lexical retrieval tool for exact term lookups (gated by config; disabled by default). | SPEC‑025/ADR‑044 | AC‑FR‑023 |
 | **FR-024** | The system **shall** provide a canonical programmatic ingestion API for local filesystem inputs and maintain a thin legacy facade for documentation compatibility. | SPEC‑026/ADR‑045 | AC‑FR‑024 |
 | **FR-025** | The system **shall** support background ingestion and snapshot rebuild jobs in the Documents UI with progress reporting and best-effort cancellation. | SPEC‑033/ADR‑052 | AC‑FR‑025 |
@@ -64,7 +64,7 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 | **FR-027** | The system **shall** support manual local backups (snapshots + cache + optional uploads/analytics) with retention/rotation and documented restore steps. | SPEC‑037/ADR‑033 | AC‑FR‑027 |
 | **FR-028** | The system **shall** support document analysis modes `auto \| separate \| combined` with deterministic, offline-safe execution. | SPEC‑036/ADR‑023 | AC‑FR‑028 |
 | **FR-029** | The system **shall** enforce and propagate an agent decision timeout budget so nested tool/LLM calls cannot exceed it. | SPEC‑040/ADR‑056 | AC‑FR‑029 |
-| **FR-030** | The system **shall** provide multi-session Chat management (create/rename/delete/select) and store session metadata locally. | SPEC‑041/ADR‑058 | AC‑FR‑030 |
+| **FR-030** | The system **shall** provide multi-session Chat management (create/rename/delete/select) and store session metadata locally in the DocMind registry. | SPEC‑041/ADR‑058 | AC‑FR‑030 |
 | **FR-031** | The system **shall** support branching/time travel for Chat sessions: list checkpoints, fork from a checkpoint, and resume execution. | SPEC‑041/ADR‑058 | AC‑FR‑031 |
 | **FR-032** | The system **shall** support long-term memory (facts/preferences) with metadata-filtered recall and user-visible review/purge controls. | SPEC‑041/ADR‑058 | AC‑FR‑032 |
 | **FR‑SEC‑IMG‑ENC** | The system **shall** support optional encryption‑at‑rest for page images using AES‑GCM; metadata SHALL record `encrypted=true`, `alg`, and `kid`. | SPEC‑011 | AC‑FR‑SEC‑IMG‑ENC |
