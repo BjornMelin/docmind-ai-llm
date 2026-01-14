@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path, PurePath
-from typing import Any
+from typing import Any, TypedDict
 
 import streamlit as st
 from pydantic import ValidationError
@@ -571,11 +571,31 @@ def _validate_gguf_inputs(
     return ui_errors, resolved_gguf_path
 
 
+class SettingsFormValues(TypedDict):
+    """Schema for values collected from the settings form."""
+
+    provider: str
+    model: str
+    context_window: int
+    ollama_url: str
+    vllm_url: str
+    lmstudio_url: str
+    llamacpp_url: str
+    timeout_s: int
+    use_gpu: bool
+    allow_remote: bool
+    rrf_k: int
+    t_text: int
+    t_siglip: int
+    t_colpali: int
+    t_total: int
+
+
 def _build_candidate_settings(
-    values: dict[str, Any], resolved_gguf_path: Path | None
+    values: SettingsFormValues, resolved_gguf_path: Path | None
 ) -> dict[str, Any]:
     """Build a settings payload for validation."""
-    provider = str(values.get("provider", ""))
+    provider = str(values["provider"])
     is_llamacpp = provider == "llamacpp"
     llamacpp_model_path = (
         str(resolved_gguf_path)
@@ -584,26 +604,26 @@ def _build_candidate_settings(
     )
     return {
         "llm_backend": provider,
-        "model": str(values.get("model", "")).strip() or None,
-        "context_window": int(values.get("context_window", 0)),
-        "ollama_base_url": str(values.get("ollama_url", "")).strip(),
-        "vllm_base_url": str(values.get("vllm_url", "")).strip() or None,
-        "lmstudio_base_url": str(values.get("lmstudio_url", "")).strip(),
-        "llamacpp_base_url": str(values.get("llamacpp_url", "")).strip() or None,
-        "llm_request_timeout_seconds": int(values.get("timeout_s", 0)),
-        "enable_gpu_acceleration": bool(values.get("use_gpu")),
+        "model": str(values["model"]).strip() or None,
+        "context_window": int(values["context_window"]),
+        "ollama_base_url": str(values["ollama_url"]).strip(),
+        "vllm_base_url": str(values["vllm_url"]).strip() or None,
+        "lmstudio_base_url": str(values["lmstudio_url"]).strip(),
+        "llamacpp_base_url": str(values["llamacpp_url"]).strip() or None,
+        "llm_request_timeout_seconds": int(values["timeout_s"]),
+        "enable_gpu_acceleration": bool(values["use_gpu"]),
         "vllm": {"llamacpp_model_path": llamacpp_model_path},
         "security": {
-            "allow_remote_endpoints": bool(values.get("allow_remote")),
+            "allow_remote_endpoints": bool(values["allow_remote"]),
             "endpoint_allowlist": list(settings.security.endpoint_allowlist),
             "trust_remote_code": bool(settings.security.trust_remote_code),
         },
         "retrieval": {
-            "rrf_k": int(values.get("rrf_k", 0)),
-            "text_rerank_timeout_ms": int(values.get("t_text", 0)),
-            "siglip_timeout_ms": int(values.get("t_siglip", 0)),
-            "colpali_timeout_ms": int(values.get("t_colpali", 0)),
-            "total_rerank_budget_ms": int(values.get("t_total", 0)),
+            "rrf_k": int(values["rrf_k"]),
+            "text_rerank_timeout_ms": int(values["t_text"]),
+            "siglip_timeout_ms": int(values["t_siglip"]),
+            "colpali_timeout_ms": int(values["t_colpali"]),
+            "total_rerank_budget_ms": int(values["t_total"]),
         },
     }
 

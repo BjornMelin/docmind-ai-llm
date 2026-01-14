@@ -131,7 +131,7 @@ For Streamlit AppTest UI checks:
 - Prefer reusing existing AppTest fixtures instead of adding extra `AppTest` runs.
 - Run tests from a temporary working directory (`monkeypatch.chdir(tmp_path)`) to
   avoid local `.env` coupling and reduce file-watcher overhead.
-- Use `default_timeout=` on `AppTest.from_file(...)` for CI stability; avoid
+- Use `default_timeout=` on `AppTest.from_file(…)` for CI stability; avoid
   strict wall-clock assertions in functional tests.
 - CI cold-starts can be slow; integration tests pre-warm AppTest once in
   `tests/integration/conftest.py` (avoid per-test timeout bumps where possible).
