@@ -925,8 +925,10 @@ name = "docmind-ai-llm"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "cryptography" },
     { name = "dspy-ai" },
     { name = "duckdb" },
+    { name = "fastembed" },
     { name = "flagembedding" },
     { name = "langchain" },
     { name = "langchain-core" },
@@ -964,19 +966,18 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pymupdf" },
-    { name = "python-docx" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "qdrant-client" },
     { name = "sentence-transformers" },
     { name = "spacy" },
+    { name = "sqlite-vec" },
     { name = "streamlit" },
     { name = "tenacity" },
     { name = "tiktoken" },
     { name = "torch" },
     { name = "transformers" },
     { name = "unstructured", extra = ["all-docs"] },
-    { name = "unstructured-ingest" },
 ]
 
 [package.optional-dependencies]
@@ -1051,8 +1052,10 @@ requires-dist = [
     { name = "beir", marker = "extra == 'eval'", specifier = ">=2.0.0,<3.0.0" },
     { name = "cmake", marker = "extra == 'gpu'", specifier = ">=3.26.4" },
     { name = "colpali-engine", marker = "extra == 'multimodal'", specifier = ">=0.3.13,<0.4.0" },
+    { name = "cryptography", specifier = ">=46.0.0" },
     { name = "dspy-ai", specifier = ">=3.1.0,<4.0.0" },
     { name = "duckdb", specifier = ">=1.3.2,<1.4.0" },
+    { name = "fastembed", specifier = ">=0.5.1" },
     { name = "fastembed-gpu", marker = "extra == 'gpu'", specifier = ">=0.7.4,<0.8.0" },
     { name = "flagembedding", specifier = ">=1.3.5,<2.0.0" },
     { name = "flashinfer-python", marker = "extra == 'gpu'", specifier = ">=0.5.3,<0.6.0" },
@@ -1102,20 +1105,19 @@ requires-dist = [
     { name = "pydantic", specifier = "==2.11.7" },
     { name = "pydantic-settings", specifier = "==2.10.1" },
     { name = "pymupdf", specifier = "==1.26.4" },
-    { name = "python-docx", specifier = "==1.2.0" },
     { name = "python-dotenv", specifier = "==1.1.1" },
     { name = "pyyaml", specifier = ">=6.0.3,<7.0.0" },
     { name = "qdrant-client", specifier = ">=1.15.1,<2.0.0" },
     { name = "ragas", marker = "extra == 'eval'", specifier = ">=0.2.10,<0.4.0" },
     { name = "sentence-transformers", specifier = ">=5.2.0,<6.0.0" },
     { name = "spacy", specifier = ">=3.8.7,<4.0.0" },
+    { name = "sqlite-vec", specifier = ">=0.1.6" },
     { name = "streamlit", specifier = ">=1.52.2,<2.0.0" },
     { name = "tenacity", specifier = ">=9.1.2,<10.0.0" },
     { name = "tiktoken", specifier = "==0.11.0" },
     { name = "torch", specifier = "==2.7.1" },
     { name = "transformers", specifier = ">=4.55.0,<4.58.0" },
     { name = "unstructured", extras = ["all-docs"], specifier = ">=0.18.26,<0.19.0" },
-    { name = "unstructured-ingest", specifier = ">=1.2.32,<2.0.0" },
     { name = "vllm", marker = "extra == 'gpu'", specifier = ">=0.10.1,<0.11.0" },
 ]
 provides-extras = ["gpu", "llama", "graph", "observability", "multimodal", "eval"]
@@ -1374,6 +1376,27 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/a4/b9/9a8c3fd59958c1c8027bc075af11722cdc62c4968bb277e841d131232289/fastar-0.8.0-pp311-pypy311_pp73-musllinux_1_2_armv7l.whl", hash = "sha256:382bfe82c026086487cb17fee12f4c1e2b4e67ce230f2e04487d3e7ddfd69031", size = 1042911, upload-time = "2025-11-26T02:35:21.857Z" },
     { url = "https://files.pythonhosted.org/packages/e2/2f/c3f30963b47022134b8a231c12845f4d7cfba520f59bbc1a82468aea77c7/fastar-0.8.0-pp311-pypy311_pp73-musllinux_1_2_i686.whl", hash = "sha256:908d2b9a1ff3d549cc304b32f95706a536da8f0bcb0bc0f9e4c1cce39b80e218", size = 1047464, upload-time = "2025-11-26T02:35:39.376Z" },
     { url = "https://files.pythonhosted.org/packages/9e/8a/218ab6d9a2bab3b07718e6cd8405529600edc1e9c266320e8524c8f63251/fastar-0.8.0-pp311-pypy311_pp73-musllinux_1_2_x86_64.whl", hash = "sha256:1aa7dbde2d2d73eb5b6203d0f74875cb66350f0f1b4325b4839fc8fbbf5d074e", size = 997309, upload-time = "2025-11-26T02:35:57.722Z" },
+]
+
+[[package]]
+name = "fastembed"
+version = "0.7.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "huggingface-hub" },
+    { name = "loguru" },
+    { name = "mmh3" },
+    { name = "numpy" },
+    { name = "onnxruntime" },
+    { name = "pillow" },
+    { name = "py-rust-stemmers" },
+    { name = "requests" },
+    { name = "tokenizers" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4c/c2/9c708680de1b54480161e0505f9d6d3d8eb47a1dc1a1f7f3c5106ba355d2/fastembed-0.7.4.tar.gz", hash = "sha256:8b8a4ea860ca295002f4754e8f5820a636e1065a9444959e18d5988d7f27093b", size = 68807, upload-time = "2025-12-05T12:08:10.447Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/10/3b/8da01492bc8b69184257d0c951bf0e77aec8ce110f06d8ce16c6ed9084f7/fastembed-0.7.4-py3-none-any.whl", hash = "sha256:79250a775f70bd6addb0e054204df042b5029ecae501e40e5bbd08e75844ad83", size = 108491, upload-time = "2025-12-05T12:08:09.059Z" },
 ]
 
 [[package]]
@@ -6203,23 +6226,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/4f/72/c0ee34c207f2ef1ce5de09872f7305accc5b9840dd05deeeec1f195f8e92/unstructured_inference-1.1.4.tar.gz", hash = "sha256:943eda86c1a0aad355fdbc132940043fa94a07c8d53cbedde66633cbca49562d", size = 44171, upload-time = "2025-12-31T04:03:10.026Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/38/69/cef46b7517fca49940c11e08acc6c8bb75c6c6dba222d75c6875f24450f2/unstructured_inference-1.1.4-py3-none-any.whl", hash = "sha256:3bb39b27cbe607db9aecba9a80a69c8b86b6f5f4bf25cd415177dab07930f995", size = 47933, upload-time = "2025-12-31T04:03:08.716Z" },
-]
-
-[[package]]
-name = "unstructured-ingest"
-version = "1.2.34"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "certifi" },
-    { name = "click" },
-    { name = "opentelemetry-sdk" },
-    { name = "pydantic" },
-    { name = "python-dateutil" },
-    { name = "tqdm" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/00/0b/97294e279ba03461d18e41f930a2de1f8f473f3c95ba8e4aff11cba81ed2/unstructured_ingest-1.2.34.tar.gz", hash = "sha256:4fc3541f2d7e0e7c1a95b255a0c8f9fd16f982818e28940b167009eaabb21824", size = 209907, upload-time = "2026-01-07T21:57:08.89Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3c/ac/9b57e17ebaaccf305cd9b24eaa7bddad7198be15882ad468f95816ab1fbd/unstructured_ingest-1.2.34-py3-none-any.whl", hash = "sha256:c392ccca3db6adc2d4a37f8a66596cc7da6b984160f8167e68a442bc58661292", size = 354554, upload-time = "2026-01-07T21:57:07.389Z" },
 ]
 
 [[package]]
