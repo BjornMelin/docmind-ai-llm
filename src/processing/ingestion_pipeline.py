@@ -22,6 +22,7 @@ from llama_index.core import Document
 from llama_index.core.extractors import TitleExtractor
 from llama_index.core.ingestion import IngestionCache, IngestionPipeline
 from llama_index.core.node_parser import TokenTextSplitter
+from llama_index.core.schema import TransformComponent
 from llama_index.core.storage.docstore import SimpleDocumentStore
 from llama_index.storage.kvstore.duckdb import DuckDBKVStore
 from loguru import logger
@@ -35,6 +36,7 @@ except ImportError:  # pragma: no cover - optional dependency
 from src.config import settings as app_settings
 from src.config import setup_llamaindex
 from src.config.integrations import get_settings_embed_model
+from src.config.settings import ProcessingConfig
 from src.models.processing import (
     ExportArtifact,
     IngestionConfig,
@@ -49,9 +51,11 @@ from src.processing.pdf_pages import save_pdf_page_images
 if TYPE_CHECKING:  # pragma: no cover
     from llama_index.core.base.embeddings.base import BaseEmbedding
     from llama_index.readers.file import UnstructuredReader as ReaderType
+
+    from src.retrieval.image_index import PageImageRecord
 else:
-    BaseEmbedding = Any
-    ReaderType = Any
+    BaseEmbedding = object
+    ReaderType = object
 
 _TRACER = trace.get_tracer("docmind.ingestion")
 
@@ -60,7 +64,7 @@ class SettingsWithProcessing(Protocol):
     """Protocol for settings with processing section."""
 
     @property
-    def processing(self) -> Any: ...
+    def processing(self) -> ProcessingConfig: ...
 
 
 _ROMAN_MAP: dict[str, int] = {
@@ -92,7 +96,7 @@ def _roman_to_int(value: str) -> int | None:
     return total if total > 0 else None
 
 
-def _parse_page_number(raw: Any) -> int | None:
+def _parse_page_number(raw: object) -> int | None:
     """Best-effort page number parser (ints, digits, roman numerals)."""
     if raw is None or isinstance(raw, bool):
         return None
@@ -169,7 +173,7 @@ def build_ingestion_pipeline(
     ingest_cache = IngestionCache(cache=kv_store, collection=cfg.cache_collection)
     docstore, docstore_path = _ensure_docstore(cfg)
 
-    transformations: list[Any] = [
+    transformations: list[TransformComponent] = [
         TokenTextSplitter(
             chunk_size=cfg.chunk_size,
             chunk_overlap=cfg.chunk_overlap,
@@ -448,10 +452,10 @@ def _build_page_image_records(
     exports: list[ExportArtifact],
     store: ArtifactStore,
     settings: SettingsWithProcessing,
-) -> tuple[list[Any], int]:
+) -> tuple[list[PageImageRecord], int]:
     from src.retrieval.image_index import PageImageRecord
 
-    records: list[Any] = []
+    records: list[PageImageRecord] = []
     skipped = 0
     for export in exports:
         meta = dict(getattr(export, "metadata", {}) or {})
@@ -511,7 +515,7 @@ def _build_page_image_records(
 
 
 def _index_page_images_orchestrator(
-    records: list[Any],
+    records: list[PageImageRecord],
     cfg: IngestionConfig,
     *,
     purge_doc_ids: set[str] | None = None,
