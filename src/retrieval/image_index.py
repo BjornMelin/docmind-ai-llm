@@ -231,7 +231,7 @@ def index_page_images_siglip(
             )
 
         if points:
-            client.upsert(collection_name=collection_name, points=points)
+            client.upsert(collection_name=collection_name, points=points, wait=True)
             indexed += len(points)
 
     return indexed

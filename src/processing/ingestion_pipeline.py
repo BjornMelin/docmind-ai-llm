@@ -582,7 +582,7 @@ def _index_page_images(
     Returns:
         dict[str, Any]: PII-safe counters/flags to include in the ingestion result.
     """
-    if not bool(getattr(cfg, "enable_image_indexing", True)):
+    if not getattr(cfg, "enable_image_indexing", True):
         return {"image_index.enabled": False, "image_index.indexed": 0}
 
     image_exports = [e for e in exports if str(e.content_type).startswith("image/")]
