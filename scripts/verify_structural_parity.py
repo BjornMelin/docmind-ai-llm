@@ -35,10 +35,11 @@ def verify_parity():
         print(f"Error extracting manifest: {e}")
         sys.exit(1)
 
-    canonical = set(manifest.get("canonical_src", []))
-
     if not src_path.exists() or not src_path.is_dir():
-        raise ValueError("src/ directory not found")
+        print("Error: src/ directory not found")
+        sys.exit(1)
+
+    canonical = set(manifest.get("canonical_src", []))
 
     # Get actual top-level directories in src/ (ignoring __pycache__ and hidden)
     actual = {

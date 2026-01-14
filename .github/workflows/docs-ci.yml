@@ -41,7 +41,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '24.x'
-          cache: 'npm'
 
       - name: Lint markdown files
         run: npx markdownlint-cli --disable MD013 MD033 MD041 -- docs/**/*.md
