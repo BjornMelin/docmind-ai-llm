@@ -30,10 +30,11 @@ Thank you for your interest in contributing to DocMind AI! This guide outlines t
 
 We use `uv` for dependency management and `ruff` for linting/formatting.
 
-- **Check quality**: `uv run ruff check .`
+- **Check Python code quality**: `uv run ruff check .`
 - **Format code**: `uv run ruff format .`
 - **Type check**: `uv run pyright`
 - **Run tests**: `uv run python scripts/run_tests.py`
+- **Validate documentation links**: `python scripts/check_links.py docs/`
 
 ## Documentation Standards
 
@@ -47,5 +48,5 @@ Every PR must pass the following automated checks:
 
 - 0 linting errors (Ruff/Pyright).
 - 100% test pass rate.
-- 100% documentation link resolution.
+- 100% internal documentation link resolution (external links not validated).
 - 1:1 structural parity between code and architecture docs.

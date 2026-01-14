@@ -572,150 +572,18 @@ def test_environment_override():
     assert settings.embedding.model_name == "custom-bge-m3"
 ```
 
-### Implementation Checklist
+### Configuration Reference & SSOT
 
-#### Phase 1: Production Settings Cleanup
+For the exhaustive list of all 100+ environment variables, hardware optimization profiles, and programmatic mapping details, please refer to the:
 
-- [ ] **Remove test contamination sections** (typically 100+ lines of test compatibility code)
-- [ ] **Fix ADR violations**: Update `agent_decision_timeout=200`, use BGE-M3 model names
-- [ ] **Remove backward compatibility artifacts**: Unused properties, duplicate fields
-- [ ] **Verify nested models** are properly maintained without custom sync logic
-- [ ] **Test production instantiation**: `settings = DocMindSettings()` works without errors
+**[Canonical Configuration Reference](configuration.md)**
 
-#### Phase 2: Test Infrastructure Setup  
+#### Implementation Guidelines
 
-- [ ] **Create test settings module**: `tests/fixtures/test_settings.py` with BaseSettings subclasses
-- [ ] **Update test fixtures**: `tests/conftest.py` with new pytest fixture patterns
-- [ ] **Test fixture functionality**: All three tiers (unit/integration/system) load properly
-- [ ] **Verify environment override**: patterns still work with new fixtures
-
-#### Phase 3: Test File Migration
-
-- [ ] **Identify affected test files**: Use `rg "embedding_model.*bge-large-en-v1.5" tests/` (to find legacy references for update)
-- [ ] **Update test assertions**: Replace model names and timeout expectations
-- [ ] **Remove legacy method calls**: Eliminate `_sync_nested_models()` calls from tests
-- [ ] **Run test suite**: Verify all tests pass with new patterns
-
-#### Phase 4: Validation
-
-- [ ] **Production smoke test**: Verify app starts with clean settings
-- [ ] **Full test suite pass**: All tiers (unit/integration/system)
-- [ ] **Performance regression check**: Ensure no slowdown from changes
-- [ ] **ADR compliance verification**: All architectural decisions aligned
-
-### Configuration Validation Tools
-
-#### ADR Compliance Verification
-
-```python
-def verify_configuration_compliance() -> Dict[str, Any]:
-    """Verify configuration meets ADR requirements."""
-    
-    from src.config import settings
-    
-    compliance_report = {
-        "timestamp": datetime.utcnow().isoformat(),
-        "overall_status": "compliant",
-        "violations": []
-    }
-    
-    # ADR-002: BGE-M3 Unified Embedding
-    if settings.embedding.model_name != "BAAI/bge-m3":
-        compliance_report["violations"].append({
-            "adr": "ADR-002",
-            "issue": f"Wrong embedding model: {settings.embedding.model_name}",
-            "expected": "BAAI/bge-m3"
-        })
-    
-    # ADR-024: Configuration Architecture - Agent timeout
-    if settings.agents.decision_timeout != 200:
-        compliance_report["violations"].append({
-            "adr": "ADR-024", 
-            "issue": f"Wrong agent timeout: {settings.agents.decision_timeout}ms",
-            "expected": "200ms"
-        })
-    
-    # Check for test contamination
-    import inspect
-    config_source = inspect.getsource(settings.__class__)
-    test_patterns = ["pytest", "test_", "TEST", "compatibility"]
-    
-    for pattern in test_patterns:
-        if pattern.lower() in config_source.lower():
-            compliance_report["violations"].append({
-                "adr": "ADR-026",
-                "issue": f"Test contamination detected: {pattern}",
-                "expected": "Zero test code in production"
-            })
-    
-    if compliance_report["violations"]:
-        compliance_report["overall_status"] = "non-compliant"
-    
-    return compliance_report
-```
-
-#### Configuration Health Check
-
-```python
-def configuration_health_check() -> Dict[str, Any]:
-    """Comprehensive configuration health assessment."""
-    
-    health_report = {
-        "configuration_cleanliness": "healthy",
-        "adr_compliance": "compliant", 
-        "test_isolation": "isolated",
-        "metrics": {}
-    }
-    
-    # Check configuration file size/complexity
-    import inspect
-    from src.config.settings import DocMindSettings
-    
-    source_lines = len(inspect.getsource(DocMindSettings).split('\n'))
-    health_report["metrics"]["settings_line_count"] = source_lines
-    
-    if source_lines > 100:
-        health_report["configuration_cleanliness"] = "complex"
-        health_report["recommendations"] = [
-            "Consider breaking down large configuration class",
-            "Review if all fields are necessary"
-        ]
-    
-    # Verify ADR compliance
-    compliance_result = verify_configuration_compliance()
-    if compliance_result["violations"]:
-        health_report["adr_compliance"] = "non-compliant"
-        health_report["adr_violations"] = compliance_result["violations"]
-    
-    return health_report
-```
-
-### Best Practices Summary
-
-#### ✅ Configuration Architecture Best Practices
-
-1. **Complete Separation**: Zero test code in production configuration classes
-2. **Library-First**: Use standard pytest + pydantic-settings patterns exclusively
-3. **Single Source of Truth**: One configuration class with clear inheritance hierarchy
-4. **ADR Compliance**: Regular verification of architectural decision alignment
-5. **Environment-Based**: Use environment variables for all deployment-specific config
-
-#### ❌ Anti-Patterns to Avoid
-
-1. **Test Detection Logic**: Never check `if "pytest" in sys.modules` in production code
-2. **Duplicate Fields**: Multiple definitions of same configuration field
-3. **Complex Sync Logic**: Custom synchronization instead of Pydantic built-ins
-4. **Mixed Concerns**: Combining test and production logic in same class
-5. **Hardcoded Values**: Environment-specific values embedded in code
-
-#### 🔧 Migration Tools
-
-- **Automated Pattern Detection**: Use `rg` to find test contamination patterns
-- **ADR Compliance Scripts**: Automated verification of architectural decisions
-- **Test Migration Utilities**: Scripts to update test assertions and fixture usage
-- **Configuration Health Monitoring**: Regular checks for complexity and cleanliness
-
-This configuration architecture ensures maintainable, clean, and compliant configuration management that follows industry best practices while supporting the full range of DocMind AI's deployment scenarios.
+1. **Zero Test Contamination**: Production configuration must never contain test-specific code. Use inheritance for test settings.
+2. **Convention-Over-Configuration**: Use the `DOCMIND_` prefix and `__` delimiter for all environment overrides.
+3. **Lazy Initialization**: Access `settings` instance at runtime; avoid module-level side effects during import if possible.
+4. **Validation First**: Rely on Pydantic's built-in validation for range and type checks.
 
 ## Testing Strategies
 
@@ -915,89 +783,11 @@ class TestPerformanceTargets:
         assert len(embedding) == 1024, "Should generate 1024D dense embedding"
 ```
 
-## Implementation Experience
+### Further Resources
 
-### Clean Test Infrastructure Implementation
-
-Based on real implementation experience migrating DocMind AI's test architecture from legacy patterns to modern pytest + BaseSettings patterns.
-
-#### Key Architectural Decisions
-
-**Migration Strategy Applied**: Big Bang Migration
-
-- All affected test files migrated simultaneously
-- TestSettings Pattern: pytest fixtures with BaseSettings subclass
-- ADR Compliance: 200ms timeout, BGE-M3 model references
-- Zero Backward Compatibility: Complete removal of deprecated patterns
-
-**Three-Tier Test Settings Hierarchy**:
+For further implementation patterns, see the [Configuration Guide](configuration.md) and the [System Architecture](system-architecture.md) deep dives.
 
 ```python
-DocMindSettings (production)
-├── TestDocMindSettings (unit tests)
-│   └── IntegrationTestSettings (integration tests)
-└── SystemTestSettings (system tests)
-```
-
-#### Test Settings Implementation
-
-**Create Clean BaseSettings Subclasses**:
-
-```python
-# tests/fixtures/test_settings.py
-from src.config.settings import DocMindSettings
-
-class TestDocMindSettings(DocMindSettings):
-    """Optimized settings for fast unit tests."""
-    
-    # Performance optimizations for testing
-    enable_gpu_acceleration: bool = False     # Unit tests CPU-only
-    agent_decision_timeout: int = 100         # 5x faster than production
-    context_window_size: int = 1024           # 128x smaller than production
-    chunk_size: int = 256                     # 2x smaller for test speed
-    
-    model_config = SettingsConfigDict(
-        env_prefix="DOCMIND_TEST_",           # Isolated environment
-        env_file=None                         # No .env loading
-    )
-
-class IntegrationTestSettings(TestDocMindSettings):
-    """Settings for integration tests with moderate performance."""
-    
-    enable_gpu_acceleration: bool = True      # GPU enabled for integration
-    agent_decision_timeout: int = 150         # Moderate timeout
-    context_window_size: int = 4096           # Larger context for integration
-    
-    model_config = SettingsConfigDict(
-        env_prefix="DOCMIND_INTEGRATION_"
-    )
-
-class SystemTestSettings(DocMindSettings):
-    """Production settings for system tests."""
-    pass  # Inherits full production configuration
-```
-
-**Update Pytest Fixtures**:
-
-```python
-# tests/conftest.py
-import pytest
-from tests.fixtures.test_settings import (
-    TestDocMindSettings,
-    IntegrationTestSettings,
-    SystemTestSettings
-)
-
-@pytest.fixture(scope="session")
-def test_settings():
-    """Primary fixture for unit tests with temp directories."""
-    return TestDocMindSettings()
-
-@pytest.fixture(scope="session")
-def integration_test_settings():
-    """Moderate performance settings for component testing."""
-    return IntegrationTestSettings()
-
 @pytest.fixture(scope="session")
 def system_test_settings():
     """Production defaults for end-to-end validation."""

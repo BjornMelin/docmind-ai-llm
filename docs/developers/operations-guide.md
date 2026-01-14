@@ -11,7 +11,7 @@ DocMind AI is a pure Python project managed by `uv`.
 
 * **Python**: 3.11 (Managed by `uv`)
 * **GPU**: NVIDIA RTX 4090 (16GB VRAM) recommended for vLLM/ColPali.
-* **System**: Linux / MacOS / WSL2.
+* **System**: Linux / macOS / WSL2.
 
 ### Standard Install
 
@@ -149,19 +149,18 @@ State is stored in three local locations (under `./data/`):
 
 ## 6. Configuration Guide
 
-Variables are prefixed with `DOCMIND_`. Nested keys use `__`.
+DocMind AI uses a centralized, type-safe configuration system. For an exhaustive list of all 100+ environment variables, hardware profiles, and optimization settings, please refer to the:
 
-| Variable | Default | Description |
+**[Canonical Configuration Reference](configuration.md)**
+
+### Critical Production Variables
+
+| Variable | Default | Purpose |
 | :--- | :--- | :--- |
-| `DOCMIND_LLM_BACKEND` | `ollama` | `vllm`, `ollama`, or `llamacpp`. |
-| `DOCMIND_VLLM_BASE_URL` | `http://localhost:8000/v1` | Target for vLLM backend. |
-| `DOCMIND_VLLM__GPU_MEMORY_UTILIZATION` | `0.85` | VRAM budget (0.0 to 1.0). |
-| `DOCMIND_PROCESSING__CHUNK_SIZE` | `1024` | Tokens per document node. |
-| `DOCMIND_PROCESSING__CHUNK_OVERLAP` | `100` | Overlap tokens. |
-| `DOCMIND_RETRIEVAL__ENABLE_COLPALI` | `false` | Enable heavy visual reranker. |
-| `DOCMIND_CONTEXT_WINDOW` | `131072` | Global context cap. |
-| `DOCMIND_PROCESSING__ENCRYPT_PAGE_IMAGES` | `false` | Enable AES encryption. |
-| `DOCMIND_IMG_AES_KEY_BASE64` | `None` | 32-byte key (Required if encrypt enabled). |
+| `DOCMIND_LLM_BACKEND` | `ollama` | Backend selector (`vllm`, `ollama`, or `llamacpp`). |
+| `DOCMIND_RETRIEVAL__ENABLE_COLPALI` | `false` | Enable visual-semantic reranking (High VRAM). |
+| `DOCMIND_HASHING__HMAC_SECRET` | `None` | **CRITICAL**: Used for PII redaction and fingerprinting. |
+| `DOCMIND_IMG_AES_KEY_BASE64` | `None` | Required if `DOCMIND_PROCESSING__ENCRYPT_PAGE_IMAGES` is `true`. |
 
 ---
 

@@ -2,6 +2,7 @@
 """Validates documentation directory structure against actual src/ contents."""
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -9,7 +10,6 @@ from pathlib import Path
 def extract_manifest(doc_path: Path) -> dict:
     """Extracts the JSON manifest from system-architecture.md."""
     content = doc_path.read_text()
-    import re
 
     match = re.search(r"```json\s+(.*?)\s+```", content, re.DOTALL)
     if not match:

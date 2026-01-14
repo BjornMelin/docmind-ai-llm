@@ -74,7 +74,7 @@ graph TD
 Import the global `settings` instance to access configuration values in your code:
 
 ```python
-from src.config.settings import settings
+from src.config import settings
 
 # Access nested fields
 model_name = settings.vllm.model
@@ -186,6 +186,7 @@ During `startup_init()`, specific settings are propagated back to `os.environ`. 
 | `DOCMIND_RETRIEVAL__PREFETCH_SPARSE_LIMIT` | int | `400` | Sparse branch prefetch limit. |
 | `DOCMIND_RETRIEVAL__DEDUP_KEY` | enum | `page_id` | Field used for results de-duplication (`page_id` or `doc_id`). |
 | `DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID` | boolean | `false` | Offloads fusion to Qdrant (requires Qdrant 1.11+). |
+| `DOCMIND_RETRIEVAL__ENABLE_COLPALI` | boolean | `false` | Enable heavy visual-semantic reranker (requires ~8-12GB VRAM). |
 | `DOCMIND_RETRIEVAL__USE_RERANKING` | boolean | `true` | Enables Cross-Encoder post-processing. |
 | `DOCMIND_RETRIEVAL__TEXT_RERANK_TIMEOUT_MS` | int | `250` | Hard deadline for text reranking stage. |
 | `DOCMIND_RETRIEVAL__TOTAL_RERANK_BUDGET_MS` | int | `800` | Global budget across all reranker stages. |
@@ -211,7 +212,7 @@ During `startup_init()`, specific settings are propagated back to `os.environ`. 
 ### 7. Embedding & Vision
 
 | Variable | Type | Default | Description |
-| :--- | : :--- | :--- | :--- |
+| :--- | :--- | :--- | :--- |
 | `DOCMIND_EMBEDDING__MODEL_NAME` | string | `BAAI/bge-m3` | Text embedding model. |
 | `DOCMIND_EMBEDDING__DIMENSION` | int | `1024` | Resulting vector dimension. |
 | `DOCMIND_EMBEDDING__ENABLE_SPARSE` | boolean | `true` | Computes Lexical/BM25-style weights via BGE-M3. |
@@ -242,10 +243,11 @@ During `startup_init()`, specific settings are propagated back to `os.environ`. 
 | :--- | :--- | :--- | :--- |
 | `DOCMIND_DATABASE__VECTOR_STORE_TYPE` | string | `qdrant` | Default vector backend. |
 | `DOCMIND_DATABASE__QDRANT_URL` | string | `http://localhost:6333` | Service endpoint. |
+| `DOCMIND_DATABASE__QDRANT_COLLECTION` | string | `docmind_docs` | Target collection for text vectors. |
 | `DOCMIND_DATABASE__SQLITE_DB_PATH` | path | `docmind.db` | Primary relational store (relocated to data_dir). |
 | `DOCMIND_DATABASE__ENABLE_WAL_MODE` | boolean | `true` | Recommended for concurrent SQLite access. |
 
-### 10. UI & Monitoring
+### 11. UI & Monitoring
 
 | Variable | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
@@ -261,6 +263,8 @@ During `startup_init()`, specific settings are propagated back to `os.environ`. 
 | `DOCMIND_ENABLE_GRAPHRAG` | boolean | `true` | Globally enable/disable GraphRAG features. |
 | `DOCMIND_ENABLE_DSPY_OPTIMIZATION` | boolean | `false` | Enable query rewriting/optimization via DSPy. |
 | `DOCMIND_ENABLE_MULTIMODAL` | boolean | `false` | Enable multimodal (ColPali/Vision) support. |
+| `DOCMIND_ARTIFACTS__MAX_TOTAL_MB` | int | `4096` | GC threshold for image artifact store. |
+| `DOCMIND_ARTIFACTS__GC_MIN_AGE_SECONDS` | int | `3600` | Minimum age before artifact collection. |
 
 ---
 

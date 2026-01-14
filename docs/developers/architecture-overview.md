@@ -155,21 +155,14 @@ Server-side Hybrid Fusion:
 
 - Hybrid dense+sparse fusion is performed server-side via the Qdrant Query API (Prefetch + FusionQuery). Default fusion is RRF; DBSF can be enabled via environment where supported. There are no client-side fusion knobs.
 
-Router Composition (router_factory):
+### Modern Reranking (ADR-037)
 
-- The RouterQueryEngine is composed via `src/retrieval/router_factory.py` with tools `semantic_search`, `hybrid_search` (Qdrant server-side fusion), and `knowledge_graph` (when a PropertyGraphIndex is present and healthy). The selector prefers `PydanticSingleSelector` and falls back to `LLMSingleSelector`. Graph traversal is bounded by `path_depth=1` by default.
+**Modality-Aware Pipeline**:
 
-Example (pseudo):
-
-```python
-from src.retrieval.router_factory import build_router_engine
-
-router = build_router_engine(vector_index, graph_index, settings)
-result = router.query("Find relationships between X and Y")
-print(result)
-```
-
-### Modern Reranking (ADR-006)
+- **BGE-reranker-v2-m3** for text-to-text semantic refinement.
+- **ColPali (visual-semantic)** for high-precision retrieval from document images.
+- Query-adaptive strategies (Cross-Encoder vs Bi-Encoder).
+- 10%+ NDCG@5 improvement target through late interaction.
 
 **Multi-Stage Pipeline**:
 
@@ -188,29 +181,28 @@ print(result)
 - **Hardware adaptation**: Automatic model selection based on VRAM
 - **Resource pools**: Efficient GPU memory utilization at ~12.2GB total
 
-### Caching Strategy
+### Cognitive Persistence (ADR-058)
 
-**Dual-Layer Caching**:
+DocMind AI implements a hierarchical persistence strategy optimized for local-first durability and "thin" payloads (using `ArtifactRef`):
 
-1. **Document Processing Cache**: LlamaIndex IngestionCache
-2. **Semantic Query Cache**: GPTCache with BGE-M3 embeddings
+- **Chat Persistence**: Thread state and intermediate steps are persisted via LangGraph `SqliteSaver`, enabling time-travel and resilient sessions.
+- **Artifact Store**: Large binary files (images, thumbnails) are stored in an encrypted, content-addressed store.
+- **Payload Invariants**: Sessions and Vector DBs store only durable references (`ArtifactRef`), never raw file paths or blobs.
 
-### Storage Optimization (ADR-007)
+### Storage Optimization (ADR-031)
 
-- **Qdrant**: Vector storage with compression
-- **SQLite**: Metadata and session persistence
-- **DuckDB**: Analytics and reporting (optional)
-- **40% storage reduction** through compression and deduplication
+- **Qdrant**: High-performance vector storage with HNSW indexing.
+- **SQLite (WAL)**: Operational metadata and session state (ADR-055).
+- **DuckDB**: Ingestion cache (DuckDBKVStore) and local analytics.
+- **30-40% storage reduction** through compression and de-duplication.
 
-## Quality Assurance
-
-### Evaluation Framework (ADR-012)
+### Evaluation Framework (ADR-039)
 
 **Automated Metrics**:
 
-- **DeepEval**: Answer relevancy, faithfulness, context precision
-- **Ragas**: RAG-specific evaluation metrics
-- **Custom metrics**: Response latency, cache hit rates
+- **DeepEval**: Answer relevancy, faithfulness, context precision.
+- **Offline Evaluation**: CLI-based harnesses for regression testing (ADR-039).
+- **Custom metrics**: Response latency and cache hit rates.
 
 ### Testing Strategy (ADR-014)
 
@@ -279,20 +271,14 @@ print(result)
 - **Memory safety**: Automatic cleanup of sensitive data
 - **Document isolation**: Per-session document sandboxing
 
-## Deployment
-
-### Single Container Deployment (ADR-015)
+### Container Hardening (ADR-042)
 
 ```bash
-# Single command deployment
-docker-compose up
-
-# Includes all dependencies:
-# - Qdrant vector database
-# - Model downloads and caching
-# - Streamlit UI with streaming
-# - All local models and libraries
+# Production-ready deployment
+docker-compose up -d
 ```
+
+DocMind AI supports single-container and orchestrated deployments (Qdrant + App). The container environment is hardened for offline-first operation with pre-integrated model weights.
 
 ### Configuration
 
@@ -314,15 +300,11 @@ This architecture overview synthesizes decisions from:
 
 - **ADR-001**: Modern Agentic RAG Architecture
 - **ADR-002**: Unified Embedding Strategy
-- **ADR-003**: Adaptive Retrieval Pipeline
-- **ADR-004**: Local-First LLM Strategy
-- **ADR-006**: Modern Reranking Architecture
-- **ADR-007**: Hybrid Persistence Strategy
-- **ADR-010**: Performance Optimization Strategy
-- **ADR-011**: Agent Orchestration Framework
-- **ADR-013**: User Interface Architecture
-- **ADR-018**: DSPy Prompt Optimization
-- **ADR-019**: Optional GraphRAG Module
+- **ADR-031**: Local-First Persistence Architecture
+- **ADR-037**: Multimodal Reranking (ColPali)
+- **ADR-039**: Offline Evaluation Strategy
+- **ADR-042**: Containerization Hardening
+- **ADR-058**: Final Multimodal Pipeline + Cognitive Persistence
 
 ### Future Extensibility
 

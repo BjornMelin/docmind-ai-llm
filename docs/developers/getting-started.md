@@ -156,7 +156,7 @@ cp .env.example .env
 
 ### 2. Essential Environment Variables
 
-Start from `.env.example` and override only what you need:
+Start from `.env.example` and override only what you need. For a full list of all 100+ variables, see the **[Configuration Reference](configuration.md)**.
 
 ```bash
 # --- 1. Global & Core ---
@@ -185,38 +185,12 @@ DOCMIND_PROCESSING__ENCRYPT_PAGE_IMAGES=false
 > ```bash
 > python -c "import os, base64; print(base64.b64encode(os.urandom(32)).decode())"
 > ```
->
-> **⚠️ Key Management:** Losing this key means permanent loss of access to encrypted images. Never commit keys to git—keep them in git-ignored `.env` for local development. For production, store keys in a secrets manager (e.g., AWS Secrets Manager, HashiCorp Vault) and have a key rotation strategy if needed.
-> Setting `DOCMIND_IMG_DELETE_PLAINTEXT=true` removes plaintext images after
-> successful encryption; `false` retains originals.
-
-```bash
-# Artifact store (page images + thumbnails)
-DOCMIND_ARTIFACTS__MAX_TOTAL_MB=4096
-DOCMIND_ARTIFACTS__GC_MIN_AGE_SECONDS=3600
-```
-
-Qdrant image collections use a **named vector** `siglip` (768D) for SigLIP
-cross-modal embeddings. The collection is created automatically on first use
-via `ensure_siglip_image_collection()` in `src/retrieval/image_index.py`.
 
 ### 3. Key Configuration Concepts
 
-- **Single Truth**: All configuration is managed via `src.config.settings`.
-- **`DOCMIND_` Prefix**: Every environment variable must start with this prefix.
-- **`__` Separator**: Double underscores map to nested Pydantic models (e.g., `DOCMIND_VLLM__MODEL`).
+- **Single Truth**: All configuration is managed via `src.config.settings`. See the **[Configuration Reference](configuration.md)** for exhaustive details.
+- **Convention-Over-Configuration**: Double underscores map to nested Pydantic models (e.g., `DOCMIND_VLLM__MODEL`).
 - **Path Relocation**: Bare filenames in DB paths are automatically moved under `DOCMIND_DATA_DIR` at startup.
-
-### 4. Configuration Categories
-
-| Category | Environment Prefix | Purpose |
-| :--- | :--- | :--- |
-| **Core** | `DOCMIND_` | Basic app, data paths, log levels. |
-| **vLLM** | `DOCMIND_VLLM__` | Backend optimization (FP8, FlashInfer). |
-| **Retrieval** | `DOCMIND_RETRIEVAL__` | Search strategy, fusion, and reranking. |
-| **Security** | `DOCMIND_SECURITY__` | Endpoint allowlists and guardrails. |
-| **Hashing** | `DOCMIND_HASHING__` | **CRITICAL**: HMAC secrets for PII safety. |
-| **System** | `VLLM_*` | Bridge variables passed to underlying libraries. |
 
 ## First Run Validation
 
