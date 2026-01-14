@@ -96,7 +96,7 @@ def _export_graphs(
     *,
     workspace: Path,
     pg_index: PgIndexProtocol | None,
-    vector_index: Any,
+    vector_index: VectorIndexProtocol,
     graph_store: Any,
     storage_context: Any,
     settings_obj: Any,
@@ -346,7 +346,7 @@ def _collect_corpus_paths(settings_obj: Any) -> tuple[list[Path], Path]:
 
 
 def _build_versions(
-    settings_obj: Any, vector_index: Any, embed_model: Any | None
+    settings_obj: Any, vector_index: VectorIndexProtocol, embed_model: Any | None
 ) -> dict[str, str]:
     """Build version metadata for the manifest.
 
@@ -412,8 +412,8 @@ def _build_versions(
 
 
 def rebuild_snapshot(
-    vector_index: Any,
-    pg_index: Any,
+    vector_index: VectorIndexProtocol,
+    pg_index: PgIndexProtocol | None,
     settings_obj: Any,
     *,
     embed_model: Any | None = None,

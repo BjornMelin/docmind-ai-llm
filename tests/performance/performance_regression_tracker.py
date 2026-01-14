@@ -133,10 +133,18 @@ class RegressionTracker:
         if current_value is None:
             return {"regression_detected": False, "reason": "no_current_data"}
 
-        # Compute percentage increase (regression when larger-is-worse)
-        delta = current_value - baseline_value
-        pct_increase = (delta / baseline_value) * 100.0
-        regression = pct_increase > threshold_pct
+        # Compute percentage change (positive means increase)
+        pct_change = ((current_value - baseline_value) / baseline_value) * 100.0
+
+        # Determine if it's a regression based on metric 'kind'
+        # Default to latency behavior (higher is worse)
+        kind = base_entry.get("kind", "latency")
+        if kind in ("memory", "latency"):
+            regression = pct_change > threshold_pct
+        else:
+            # Assume throughput behavior (lower is worse)
+            regression = pct_change < -threshold_pct
+
         factor = (current_value / baseline_value) if baseline_value else 1.0
 
         return {
@@ -145,7 +153,8 @@ class RegressionTracker:
             "current_value": current_value,
             "regression_factor": factor,
             "threshold_pct": threshold_pct,
-            "increase_pct": pct_increase,
+            "increase_pct": pct_change,
+            "metric_kind": kind,
         }
 
     def get_trend_analysis(self, metric: str, days_back: int = 30) -> dict[str, Any]:

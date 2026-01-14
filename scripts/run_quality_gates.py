@@ -112,7 +112,7 @@ QUALITY_SUITES = {
     "quick": ["coverage"],
     "standard": ["coverage", "performance"],
     "comprehensive": ["coverage", "performance", "health"],
-    "ci": ["coverage"],
+    "ci": ["coverage", "performance"],
 }
 
 
@@ -207,7 +207,7 @@ class QualityGateRunner:
         except (OSError, ValueError) as e:
             error_msg = f"Error running {gate_name}: {e}"
             self.failures.append(error_msg)
-            logger.error("ERROR: %s", error_msg)
+            logger.error("%s", error_msg)
             return False
 
     def run_quality_suite(
@@ -296,12 +296,12 @@ class QualityGateRunner:
                 "pre-commit command not found - install with: uv pip install pre-commit"
             )
             self.failures.append(error_msg)
-            logger.error("ERROR: %s", error_msg)
+            logger.error("%s", error_msg)
             return False
         except (OSError, ValueError) as e:
             error_msg = f"Error running pre-commit hooks: {e}"
             self.failures.append(error_msg)
-            logger.error("ERROR: %s", error_msg)
+            logger.error("%s", error_msg)
             return False
 
     def generate_report(self) -> str:

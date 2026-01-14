@@ -122,33 +122,41 @@ class TestRunner:
         """Clean test artifacts and caches."""
         print("Cleaning test artifacts...")
 
-        artifacts_to_clean = [
+        # Targets that should be searched for recursively
+        recursive_targets = {
+            "__pycache__",
+            "*.pyc",
             ".pytest_cache",
+            ".coverage",
+        }
+
+        # Explicit paths relative to project root
+        explicit_targets = [
             "htmlcov",
             "coverage.xml",
             "coverage.json",
-            ".coverage",
             "coverage/.coverage",
-            "__pycache__",
-            "*.pyc",
         ]
 
-        for pattern in artifacts_to_clean:
-            if pattern.startswith("*."):
-                # Use glob for file patterns
-                for path in self.project_root.rglob(pattern):
-                    with contextlib.suppress(OSError):
-                        path.unlink()
-            else:
-                # Remove directories or files
-                path = self.project_root / pattern
-                if path.exists():
+        # Clean recursive targets
+        for pattern in recursive_targets:
+            for path in self.project_root.rglob(pattern):
+                with contextlib.suppress(OSError):
                     if path.is_file():
-                        with contextlib.suppress(OSError):
-                            path.unlink()
+                        path.unlink()
                     else:
-                        with contextlib.suppress(OSError):
-                            shutil.rmtree(path)
+                        # Use ignore_errors=True for robust rmtree
+                        shutil.rmtree(path, ignore_errors=True)
+
+        # Clean explicit targets
+        for rel_path in explicit_targets:
+            path = self.project_root / rel_path
+            if path.exists():
+                with contextlib.suppress(OSError):
+                    if path.is_file():
+                        path.unlink()
+                    else:
+                        shutil.rmtree(path, ignore_errors=True)
 
         print("OK: Artifacts cleaned")
 

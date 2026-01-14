@@ -72,7 +72,14 @@ def get_issue_summary(thread: dict[str, Any]) -> str:
 def get_line_number(location: dict[str, Any] | None) -> int | None:
     """Extract line number from location, or None if missing."""
     if isinstance(location, dict):
-        return location.get("start_line")
+        val = location.get("start_line")
+        if isinstance(val, int):
+            return val
+        if isinstance(val, str):
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                return None
     return None
 
 
@@ -114,11 +121,12 @@ def _print_console_report(by_file: dict[str, list[dict[str, Any]]]) -> None:
             line = issue["line"]
             line_str = str(line) if line is not None else "N/A"
             summary = issue["summary"]
-            has_code = issue["has_code"]
+            has_code_str = "Yes" if issue["has_code"] else "No"
             comments = issue["comment_count"]
             print(
                 "  Line "
-                f"{line_str:6} | Code: {has_code:3} | Comments: {comments} | {summary}"
+                f"{line_str:6} | Code: {has_code_str:3} | "
+                f"Comments: {comments} | {summary}"
             )
 
 
@@ -135,7 +143,7 @@ def _generate_csv(by_file: dict[str, list[dict[str, Any]]]) -> str:
                 [
                     file_path,
                     line_str,
-                    issue["has_code"],
+                    "Yes" if issue["has_code"] else "No",
                     issue["comment_count"],
                     issue["summary"],
                 ]
@@ -151,10 +159,7 @@ def _print_statistics(by_file: dict[str, list[dict[str, Any]]]) -> None:
     print("=" * 120)
     total_threads = sum(len(issues) for issues in by_file.values())
     total_with_code = sum(
-        1
-        for issues in by_file.values()
-        for issue in issues
-        if issue["has_code"] == "Yes"
+        1 for issues in by_file.values() for issue in issues if issue["has_code"]
     )
     print(f"Total unresolved threads (excl. processed): {total_threads}")
     if total_threads == 0:
@@ -175,7 +180,7 @@ def _print_statistics(by_file: dict[str, list[dict[str, Any]]]) -> None:
     print("\nTop files by thread count:")
     sorted_files = sorted(by_file.items(), key=lambda x: len(x[1]), reverse=True)
     for file_path, issues in sorted_files[:10]:
-        code_count = sum(1 for i in issues if i["has_code"] == "Yes")
+        code_count = sum(1 for i in issues if i["has_code"])
         print(f"  {len(issues):2} threads | {code_count:2} with code | {file_path}")
 
 
@@ -225,7 +230,7 @@ def main() -> None:
             {
                 "line": line_number,
                 "summary": summary,
-                "has_code": "Yes" if has_code else "No",
+                "has_code": has_code,
                 "thread_id": thread.get("thread_id"),
                 "comment_count": thread.get("comment_count", 0),
             }
@@ -245,7 +250,8 @@ def main() -> None:
 
     output_csv = Path(args.output_csv)
     output_csv.parent.mkdir(parents=True, exist_ok=True)
-    output_csv.write_text(csv_content, encoding="utf-8")
+    with output_csv.open("w", encoding="utf-8", newline="") as f:
+        f.write(csv_content)
 
     _print_statistics(by_file)
 

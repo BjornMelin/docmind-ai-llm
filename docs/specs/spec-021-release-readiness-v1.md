@@ -16,7 +16,6 @@ related_adrs:
   - "ADR-035"
   - "ADR-041"
   - "ADR-042"
-  - "ADR-058"
   - "ADR-044"
   - "ADR-045"
   - "ADR-046"
@@ -29,6 +28,7 @@ related_adrs:
   - "ADR-053"
   - "ADR-055"
   - "ADR-056"
+  - "ADR-058"
 ---
 
 ## Objective

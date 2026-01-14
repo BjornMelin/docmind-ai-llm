@@ -164,7 +164,7 @@ def _render_pdf_pages(
             )
             needs_render = True
             if existing is not None:
-                existing_is_enc = img_path.name.endswith(".enc")
+                existing_is_enc = img_path.suffix == ".enc"
                 try:
                     needs_render = (img_path.stat().st_mtime < pdf_mtime) or (
                         existing_is_enc != wants_encrypt
@@ -272,7 +272,7 @@ def pdf_pages_to_image_documents(
                 "page_id": f"{doc_id}::page::{i}",
             }
         )
-        if str(path).endswith(".enc"):
+        if path.suffix == ".enc":
             meta.update(
                 {
                     "encrypted": True,
@@ -328,7 +328,7 @@ def save_pdf_page_images(
             "page_text": page_text,
             **(
                 {"encrypted": True, "kid": get_image_kid()}
-                if str(path).endswith(".enc")
+                if path.suffix == ".enc"
                 else {}
             ),
         }

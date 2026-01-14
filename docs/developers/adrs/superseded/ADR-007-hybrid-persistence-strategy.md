@@ -8,7 +8,7 @@ Superseded-by: ADR-031
 Related: ADR-002, ADR-003, ADR-008, ADR-010, ADR-019, ADR-025, ADR-031
 Tags: persistence, sqlite, duckdb, qdrant, hybrid, local-first
 References:
-  - [ADR-031 — Local-First Persistence Architecture](ADR-031-local-first-persistence-architecture.md)
+  - [ADR-031 — Local-First Persistence Architecture](../ADR-031-local-first-persistence-architecture.md)
 ---
 
 ## ADR-007: Hybrid Persistence Strategy

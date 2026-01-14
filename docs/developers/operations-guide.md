@@ -78,7 +78,7 @@ services:
       - DOCMIND_DEBUG=false
       - DOCMIND_LOG_LEVEL=INFO
       - DOCMIND_DATA_DIR=/app/data
-      - DOCMIND_CACHE_DIR=/app/cache
+      - DOCMIND_CACHE__DIR=/app/cache # Configures ingestion/document-processing cache
       
       # GPU optimization for RTX 4090
       - VLLM_ATTENTION_BACKEND=FLASHINFER

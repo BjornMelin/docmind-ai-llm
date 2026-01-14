@@ -108,6 +108,8 @@ def ensure_siglip_image_collection(
                 f"(collection={collection_name}, vector={vector_name}, "
                 f"expected_dim={int(dim)}, actual_dim={int(existing_dim)})"
             )
+    except ValueError:
+        raise
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning("ensure_siglip_image_collection skipped: %s", exc)
 

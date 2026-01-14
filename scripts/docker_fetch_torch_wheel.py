@@ -298,7 +298,8 @@ def _handle_416(dest: Path, sha256: str | None) -> bool:
     if not dest.exists():
         return False
     if sha256:
-        if _sha256_matches(dest, sha256):
+        actual = _sha256_digest(dest)
+        if actual.lower() == sha256.lower():
             return True
         dest.unlink()
         return False
@@ -358,10 +359,10 @@ def _verify_checksum(dest: Path, sha256: str | None) -> None:
     """
     if not sha256:
         return
-    if not _sha256_matches(dest, sha256):
+    actual = _sha256_digest(dest)
+    if actual.lower() != sha256.lower():
         raise SystemExit(
-            "Torch wheel checksum mismatch: expected "
-            f"{sha256}, got {_sha256_digest(dest)}"
+            f"Torch wheel checksum mismatch: expected {sha256}, got {actual}"
         )
 
 

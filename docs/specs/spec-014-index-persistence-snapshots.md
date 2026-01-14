@@ -52,7 +52,7 @@ storage/
   },
   "graph_exports": [
     {
-      "filename": "graph_export-YYYYMMDDTHHMMSSZ.jsonl",
+      "filename": "graph_export-YYYYMMDDTHHMMSSZ.jsonl", // Basename only; graph/ is implicit
       "format": "jsonl" | "parquet",
       "seed_count": 32,
       "size_bytes": 1234,
@@ -64,10 +64,12 @@ storage/
 }
 ```
 
-- `manifest.jsonl` contains one JSON object per payload file with `path`, `sha256`, `size_bytes`, and `content_type` fields.
+- `manifest.jsonl` contains one JSON object per payload file with `path` (full workspace-relative path, e.g., `graph/export.jsonl`), `sha256`, `size_bytes`, and `content_type` fields.
 - `manifest.meta.json` is written alongside the JSONL entries with `complete=false` while the workspace is still staged and flipped to `true` immediately after the atomic rename succeeds.
 - `manifest.checksum` stores `{schema_version, created_at, manifest_sha256}` where the digest covers the sorted line hashes plus the full metadata payload.
 - `graph_exports` enumerates GraphRAG export artifacts packaged with the snapshot, capturing telemetry metadata (`seed_count`, `duration_ms`, `size_bytes`, `sha256`).
+
+> **Note**: The `filename` field in `graph_exports` entries contains the export file basename only (e.g., `graph_export-20260109T120000Z.jsonl`). The `graph/` subdirectory location is implicit. This differs from `manifest.jsonl` payload entries, which use a `path` field containing the full workspace-relative path.
 
 ## Hashing Rules
 

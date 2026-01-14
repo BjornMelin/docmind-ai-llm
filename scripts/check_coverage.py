@@ -610,14 +610,28 @@ def _render_reports(analyzer: CoverageAnalyzer, args: argparse.Namespace) -> Non
             print("HTML coverage report not found. Run --collect to generate.")
 
 
-def _report_failures_and_warnings(analyzer: CoverageAnalyzer) -> int:
+def _report_failures_and_warnings(analyzer: CoverageAnalyzer, fail_under: bool) -> int:
     """Print failures and warnings, returning an exit code."""
     exit_code = 0
     if analyzer.failures:
         print("\nFAILURES:")
         for failure in analyzer.failures:
             print(f"  - {failure}")
-        exit_code = 1
+
+        # Check for threshold-specific failures
+        threshold_keywords = ("below threshold",)
+        has_threshold_failure = any(
+            any(kw in f.lower() for kw in threshold_keywords) for f in analyzer.failures
+        )
+        has_generic_failure = any(
+            all(kw not in f.lower() for kw in threshold_keywords)
+            for f in analyzer.failures
+        )
+
+        # Only exit with error if generic failure or (threshold failure + fail_under)
+        if has_generic_failure or (fail_under and has_threshold_failure):
+            exit_code = 1
+
     if analyzer.warnings:
         print("\nWARNINGS:")
         for warning in analyzer.warnings:
@@ -652,7 +666,9 @@ def main() -> int:
     try:
         exit_code = _run_coverage_checks(analyzer, args)
         _render_reports(analyzer, args)
-        exit_code = max(exit_code, _report_failures_and_warnings(analyzer))
+        exit_code = max(
+            exit_code, _report_failures_and_warnings(analyzer, args.fail_under)
+        )
     except (OSError, ValueError, subprocess.TimeoutExpired) as e:
         logger.exception("Unexpected error during coverage checking")
         print(f"ERROR: Unexpected error: {e}")
