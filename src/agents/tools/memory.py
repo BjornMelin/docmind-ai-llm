@@ -18,6 +18,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import Any, Literal
 
+from langchain_core.language_models import BaseChatModel, BaseLanguageModel
 from langchain_core.messages import AnyMessage
 from langchain_core.messages.utils import get_buffer_string
 from langchain_core.runnables import RunnableConfig
@@ -463,7 +464,7 @@ def _dedupe_candidates(candidates: list[MemoryCandidate]) -> list[MemoryCandidat
 def extract_memory_candidates(
     messages: list[AnyMessage],
     checkpoint_id: str,
-    llm: Any = None,
+    llm: BaseChatModel | BaseLanguageModel | None = None,
     *,
     policy: MemoryConsolidationPolicy | None = None,
 ) -> list[MemoryCandidate]:
@@ -628,7 +629,7 @@ def apply_consolidation_policy(
                 )
                 change_count += 1
             except Exception as e:
-                logger.error(
+                logger.warning(
                     "Memory consolidation failed to {} {} in namespace {}: {}",
                     op.action,
                     mem_id,
@@ -647,7 +648,7 @@ def apply_consolidation_policy(
                 )
                 change_count += 1
             except Exception as e:
-                logger.error(
+                logger.warning(
                     "Memory consolidation failed to {} {} in namespace {}: {}",
                     op.action,
                     op.existing_id,
@@ -659,7 +660,7 @@ def apply_consolidation_policy(
                 store.delete(namespace, op.existing_id)
                 change_count += 1
             except Exception as e:
-                logger.error(
+                logger.warning(
                     "Memory consolidation failed to {} {} in namespace {}: {}",
                     op.action,
                     op.existing_id,

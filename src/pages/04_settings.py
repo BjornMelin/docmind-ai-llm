@@ -159,26 +159,27 @@ def _is_valid_gguf_candidate(base_dir: Path, candidate: Path) -> Path | None:
     stop_at = base_dir
     symlink_found = False
     reached_base = False
-    for part in (candidate, *candidate.parents):
-        if part.is_symlink():
-            symlink_found = True
-            break
-        if part == stop_at:
-            reached_base = True
-            break
+    try:
+        for part in (candidate, *candidate.parents):
+            if part.is_symlink():
+                symlink_found = True
+                break
+            if part == stop_at:
+                reached_base = True
+                break
+    except OSError:
+        return None
+
     if symlink_found or not reached_base:
         return None
 
     try:
         resolved = candidate.resolve(strict=False)
+        resolved.relative_to(base_dir)  # Validate path is within base
+        if resolved.is_file() and resolved.suffix.lower() == ".gguf":
+            return resolved
     except (OSError, RuntimeError, ValueError):
         return None
-    try:
-        resolved.relative_to(base_dir)
-    except ValueError:
-        return None
-    if resolved.is_file() and resolved.suffix.lower() == ".gguf":
-        return resolved
     return None
 
 
