@@ -16,7 +16,14 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from src.models.embedding_constants import ImageBackboneName
@@ -109,6 +116,8 @@ _DEFAULT_OPENAI_BASE_URL = OpenAIConfig().base_url
 
 class ImageConfig(BaseModel):
     """Image processing and security settings."""
+
+    model_config = ConfigDict(validate_assignment=True)
 
     img_aes_key_base64: str | None = Field(default=None)
     img_kid: str | None = Field(default=None)

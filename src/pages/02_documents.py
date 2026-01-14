@@ -93,9 +93,15 @@ def _handle_ingest_submission(
                 encrypt_images=encrypt_images,
             )
             _render_ingest_results(result, use_graphrag)
+            resolved_vector_index = st.session_state.get("vector_index") or result.get(
+                "vector_index"
+            )
+            resolved_pg_index = (
+                st.session_state.get("graphrag_index") if use_graphrag else None
+            )
             _handle_snapshot_rebuild(
-                result.get("vector_index"),
-                result.get("pg_index") if use_graphrag else None,
+                resolved_vector_index,
+                resolved_pg_index,
             )
             status.update(label="Done", state="complete")
             st.toast("Ingestion complete", icon="✅")

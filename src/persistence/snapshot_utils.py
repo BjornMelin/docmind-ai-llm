@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -127,10 +128,27 @@ def timestamped_export_path(
         'graph_export-20240115T120030Z-42.json' if collision).
     """
     ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    ext = extension.lstrip(".")
-    if not ext:
+    sep_candidates = {"/", "\\"}
+    if os.path.sep:
+        sep_candidates.add(os.path.sep)
+    if os.path.altsep:
+        sep_candidates.add(os.path.altsep)
+
+    raw_ext = extension.strip()
+    if not raw_ext:
         raise ValueError("extension must be a non-empty string")
-    normalized_prefix = prefix.strip().rstrip("-")
+    if any(sep in raw_ext for sep in sep_candidates) or ".." in raw_ext:
+        raise ValueError("extension must not contain path separators or '..'")
+    if "." in raw_ext.strip("."):
+        raise ValueError("extension must be a single token without dots")
+    ext = raw_ext.lstrip(".")
+
+    raw_prefix = prefix.strip()
+    if not raw_prefix:
+        raise ValueError("prefix must be a non-empty string")
+    if any(sep in raw_prefix for sep in sep_candidates) or ".." in raw_prefix:
+        raise ValueError("prefix must not contain path separators or '..'")
+    normalized_prefix = raw_prefix.rstrip("-")
     if not normalized_prefix:
         raise ValueError("prefix must be a non-empty string")
     candidate = out_dir / f"{normalized_prefix}-{ts}.{ext}"

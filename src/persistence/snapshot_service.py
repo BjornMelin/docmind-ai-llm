@@ -53,6 +53,32 @@ def _noop_record_graph_export_metric(*_args: Any, **_kwargs: Any) -> None:
     """No-op callback for graph export metrics."""
 
 
+def _resolve_corpus_path(path: Path, uploads_root: Path) -> Path | None:
+    """Return a resolved corpus path if it is safe and contained."""
+    try:
+        if path.is_symlink():
+            return None
+        resolved = path.resolve()
+        if not resolved.is_relative_to(uploads_root):
+            return None
+        return resolved
+    except OSError:
+        return None
+
+
+def _resolve_cached_paths(
+    cached_paths: list[Path], uploads_root: Path
+) -> list[Path] | None:
+    """Return resolved cached paths or None if any path is unsafe."""
+    resolved_paths: list[Path] = []
+    for p in cached_paths:
+        resolved = _resolve_corpus_path(p, uploads_root)
+        if resolved is None:
+            return None
+        resolved_paths.append(resolved)
+    return resolved_paths
+
+
 def _init_callbacks(
     log_export_event: Callable[[dict[str, Any]], None] | None,
     record_graph_export_metric: Callable[..., None] | None,
@@ -219,7 +245,12 @@ def _is_corpus_cache_valid(
     manifest_mtime: float,
 ) -> bool:
     """Return True if cached corpus manifest is still valid."""
-    missing = [p for p in cached_paths if not p.exists()]
+    uploads_root = uploads_dir.resolve()
+    resolved_cached = _resolve_cached_paths(cached_paths, uploads_root)
+    if resolved_cached is None:
+        return False
+
+    missing = [p for p in resolved_cached if not p.exists()]
     if missing:
         logger.debug(
             "Corpus manifest cache invalidated; {} missing files detected",
@@ -228,25 +259,28 @@ def _is_corpus_cache_valid(
         return False
 
     file_count = 0
-    current_paths: list[Path] = []
+    resolved_current: list[Path] = []
     for p in islice(uploads_dir.rglob("*"), MAX_CORPUS_FILES + 1):
         if p.is_file():
+            resolved = _resolve_corpus_path(p, uploads_root)
+            if resolved is None:
+                continue
             file_count += 1
-            current_paths.append(p)
+            resolved_current.append(resolved)
             # Break early if count already differs
-            if file_count > len(cached_paths):
+            if file_count > len(resolved_cached):
                 break
-    if file_count != len(cached_paths):
+    if file_count != len(resolved_cached):
         logger.debug(
             "Corpus manifest cache invalidated; cached_count={} current_count={}",
-            len(cached_paths),
+            len(resolved_cached),
             file_count,
         )
         return False
 
     # Compare path sets to detect renames or moved files
-    cached_path_set = {str(p) for p in cached_paths}
-    current_path_set = {str(p) for p in current_paths}
+    cached_path_set = {str(p) for p in resolved_cached}
+    current_path_set = {str(p) for p in resolved_current}
     if cached_path_set != current_path_set:
         logger.debug(
             "Corpus manifest cache invalidated; path set differs "
@@ -256,8 +290,8 @@ def _is_corpus_cache_valid(
         )
         return False
 
-    sample_size = min(50, len(cached_paths))
-    for p in cached_paths[:sample_size]:
+    sample_size = min(50, len(resolved_cached))
+    for p in resolved_cached[:sample_size]:
         try:
             if p.stat().st_mtime > manifest_mtime:
                 logger.debug("Corpus manifest cache invalidated; newer files found")
@@ -281,6 +315,7 @@ def _collect_corpus_paths(settings_obj: Any) -> tuple[list[Path], Path]:
     import json
 
     uploads_dir = settings_obj.data_dir / "uploads"
+    uploads_root = uploads_dir.resolve()
     manifest_file = settings_obj.data_dir / ".corpus_manifest.json"
 
     # Try to use cached manifest first
@@ -319,6 +354,8 @@ def _collect_corpus_paths(settings_obj: Any) -> tuple[list[Path], Path]:
                 )
                 break
             if p.is_file():
+                if _resolve_corpus_path(p, uploads_root) is None:
+                    continue
                 corpus_paths.append(p)
 
     # Cache the result for next time

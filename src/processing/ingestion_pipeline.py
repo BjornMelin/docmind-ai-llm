@@ -437,7 +437,7 @@ def _store_image_artifact(
             Path(export.path),
             max_side=int(getattr(settings.processing, "thumbnail_max_side", 384)),
             thumb_dir=thumb_dir,
-            encrypt=bool(str(export.path).endswith(".enc")),
+            encrypt=Path(export.path).suffix == ".enc",
         )
         thumb_ref = store.put_file(Path(thumb_local))
         thumb_path = store.resolve_path(thumb_ref)

@@ -6,7 +6,7 @@ This directory contains comprehensive test quality gates and monitoring infrastr
 
 ### 1. Coverage Threshold Checker (`check_coverage.py`)
 
-Target gates: 80% line coverage with detailed reporting. Override thresholds on-demand with `--threshold`.
+Enforced gate: 80% line coverage with detailed reporting; branch coverage is tracked but not enforced (`min_branch_coverage_percent = 0.0`). Override thresholds on-demand with `--threshold`.
 
 ```bash
 # Basic usage
@@ -21,7 +21,7 @@ uv run python scripts/check_coverage.py --new-code-only --diff-from main
 
 **Features:**
 
-- Line and branch coverage validation (targets)  
+- Line coverage validation (80% enforced); branch coverage tracking (not enforced; `min_branch_coverage_percent = 0.0`)  
 - New code coverage tracking
 - Detailed HTML reports
 - CI/CD integration support
@@ -67,7 +67,7 @@ The following flows represent the critical path and are automatically measured d
 5. **UI Load & Routing**: Streamlit page transition and initial component render times.
    - Target (P95): initial render <800ms, route switch <300ms
 6. **Ingestion Pipeline**: End-to-end processing from document to vector store.
-   - Target (P95): <5s for a 10-page PDF
+   - Target (P95): <5s for a 10-page PDF.
 
 Targets are illustrative and hardware-dependent; adjust as needed. Regression checks
 still gate on >20% change vs the recorded baseline.
@@ -237,7 +237,7 @@ uv run python scripts/performance_monitor.py --report --days 30
 
 ## Success Criteria
 
-✅ **Coverage**: >80% line coverage (targets)
+✅ **Coverage**: >80% line coverage (aspirational target; overrideable with `--threshold`)
 ✅ **Performance**: <20% regression in test execution  
 ✅ **Health**: <5 flaky tests, minimal anti-patterns  
 ✅ **Integration**: All pre-commit hooks pass  
