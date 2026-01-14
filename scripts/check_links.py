@@ -1,15 +1,77 @@
 #!/usr/bin/env python3
-"""Check for broken links in markdown files."""
+"""Check for broken links in markdown files.
+
+This script scans markdown files under the provided paths and reports
+broken internal links. It respects `.gitignore` when run inside a git repo.
+"""
 
 import argparse
 import os
 import re
 import sys
+from collections.abc import Iterable
+from subprocess import DEVNULL, run
+
+DEFAULT_SKIP_DIRS = {".git"}
 
 
-def check_links(search_paths: list[str]) -> list[dict]:
-    """Scan markdown files in paths for broken internal links."""
-    broken_links = []
+def get_git_root(start_path: str) -> str | None:
+    """Return the repository root for a path.
+
+    Args:
+        start_path: Filesystem path to probe.
+
+    Returns:
+        Absolute path to the git repository root, or None when unavailable.
+    """
+    try:
+        result = run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=start_path,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return None
+    return result.stdout.strip() or None
+
+
+def is_git_ignored(path: str, git_root: str | None) -> bool:
+    """Check whether a path is ignored by git.
+
+    Args:
+        path: Filesystem path to test.
+        git_root: Git repository root, or None when not in a repo.
+
+    Returns:
+        True if the path is ignored by git, otherwise False.
+    """
+    if not git_root:
+        return False
+    rel_path = os.path.relpath(path, git_root)
+    if rel_path.startswith(".."):
+        return False
+    result = run(
+        ["git", "check-ignore", "-q", rel_path],
+        cwd=git_root,
+        check=False,
+        stdout=DEVNULL,
+        stderr=DEVNULL,
+    )
+    return result.returncode == 0
+
+
+def check_links(search_paths: Iterable[str]) -> list[dict[str, str]]:
+    """Scan markdown files in paths for broken internal links.
+
+    Args:
+        search_paths: Paths to search for markdown files.
+
+    Returns:
+        A list of broken link records with source, link, and resolved path.
+    """
+    broken_links: list[dict[str, str]] = []
 
     for search_path in search_paths:
         abs_search_path = os.path.abspath(search_path)
@@ -17,22 +79,37 @@ def check_links(search_paths: list[str]) -> list[dict]:
             print(f"Warning: Path {abs_search_path} does not exist. Skipping.")
             continue
 
+        git_root = get_git_root(abs_search_path)
+
         for root, dirs, files in os.walk(abs_search_path):
-            # Skip hidden directories like .git
-            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            # Skip hidden and vendor directories.
+            dirs[:] = [
+                d
+                for d in dirs
+                if not d.startswith(".")
+                and d not in DEFAULT_SKIP_DIRS
+                and not is_git_ignored(os.path.join(root, d), git_root)
+            ]
 
             for file in files:
                 if file.endswith(".md"):
                     file_path = os.path.join(root, file)
+                    if is_git_ignored(file_path, git_root):
+                        continue
                     try:
                         with open(file_path, encoding="utf-8") as f:
                             content = f.read()
+                    except UnicodeDecodeError:
+                        print(f"Warning: Skipping non-UTF-8 markdown file: {file_path}")
+                        continue
                     except OSError as e:
                         print(f"Error reading {file_path}: {e}")
                         continue
 
+                    # Strip fenced code blocks to avoid false positives.
+                    content = re.sub(r"```.*?```", "", content, flags=re.S)
+
                     # Simple markdown link regex
-                    # Improved regex to avoid false positives from code blocks
                     # Matches standard [label](link) pairs, including quoted labels.
                     found_links = re.findall(r"\[([^\]]+)\]\(([^)]+)\)", content)
 
@@ -69,8 +146,12 @@ def check_links(search_paths: list[str]) -> list[dict]:
                                     or os.path.exists(
                                         os.path.join(target_path, "_index.md")
                                     )
+                                    or os.path.exists(
+                                        os.path.join(target_path, "README.md")
+                                    )
                                 )
                             )
+                            or os.path.isdir(target_path)
                         ):
                             is_valid = True
 
