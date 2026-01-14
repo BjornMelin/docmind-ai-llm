@@ -60,7 +60,7 @@ Factory Resolution (library‑first):
 
 - For OpenAI‑compatible backends, use LlamaIndex `OpenAILike` with `api_base=backend_base_url_normalized`. This ensures consistent `/v1` handling and avoids duplicated code.
 
-See also: the canonical configuration guide at `docs/developers/configuration-reference.md#openai-compatible-local-servers-lm-studio-vllm-llamacpp`.
+See also: the canonical configuration guide at `docs/developers/configuration.md#llm-backend-selection`.
 
 Amendment (Hybrid Fusion Flags; supersedes legacy flags):
 

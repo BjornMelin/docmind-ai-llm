@@ -42,7 +42,7 @@ Notes:
   - [Architecture Overview](developers/architecture-overview.md): High-level system view
   - [System Architecture](developers/system-architecture.md): Technical diagrams and flows
   - [Cache Implementation](developers/cache.md): Cache wiring and operations
-  - [Configuration Reference](developers/configuration-reference.md): Developer configuration details
+  - [Configuration Guide](developers/configuration.md): Developer configuration details
   - [CI/CD Pipeline](developers/ci-cd-pipeline.md): GitHub Actions pipeline (3.11 + 3.10)
   - [Operations Guide](developers/operations-guide.md): Deployment and operations
   - [Developer Handbook](developers/developer-handbook.md): Patterns and workflows

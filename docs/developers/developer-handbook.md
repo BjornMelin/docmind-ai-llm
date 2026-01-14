@@ -1761,6 +1761,6 @@ if __name__ == "__main__":
 
 This developer handbook provides comprehensive guidance for contributing to DocMind AI. The unified architecture and clear patterns ensure consistent, maintainable, and high-performance code across all contributions.
 
-For configuration details, see [Configuration Reference](configuration-reference.md).
+For configuration details, see the [Configuration Guide](configuration.md).
 For deployment procedures, see [Operations Guide](operations-guide.md).
 For architectural understanding, see [System Architecture](system-architecture.md).

@@ -629,5 +629,5 @@ except Exception as e:
 This architecture guide provides the foundation for understanding and contributing to DocMind AI. The system's unified approach ensures consistency, maintainability, and excellent performance while remaining approachable for new developers.
 
 For implementation details, see the [Developer Handbook](developer-handbook.md).
-For configuration specifics, see the [Configuration Reference](configuration-reference.md).
+For configuration specifics, see the [Configuration Guide](configuration.md).
 For operational procedures, see the [Operations Guide](operations-guide.md).

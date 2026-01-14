@@ -41,8 +41,9 @@ Design goals:
 
 ## Table of Contents
 
-- [DocMind AI: Local LLM for AI-Powered Document Analysis](#docmind-ai-local-llm-for-ai-powered-document-analysis)
-  - [Features of DocMind AI](#features-of-docmind-ai)
+- [🧠 DocMind AI: Local LLM for AI-Powered Document Analysis](#-docmind-ai-local-llm-for-ai-powered-document-analysis)
+  - [✨ Features of DocMind AI](#-features-of-docmind-ai)
+  - [Table of Contents](#table-of-contents)
   - [Getting Started with DocMind AI](#getting-started-with-docmind-ai)
     - [Prerequisites](#prerequisites)
     - [Installation](#installation)
@@ -98,7 +99,7 @@ Design goals:
     - [Development Guidelines](#development-guidelines)
       - [Tests and CI](#tests-and-ci)
   - [License](#license)
-  - [Observability](#observability).
+  - [Observability](#observability)
 
 ## Getting Started with DocMind AI
 
@@ -214,7 +215,7 @@ Design goals:
    #   DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true
    ```
 
-   For a complete overview (including a Local vs Cloud matrix), see `docs/developers/configuration-reference.md`. The relevant section is `openai-compatible-local-servers-lm-studio-vllm-llamacpp`.
+   For a complete overview, see `docs/developers/configuration.md`. The relevant section is `LLM Backend Selection`.
 
 5. **(Optional) Install GPU support for RTX 4090 with vLLM FlashInfer:**
 

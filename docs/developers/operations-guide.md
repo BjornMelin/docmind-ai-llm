@@ -147,7 +147,7 @@ State is stored in three local locations (under `./data/`):
 
 ---
 
-## 6. Configuration Reference
+## 6. Configuration Guide
 
 Variables are prefixed with `DOCMIND_`. Nested keys use `__`.
 
