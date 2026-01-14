@@ -95,10 +95,12 @@ def test_settings_apply_runtime_calls_initialize_integrations(
 
     Expect force_llm=True and force_embed=False.
     """
-    calls = _install_integrations_stub(monkeypatch)
-
     app = settings_app_test.run()
     assert not app.exception
+
+    # Install stub after the initial render to avoid impacting import-time
+    # behavior in environments with additional optional dependencies (CI llama job).
+    calls = _install_integrations_stub(monkeypatch)
 
     buttons = [b for b in app.button if getattr(b, "label", "") == "Apply runtime"]
     assert buttons, "Apply runtime button not found"
