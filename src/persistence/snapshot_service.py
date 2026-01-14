@@ -158,7 +158,9 @@ def _export_graphs(
     if can_export_graph:
         from src.retrieval.graph_config import export_graph_jsonl, export_graph_parquet
 
-        jsonl_path = timestamped_export_path(graph_dir, "jsonl")
+        jsonl_path = timestamped_export_path(
+            graph_dir, "jsonl", prefix="graph_export-snapshot"
+        )
         try:
             start_json = time.perf_counter()
             export_graph_jsonl(
@@ -182,7 +184,9 @@ def _export_graphs(
                 }
             )
 
-        parquet_path = timestamped_export_path(graph_dir, "parquet")
+        parquet_path = timestamped_export_path(
+            graph_dir, "parquet", prefix="graph_export-snapshot"
+        )
         try:
             start_parquet = time.perf_counter()
             export_graph_parquet(

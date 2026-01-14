@@ -56,16 +56,11 @@ else:
 _TRACER = trace.get_tracer("docmind.ingestion")
 
 
-class ProcessingSettings(Protocol):
-    """Protocol for processing settings."""
-
-    thumbnail_max_side: int | None
-
-
 class SettingsWithProcessing(Protocol):
     """Protocol for settings with processing section."""
 
-    processing: ProcessingSettings
+    @property
+    def processing(self) -> Any: ...
 
 
 _ROMAN_MAP: dict[str, int] = {
@@ -452,7 +447,7 @@ def _store_image_artifact(
 def _build_page_image_records(
     exports: list[ExportArtifact],
     store: ArtifactStore,
-    settings: Any,
+    settings: SettingsWithProcessing,
 ) -> tuple[list[Any], int]:
     from src.retrieval.image_index import PageImageRecord
 
@@ -634,7 +629,10 @@ def _prune_artifacts_best_effort() -> int:
                 ),
             )
         )
-    except Exception:
+    except Exception as exc:
+        logger.debug(
+            "Artifact pruning failed (ArtifactStore.from_settings/prune): {}", exc
+        )
         return 0
 
 

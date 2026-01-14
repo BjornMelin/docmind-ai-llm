@@ -533,7 +533,7 @@ def test_handle_manual_export_smoke(
 
     monkeypatch.setattr(page, "get_export_seed_ids", lambda *_a, **_k: ["0", "1"])
     out_file = tmp_path / "out.jsonl"
-    monkeypatch.setattr(page, "timestamped_export_path", lambda _d, _e: out_file)
+    monkeypatch.setattr(page, "timestamped_export_path", lambda _d, _e, **_k: out_file)
     monkeypatch.setattr(
         page,
         "export_graph_jsonl",
@@ -829,7 +829,7 @@ def test_handle_manual_export_parquet(
 
     monkeypatch.setattr(page, "get_export_seed_ids", lambda *_a, **_k: ["0"])
     out_file = tmp_path / "out.parquet"
-    monkeypatch.setattr(page, "timestamped_export_path", lambda _d, _e: out_file)
+    monkeypatch.setattr(page, "timestamped_export_path", lambda _d, _e, **_k: out_file)
     monkeypatch.setattr(
         page,
         "export_graph_parquet",

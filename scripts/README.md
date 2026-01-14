@@ -57,11 +57,20 @@ Regression checks compare durations and memory (CPU peak, GPU VRAM peak when ava
 The following flows represent the critical path and are automatically measured during regression checks:
 
 1. **Document Upload & Ingestion**: Processing PDF/Text files into the pipeline.
+   - Target (P95): <=500ms for a 10-page PDF
 2. **Embedding Generation**: Performance of BGE-M3/SigLIP models (latency/throughput).
+   - Target (P95): <100ms/page (SigLIP), <50ms/chunk (BGE-M3)
 3. **Retrieval Latency**: Hybrid search (dense + sparse) query execution time.
+   - Target (P95): <200ms per query
 4. **Chat Inference**: Token generation speed (tok/s) and time-to-first-token.
+   - Target (P95): TTFT <500ms, >=30 tok/s sustained
 5. **UI Load & Routing**: Streamlit page transition and initial component render times.
+   - Target (P95): initial render <800ms, route switch <300ms
 6. **Ingestion Pipeline**: End-to-end processing from document to vector store.
+   - Target (P95): <5s for a 10-page PDF
+
+Targets are illustrative and hardware-dependent; adjust as needed. Regression checks
+still gate on >20% change vs the recorded baseline.
 
 #### Measurement Procedure
 

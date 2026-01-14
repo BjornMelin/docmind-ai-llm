@@ -106,7 +106,9 @@ def compute_staleness(
     return manifest.get("corpus_hash") != chash_abs
 
 
-def timestamped_export_path(out_dir: Path, extension: str) -> Path:
+def timestamped_export_path(
+    out_dir: Path, extension: str, *, prefix: str = "graph_export"
+) -> Path:
     """Return timestamped export path, with collision avoidance.
 
     Generates a filename using current UTC timestamp (YYYYMMDDTHHMMSSz
@@ -117,6 +119,7 @@ def timestamped_export_path(out_dir: Path, extension: str) -> Path:
     Args:
         out_dir: Directory where the export file will be created.
         extension: File extension (e.g., 'json', 'yaml') without the dot.
+        prefix: Filename prefix (default: 'graph_export').
 
     Returns:
         Path with timestamped filename (e.g.,
@@ -127,11 +130,14 @@ def timestamped_export_path(out_dir: Path, extension: str) -> Path:
     ext = extension.lstrip(".")
     if not ext:
         raise ValueError("extension must be a non-empty string")
-    candidate = out_dir / f"graph_export-{ts}.{ext}"
+    normalized_prefix = prefix.strip().rstrip("-")
+    if not normalized_prefix:
+        raise ValueError("prefix must be a non-empty string")
+    candidate = out_dir / f"{normalized_prefix}-{ts}.{ext}"
     counter = 1
     max_attempts = 1000  # Safety limit to prevent infinite loops
     while candidate.exists() and counter < max_attempts:
-        candidate = out_dir / f"graph_export-{ts}-{counter}.{ext}"
+        candidate = out_dir / f"{normalized_prefix}-{ts}-{counter}.{ext}"
         counter += 1
     if candidate.exists():
         raise RuntimeError(

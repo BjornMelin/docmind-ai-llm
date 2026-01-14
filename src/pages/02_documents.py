@@ -682,7 +682,7 @@ def _handle_manual_export(out_dir: Path, extension: str) -> None:
         vector_index = st.session_state.get("vector_index")
         cap = int(getattr(settings.graphrag_cfg, "export_seed_cap", 32))
         seeds = get_export_seed_ids(pg_index, vector_index, cap=cap)
-        out = timestamped_export_path(out_dir, extension)
+        out = timestamped_export_path(out_dir, extension, prefix="graph_export-manual")
         start = time.perf_counter()
         if extension == "jsonl":
             export_graph_jsonl(

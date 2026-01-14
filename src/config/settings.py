@@ -8,6 +8,7 @@ Usage:
     print(settings.embedding.model_name)
 """
 
+import base64
 import logging
 from collections.abc import Callable
 from contextlib import suppress
@@ -112,6 +113,19 @@ class ImageConfig(BaseModel):
     img_aes_key_base64: str | None = Field(default=None)
     img_kid: str | None = Field(default=None)
     img_delete_plaintext: bool = Field(default=False)
+
+    @field_validator("img_aes_key_base64", mode="before")
+    @classmethod
+    def _validate_img_aes_key_base64(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        try:
+            decoded = base64.b64decode(v, validate=True)
+        except Exception as exc:
+            raise ValueError("img_aes_key_base64 must be valid base64") from exc
+        if len(decoded) != 32:
+            raise ValueError("img_aes_key_base64 must decode to 32 bytes (AES-256)")
+        return v
 
 
 class SecurityConfig(BaseModel):
