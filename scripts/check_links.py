@@ -10,7 +10,8 @@ import os
 import re
 import sys
 from collections.abc import Iterable
-from subprocess import DEVNULL, run
+from pathlib import Path
+from subprocess import DEVNULL, CalledProcessError, run
 
 DEFAULT_SKIP_DIRS = {".git"}
 
@@ -32,7 +33,7 @@ def get_git_root(start_path: str) -> str | None:
             capture_output=True,
             text=True,
         )
-    except Exception:
+    except (CalledProcessError, FileNotFoundError):
         return None
     return result.stdout.strip() or None
 
@@ -62,6 +63,82 @@ def is_git_ignored(path: str, git_root: str | None) -> bool:
     return result.returncode == 0
 
 
+def is_hidden_or_skipped(path: Path, root: Path) -> bool:
+    """Return True if a path is under a hidden or skipped directory."""
+    try:
+        rel_parts = path.relative_to(root).parts
+    except ValueError:
+        rel_parts = path.parts
+    parts_to_check = rel_parts
+    if path.is_file():
+        parts_to_check = rel_parts[:-1]
+    for part in parts_to_check:
+        if part in {".", ""}:
+            continue
+        if part.startswith(".") or part in DEFAULT_SKIP_DIRS:
+            return True
+    return False
+
+
+def describe_path(path: Path) -> str:
+    """Return a display-friendly path relative to the current directory."""
+    try:
+        return path.relative_to(Path.cwd()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def iter_markdown_files(search_path: Path) -> Iterable[Path]:
+    """Yield markdown files for a search path."""
+    if search_path.is_file():
+        if search_path.suffix == ".md":
+            yield search_path
+        return
+    yield from search_path.rglob("*.md")
+
+
+def read_markdown(file_path: Path) -> str | None:
+    """Read a markdown file and return its content, or None on failure."""
+    try:
+        return file_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        print(f"Warning: Skipping non-UTF-8 markdown file: {file_path}")
+        return None
+    except OSError as exc:
+        print(f"Error reading {file_path}: {exc}")
+        return None
+
+
+def iter_internal_links(content: str) -> Iterable[tuple[str, str]]:
+    """Yield (raw_link, link_path) pairs for internal markdown links."""
+    stripped = re.sub(r"```.*?```", "", content, flags=re.S)
+    found_links = re.findall(r"\[([^\]]+)\]\(([^)]+)\)", stripped)
+    for _, link in found_links:
+        if link.startswith(("http://", "https://", "mailto:", "tel:")):
+            continue
+        if link.startswith("#"):
+            continue
+        link_path = link.split("#")[0]
+        if not link_path:
+            continue
+        yield link, link_path
+
+
+def is_valid_target(target_path: Path) -> bool:
+    """Return True if a target path resolves to a valid markdown resource."""
+    if target_path.is_file():
+        return True
+    if target_path.suffix != ".md" and target_path.with_suffix(".md").exists():
+        return True
+    if target_path.is_dir() and (
+        (target_path / "index.md").exists()
+        or (target_path / "_index.md").exists()
+        or (target_path / "README.md").exists()
+    ):
+        return True
+    return target_path.is_dir()
+
+
 def check_links(search_paths: Iterable[str]) -> list[dict[str, str]]:
     """Scan markdown files in paths for broken internal links.
 
@@ -74,95 +151,38 @@ def check_links(search_paths: Iterable[str]) -> list[dict[str, str]]:
     broken_links: list[dict[str, str]] = []
 
     for search_path in search_paths:
-        abs_search_path = os.path.abspath(search_path)
-        if not os.path.exists(abs_search_path):
+        abs_search_path = Path(search_path).resolve()
+        if not abs_search_path.exists():
             print(f"Warning: Path {abs_search_path} does not exist. Skipping.")
             continue
 
-        git_root = get_git_root(abs_search_path)
+        git_root_probe = abs_search_path
+        if abs_search_path.is_file():
+            git_root_probe = abs_search_path.parent
+        git_root = get_git_root(str(git_root_probe))
 
-        for root, dirs, files in os.walk(abs_search_path):
-            # Skip hidden and vendor directories.
-            dirs[:] = [
-                d
-                for d in dirs
-                if not d.startswith(".")
-                and d not in DEFAULT_SKIP_DIRS
-                and not is_git_ignored(os.path.join(root, d), git_root)
-            ]
+        for file_path in iter_markdown_files(abs_search_path):
+            if not file_path.is_file():
+                continue
+            if is_hidden_or_skipped(file_path, abs_search_path):
+                continue
+            if is_git_ignored(str(file_path), git_root):
+                continue
+            content = read_markdown(file_path)
+            if content is None:
+                continue
 
-            for file in files:
-                if file.endswith(".md"):
-                    file_path = os.path.join(root, file)
-                    if is_git_ignored(file_path, git_root):
-                        continue
-                    try:
-                        with open(file_path, encoding="utf-8") as f:
-                            content = f.read()
-                    except UnicodeDecodeError:
-                        print(f"Warning: Skipping non-UTF-8 markdown file: {file_path}")
-                        continue
-                    except OSError as e:
-                        print(f"Error reading {file_path}: {e}")
-                        continue
-
-                    # Strip fenced code blocks to avoid false positives.
-                    content = re.sub(r"```.*?```", "", content, flags=re.S)
-
-                    # Simple markdown link regex
-                    # Matches standard [label](link) pairs, including quoted labels.
-                    found_links = re.findall(r"\[([^\]]+)\]\(([^)]+)\)", content)
-
-                    for _, link in found_links:
-                        # Skip web links
-                        if link.startswith(("http://", "https://", "mailto:", "tel:")):
-                            continue
-
-                        # Skip anchor-only links
-                        if link.startswith("#"):
-                            continue
-                        # Remove anchors
-                        link_path = link.split("#")[0]
-                        if not link_path:
-                            continue
-
-                        # Resolve relative path
-                        target_path = os.path.abspath(os.path.join(root, link_path))
-
-                        # Check if file exists with fallbacks
-                        is_valid = False
-                        if (
-                            os.path.isfile(target_path)
-                            or (
-                                not target_path.endswith(".md")
-                                and os.path.exists(target_path + ".md")
-                            )
-                            or (
-                                os.path.isdir(target_path)
-                                and (
-                                    os.path.exists(
-                                        os.path.join(target_path, "index.md")
-                                    )
-                                    or os.path.exists(
-                                        os.path.join(target_path, "_index.md")
-                                    )
-                                    or os.path.exists(
-                                        os.path.join(target_path, "README.md")
-                                    )
-                                )
-                            )
-                            or os.path.isdir(target_path)
-                        ):
-                            is_valid = True
-
-                        if not is_valid:
-                            broken_links.append(
-                                {
-                                    "source": os.path.relpath(file_path),
-                                    "link": link,
-                                    "resolved": target_path,
-                                }
-                            )
+            for link, link_path in iter_internal_links(content):
+                target_path = (file_path.parent / Path(link_path)).resolve()
+                if is_valid_target(target_path):
+                    continue
+                broken_links.append(
+                    {
+                        "source": describe_path(file_path),
+                        "link": link,
+                        "resolved": target_path.as_posix(),
+                    }
+                )
     return broken_links
 
 
