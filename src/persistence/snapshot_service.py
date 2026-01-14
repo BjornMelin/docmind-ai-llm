@@ -404,7 +404,9 @@ def _build_versions(
         from qdrant_client import __version__ as qdrant_version  # type: ignore[import]
 
         versions.setdefault("qdrant_client", qdrant_version)
-    if hasattr(settings_obj.database, "client_version"):
+    if settings_obj.database is not None and hasattr(
+        settings_obj.database, "client_version"
+    ):
         versions.setdefault("vector_client", str(settings_obj.database.client_version))
     return versions
 
@@ -438,6 +440,10 @@ def rebuild_snapshot(
     )
 
     storage_dir = settings_obj.data_dir / "storage"
+    if settings_obj.database is None:
+        raise ValueError(
+            "settings_obj.database must be configured for snapshot rebuild"
+        )
     mgr = SnapshotManager(storage_dir)
     workspace = mgr.begin_snapshot()
     try:

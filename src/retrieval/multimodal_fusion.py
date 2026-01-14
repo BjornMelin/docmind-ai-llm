@@ -21,7 +21,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 from llama_index.core.schema import NodeWithScore, QueryBundle
 from loguru import logger
@@ -34,6 +34,14 @@ from src.utils.qdrant_utils import nodes_from_query_result
 from src.utils.siglip_adapter import SiglipEmbedding
 from src.utils.storage import get_client_config
 from src.utils.telemetry import log_jsonl
+
+if TYPE_CHECKING:
+    import numpy as np
+    from PIL import Image
+
+    ImageInput: TypeAlias = Image.Image | np.ndarray | bytes | str
+else:
+    ImageInput: TypeAlias = Any
 
 
 @dataclass(frozen=True)
@@ -141,7 +149,7 @@ class ImageSiglipRetriever:
         return self._query_vec(vec)
 
     def retrieve_by_image(
-        self, image: Any, *, top_k: int | None = None
+        self, image: ImageInput, *, top_k: int | None = None
     ) -> list[NodeWithScore]:
         """Retrieve image nodes for an image query."""
         try:

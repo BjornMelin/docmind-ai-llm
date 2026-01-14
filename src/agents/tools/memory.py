@@ -231,7 +231,7 @@ def recall_memories(
             {
                 "chat.memory_searched": True,
                 "scope": scope,
-                "top_k": int(limit),
+                "top_k": safe_limit,
                 "latency_ms": round(elapsed_ms, 2),
                 "result_count": len(results),
                 "thread_id": thread_id,
@@ -500,6 +500,65 @@ def consolidate_memory_candidates(
             return candidate
         return candidate.model_copy(update={"tags": merged_tags})
 
+    def _determine_consolidation_action(
+        score: float | None,
+        threshold_value: float,
+        existing_value: dict[str, Any] | None,
+        candidate: MemoryCandidate,
+        existing_id: str,
+    ) -> ConsolidationAction:
+        existing_kind = (
+            existing_value.get("kind") if isinstance(existing_value, dict) else None
+        )
+        existing_content = (
+            existing_value.get("content") if isinstance(existing_value, dict) else None
+        )
+        existing_importance = (
+            float(existing_value.get("importance", 0.5))
+            if isinstance(existing_value, dict)
+            else 0.5
+        )
+
+        action: ConsolidationAction = ConsolidationAction(
+            action="ADD", candidate=candidate
+        )
+        if score is None:
+            if _content_matches(existing_content, candidate.content):
+                if candidate.importance > existing_importance:
+                    updated_candidate = _with_merged_tags(candidate, existing_value)
+                    action = ConsolidationAction(
+                        action="UPDATE",
+                        existing_id=existing_id,
+                        candidate=updated_candidate,
+                    )
+                else:
+                    action = ConsolidationAction(action="NOOP", existing_id=existing_id)
+        else:
+            score_value = float(score)
+            if score_value >= threshold_value and existing_kind == candidate.kind:
+                if _content_matches(existing_content, candidate.content):
+                    if candidate.importance > existing_importance:
+                        updated_candidate = _with_merged_tags(candidate, existing_value)
+                        action = ConsolidationAction(
+                            action="UPDATE",
+                            existing_id=existing_id,
+                            candidate=updated_candidate,
+                        )
+                    else:
+                        action = ConsolidationAction(
+                            action="NOOP", existing_id=existing_id
+                        )
+                elif candidate.importance >= existing_importance:
+                    updated_candidate = _with_merged_tags(candidate, existing_value)
+                    action = ConsolidationAction(
+                        action="UPDATE",
+                        existing_id=existing_id,
+                        candidate=updated_candidate,
+                    )
+                else:
+                    action = ConsolidationAction(action="NOOP", existing_id=existing_id)
+        return action
+
     for cand in candidates:
         # Vector search for similar memories in the same namespace
         results = store.search(
@@ -515,90 +574,15 @@ def consolidate_memory_candidates(
             existing_value = (
                 best_match.value if isinstance(best_match.value, dict) else None
             )
-            existing_kind = (
-                existing_value.get("kind") if isinstance(existing_value, dict) else None
+            action = _determine_consolidation_action(
+                score=score,
+                threshold_value=threshold,
+                existing_value=existing_value,
+                candidate=cand,
+                existing_id=str(best_match.key),
             )
-            existing_content = (
-                existing_value.get("content")
-                if isinstance(existing_value, dict)
-                else None
-            )
-            existing_importance = (
-                float(existing_value.get("importance", 0.5))
-                if isinstance(existing_value, dict)
-                else 0.5
-            )
-
-            if score is None:
-                # Fallback to exact match when semantic scores are unavailable.
-                if _content_matches(existing_content, cand.content):
-                    if cand.importance > existing_importance:
-                        updated_candidate = _with_merged_tags(cand, existing_value)
-                        actions.append(
-                            ConsolidationAction(
-                                action="UPDATE",
-                                existing_id=best_match.key,
-                                candidate=updated_candidate,
-                            )
-                        )
-                    else:
-                        actions.append(
-                            ConsolidationAction(
-                                action="NOOP", existing_id=best_match.key
-                            )
-                        )
-                else:
-                    actions.append(ConsolidationAction(action="ADD", candidate=cand))
-                continue
-            else:
-                score_value = float(score)
-                # Consolidation decision rule:
-                # - Only consider UPDATE/NOOP when `score_value >= threshold` and
-                #   `existing_kind == cand.kind`.
-                # - If `_content_matches(existing_content, cand.content)`
-                #   (exact/near-exact), require `cand.importance > existing_importance`
-                #   before UPDATE; otherwise NOOP.
-                #   Exact duplicates are stricter to avoid churn.
-                # - If the match is semantic-only (the `else` branch), allow
-                #   `cand.importance >= existing_importance` so equal-importance
-                #   candidates can replace older entries.
-                # - Updates merge tags via `_merge_tags(existing_value, cand)` and
-                #   record a
-                #   `ConsolidationAction(..., existing_id=best_match.key, ...)`.
-                if score_value >= threshold and existing_kind == cand.kind:
-                    if _content_matches(existing_content, cand.content):
-                        if cand.importance > existing_importance:
-                            updated_candidate = _with_merged_tags(cand, existing_value)
-                            actions.append(
-                                ConsolidationAction(
-                                    action="UPDATE",
-                                    existing_id=best_match.key,
-                                    candidate=updated_candidate,
-                                )
-                            )
-                        else:
-                            actions.append(
-                                ConsolidationAction(
-                                    action="NOOP", existing_id=best_match.key
-                                )
-                            )
-                    else:
-                        if cand.importance >= existing_importance:
-                            updated_candidate = _with_merged_tags(cand, existing_value)
-                            actions.append(
-                                ConsolidationAction(
-                                    action="UPDATE",
-                                    existing_id=best_match.key,
-                                    candidate=updated_candidate,
-                                )
-                            )
-                        else:
-                            actions.append(
-                                ConsolidationAction(
-                                    action="NOOP", existing_id=best_match.key
-                                )
-                            )
-                    continue
+            actions.append(action)
+            continue
 
         # No similar memory found
         actions.append(ConsolidationAction(action="ADD", candidate=cand))

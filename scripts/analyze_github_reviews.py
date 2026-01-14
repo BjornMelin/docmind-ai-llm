@@ -54,7 +54,7 @@ def extract_threads(json_file: Path) -> list[dict[str, Any]] | None:
 def get_code_block_indicator(thread: dict[str, Any]) -> bool:
     """Check if thread has suggested code."""
     return any(
-        "```" in comment.get("body", "") for comment in thread.get("comments", [])
+        "```" in (comment.get("body") or "") for comment in thread.get("comments", [])
     )
 
 
@@ -63,7 +63,7 @@ def get_issue_summary(thread: dict[str, Any]) -> str:
     comments = thread.get("comments", [])
     if not comments:
         return "No comment"
-    body = comments[0].get("body", "").split("\n")[0]
+    body = (comments[0].get("body") or "").split("\n")[0]
     # Remove markdown code blocks and extra spaces
     body = body.replace("```", "").strip()
     return body[:80] if body else "No comment"

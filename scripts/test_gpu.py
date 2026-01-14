@@ -250,7 +250,7 @@ def _require_gpu_info(*, cwd: Path | None = None) -> GPUInfo:
     if gpu_info["cuda_version"]:
         print(f"   CUDA: {gpu_info['cuda_version']}")
     if gpu_info["memory_total"] < MIN_RECOMMENDED_VRAM_MB:
-        print("WARN: GPU has less than 12GB VRAM")
+        print(f"WARN: GPU has less than {MIN_RECOMMENDED_VRAM_MB}MB VRAM")
         print("   System tests may fail or run with reduced performance")
     return gpu_info
 
