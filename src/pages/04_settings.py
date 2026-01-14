@@ -353,10 +353,15 @@ def main() -> None:
 def _render_provider_section() -> str:
     """Render provider selector and return selection."""
     st.subheader("Provider")
+    options = ["ollama", "vllm", "lmstudio", "llamacpp"]
+    try:
+        default_index = options.index(settings.llm_backend)
+    except ValueError:
+        default_index = 0  # Fall back to first option
     return st.selectbox(
         "LLM Provider",
-        options=["ollama", "vllm", "lmstudio", "llamacpp"],
-        index=(["ollama", "vllm", "lmstudio", "llamacpp"].index(settings.llm_backend)),
+        options=options,
+        index=default_index,
         help="Select the active LLM backend",
     )
 

@@ -133,6 +133,8 @@ For Streamlit AppTest UI checks:
   avoid local `.env` coupling and reduce file-watcher overhead.
 - Use `default_timeout=` on `AppTest.from_file(...)` for CI stability; avoid
   strict wall-clock assertions in functional tests.
+- CI cold-starts can be slow; integration tests pre-warm AppTest once in
+  `tests/integration/conftest.py` (avoid per-test timeout bumps where possible).
 
 ## Patterns
 
