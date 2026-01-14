@@ -135,6 +135,6 @@ def timestamped_export_path(out_dir: Path, extension: str) -> Path:
         counter += 1
     if candidate.exists():
         raise RuntimeError(
-            f"Failed to generate unique export path after {counter} attempts"
+            f"Failed to generate unique export path after {max_attempts} attempts"
         )
     return candidate

@@ -232,7 +232,7 @@ def main() -> None:
                 "summary": summary,
                 "has_code": has_code,
                 "thread_id": thread.get("thread_id"),
-                "comment_count": thread.get("comment_count", 0),
+                "comment_count": thread.get("comment_count") or 0,
             }
         )
 

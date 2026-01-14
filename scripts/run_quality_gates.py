@@ -471,11 +471,10 @@ def _run_gates(
     overall_success = True
     for gate_name in gates:
         success = runner.run_quality_gate(gate_name)
-        if success:
-            continue
-        overall_success = False
-        if not continue_on_failure:
-            break
+        if not success:
+            overall_success = False
+            if not continue_on_failure:
+                break
     return overall_success
 
 

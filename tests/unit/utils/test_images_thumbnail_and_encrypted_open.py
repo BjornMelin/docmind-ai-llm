@@ -11,12 +11,14 @@ pytestmark = pytest.mark.unit
 
 
 def _set_test_aes_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.config.settings import settings
+
     # 32 bytes key (AES-256) encoded as base64.
     key = b"k" * 32
-    monkeypatch.setenv(
-        "DOCMIND_IMG_AES_KEY_BASE64", base64.b64encode(key).decode("ascii")
+    monkeypatch.setattr(
+        settings.image, "img_aes_key_base64", base64.b64encode(key).decode("ascii")
     )
-    monkeypatch.setenv("DOCMIND_IMG_KID", "test")
+    monkeypatch.setattr(settings.image, "img_kid", "test")
 
 
 def test_ensure_thumbnail_plain_and_encrypted(

@@ -106,6 +106,14 @@ class OpenAIConfig(BaseModel):
 _DEFAULT_OPENAI_BASE_URL = OpenAIConfig().base_url
 
 
+class ImageConfig(BaseModel):
+    """Image processing and security settings."""
+
+    img_aes_key_base64: str | None = Field(default=None)
+    img_kid: str | None = Field(default=None)
+    img_delete_plaintext: bool = Field(default=False)
+
+
 class SecurityConfig(BaseModel):
     """Security and remote endpoint policy settings."""
 
@@ -740,6 +748,7 @@ class DocMindSettings(BaseSettings):
     graphrag_cfg: GraphRAGConfig = Field(default_factory=GraphRAGConfig)
     snapshots: SnapshotConfig = Field(default_factory=SnapshotConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
+    image: ImageConfig = Field(default_factory=ImageConfig)
     hybrid: HybridConfig = Field(default_factory=HybridConfig)
 
     # Alias fields mapped to nested configs for ergonomic top-level
@@ -750,6 +759,11 @@ class DocMindSettings(BaseSettings):
     enable_multi_agent: bool | None = Field(default=None)
     # Top-level LLM context window cap (ADR-004/024)
     llm_context_window_max: int = Field(default=131072, ge=8192, le=200000)
+
+    # Image encryption aliases (ADR-031 bridge)
+    img_aes_key_base64: str | None = Field(default=None)
+    img_kid: str | None = Field(default=None)
+    img_delete_plaintext: bool | None = Field(default=None)
 
     @model_validator(mode="after")
     def _apply_aliases_and_validate(self) -> "DocMindSettings":
@@ -768,6 +782,9 @@ class DocMindSettings(BaseSettings):
             "chunk_size": (self.processing, "chunk_size", int),
             "chunk_overlap": (self.processing, "chunk_overlap", int),
             "enable_multi_agent": (self.agents, "enable_multi_agent", bool),
+            "img_aes_key_base64": (self.image, "img_aes_key_base64", str),
+            "img_kid": (self.image, "img_kid", str),
+            "img_delete_plaintext": (self.image, "img_delete_plaintext", bool),
         }
         for field, (target, attr, caster) in alias_targets.items():
             value = getattr(self, field, None)

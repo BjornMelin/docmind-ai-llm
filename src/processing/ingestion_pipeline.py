@@ -16,7 +16,7 @@ import re
 import time
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from llama_index.core import Document
 from llama_index.core.extractors import TitleExtractor
@@ -54,6 +54,19 @@ else:
     ReaderType = Any
 
 _TRACER = trace.get_tracer("docmind.ingestion")
+
+
+class ProcessingSettings(Protocol):
+    """Protocol for processing settings."""
+
+    thumbnail_max_side: int | None
+
+
+class SettingsWithProcessing(Protocol):
+    """Protocol for settings with processing section."""
+
+    processing: ProcessingSettings
+
 
 _ROMAN_MAP: dict[str, int] = {
     "I": 1,
@@ -410,7 +423,7 @@ def _load_documents(
 def _store_image_artifact(
     store: ArtifactStore,
     export: ExportArtifact,
-    settings: Any,
+    settings: SettingsWithProcessing,
 ) -> tuple[ArtifactRef, Path, ArtifactRef | None, Path | None]:
     img_ref = store.put_file(Path(export.path))
     img_path = store.resolve_path(img_ref)

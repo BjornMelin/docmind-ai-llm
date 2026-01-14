@@ -325,7 +325,7 @@ def main() -> None:
     ui_errors, resolved_gguf_path = _validate_gguf_inputs(
         provider, llamacpp_url, gguf_path
     )
-    values = {
+    values: SettingsFormValues = {
         "provider": provider,
         "model": model,
         "context_window": context_window,

@@ -22,9 +22,7 @@ except ImportError:
         """Fallback when cryptography is unavailable."""
 
 
-_ALG = "AES-256-GCM"
-_ENV_KEY = "DOCMIND_IMG_AES_KEY_BASE64"
-_ENV_KID = "DOCMIND_IMG_KID"
+from src.config.settings import settings
 
 
 def redact_pii(text: str) -> str:
@@ -35,7 +33,7 @@ def redact_pii(text: str) -> str:
 
 
 def _get_key() -> bytes | None:
-    b64 = os.getenv(_ENV_KEY, "").strip()
+    b64 = (settings.image.img_aes_key_base64 or "").strip()
     if not b64:
         return None
     try:
@@ -49,7 +47,7 @@ def _get_key() -> bytes | None:
 
 def get_image_kid() -> str | None:
     """Return the configured image key id (kid) for AES-GCM metadata, if any."""
-    kid = os.getenv(_ENV_KID, "").strip()
+    kid = (settings.image.img_kid or "").strip()
     return kid or None
 
 
@@ -75,7 +73,7 @@ def encrypt_file(path: str) -> str:
         out_path = p.with_suffix(p.suffix + ".enc")
         out_path.write_bytes(nonce + ct)
         # Optionally delete plaintext after successful encryption
-        if os.getenv("DOCMIND_IMG_DELETE_PLAINTEXT", "0") in {"1", "true", "TRUE"}:
+        if settings.image.img_delete_plaintext:
             with contextlib.suppress(Exception):
                 p.unlink()
         # Do not delete plaintext automatically to allow caller control

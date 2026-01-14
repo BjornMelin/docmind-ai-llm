@@ -6,7 +6,7 @@ This directory contains comprehensive test quality gates and monitoring infrastr
 
 ### 1. Coverage Threshold Checker (`check_coverage.py`)
 
-Target gates: 80% line and 75% branch coverage with detailed reporting. Override thresholds on-demand with `--threshold`/`--branch-threshold`.
+Target gates: 80% line coverage with detailed reporting. Override thresholds on-demand with `--threshold`.
 
 ```bash
 # Basic usage
@@ -57,7 +57,7 @@ Regression checks compare durations and memory (CPU peak, GPU VRAM peak when ava
 The following flows represent the critical path and are automatically measured during regression checks:
 
 1. **Document Upload & Ingestion**: Processing PDF/Text files into the pipeline.
-2. **Embedding Generation**: Performance of BGE-M3/CLIP models (latency/throughput).
+2. **Embedding Generation**: Performance of BGE-M3/SigLIP models (latency/throughput).
 3. **Retrieval Latency**: Hybrid search (dense + sparse) query execution time.
 4. **Chat Inference**: Token generation speed (tok/s) and time-to-first-token.
 5. **UI Load & Routing**: Streamlit page transition and initial component render times.
@@ -228,7 +228,7 @@ uv run python scripts/performance_monitor.py --report --days 30
 
 ## Success Criteria
 
-✅ **Coverage**: >80% line coverage, >75% branch coverage  
+✅ **Coverage**: >80% line coverage (targets)
 ✅ **Performance**: <20% regression in test execution  
 ✅ **Health**: <5 flaky tests, minimal anti-patterns  
 ✅ **Integration**: All pre-commit hooks pass  

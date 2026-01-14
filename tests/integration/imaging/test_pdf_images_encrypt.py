@@ -29,8 +29,8 @@ def test_pdf_page_images_encrypted(monkeypatch):
 
     # Enable encryption
     key = os.urandom(32)
-    monkeypatch.setenv(
-        "DOCMIND_IMG_AES_KEY_BASE64", base64.b64encode(key).decode("ascii")
+    monkeypatch.setattr(
+        settings.image, "img_aes_key_base64", base64.b64encode(key).decode("ascii")
     )
     settings.processing.encrypt_page_images = True
 
