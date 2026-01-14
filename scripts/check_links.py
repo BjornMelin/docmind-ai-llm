@@ -130,13 +130,11 @@ def is_valid_target(target_path: Path) -> bool:
         return True
     if target_path.suffix != ".md" and target_path.with_suffix(".md").exists():
         return True
-    if target_path.is_dir() and (
+    return target_path.is_dir() and (
         (target_path / "index.md").exists()
         or (target_path / "_index.md").exists()
         or (target_path / "README.md").exists()
-    ):
-        return True
-    return target_path.is_dir()
+    )
 
 
 def check_links(search_paths: Iterable[str]) -> list[dict[str, str]]:
@@ -173,7 +171,14 @@ def check_links(search_paths: Iterable[str]) -> list[dict[str, str]]:
                 continue
 
             for link, link_path in iter_internal_links(content):
-                target_path = (file_path.parent / Path(link_path)).resolve()
+                link_as_path = Path(link_path)
+                if link_as_path.is_absolute():
+                    # Treat absolute links as relative to git root or search path
+                    base = Path(git_root) if git_root else abs_search_path
+                    target_path = (base / link_path.lstrip("/")).resolve()
+                else:
+                    target_path = (file_path.parent / link_as_path).resolve()
+
                 if is_valid_target(target_path):
                     continue
                 broken_links.append(
@@ -186,7 +191,7 @@ def check_links(search_paths: Iterable[str]) -> list[dict[str, str]]:
     return broken_links
 
 
-def main():
+def main() -> None:
     """Main entry point for the link checker."""
     parser = argparse.ArgumentParser(
         description="Check for broken links in markdown files."

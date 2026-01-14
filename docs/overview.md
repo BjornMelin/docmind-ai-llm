@@ -42,7 +42,7 @@ Notes:
 ## Documentation Structure
 
 - **[Product Requirements Document (PRD)](PRD.md)**: Complete system requirements with validated performance specifications
-- **[User Documentation](user/)**:
+- **[User Documentation](user/getting-started.md)**:
   - [Getting Started](user/getting-started.md): Installation and setup
   - [Configuration](user/configuration.md): Basic settings and examples
   - [Troubleshooting & FAQ](user/troubleshooting-faq.md): Common issues and answers
@@ -56,7 +56,7 @@ Notes:
   - [Operations Guide](developers/operations-guide.md): Deployment and operations
   - [Developer Handbook](developers/developer-handbook.md): Patterns and workflows
   - [Testing Guide](testing/testing-guide.md): How to write and run tests
-- **[API Documentation](api/)**:
+- **[API Documentation](api/api.md)**:
   - [API Reference](api/api.md): REST and Python API with examples
 - **Architectural Decision Records (ADRs)**:
   - [ADR Index](developers/adrs/): Complete collection of architectural decisions
