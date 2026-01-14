@@ -272,7 +272,7 @@ class MultimodalFusionRetriever:
         # PII-safe telemetry-like metadata (no query text).
         with contextlib.suppress(Exception):
             logger.debug(
-                "MultimodalFusionRetriever done (text=%d, image=%d, out=%d, ms=%d)",
+                "MultimodalFusionRetriever done (text={}, image={}, out={}, ms={})",
                 len(text_nodes),
                 len(image_nodes),
                 len(out),

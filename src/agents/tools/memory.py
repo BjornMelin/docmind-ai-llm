@@ -186,20 +186,34 @@ def remember(
         "importance": float(importance),
         "tags": tags_value,
     }
-    store.put(ns, mem_id, payload, index=["content"])
-    elapsed_ms = (time.perf_counter() - start) * 1000.0
-    with _SuppressTelemetry():
-        log_jsonl(
-            {
-                "chat.memory_saved": True,
-                "scope": scope,
-                "count": 1,
-                "latency_ms": round(elapsed_ms, 2),
-                "thread_id": thread_id,
-                "user_id": user_id,
-            }
-        )
-    return json.dumps({"ok": True, "memory_id": mem_id})
+    try:
+        store.put(ns, mem_id, payload, index=["content"])
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        with _SuppressTelemetry():
+            log_jsonl(
+                {
+                    "chat.memory_saved": True,
+                    "scope": scope,
+                    "count": 1,
+                    "latency_ms": round(elapsed_ms, 2),
+                    "thread_id": thread_id,
+                    "user_id": user_id,
+                }
+            )
+        return json.dumps({"ok": True, "memory_id": mem_id})
+    except Exception as e:
+        logger.debug("remember store.put failed: {}", e)
+        with _SuppressTelemetry():
+            log_jsonl(
+                {
+                    "chat.memory_saved": False,
+                    "scope": scope,
+                    "error": str(e),
+                    "thread_id": thread_id,
+                    "user_id": user_id,
+                }
+            )
+        return json.dumps({"ok": False, "error": str(e)})
 
 
 @tool
@@ -604,27 +618,54 @@ def apply_consolidation_policy(
         if op.action == "ADD" and op.candidate:
             mem_id = str(uuid.uuid4())
             ttl = _candidate_ttl_minutes(op.candidate, policy)
-            store.put(
-                namespace,
-                mem_id,
-                op.candidate.model_dump(),
-                index=["content"],
-                ttl=ttl,
-            )
-            change_count += 1
+            try:
+                store.put(
+                    namespace,
+                    mem_id,
+                    op.candidate.model_dump(),
+                    index=["content"],
+                    ttl=ttl,
+                )
+                change_count += 1
+            except Exception as e:
+                logger.error(
+                    "Memory consolidation failed to {} {} in namespace {}: {}",
+                    op.action,
+                    mem_id,
+                    namespace,
+                    e,
+                )
         elif op.action == "UPDATE" and op.existing_id and op.candidate:
             ttl = _candidate_ttl_minutes(op.candidate, policy)
-            store.put(
-                namespace,
-                op.existing_id,
-                op.candidate.model_dump(),
-                index=["content"],
-                ttl=ttl,
-            )
-            change_count += 1
+            try:
+                store.put(
+                    namespace,
+                    op.existing_id,
+                    op.candidate.model_dump(),
+                    index=["content"],
+                    ttl=ttl,
+                )
+                change_count += 1
+            except Exception as e:
+                logger.error(
+                    "Memory consolidation failed to {} {} in namespace {}: {}",
+                    op.action,
+                    op.existing_id,
+                    namespace,
+                    e,
+                )
         elif op.action == "DELETE" and op.existing_id:
-            store.delete(namespace, op.existing_id)
-            change_count += 1
+            try:
+                store.delete(namespace, op.existing_id)
+                change_count += 1
+            except Exception as e:
+                logger.error(
+                    "Memory consolidation failed to {} {} in namespace {}: {}",
+                    op.action,
+                    op.existing_id,
+                    namespace,
+                    e,
+                )
 
     if policy.max_items_per_namespace > 0:
         change_count += _enforce_namespace_limits(store, namespace, policy)
