@@ -67,7 +67,7 @@ The following flows represent the critical path and are automatically measured d
 5. **UI Load & Routing**: Streamlit page transition and initial component render times.
    - Target (P95): initial render <800ms, route switch <300ms
 6. **Ingestion Pipeline**: End-to-end processing from document to vector store.
-   - Target (P95): <5s for a 10-page PDF.
+   - Target (P95): <5s for a 10-page PDF
 
 Targets are illustrative and hardware-dependent; adjust as needed. Regression checks
 still gate on >20% change vs the recorded baseline.

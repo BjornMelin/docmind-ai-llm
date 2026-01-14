@@ -11,7 +11,6 @@ import errno
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
-from itertools import islice
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -200,7 +199,7 @@ def _export_graphs(
                 duration_ms=(time.perf_counter() - start_json) * 1000.0,
             )
         except Exception as exc:
-            logger.warning("Graph JSONL export failed (snapshot): {}", exc)
+            logger.opt(exception=exc).warning("Graph JSONL export failed (snapshot)")
             log_export_event(
                 {
                     "export_performed": False,
@@ -226,7 +225,7 @@ def _export_graphs(
                 duration_ms=(time.perf_counter() - start_parquet) * 1000.0,
             )
         except Exception as exc:
-            logger.warning("Graph Parquet export failed (snapshot): {}", exc)
+            logger.opt(exception=exc).warning("Graph Parquet export failed (snapshot)")
             log_export_event(
                 {
                     "export_performed": False,
@@ -260,7 +259,7 @@ def _is_corpus_cache_valid(
 
     file_count = 0
     resolved_current: list[Path] = []
-    for p in islice(uploads_dir.rglob("*"), MAX_CORPUS_FILES + 1):
+    for p in uploads_dir.rglob("*"):
         if p.is_file():
             resolved = _resolve_corpus_path(p, uploads_root)
             if resolved is None:
@@ -269,6 +268,12 @@ def _is_corpus_cache_valid(
             resolved_current.append(resolved)
             # Break early if count already differs
             if file_count > len(resolved_cached):
+                break
+            if file_count > MAX_CORPUS_FILES:
+                logger.warning(
+                    "Corpus file scan capped at {}; snapshot hash may be partial.",
+                    MAX_CORPUS_FILES,
+                )
                 break
     if file_count != len(resolved_cached):
         logger.debug(
@@ -345,18 +350,20 @@ def _collect_corpus_paths(settings_obj: Any) -> tuple[list[Path], Path]:
 
     # Glob for corpus files (bounded to immediate children if corpus is large)
     corpus_paths: list[Path] = []
+    file_count = 0
     if uploads_dir.exists():
-        for i, p in enumerate(islice(uploads_dir.rglob("*"), MAX_CORPUS_FILES + 1)):
-            if i >= MAX_CORPUS_FILES:
-                logger.warning(
-                    "Corpus file scan capped at {}; snapshot hash may be partial.",
-                    MAX_CORPUS_FILES,
-                )
-                break
+        for p in uploads_dir.rglob("*"):
             if p.is_file():
                 if _resolve_corpus_path(p, uploads_root) is None:
                     continue
                 corpus_paths.append(p)
+                file_count += 1
+                if file_count >= MAX_CORPUS_FILES:
+                    logger.warning(
+                        "Corpus file scan capped at {}; snapshot hash may be partial.",
+                        MAX_CORPUS_FILES,
+                    )
+                    break
 
     # Cache the result for next time
     try:
@@ -365,22 +372,18 @@ def _collect_corpus_paths(settings_obj: Any) -> tuple[list[Path], Path]:
     except OSError as e:
         # Log permission errors at warning level with full details
         if e.errno in (errno.EACCES, errno.EPERM):
-            logger.warning(
-                "Permission denied writing corpus manifest at {}: {}",
+            logger.opt(exception=e).warning(
+                "Permission denied writing corpus manifest at {}",
                 manifest_file,
-                e,
-                exc_info=True,
             )
         else:
-            logger.debug(
-                "Failed to cache corpus manifest at {}: {}",
+            logger.opt(exception=e).debug(
+                "Failed to cache corpus manifest at {}",
                 manifest_file,
-                e,
-                exc_info=True,
             )
     except Exception as e:
-        logger.debug(
-            "Failed to cache corpus manifest at {}: {}", manifest_file, e, exc_info=True
+        logger.opt(exception=e).debug(
+            "Failed to cache corpus manifest at {}", manifest_file
         )
 
     return corpus_paths, uploads_dir

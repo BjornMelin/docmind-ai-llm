@@ -459,6 +459,8 @@ def _build_page_image_records(
     skipped = 0
     for export in exports:
         meta = dict(getattr(export, "metadata", {}) or {})
+        if not isinstance(getattr(export, "metadata", None), dict):
+            export.metadata = dict(meta)
         doc_id = str(meta.get("doc_id") or meta.get("document_id") or "")
         page_no_raw = meta.get("page_no") or meta.get("page") or meta.get("page_number")
         try:
@@ -532,18 +534,19 @@ def _index_page_images_orchestrator(
     t0 = time.time()
     client = QdrantClient(**get_client_config())
     purged_points = 0
-    if purge_doc_ids:
-        for doc_id in sorted({str(d) for d in purge_doc_ids if d}):
-            with contextlib.suppress(Exception):
-                purged_points += int(
-                    delete_page_images_for_doc_id(
-                        client,
-                        app_settings.database.qdrant_image_collection,
-                        doc_id=doc_id,
-                    )
-                )
-    embedder = SiglipEmbedding()
+    indexed = 0
     try:
+        embedder = SiglipEmbedding()
+        if purge_doc_ids:
+            for doc_id in sorted({str(d) for d in purge_doc_ids if d}):
+                with contextlib.suppress(Exception):
+                    purged_points += int(
+                        delete_page_images_for_doc_id(
+                            client,
+                            app_settings.database.qdrant_image_collection,
+                            doc_id=doc_id,
+                        )
+                    )
         indexed = index_page_images_siglip(
             client,
             collection_name=app_settings.database.qdrant_image_collection,

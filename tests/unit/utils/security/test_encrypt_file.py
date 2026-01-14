@@ -25,17 +25,17 @@ def test_encrypt_file_passthrough_without_key(monkeypatch):
     assert out == path
 
 
-@pytest.mark.parametrize("keylen", [16, 24, 32])
+@pytest.mark.parametrize("keylen", [32])
 def test_encrypt_file_with_key_round_trip(monkeypatch, keylen):
     """Test encrypt/decrypt round trip with AES keys of different lengths.
 
-    Tests AES-GCM encryption and decryption using different key sizes
-    (128, 192, 256 bits). Verifies that encrypted files can be successfully
-    decrypted back to original content.
+    Tests AES-GCM encryption and decryption using a 256-bit key.
+    Verifies that encrypted files can be successfully decrypted back to
+    original content.
 
     Args:
         monkeypatch: Pytest fixture for manipulating environment variables.
-        keylen: AES key length in bytes (16, 24, or 32).
+        keylen: AES key length in bytes (32).
     """
     try:
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa: F401

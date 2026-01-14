@@ -36,7 +36,7 @@ def collect_corpus_paths(base: Path) -> list[Path]:
     """
     if not base.exists():
         return []
-    return [p for p in base.rglob("*") if p.is_file()]
+    return [p for p in base.rglob("*") if p.is_file() and not p.is_symlink()]
 
 
 def current_config_dict(settings_obj: Any | None = None) -> dict[str, Any]:
@@ -112,7 +112,7 @@ def timestamped_export_path(
 ) -> Path:
     """Return timestamped export path, with collision avoidance.
 
-    Generates a filename using current UTC timestamp (YYYYMMDDTHHMMSSz
+    Generates a filename using current UTC timestamp (YYYYMMDDTHHMMSSZ
     format). If the file already exists, appends a counter to avoid
     collisions. Enforces a safety limit of 1000 attempts to prevent
     infinite loops.

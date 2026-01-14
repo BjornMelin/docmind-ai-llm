@@ -9,13 +9,13 @@ Usage:
 """
 
 import base64
-import logging
 from collections.abc import Callable
 from contextlib import suppress
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
 
+from loguru import logger
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -27,8 +27,6 @@ from pydantic import (
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from src.models.embedding_constants import ImageBackboneName
-
-logger = logging.getLogger(__name__)
 
 SETTINGS_MODEL_CONFIG = SettingsConfigDict(
     env_file=".env",
