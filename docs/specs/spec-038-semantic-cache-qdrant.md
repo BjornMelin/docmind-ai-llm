@@ -93,6 +93,7 @@ class SemanticCacheConfig(BaseModel):
 ```
 
 Fields:
+
 - `provider`: Cache backend (`"qdrant"` or `"none"` when explicitly disabled)
 - `collection_name`: Optional override for Qdrant collection name
 - `allow_semantic_for_templates`: Optional allowlist of template IDs for semantic matching

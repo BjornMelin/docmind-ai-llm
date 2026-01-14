@@ -106,4 +106,3 @@ uv run ruff check . --fix
 uv run pyright
 uv run python scripts/run_tests.py
 ```
-
