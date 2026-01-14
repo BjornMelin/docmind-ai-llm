@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import importlib
 import json
+import re
 import time
+from pathlib import Path
 from typing import Annotated, Any
 
+from langchain.tools import ToolRuntime
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 from llama_index.core import Document
@@ -40,12 +43,13 @@ def retrieve_documents(
     use_dspy: bool = True,
     use_graphrag: bool = False,
     state: Annotated[dict, InjectedState] | None = None,
+    runtime: ToolRuntime | None = None,
 ) -> str:
     """Execute document retrieval using specified strategy and optimizations."""
     try:
         start_time = time.perf_counter()
 
-        vector_index, kg_index, retriever = _extract_indexes(state)
+        vector_index, kg_index, retriever = _extract_indexes(state, runtime)
         if vector_index is None and retriever is None and kg_index is None:
             return json.dumps(
                 {
@@ -119,6 +123,15 @@ def retrieve_documents(
             documents.extend(docs)
             strategy_used = last_used or strategy_used
 
+        # Contextual recall: if user references prior context and retrieval returned
+        # nothing, reuse most recent sources from persisted state. This enables
+        # "what does that chart show?" flows across reloads without storing images.
+        if not documents and _looks_contextual(query):
+            recalled = _recall_recent_sources(st)
+            if recalled:
+                documents.extend(recalled)
+                strategy_used = f"{strategy_used}+recall"
+
         # Deduplicate
         documents = _deduplicate_documents(documents)
 
@@ -148,16 +161,39 @@ def retrieve_documents(
         )
 
 
-def _extract_indexes(state: dict | None):
+def _extract_indexes(state: dict | None, runtime: ToolRuntime | None):
+    # Prefer runtime context (not persisted) for heavy objects like indexes.
+    # Fall back to state.tools_data for any missing entries.
+    runtime_ctx = runtime.context if runtime is not None else None
+
+    # Start with runtime values if available
+    v = None
+    kg = None
+    r = None
+
+    if isinstance(runtime_ctx, dict):
+        v = runtime_ctx.get("vector")
+        kg = runtime_ctx.get("kg")
+        r = runtime_ctx.get("retriever")
+
+    # Fall back to tools_data for missing entries
     tools_data = state.get("tools_data") if state else None
-    if not tools_data:
+    if tools_data:
+        if v is None:
+            v = tools_data.get("vector")
+        if kg is None:
+            kg = tools_data.get("kg")
+        if r is None:
+            r = tools_data.get("retriever")
+
+    if not any((v, kg, r)):
         logger.warning("No tools data available in state, using fallback")
-        return None, None, None
-    return tools_data.get("vector"), tools_data.get("kg"), tools_data.get("retriever")
+
+    return v, kg, r
 
 
-## Fast-path via ToolFactory.create_tools_from_indexes was removed for clarity
-## and testability. Use explicit tools for each strategy instead.
+# Fast-path via ToolFactory.create_tools_from_indexes was removed for clarity
+# and testability. Use explicit tools for each strategy instead.
 
 
 def _optimize_queries(query: str, use_dspy: bool) -> tuple[str, list[str]]:
@@ -304,12 +340,112 @@ def _deduplicate_documents(documents: list[dict]) -> list[dict]:
         return []
     seen_content: dict[str, dict] = {}
     for doc in documents:
-        content_key = doc.get("content", "")[:CONTENT_KEY_LENGTH]
+        content = str(doc.get("content", "") or "")
+        meta = doc.get("metadata") if isinstance(doc, dict) else None
+        meta = meta if isinstance(meta, dict) else {}
+        # For multimodal nodes, content may be empty; prefer stable ids.
+        stable = meta.get("page_id") or meta.get("chunk_id") or meta.get("doc_id")
+        stable = stable or meta.get("document_id")
+        stable = stable or meta.get("source")
+        content_key = (content[:CONTENT_KEY_LENGTH] if content else str(stable or ""))[
+            :CONTENT_KEY_LENGTH
+        ]
         if content_key not in seen_content or doc.get("score", 0) > seen_content[
             content_key
         ].get("score", 0):
             seen_content[content_key] = doc
     return list(seen_content.values())[:MAX_RETRIEVAL_RESULTS]
+
+
+def _looks_contextual(query: str) -> bool:
+    # Intentionally broad: err on false-positives to trigger recall.
+    pattern = (
+        r"\b(this|that|they|them|above|previous|chart|figure|diagram|table|"
+        r"image|photo)\b"
+        r"|\bit\b(?=\s+(?:is|was|seems|refers|referring|about|in|on|of))"
+    )
+    return re.search(pattern, str(query), flags=re.IGNORECASE) is not None
+
+
+def _recall_recent_sources(state: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Extract the most recent persisted sources from prior turns (best-effort)."""
+    if not isinstance(state, dict):
+        return []
+    # Prefer synthesis_result documents (closest to what user saw).
+    sr = state.get("synthesis_result")
+    if isinstance(sr, dict):
+        docs = sr.get("documents")
+        if isinstance(docs, list):
+            return [_sanitize_document_dict(d) for d in docs if isinstance(d, dict)]
+
+    rr = state.get("retrieval_results")
+    if isinstance(rr, list):
+        for item in reversed(rr):
+            if isinstance(item, dict):
+                docs = item.get("documents")
+                if isinstance(docs, list):
+                    return [
+                        _sanitize_document_dict(d) for d in docs if isinstance(d, dict)
+                    ]
+    return []
+
+
+def _sanitize_metadata(metadata: object | None) -> dict[str, Any]:
+    """Sanitize metadata (paths/blobs) for agent-visible document sources."""
+    sanitized = _sanitize_document_dict({"metadata": metadata}).get("metadata")
+    return sanitized if isinstance(sanitized, dict) else {}
+
+
+def _sanitize_document_dict(doc: dict[str, Any]) -> dict[str, Any]:
+    """Sanitize a persisted/recalled document dict for persistence invariants."""
+
+    def _sanitize_metadata_dict(meta: Any) -> dict[str, Any]:
+        if not isinstance(meta, dict):
+            return {}
+        # Never persist raw paths or blobs in agent-visible sources.
+        drop = {
+            "image_base64",
+            "thumbnail_base64",
+            "image_path",
+            "thumbnail_path",
+            "source_path",
+            "file_path",
+            "path",
+        }
+        sanitized = {k: v for k, v in meta.items() if k not in drop}
+        # Defensive: drop any future *_base64 keys.
+        sanitized = {
+            k: v for k, v in sanitized.items() if not str(k).endswith("_base64")
+        }
+        # `source` is frequently used by upstream libraries to carry a path/URI.
+        # Preserve only a safe basename when it looks path-like.
+        src = sanitized.get("source")
+        if isinstance(src, str) and (
+            "/" in src or "\\" in src or src.startswith("file:")
+        ):
+            sanitized["source"] = Path(src).name
+        return sanitized
+
+    cleaned = dict(doc)
+    # Drop forbidden top-level keys too (some tool stacks return flat dicts).
+    for key in list(cleaned.keys()):
+        if key in {
+            "image_base64",
+            "thumbnail_base64",
+            "image_path",
+            "thumbnail_path",
+            "source_path",
+            "file_path",
+            "path",
+        } or str(key).endswith("_base64"):
+            cleaned.pop(key, None)
+
+    cleaned["metadata"] = _sanitize_metadata_dict(cleaned.get("metadata"))
+    # If a tool returns a top-level `source`, apply the same policy.
+    src = cleaned.get("source")
+    if isinstance(src, str) and ("/" in src or "\\" in src or src.startswith("file:")):
+        cleaned["source"] = Path(src).name
+    return cleaned
 
 
 def _parse_tool_result(result: Any) -> list[dict[str, Any]]:
@@ -319,12 +455,44 @@ def _parse_tool_result(result: Any) -> list[dict[str, Any]]:
         return [
             {"content": result, "metadata": {"source": "tool_response"}, "score": 1.0}
         ]
+    if hasattr(result, "source_nodes"):
+        nodes = getattr(result, "source_nodes", None)
+        if nodes is None:
+            nodes = []
+        elif not isinstance(nodes, list):
+            try:
+                nodes = list(nodes)
+            except TypeError:
+                nodes = []
+        docs: list[dict[str, Any]] = []
+        for nws in nodes:
+            node = getattr(nws, "node", None) or getattr(nws, "document", None) or nws
+            score = float(getattr(nws, "score", 0.0) or 0.0)
+            text = ""
+            try:
+                text_attr = getattr(node, "text", None)
+                if text_attr is not None:
+                    text = str(text_attr)
+                else:
+                    get_content = getattr(node, "get_content", None)
+                    text = str(get_content()) if callable(get_content) else str(node)
+            except Exception as exc:
+                logger.opt(exception=exc).debug(
+                    "Failed to extract text from node; falling back to str(node) "
+                    "(node_type={node_type})",
+                    node_type=type(node).__name__,
+                )
+                text = str(node)
+            meta = _sanitize_metadata(getattr(node, "metadata", None) or {})
+            docs.append({"content": text, "metadata": meta, "score": score})
+        if docs:
+            return docs
     if hasattr(result, "response"):
         # LlamaIndex response object
         return [
             {
                 "content": result.response,
-                "metadata": getattr(result, "metadata", {}),
+                "metadata": _sanitize_metadata(getattr(result, "metadata", None)),
                 "score": 1.0,
             }
         ]
@@ -336,12 +504,12 @@ def _parse_tool_result(result: Any) -> list[dict[str, Any]]:
                 documents.append(
                     {
                         "content": item.text,
-                        "metadata": item.metadata,
+                        "metadata": _sanitize_metadata(item.metadata),
                         "score": getattr(item, "score", 1.0),
                     }
                 )
             elif isinstance(item, dict):
-                documents.append(item)
+                documents.append(_sanitize_document_dict(item))
         return documents
     # Fallback - convert to string
     return [{"content": str(result), "metadata": {"source": "unknown"}, "score": 1.0}]

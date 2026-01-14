@@ -6,9 +6,9 @@ import json
 import time
 from typing import Annotated
 
+from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
-from llama_index.core.memory import ChatMemoryBuffer
 from loguru import logger
 
 from .constants import (
@@ -78,32 +78,34 @@ def route_query(
 
 
 def _extract_previous_queries_from_state(state: dict | None) -> list[str]:
-    context = state.get("context") if isinstance(state, dict) else None
-    # Context corruption recovery (tests patch ChatMemoryBuffer.from_defaults)
-    if (
-        isinstance(state, dict)
-        and state.get("context_recovery_enabled")
-        and context is not None
-    ):
-        try:
-            context = ChatMemoryBuffer.from_defaults()
-            state["context"] = context
-        except Exception:
-            context = ChatMemoryBuffer.from_defaults()
-            state["context"] = context
-    if isinstance(state, dict) and state.get("reset_context_on_error"):
-        state["context"] = ChatMemoryBuffer.from_defaults()
+    # NOTE: Persistence stores LangChain message objects in state
+    # (via LangGraph checkpointer). We avoid LlamaIndex ChatMemoryBuffer here to
+    # keep state fully serializable.
+    if not isinstance(state, dict):
+        return []
 
-    history = getattr(context, "chat_history", None) if context else None
-    if isinstance(history, list):
-        try:
-            return [
-                getattr(msg, "content", str(msg))
-                for msg in history[-RECENT_CHAT_HISTORY_LIMIT:]
-            ]
-        except Exception:
-            return []
-    return []
+    messages = state.get("messages", [])
+    if not isinstance(messages, list):
+        return []
+
+    previous: list[str] = []
+    for msg in messages[:-1]:  # exclude current user query
+        if isinstance(msg, HumanMessage):
+            content = getattr(msg, "content", None)
+            if content:
+                if isinstance(content, str):
+                    previous.append(content)
+                elif isinstance(content, list):
+                    text_parts = [
+                        block.get("text", "")
+                        for block in content
+                        if isinstance(block, dict) and block.get("type") == "text"
+                    ]
+                    joined = " ".join(part for part in text_parts if part.strip())
+                    if joined:
+                        previous.append(joined)
+
+    return previous[-RECENT_CHAT_HISTORY_LIMIT:]
 
 
 def _determine_complexity(query_lower: str, word_count: int):

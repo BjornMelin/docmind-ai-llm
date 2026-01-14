@@ -47,7 +47,11 @@ def test_retrieve_documents_with_patched_factory():
         mock_factory.create_vector_search_tool.return_value = mock_tool
         out = json.loads(
             retrieve_documents.invoke(
-                {"query": "q", "state": mock_state, "strategy": "vector"}
+                {
+                    "query": "q",
+                    "state": mock_state,
+                    "strategy": "vector",
+                }
             )
         )
     assert out.get("documents")

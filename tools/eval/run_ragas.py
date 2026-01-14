@@ -46,6 +46,99 @@ from src.eval.common.determinism import set_determinism
 from src.eval.common.io import SCHEMA_VERSION, write_csv_row
 
 
+def _build_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser for RAGAS evaluation."""
+    ap = argparse.ArgumentParser(description="DocMind E2E RAG eval with RAGAS")
+    ap.add_argument(
+        "--dataset_csv",
+        required=True,
+        help=("CSV with: question, ground_truth, optional contexts JSON list"),
+    )
+    ap.add_argument("--results_dir", default="eval/results")
+    ap.add_argument(
+        "--ragas_mode",
+        choices=["offline", "online_smoke"],
+        default="offline",
+        help="Offline mocks in PR CI; limited online smoke in nightly",
+    )
+    ap.add_argument(
+        "--sample_count",
+        type=int,
+        default=0,
+        help="If >0, limit number of rows deterministically",
+    )
+    return ap
+
+
+def _validate_args(args: argparse.Namespace) -> None:
+    """Validate CLI arguments for RAGAS evaluation."""
+    if args.sample_count < 0:
+        raise ValueError("--sample_count must be >= 0")
+
+
+def _load_dataset(path: str, sample_count: int) -> pd.DataFrame:
+    """Load the dataset CSV and optionally limit rows."""
+    df = pd.read_csv(path)
+    if sample_count > 0:
+        df = df.head(sample_count)
+    return df
+
+
+def _build_answers(df: pd.DataFrame, ragas_mode: str) -> list[str]:
+    """Build answers with offline or online coordinator mode."""
+    if ragas_mode == "offline":
+        return [""] * len(df)
+    coord = MultiAgentCoordinator()
+    answers: list[str] = []
+    for _, row in df.iterrows():
+        q = row["question"]
+        resp = coord.process_query(q)
+        answers.append(getattr(resp, "content", ""))
+    return answers
+
+
+def _build_contexts(df: pd.DataFrame) -> list[list[Any]]:
+    """Build contexts list from dataset, defaulting to empty lists."""
+    if "contexts" not in df.columns:
+        return [[] for _ in range(len(df))]
+    return [c if isinstance(c, list) else [] for c in df["contexts"]]
+
+
+def _ensure_ragas_loaded() -> None:
+    """Ensure ragas modules are available, importing on demand."""
+    global evaluate, faithfulness, answer_relevancy, context_recall, context_precision
+    if evaluate is not None:
+        return
+    try:  # pragma: no cover
+        from ragas import evaluate as _evaluate  # type: ignore
+        from ragas.metrics import answer_relevancy as _ans  # type: ignore
+        from ragas.metrics import context_precision as _cp  # type: ignore
+        from ragas.metrics import context_recall as _cr  # type: ignore
+        from ragas.metrics import faithfulness as _fh  # type: ignore
+
+        evaluate = _evaluate  # type: ignore[assignment]
+        answer_relevancy = _ans  # type: ignore[assignment]
+        context_precision = _cp  # type: ignore[assignment]
+        context_recall = _cr  # type: ignore[assignment]
+        faithfulness = _fh  # type: ignore[assignment]
+    except Exception as exc:  # pragma: no cover - defensive
+        raise ImportError(
+            "ragas is required for evaluation; install optional eval extras"
+        ) from exc
+
+
+def _as_float(x: Any) -> float:
+    """Return a float from ragas metric results."""
+    try:
+        m = getattr(x, "mean", None)
+        if callable(m):
+            val = m()
+            return float(val) if val is not None else float("nan")  # type: ignore[arg-type]
+        return float(x) if x is not None else float("nan")  # type: ignore[arg-type]
+    except Exception:  # pragma: no cover - defensive fallback
+        return float("nan")
+
+
 def main() -> None:
     """Evaluate RAG system using RAGAS metrics and log results to leaderboard.
 
@@ -67,53 +160,14 @@ def main() -> None:
         ValueError: If the CSV doesn't contain required columns.
         RuntimeError: If the MultiAgentCoordinator fails to initialize.
     """
-    # Determinism first
     set_determinism()
-
-    ap = argparse.ArgumentParser(description="DocMind E2E RAG eval with RAGAS")
-    ap.add_argument(
-        "--dataset_csv",
-        required=True,
-        help=("CSV with: question, ground_truth, optional contexts JSON list"),
-    )
-    ap.add_argument("--results_dir", default="eval/results")
-    ap.add_argument(
-        "--ragas_mode",
-        choices=["offline", "online_smoke"],
-        default="offline",
-        help="Offline mocks in PR CI; limited online smoke in nightly",
-    )
-    ap.add_argument(
-        "--sample_count",
-        type=int,
-        default=0,
-        help="If >0, limit number of rows deterministically",
-    )
+    ap = _build_parser()
     args = ap.parse_args()
-    if args.sample_count < 0:
-        raise ValueError("--sample_count must be >= 0")
+    _validate_args(args)
 
-    df = pd.read_csv(args.dataset_csv)
-    if args.sample_count > 0:
-        df = df.head(args.sample_count)
-
-    # Build answers depending on mode: offline skips online calls entirely
-    if args.ragas_mode == "offline":
-        answers: list[str] = [""] * len(df)
-    else:
-        coord = MultiAgentCoordinator()
-        answers = []
-        for _, row in df.iterrows():
-            q = row["question"]
-            resp = coord.process_query(q)
-            answers.append(getattr(resp, "content", ""))
-
-    # If dataset contains a 'contexts' column, preserve it; else empty lists
-    if "contexts" in df.columns:
-        ctxs = [c if isinstance(c, list) else [] for c in df["contexts"]]
-    else:
-        ctxs = [[] for _ in range(len(df))]
-
+    df = _load_dataset(args.dataset_csv, args.sample_count)
+    answers = _build_answers(df, args.ragas_mode)
+    ctxs = _build_contexts(df)
     data = pd.DataFrame(
         {
             "question": df["question"],
@@ -123,33 +177,10 @@ def main() -> None:
         }
     )
 
-    # Import ragas on-demand if not already imported (and not monkeypatched).
-    global evaluate, faithfulness, answer_relevancy, context_recall, context_precision
-    if evaluate is None:  # pragma: no cover - executed only without ragas in env
-        try:
-            from ragas import evaluate as _evaluate  # type: ignore
-            from ragas.metrics import (  # type: ignore
-                answer_relevancy as _ans,
-            )
-            from ragas.metrics import (
-                context_precision as _cp,
-            )
-            from ragas.metrics import (
-                context_recall as _cr,
-            )
-            from ragas.metrics import (
-                faithfulness as _fh,
-            )
+    _ensure_ragas_loaded()
 
-            evaluate = _evaluate  # type: ignore[assignment]
-            answer_relevancy = _ans  # type: ignore[assignment]
-            context_precision = _cp  # type: ignore[assignment]
-            context_recall = _cr  # type: ignore[assignment]
-            faithfulness = _fh  # type: ignore[assignment]
-        except Exception as exc:  # pragma: no cover - defensive
-            raise ImportError(
-                "ragas is required for evaluation; install optional eval extras"
-            ) from exc
+    if evaluate is None:
+        raise ImportError("ragas not loaded")
 
     # Use ragas_mode to toggle minimal runtime behavior
     show_progress = args.ragas_mode == "online_smoke"
@@ -160,16 +191,6 @@ def main() -> None:
         show_progress=show_progress,
         batch_size=batch_size,
     )
-
-    # The mock in tests returns mapping of Series; handle that shape.
-    # Newer ragas may return EvaluationResult with dict-like access to arrays.
-    def _as_float(x: Any) -> float:
-        try:
-            # Pandas Series.mean or list/ndarray mean fallback
-            m = getattr(x, "mean", None)
-            return float(m()) if callable(m) else float(x)
-        except Exception:  # pragma: no cover - defensive fallback
-            return float("nan")
 
     out = {
         "schema_version": SCHEMA_VERSION,

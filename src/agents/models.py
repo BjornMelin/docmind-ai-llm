@@ -23,9 +23,11 @@ Architecture Decision:
     the hybrid organization strategy.
 """
 
-from typing import Any
+from typing import Annotated, Any, NotRequired
 
-from llama_index.core.memory import ChatMemoryBuffer
+from langchain.agents import AgentState
+from langchain_core.messages import AnyMessage
+from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field
 
 
@@ -71,6 +73,35 @@ class AgentResponse(BaseModel):
     )
 
 
+class MultiAgentGraphState(AgentState[Any]):
+    """TypedDict state schema for LangChain/LangGraph agent graphs.
+
+    ``langchain.agents.create_agent`` requires a ``TypedDict`` that extends
+    ``AgentState``. The Pydantic ``MultiAgentState`` model remains the local
+    validation/serialization helper used by DocMind code and tests.
+    """
+
+    tools_data: NotRequired[dict[str, Any]]
+    routing_decision: NotRequired[dict[str, Any]]
+    planning_output: NotRequired[dict[str, Any]]
+    retrieval_results: NotRequired[list[dict[str, Any]]]
+    synthesis_result: NotRequired[dict[str, Any]]
+    validation_result: NotRequired[dict[str, Any]]
+    agent_timings: NotRequired[dict[str, float]]
+    total_start_time: NotRequired[float]
+    parallel_execution_active: NotRequired[bool]
+    token_reduction_achieved: NotRequired[float]
+    context_trimmed: NotRequired[bool]
+    tokens_trimmed: NotRequired[int]
+    kv_cache_usage_gb: NotRequired[float]
+    output_mode: NotRequired[str]
+    errors: NotRequired[list[str]]
+    fallback_used: NotRequired[bool]
+    remaining_steps: NotRequired[int]
+    timed_out: NotRequired[bool]
+    deadline_s: NotRequired[float]
+
+
 class MultiAgentState(BaseModel):
     """Extended state for ADR-compliant multi-agent coordination.
 
@@ -100,12 +131,13 @@ class MultiAgentState(BaseModel):
         errors: List of errors encountered during processing
         fallback_used: Whether fallback RAG mode was used
         remaining_steps: Remaining steps for LangGraph supervisor
+        timed_out: Whether the workflow timed out
+        deadline_s: Absolute workflow deadline in seconds
     """
 
     # Core state
-    messages: list[Any] = Field(default_factory=list)
+    messages: Annotated[list[AnyMessage], add_messages] = Field(default_factory=list)
     tools_data: dict[str, Any] = Field(default_factory=dict)
-    context: ChatMemoryBuffer | None = None
 
     # Agent decisions and results
     routing_decision: dict[str, Any] = Field(default_factory=dict)
@@ -136,3 +168,5 @@ class MultiAgentState(BaseModel):
     remaining_steps: int = Field(
         default=10, description="Remaining steps for supervisor"
     )
+    timed_out: bool = Field(default=False)
+    deadline_s: float = Field(default=0.0)

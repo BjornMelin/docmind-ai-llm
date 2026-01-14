@@ -16,6 +16,7 @@ import re
 import sys
 from collections.abc import Iterable
 from pathlib import Path
+from typing import Any, cast
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
@@ -23,7 +24,7 @@ from jsonschema.exceptions import SchemaError
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def _load_schema(name: str) -> dict:
+def _load_schema(name: str) -> dict[str, Any]:
     p = ROOT / "schemas" / name
     with p.open("r", encoding="utf-8") as f:
         return json.load(f)
@@ -53,7 +54,7 @@ def validate_file(path: Path) -> None:
         reader = csv.DictReader(f)
         if reader.fieldnames is None:
             raise ValueError(f"Empty or invalid CSV: {path}")
-        header = reader.fieldnames
+        header = list(reader.fieldnames)
         kind = guess_leaderboard_type(header)
         if kind == "unknown":
             raise ValueError(
@@ -121,7 +122,10 @@ def validate_file(path: Path) -> None:
                 if field not in data:
                     raise ValueError(f"Missing {field} in row {row_count} of {path}")
 
-            if errors := sorted(validator.iter_errors(data), key=lambda e: e.path):
+            if errors := sorted(
+                validator.iter_errors(cast(Any, data)),
+                key=lambda e: e.path,
+            ):
                 msg = "; ".join(
                     f"{list(e.path)}: {e.message}" if e.path else e.message
                     for e in errors

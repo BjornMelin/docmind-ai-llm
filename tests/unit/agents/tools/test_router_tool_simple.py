@@ -26,7 +26,9 @@ class _Router:
 @pytest.mark.unit
 def test_router_tool_happy_path() -> None:
     """Test router tool extracts response text and selected strategy correctly."""
-    out = router_tool.func("q", {"router_engine": _Router()})  # type: ignore[attr-defined]
+    out = router_tool.invoke(
+        {"query": "q", "state": {"tools_data": {"router_engine": _Router()}}},
+    )
     data = json.loads(out)
     assert data["response_text"] == "ok"
     assert data.get("selected_strategy") == "semantic_search"
@@ -35,7 +37,7 @@ def test_router_tool_happy_path() -> None:
 @pytest.mark.unit
 def test_router_tool_missing_engine_returns_error() -> None:
     """Test router tool returns error when router engine is missing."""
-    out = router_tool.func("q", {"tools_data": {}})  # type: ignore[attr-defined]
+    out = router_tool.invoke({"query": "q"})
     data = json.loads(out)
     assert "error" in data
     assert "router_engine" in data["error"]

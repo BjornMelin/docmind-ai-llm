@@ -36,7 +36,11 @@ def test_kg_tool_absent_when_builder_errors(monkeypatch: pytest.MonkeyPatch) -> 
     cfg = SimpleNamespace(
         enable_graphrag=True,
         retrieval=SimpleNamespace(
-            top_k=3, use_reranking=False, reranking_top_k=2, enable_server_hybrid=False
+            top_k=3,
+            use_reranking=False,
+            reranking_top_k=2,
+            enable_server_hybrid=False,
+            enable_image_retrieval=True,
         ),
         graphrag_cfg=SimpleNamespace(default_path_depth=1),
         database=SimpleNamespace(qdrant_collection="col"),
@@ -45,7 +49,10 @@ def test_kg_tool_absent_when_builder_errors(monkeypatch: pytest.MonkeyPatch) -> 
     router = rf.build_router_engine(
         _Vec(), pg_index=_Pg(), settings=cfg, enable_hybrid=False
     )
-    assert get_router_tool_names(router) == ["semantic_search"]
+    assert set(get_router_tool_names(router)) == {
+        "semantic_search",
+        "multimodal_search",
+    }
 
 
 @pytest.mark.unit
@@ -69,7 +76,11 @@ def test_kg_tool_present_when_builder_ok(monkeypatch: pytest.MonkeyPatch) -> Non
     cfg = SimpleNamespace(
         enable_graphrag=True,
         retrieval=SimpleNamespace(
-            top_k=3, use_reranking=False, reranking_top_k=2, enable_server_hybrid=False
+            top_k=3,
+            use_reranking=False,
+            reranking_top_k=2,
+            enable_server_hybrid=False,
+            enable_image_retrieval=True,
         ),
         graphrag_cfg=SimpleNamespace(default_path_depth=1),
         database=SimpleNamespace(qdrant_collection="col"),
@@ -78,4 +89,8 @@ def test_kg_tool_present_when_builder_ok(monkeypatch: pytest.MonkeyPatch) -> Non
     router = rf.build_router_engine(
         _Vec(), pg_index=_Pg(), settings=cfg, enable_hybrid=False
     )
-    assert set(get_router_tool_names(router)) == {"semantic_search", "knowledge_graph"}
+    assert set(get_router_tool_names(router)) == {
+        "semantic_search",
+        "multimodal_search",
+        "knowledge_graph",
+    }

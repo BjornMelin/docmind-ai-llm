@@ -41,13 +41,19 @@ from src.telemetry import opentelemetry as otel
 def snapshot_storage_root(tmp_path: Path) -> Path:
     """Provide an isolated snapshot storage root for each test."""
     original_dir = app_settings.data_dir
+    original_chat_db = app_settings.chat.sqlite_path
+    original_ops_db = app_settings.database.sqlite_db_path
     app_settings.data_dir = tmp_path
+    app_settings.chat.sqlite_path = tmp_path / "chat.db"
+    app_settings.database.sqlite_db_path = tmp_path / "docmind.db"
     storage = tmp_path / "storage"
     storage.mkdir(parents=True, exist_ok=True)
     try:
         yield storage
     finally:
         app_settings.data_dir = original_dir
+        app_settings.chat.sqlite_path = original_chat_db
+        app_settings.database.sqlite_db_path = original_ops_db
 
 
 @pytest.fixture

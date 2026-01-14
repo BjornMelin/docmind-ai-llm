@@ -27,7 +27,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 from langchain_core.messages import HumanMessage
-from llama_index.core.memory import ChatMemoryBuffer
 
 from src.agents.tools.planning import route_query
 from src.agents.tools.retrieval import retrieve_documents
@@ -46,7 +45,6 @@ class TestAgentErrorRecovery:
         # Given: State with multiple tools, one fails
         mock_state = {
             "messages": [HumanMessage(content="Multi-tool test query")],
-            "context": ChatMemoryBuffer.from_defaults(),
             "tools_data": {"vector": Mock(), "kg": Mock(), "retriever": Mock()},
             "error_isolation_enabled": True,
             "continue_on_tool_failure": True,
@@ -73,7 +71,10 @@ class TestAgentErrorRecovery:
             # Should isolate vector tool failure
             with patch("src.agents.tools.retrieval.logger") as mock_logger:
                 result = retrieve_documents.invoke(
-                    {"query": "Multi-tool test query", "state": mock_state}
+                    {
+                        "query": "Multi-tool test query",
+                        "state": mock_state,
+                    }
                 )
 
         # Then: Error is contained and other tools continue working
@@ -93,38 +94,29 @@ class TestAgentErrorRecovery:
 
     def test_context_corruption_recovery(self):
         """Test recovery from context corruption scenarios."""
-        # Given: Corrupted context state
-        corrupted_context = ChatMemoryBuffer.from_defaults()
-        # Simulate corrupted context by adding invalid data
-        corrupted_context.chat_store.store = {"invalid": "corrupted_data"}
-
+        # Given: Corrupted state representation (legacy tests used ChatMemoryBuffer,
+        # but final-release persistence stores LangChain messages in state).
         mock_state = {
             "messages": [HumanMessage(content="Context corruption test")],
-            "context": corrupted_context,
             "tools_data": {"vector": Mock()},
             "context_recovery_enabled": True,
             "reset_context_on_error": True,
         }
 
-        # When: Tool execution encounters corrupted context
-        with patch("src.agents.tool_factory.ToolFactory") as mock_factory:
-            mock_factory.create_tools_from_indexes.return_value = [Mock()]
+        # When: Routing runs with corrupted/legacy flags, it should still succeed.
+        result = route_query.invoke(
+            {
+                "query": "Context corruption test",
+                "state": mock_state,
+            }
+        )
 
-            # Mock context validation that detects corruption
-            with patch(
-                "src.agents.tools.planning.ChatMemoryBuffer"
-            ) as mock_context_class:
-                mock_fresh_context = Mock()
-                mock_context_class.from_defaults.return_value = mock_fresh_context
-
-                result = route_query.invoke(
-                    {"query": "Context corruption test", "state": mock_state}
-                )
-
-        # Then: Context recovery creates fresh context
+        # Then: Routing returns a decision JSON (outer layers can reset state).
         assert result is not None
-        # Verify new context was created due to corruption
-        assert mock_context_class.from_defaults.called
+        import json
+
+        parsed = json.loads(result)
+        assert isinstance(parsed, dict)
 
     # Deprecated timeout recovery probe tests removed; use direct monkeypatching
     # at tool boundaries in modern tests.
@@ -134,7 +126,6 @@ class TestAgentErrorRecovery:
         # Given: State where multiple components have issues
         mock_state = {
             "messages": [HumanMessage(content="Partial failure resilience test")],
-            "context": ChatMemoryBuffer.from_defaults(),
             "tools_data": {
                 "vector": Mock(),  # This will work
                 "kg": None,  # This is unavailable
@@ -170,7 +161,10 @@ class TestAgentErrorRecovery:
 
             with patch("src.agents.tools.retrieval.logger") as mock_logger:
                 result = retrieve_documents.invoke(
-                    {"query": "Partial failure test", "state": mock_state}
+                    {
+                        "query": "Partial failure test",
+                        "state": mock_state,
+                    }
                 )
 
         # Then: System continues with available tools
@@ -195,7 +189,6 @@ class TestAgentErrorRecovery:
         # Given: State that becomes corrupted during processing
         mock_state = {
             "messages": [HumanMessage(content="State corruption test")],
-            "context": ChatMemoryBuffer.from_defaults(),
             "tools_data": {"vector": Mock()},
             "state_validation_enabled": True,
             "auto_recover_corrupted_state": True,
@@ -206,13 +199,19 @@ class TestAgentErrorRecovery:
 
         # First execution should return error JSON due to missing tools
         result_json = retrieve_documents.invoke(
-            {"query": "State corruption test", "state": mock_state}
+            {
+                "query": "State corruption test",
+                "state": mock_state,
+            }
         )
 
         # Recovery: Restore minimal required state and verify route works
         mock_state["tools_data"] = {"vector": Mock()}
         route_result = route_query.invoke(
-            {"query": "State recovery test", "state": mock_state}
+            {
+                "query": "State recovery test",
+                "state": mock_state,
+            }
         )
 
         # Then: Error JSON and successful subsequent route
@@ -227,7 +226,6 @@ class TestAgentErrorRecovery:
         # Given: State that simulates memory pressure
         mock_state = {
             "messages": [HumanMessage(content="Memory exhaustion test")],
-            "context": ChatMemoryBuffer.from_defaults(),
             "tools_data": {"vector": Mock()},
             "memory_limit_mb": 100,
             "auto_cleanup_on_memory_pressure": True,
@@ -248,7 +246,10 @@ class TestAgentErrorRecovery:
 
             # Retrieval should fall back to detailed path and not raise
             result_json = retrieve_documents.invoke(
-                {"query": "Memory test", "state": mock_state}
+                {
+                    "query": "Memory test",
+                    "state": mock_state,
+                }
             )
 
         # Then: Memory error path was attempted and result returned
@@ -264,7 +265,6 @@ class TestAgentErrorRecovery:
         # Given: State with vector index and short query to trigger variants
         mock_state = {
             "messages": [HumanMessage(content="Network fail test")],
-            "context": ChatMemoryBuffer.from_defaults(),
             "tools_data": {"vector": Mock()},
         }
 
@@ -294,7 +294,10 @@ class TestAgentErrorRecovery:
         ):
             # Use short query (<3 words) to trigger 2 variants + primary = 3 calls
             result_json = retrieve_documents.invoke(
-                {"query": "net issue", "state": mock_state}
+                {
+                    "query": "net issue",
+                    "state": mock_state,
+                }
             )
 
         # Then: Recovery succeeds after internal retries across variants
@@ -309,7 +312,6 @@ class TestAgentErrorRecovery:
         # Given: State with validation recovery enabled
         mock_state = {
             "messages": [HumanMessage(content="Validation failure test")],
-            "context": ChatMemoryBuffer.from_defaults(),
             "tools_data": {"vector": Mock()},
             "validation_recovery_enabled": True,
             "retry_on_validation_failure": True,
@@ -380,7 +382,6 @@ class TestAsyncErrorRecovery:
         # Given: Async state with timeout configuration
         mock_state = {
             "messages": [HumanMessage(content="Async timeout test")],
-            "context": ChatMemoryBuffer.from_defaults(),
             "tools_data": {"vector": Mock()},
             "async_timeout_seconds": 0.1,
             "graceful_degradation_enabled": True,

@@ -113,8 +113,7 @@ class OcrController:
                 details={"page_count": pages},
             )
 
-        # Default to legacy mapping: treat unknown types as FAST to preserve
-        # existing behaviour unless explicitly image-based.
+        # Default: treat unknown types as FAST unless explicitly image-based.
         return OcrDecision(
             strategy=ProcessingStrategy.FAST,
             reason_code="DEFAULT_FAST",

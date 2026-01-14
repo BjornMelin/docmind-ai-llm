@@ -33,6 +33,7 @@ Attributes:
 
 from typing import Any
 
+from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from loguru import logger
 
@@ -165,6 +166,7 @@ class ToolFactory:
             llm=llm,
             response_mode="compact",
             verbose=False,
+            engine_cls=RetrieverQueryEngine,
         )
         return cls.create_query_tool(
             query_engine,
@@ -245,7 +247,10 @@ class ToolFactory:
             use_reranking=bool(getattr(settings.retrieval, "use_reranking", True)),
         )
         query_engine = build_retriever_query_engine(
-            retriever=retriever, post=post, llm=None
+            retriever=retriever,
+            post=post,
+            llm=None,
+            engine_cls=RetrieverQueryEngine,
         )
         return cls.create_query_tool(
             query_engine,
@@ -253,6 +258,36 @@ class ToolFactory:
             (
                 "Hybrid via Qdrant Query API (server-side). RRF default; DBSF "
                 "optional. Prefetch dense+sparse; fused_top_k caps; de-dup by page_id."
+            ),
+        )
+
+    @classmethod
+    def create_multimodal_search_tool(cls, retriever: Any) -> QueryEngineTool:
+        """Create multimodal search tool (text hybrid + visual SigLIP channel).
+
+        The retriever is expected to return both text and image nodes and to
+        rely on the shared modality-aware reranker (SigLIP default; optional
+        ColPali).
+        """
+        from src.retrieval.reranking import get_postprocessors as _get_pp
+
+        post = _get_pp(
+            "hybrid",
+            use_reranking=bool(getattr(settings.retrieval, "use_reranking", True)),
+        )
+        query_engine = build_retriever_query_engine(
+            retriever=retriever,
+            post=post,
+            llm=None,
+            engine_cls=RetrieverQueryEngine,
+        )
+        return cls.create_query_tool(
+            query_engine,
+            "multimodal_search",
+            (
+                "Multimodal search: fuses text hybrid retrieval "
+                "with visual PDF page-image retrieval (SigLIP). Best for charts, "
+                "tables, and scanned documents."
             ),
         )
 
@@ -331,6 +366,8 @@ class ToolFactory:
             ... )
             >>> len(tools)  # number of tools created
         """
+        from src.retrieval.multimodal_fusion import MultimodalFusionRetriever
+
         tools = []
 
         if not vector_index:
@@ -339,8 +376,12 @@ class ToolFactory:
 
         # Add hybrid fusion search if retriever is available (highest priority)
         if retriever:
-            tools.append(cls.create_hybrid_search_tool(retriever))
-            logger.info("Added hybrid fusion search tool")
+            if isinstance(retriever, MultimodalFusionRetriever):
+                tools.append(cls.create_multimodal_search_tool(retriever))
+                logger.info("Added multimodal search tool")
+            else:
+                tools.append(cls.create_hybrid_search_tool(retriever))
+                logger.info("Added hybrid fusion search tool")
         else:
             # Fallback to hybrid vector search
             tools.append(cls.create_hybrid_vector_tool(vector_index))

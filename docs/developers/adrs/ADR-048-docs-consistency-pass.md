@@ -45,6 +45,7 @@ Complexity is weighted highest (40%) to reflect the maintenance burden on a smal
 | A: Do nothing                     |               10 |         10 |               0 |     7.0 |
 
 Scoring notes (brief):
+
 - **C**: small script + allowlist yields low effort (9), no perf risk (10), strong alignment (9).
 - **B**: lowest effort (10) but weaker alignment (7) because drift can return.
 - **D**: higher effort to triage/archive content (6), but perf unaffected (10).

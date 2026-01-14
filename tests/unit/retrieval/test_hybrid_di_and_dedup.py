@@ -11,7 +11,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
+from src.retrieval.hybrid import HybridParams, ServerHybridRetriever
 
 
 class _Point:
@@ -47,7 +47,7 @@ def test_hybrid_di_and_dedup_ordering(monkeypatch: pytest.MonkeyPatch) -> None:
     ]
 
     client = _ClientFake(pts)
-    retr = ServerHybridRetriever(_HybridParams(collection="col"), client=client)
+    retr = ServerHybridRetriever(HybridParams(collection="col"), client=client)
     retr._embed_dense = (  # type: ignore[attr-defined]
         lambda _t: np.asarray([0.0, 1.0], dtype=np.float32)
     )

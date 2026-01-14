@@ -22,6 +22,8 @@ def chat_app_autoload(tmp_path: Path, monkeypatch) -> AppTest:
     from src.config.settings import settings as _settings  # local import
 
     _settings.data_dir = tmp_path
+    _settings.chat.sqlite_path = tmp_path / "chat.db"
+    _settings.database.sqlite_db_path = tmp_path / "docmind.db"
     _settings.graphrag_cfg.autoload_policy = "latest_non_stale"
 
     # Create uploads dir with one file for stable corpus hash

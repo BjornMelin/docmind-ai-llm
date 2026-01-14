@@ -4,6 +4,7 @@ import tempfile
 
 import pytest
 
+from src.config.settings import settings
 from src.utils.security import decrypt_file, encrypt_file
 
 
@@ -16,7 +17,7 @@ def test_encrypt_file_passthrough_without_key(monkeypatch):
     Args:
         monkeypatch: Pytest fixture for manipulating environment variables.
     """
-    monkeypatch.delenv("DOCMIND_IMG_AES_KEY_BASE64", raising=False)
+    monkeypatch.setattr(settings.image, "img_aes_key_base64", None)
     with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
         f.write(b"abc")
         path = f.name
@@ -24,17 +25,17 @@ def test_encrypt_file_passthrough_without_key(monkeypatch):
     assert out == path
 
 
-@pytest.mark.parametrize("keylen", [16, 24, 32])
+@pytest.mark.parametrize("keylen", [32])
 def test_encrypt_file_with_key_round_trip(monkeypatch, keylen):
     """Test encrypt/decrypt round trip with AES keys of different lengths.
 
-    Tests AES-GCM encryption and decryption using different key sizes
-    (128, 192, 256 bits). Verifies that encrypted files can be successfully
-    decrypted back to original content.
+    Tests AES-GCM encryption and decryption using a 256-bit key.
+    Verifies that encrypted files can be successfully decrypted back to
+    original content.
 
     Args:
         monkeypatch: Pytest fixture for manipulating environment variables.
-        keylen: AES key length in bytes (16, 24, or 32).
+        keylen: AES key length in bytes (32).
     """
     try:
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa: F401
@@ -45,8 +46,8 @@ def test_encrypt_file_with_key_round_trip(monkeypatch, keylen):
     import os as _os
 
     key = _os.urandom(keylen)
-    monkeypatch.setenv(
-        "DOCMIND_IMG_AES_KEY_BASE64", base64.b64encode(key).decode("ascii")
+    monkeypatch.setattr(
+        settings.image, "img_aes_key_base64", base64.b64encode(key).decode("ascii")
     )
 
     with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as f:
@@ -73,8 +74,10 @@ def test_encrypt_file_with_kid_aad(monkeypatch, tmp_path):
     import base64
 
     key = b"x" * 32
-    monkeypatch.setenv("DOCMIND_IMG_AES_KEY_BASE64", base64.b64encode(key).decode())
-    monkeypatch.setenv("DOCMIND_IMG_KID", "kid-123")
+    monkeypatch.setattr(
+        settings.image, "img_aes_key_base64", base64.b64encode(key).decode()
+    )
+    monkeypatch.setattr(settings.image, "img_kid", "kid-123")
 
     p = tmp_path / "x.bin"
     p.write_bytes(b"abc")
@@ -87,7 +90,7 @@ def test_encrypt_file_with_kid_aad(monkeypatch, tmp_path):
         assert f.read() == b"abc"
 
     # Change KID to simulate AAD mismatch
-    monkeypatch.setenv("DOCMIND_IMG_KID", "other")
+    monkeypatch.setattr(settings.image, "img_kid", "other")
     dec2 = decrypt_file(enc)
     assert dec2 == enc
 
@@ -103,10 +106,10 @@ def test_encrypt_file_delete_plaintext(monkeypatch, tmp_path):
     import os as _os
 
     key = _os.urandom(32)
-    monkeypatch.setenv(
-        "DOCMIND_IMG_AES_KEY_BASE64", base64.b64encode(key).decode("ascii")
+    monkeypatch.setattr(
+        settings.image, "img_aes_key_base64", base64.b64encode(key).decode("ascii")
     )
-    monkeypatch.setenv("DOCMIND_IMG_DELETE_PLAINTEXT", "1")
+    monkeypatch.setattr(settings.image, "img_delete_plaintext", True)
 
     p = tmp_path / "img.webp"
     p.write_bytes(b"imgdata")

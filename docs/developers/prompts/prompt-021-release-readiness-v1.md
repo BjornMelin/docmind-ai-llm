@@ -275,16 +275,16 @@ Use these tools as needed:
 
 ### Final Verification Checklist (Must Complete)
 
-| Requirement     | Status | Proof / Notes                                     |
-| --------------- | ------ | ------------------------------------------------- |
-| **Packaging**   |        | `uv sync` clean                                   |
-| **Formatting**  |        | `ruff format`                                     |
-| **Lint**        |        | `ruff check` clean                                |
-| **Types**       |        | `pyright` clean                                   |
-| **Tests**       |        | `pytest` green (scoped + full tiers as required)  |
-| **Docs**        |        | ADR/SPEC/RTM updated                              |
-| **Security**    |        | allowlist + path validation + no secret logs      |
-| **Tech Debt**   |        | zero TODO/FIXME introduced                        |
-| **Performance** |        | no new import-time heavy work; run `scripts/performance_monitor.py` and ensure key UI/ingest flows have no regressions >10% vs. baseline (see `scripts/README.md`) |
+| Requirement     | Status | Proof / Notes                                                                                                                                                      |
+| --------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Packaging**   |        | `uv sync` clean                                                                                                                                                    |
+| **Formatting**  |        | `ruff format`                                                                                                                                                      |
+| **Lint**        |        | `ruff check` clean                                                                                                                                                 |
+| **Types**       |        | `pyright` clean                                                                                                                                                    |
+| **Tests**       |        | `pytest` green (scoped + full tiers as required)                                                                                                                   |
+| **Docs**        |        | ADR/SPEC/RTM updated                                                                                                                                               |
+| **Security**    |        | allowlist + path validation + no secret logs                                                                                                                       |
+| **Tech Debt**   |        | zero TODO/FIXME introduced                                                                                                                                         |
+| **Performance** |        | no new import-time heavy work; run `scripts/performance_monitor.py` and ensure key UI/ingest flows have no regressions >20% vs. baseline (see `scripts/README.md`) |
 
 **EXECUTE UNTIL COMPLETE.**

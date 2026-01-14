@@ -20,7 +20,7 @@ GPU Smoke Tests:
     - Real hardware testing for releases
 
 Usage:
-    uv run python run_tests.py                  # Run tiered tests (unit → integration)
+    uv run python run_tests.py                  # Run tiered tests (unit -> integration)
     uv run python run_tests.py --unit           # Run unit tests only
     uv run python run_tests.py --integration    # Run integration tests only
     uv run python run_tests.py --gpu            # Run GPU tests only
@@ -32,9 +32,12 @@ Usage:
 """
 
 import argparse
+import contextlib
 import importlib.util
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 import time
@@ -95,43 +98,67 @@ class TestRunner:
         except (ImportError, AttributeError, ValueError):
             return False
 
+    def _reset_coverage_artifacts(self) -> None:
+        """Remove stale coverage artifacts to keep reports reproducible."""
+        coverage_dir = self.project_root / "coverage"
+        coverage_dir.mkdir(parents=True, exist_ok=True)
+
+        stale_paths = [
+            self.project_root / ".coverage",
+            coverage_dir / ".coverage",
+            self.project_root / "coverage.json",
+            self.project_root / "coverage.xml",
+            self.project_root / "htmlcov",
+        ]
+        for path in stale_paths:
+            if not path.exists():
+                continue
+            if path.is_file():
+                path.unlink(missing_ok=True)
+            else:
+                shutil.rmtree(path, ignore_errors=True)
+
     def clean_artifacts(self) -> None:
         """Clean test artifacts and caches."""
-        print("🧹 Cleaning test artifacts...")
+        print("Cleaning test artifacts...")
 
-        artifacts_to_clean = [
+        # Targets that should be searched for recursively
+        recursive_targets = {
+            "__pycache__",
+            "*.pyc",
             ".pytest_cache",
+            ".coverage",
+        }
+
+        # Explicit paths relative to project root
+        explicit_targets = [
             "htmlcov",
             "coverage.xml",
             "coverage.json",
-            ".coverage",
-            "__pycache__",
-            "*.pyc",
+            "coverage/.coverage",
         ]
 
-        for pattern in artifacts_to_clean:
-            if pattern.startswith("*."):
-                # Use find for file patterns
-                subprocess.run(
-                    ["find", ".", "-name", pattern, "-delete"],
-                    cwd=self.project_root,
-                    capture_output=True,
-                    check=False,
-                )
-            else:
-                # Remove directories
-                path = self.project_root / pattern
-                if path.exists():
+        # Clean recursive targets
+        for pattern in recursive_targets:
+            for path in self.project_root.rglob(pattern):
+                with contextlib.suppress(OSError):
                     if path.is_file():
                         path.unlink()
                     else:
-                        subprocess.run(
-                            ["rm", "-rf", str(path)],
-                            cwd=self.project_root,
-                            check=False,
-                        )
+                        # Use ignore_errors=True for robust rmtree
+                        shutil.rmtree(path, ignore_errors=True)
 
-        print("✅ Artifacts cleaned")
+        # Clean explicit targets
+        for rel_path in explicit_targets:
+            path = self.project_root / rel_path
+            if path.exists():
+                with contextlib.suppress(OSError):
+                    if path.is_file():
+                        path.unlink()
+                    else:
+                        shutil.rmtree(path, ignore_errors=True)
+
+        print("OK: Artifacts cleaned")
 
     def run_command(self, command: list[str], description: str) -> TestResult:
         """Run a test command and capture results."""
@@ -170,14 +197,14 @@ class TestRunner:
                 print(f"OK: {description} completed successfully")
                 if result.passed > 0:
                     print(
-                        f"   📊 {result.passed} passed, "
+                        f"   Stats: {result.passed} passed, "
                         f"{result.failed} failed, {result.skipped} skipped"
                     )
             else:
                 print(f"FAIL: {description} failed with exit code {result.exit_code}")
                 if result.failed > 0:
                     print(
-                        f"   📊 {result.passed} passed, "
+                        f"   Stats: {result.passed} passed, "
                         f"{result.failed} failed, {result.skipped} skipped"
                     )
 
@@ -203,7 +230,6 @@ class TestRunner:
         output = result.output
 
         # Look for test summary line like "5 passed, 2 failed, 1 skipped"
-        import re
 
         summary_pattern = (
             r"(\d+) passed(?:, (\d+) failed)?(?:, (\d+) skipped)?(?:, (\d+) error)?"
@@ -245,8 +271,6 @@ class TestRunner:
             "--cov-fail-under=0",
             "--cov-report=term-missing",
             "--durations=10",
-            "-m",
-            "unit",
         ]
         # Run unit tests serially in CI for stability across environments
         return self.run_command(command, "Unit Tests (Tier 1 - Fast with mocks)")
@@ -264,8 +288,6 @@ class TestRunner:
             "--cov-fail-under=0",
             "--cov-report=term-missing",
             "--durations=10",
-            "-m",
-            "integration",
         ]
         return self.run_command(
             command, "Integration Tests (Tier 2 - Lightweight models)"
@@ -357,8 +379,6 @@ class TestRunner:
             "--cov-report=term-missing",
             "--cov-branch",
             "--durations=20",
-            "-m",
-            "unit or integration",
             "--maxfail=5",
         ]
         ci_env = os.getenv("CI") or os.getenv("GITHUB_ACTIONS")
@@ -396,16 +416,15 @@ class TestRunner:
             "--cov=src",
             "--cov-report=term-missing",
             "--durations=10",
-            "-m",
-            "unit or integration",
         ]
         return self.run_command(command, "Fast Tests (Unit + Integration)")
 
     def run_tiered_tests(self) -> None:
-        """Run all tests in pyramid order: unit → integration (no system tests)."""
+        """Run all tests in pyramid order: unit -> integration (no system tests)."""
         print("\nRunning Tiered Test Strategy")
         print("=" * 50)
         print("Tier 1: Unit Tests (mocked dependencies)")
+        self._reset_coverage_artifacts()
         result_unit = self.run_unit_tests()
 
         if result_unit.exit_code != 0:
@@ -413,7 +432,23 @@ class TestRunner:
             return
 
         print("\nTier 2: Integration Tests (lightweight models)")
-        result_integration = self.run_integration_tests()
+        # Append coverage from Tier 1 so coverage reporting reflects both tiers.
+        command = [
+            "uv",
+            "run",
+            "pytest",
+            "tests/integration/",
+            "-v",
+            "--tb=short",
+            "--cov=src",
+            "--cov-append",
+            "--cov-fail-under=0",
+            "--cov-report=term-missing",
+            "--durations=10",
+        ]
+        result_integration = self.run_command(
+            command, "Integration Tests (Tier 2 - Lightweight models)"
+        )
 
         if result_integration.exit_code != 0:
             print("Integration tests failed. Stopping tiered execution.")
@@ -473,8 +508,26 @@ else:
         ]
         self.run_command(coverage_cmd, "Coverage Report")
 
-        # Generate coverage analysis if coverage.json exists
         coverage_json = self.project_root / "coverage.json"
+        coverage_xml = self.project_root / "coverage.xml"
+        coverage_html = self.project_root / "htmlcov"
+        if not (
+            coverage_json.exists() and coverage_xml.exists() and coverage_html.exists()
+        ):
+            self.run_command(
+                ["uv", "run", "coverage", "json", "-o", "coverage.json"],
+                "Coverage JSON",
+            )
+            self.run_command(
+                ["uv", "run", "coverage", "xml", "-o", "coverage.xml"],
+                "Coverage XML",
+            )
+            self.run_command(
+                ["uv", "run", "coverage", "html", "-d", "htmlcov"],
+                "Coverage HTML",
+            )
+
+        # Generate coverage analysis if coverage.json exists
         if coverage_json.exists():
             self._analyze_coverage_data(coverage_json)
 
@@ -486,7 +539,7 @@ else:
 
             files = data.get("files", {})
             if not files:
-                print("❌ No coverage data found")
+                print("ERROR: No coverage data found")
                 return
 
             # Calculate overall stats
@@ -518,11 +571,13 @@ else:
 
             # Identify critical files
             critical_files = [
-                "src/models/core.py",
-                "src/utils/core.py",
-                "src/utils/document.py",
-                "src/utils/database.py",
-                "src/utils/monitoring.py",
+                "src/config/settings.py",
+                "src/models/embeddings.py",
+                "src/persistence/chat_db.py",
+                "src/persistence/memory_store.py",
+                "src/persistence/snapshot.py",
+                "src/retrieval/hybrid.py",
+                "src/retrieval/router_factory.py",
                 "src/agents/coordinator.py",
                 "src/agents/tool_factory.py",
                 "src/agents/tools/router_tool.py",
@@ -530,6 +585,9 @@ else:
                 "src/agents/tools/retrieval.py",
                 "src/agents/tools/synthesis.py",
                 "src/agents/tools/validation.py",
+                "src/utils/core.py",
+                "src/utils/document.py",
+                "src/utils/monitoring.py",
                 "src/app.py",
             ]
 
@@ -545,10 +603,10 @@ else:
                         found = True
                         break
                 if not found:
-                    print(f"   ❓ {critical}: Not found in coverage data")
+                    print(f"   WARN: {critical}: Not found in coverage data")
 
         except (OSError, ValueError, KeyError, json.JSONDecodeError) as e:
-            print(f"❌ Error analyzing coverage data: {e}")
+            print(f"ERROR: Error analyzing coverage data: {e}")
 
     def print_summary(self) -> None:
         """Print comprehensive test execution summary."""
@@ -569,7 +627,7 @@ else:
         print(f"   Errors:  {total_errors}")
         print(f"   Total Duration: {total_duration:.1f}s")
 
-        print("\n🔍 DETAILED RESULTS:")
+        print("\nDETAILED RESULTS:")
         print("-" * 60)
 
         for result in self.results:
@@ -581,12 +639,12 @@ else:
                     f"{result.skipped}S - {result.duration:.1f}s"
                 )
             else:
-                print(f"      ⏱️  {result.duration:.1f}s")
+                print(f"      Duration: {result.duration:.1f}s")
 
         # Show failures
         failed_results = [r for r in self.results if r.exit_code != 0]
         if failed_results:
-            print("\n❌ FAILED TESTS:")
+            print("\nFAILED TESTS:")
             print("-" * 60)
             for result in failed_results:
                 print(f"   Command: {result.command}")
@@ -604,7 +662,7 @@ else:
         # Print recommended actions
         print("\nRECOMMENDATIONS:")
         if total_failed > 0:
-            print("   🔧 Fix failing tests before deployment")
+            print("   - Fix failing tests before deployment")
         if total_failed == 0 and total_passed > 0:
             print("   All tests passing! Ready for deployment")
 
@@ -613,8 +671,8 @@ else:
         print("   Re-run specific tests: uv run pytest tests/test_<name>.py -v")
 
 
-def main():  # pylint: disable=too-many-branches,too-many-statements
-    """Main entry point for tiered test runner."""
+def _build_arg_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser for the tiered test runner."""
     parser = argparse.ArgumentParser(
         description="DocMind AI Tiered Test Runner",
         epilog="""Three-Tier Testing Strategy:
@@ -630,8 +688,6 @@ Examples:
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-
-    # Three-tier testing strategy arguments
     parser.add_argument(
         "--unit",
         action="store_true",
@@ -642,8 +698,6 @@ Examples:
         action="store_true",
         help="Run integration tests only (Tier 2 - lightweight models)",
     )
-
-    # Additional test categories
     parser.add_argument(
         "--fast",
         action="store_true",
@@ -667,8 +721,6 @@ Examples:
         action="store_true",
         help="Run basic smoke tests (quick system health check)",
     )
-
-    # Utility arguments
     parser.add_argument(
         "--coverage", action="store_true", help="Generate detailed coverage report"
     )
@@ -680,106 +732,130 @@ Examples:
         action="store_true",
         help="Validate that all modules can be imported",
     )
-
-    # Accept optional positional test paths/patterns for direct pytest invocation
     parser.add_argument(
         "paths",
         nargs="*",
         help="Optional test paths or patterns to pass directly to pytest.",
     )
+    return parser
 
+
+def _print_default_tiers() -> None:
+    """Print guidance for the default tiered test strategy."""
+    print("\nRunning Default Tiered Test Strategy")
+    print("\nTiers:")
+    print("   --unit: Fast tests with mocks (development)")
+    print("   --integration: Lightweight models (PR validation)")
+    print("   --gpu: Manual GPU smoke tests (staging/release)")
+    print("   --fast: Unit + Integration only")
+    print("   --extras: Optional-dependency tests (requires llama_index extras)")
+
+
+def _run_direct_paths(runner: TestRunner, args: argparse.Namespace) -> None:
+    """Run pytest directly for the provided paths."""
+    cmd = ["uv", "run", "pytest", *args.paths, "-v", "--tb=short"]
+    if args.coverage:
+        cmd += ["--cov=src", "--cov-report=term-missing"]
+    else:
+        cmd += ["--no-cov"]
+    runner.run_command(cmd, "Direct pytest (paths)")
+
+
+def _run_selected_tests(runner: TestRunner, args: argparse.Namespace) -> None:
+    """Dispatch to the appropriate test execution flow."""
+    if args.paths:
+        _run_direct_paths(runner, args)
+        return
+    if args.validate_imports:
+        runner.validate_imports()
+    elif args.smoke:
+        runner.run_smoke_tests()
+    elif args.unit:
+        runner.run_unit_tests()
+    elif args.integration:
+        runner.run_integration_tests()
+    elif args.extras:
+        runner.run_extras_tests()
+    elif args.fast:
+        runner.run_fast_tests()
+    elif args.performance:
+        runner.run_performance_tests()
+    elif args.gpu:
+        runner.run_gpu_tests()
+    elif args.coverage:
+        runner.run_all_tests()
+    else:
+        _print_default_tiers()
+        runner.validate_imports()
+        runner.run_tiered_tests()
+
+
+def _should_generate_coverage(args: argparse.Namespace) -> bool:
+    """Return True when a coverage report should be generated."""
+    if args.coverage:
+        return True
+    if args.paths:
+        return False
+    return not any(
+        (
+            args.fast,
+            args.unit,
+            args.integration,
+            args.extras,
+            args.performance,
+            args.gpu,
+            args.smoke,
+            args.validate_imports,
+        )
+    )
+
+
+def _finalize_run(runner: TestRunner) -> int:
+    """Print summary and return exit code.
+
+    Returns:
+        0 if all test runs succeeded, 1 if any runs failed.
+    """
+    runner.print_summary()
+    failed_runs = sum(1 for r in runner.results if r.exit_code != 0)
+    if failed_runs > 0:
+        print(f"\n{failed_runs} test run(s) failed")
+        return 1
+    print("\nAll test runs completed successfully")
+    return 0
+
+
+def main() -> int:
+    """Main entry point for tiered test runner.
+
+    Returns:
+        Exit code (0 for success, 1 for failure).
+    """
+    parser = _build_arg_parser()
     args = parser.parse_args()
 
-    project_root = Path(__file__).parent.parent  # Go up to project root from scripts/
+    project_root = Path(__file__).resolve().parent.parent
     runner = TestRunner(project_root)
 
     print("DocMind AI Test Suite")
     print("=" * 50)
 
-    # Clean artifacts if requested
     if args.clean:
         runner.clean_artifacts()
 
     try:
-        # If explicit test paths were supplied, run them directly via pytest
-        if args.paths:
-            cmd = ["uv", "run", "pytest", *args.paths, "-v", "--tb=short"]
-            if args.coverage:
-                cmd += ["--cov=src", "--cov-report=term-missing"]
-            else:
-                # Avoid project-wide coverage thresholds when running ad-hoc paths
-                cmd += ["--no-cov"]
-            runner.run_command(cmd, "Direct pytest (paths)")
-        # Run specific test categories based on tiered strategy
-        elif args.validate_imports:
-            runner.validate_imports()
-        elif args.smoke:
-            runner.run_smoke_tests()
-        elif args.unit:
-            runner.run_unit_tests()
-        elif args.integration:
-            runner.run_integration_tests()
-        elif args.extras:
-            runner.run_extras_tests()
-        elif args.fast:
-            runner.run_fast_tests()
-        elif args.performance:
-            runner.run_performance_tests()
-        elif args.gpu:
-            runner.run_gpu_tests()
-        elif args.coverage:
-            # Full test suite with coverage over src/
-            runner.run_all_tests()
-        else:
-            # Default: Run tiered test strategy (unit → integration → system)
-            print("\nRunning Default Tiered Test Strategy")
-            print("\nTiers:")
-            print("   --unit: Fast tests with mocks (development)")
-            print("   --integration: Lightweight models (PR validation)")
-            print("   --gpu: Manual GPU smoke tests (staging/release)")
-            print("   --fast: Unit + Integration only")
-            print(
-                "   --extras: Optional-dependency tests (requires llama_index extras)"
-            )
-
-            runner.validate_imports()
-            runner.run_tiered_tests()
-
-        # Generate coverage report if requested or if running comprehensive tests
-        if args.coverage or (
-            not args.paths
-            and not any(
-                [
-                    args.fast,
-                    args.unit,
-                    args.integration,
-                    args.extras,
-                    args.performance,
-                    args.gpu,
-                    args.smoke,
-                    args.validate_imports,
-                ]
-            )
-        ):
+        _run_selected_tests(runner, args)
+        if _should_generate_coverage(args):
             runner.generate_coverage_report()
-
     except KeyboardInterrupt:
-        print("\n⚠️  Test execution interrupted by user")
+        print("\nWARN: Test execution interrupted by user")
+        return 1
     except Exception as e:  # pylint: disable=broad-exception-caught
         print(f"\nUnexpected error: {e}")
-        sys.exit(1)
+        return 1
 
-    # Print summary
-    runner.print_summary()
-
-    # Exit with appropriate code
-    failed_runs = sum(1 for r in runner.results if r.exit_code != 0)
-    if failed_runs > 0:
-        print(f"\n{failed_runs} test run(s) failed")
-        sys.exit(1)
-    else:
-        print("\nAll test runs completed successfully")
+    return _finalize_run(runner)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

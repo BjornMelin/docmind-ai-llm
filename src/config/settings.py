@@ -8,17 +8,33 @@ Usage:
     print(settings.embedding.model_name)
 """
 
-import logging
+import base64
 from collections.abc import Callable
 from contextlib import suppress
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
+from loguru import logger
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-logger = logging.getLogger(__name__)
+from src.models.embedding_constants import ImageBackboneName
+
+SETTINGS_MODEL_CONFIG = SettingsConfigDict(
+    env_file=".env",
+    env_prefix="DOCMIND_",
+    env_nested_delimiter="__",
+    case_sensitive=False,
+    extra="ignore",
+)
 
 
 class VLLMConfig(BaseModel):
@@ -96,6 +112,29 @@ class OpenAIConfig(BaseModel):
 _DEFAULT_OPENAI_BASE_URL = OpenAIConfig().base_url
 
 
+class ImageConfig(BaseModel):
+    """Image processing and security settings."""
+
+    model_config = ConfigDict(validate_assignment=True)
+
+    img_aes_key_base64: str | None = Field(default=None)
+    img_kid: str | None = Field(default=None)
+    img_delete_plaintext: bool = Field(default=False)
+
+    @field_validator("img_aes_key_base64", mode="before")
+    @classmethod
+    def _validate_img_aes_key_base64(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        try:
+            decoded = base64.b64decode(v, validate=True)
+        except Exception as exc:
+            raise ValueError("img_aes_key_base64 must be valid base64") from exc
+        if len(decoded) != 32:
+            raise ValueError("img_aes_key_base64 must decode to 32 bytes (AES-256)")
+        return v
+
+
 class SecurityConfig(BaseModel):
     """Security and remote endpoint policy settings."""
 
@@ -156,7 +195,41 @@ class ProcessingConfig(BaseModel):
 class ChatConfig(BaseModel):
     """Chat memory configuration (ADR-021)."""
 
-    sqlite_path: Path = Field(default=Path("./data/chat.db"))
+    sqlite_path: Path = Field(default=Path("chat.db"))
+    memory_store_filter_fetch_cap: int = Field(
+        default=5000,
+        ge=256,
+        le=100000,
+        description="Max rows fetched for filtered memory searches before slicing.",
+    )
+    memory_similarity_threshold: float = Field(
+        default=0.85,
+        ge=0.0,
+        le=1.0,
+        description="Similarity threshold for consolidating memory candidates.",
+    )
+    memory_low_importance_threshold: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=1.0,
+        description="Importance cutoff for applying memory TTL.",
+    )
+    memory_low_importance_ttl_days: int = Field(
+        default=14,
+        ge=0,
+        description="TTL in days for low-importance memories (0 disables TTL).",
+    )
+    memory_max_items_per_namespace: int = Field(
+        default=200,
+        ge=1,
+        description="Maximum memories kept per namespace before eviction.",
+    )
+    memory_max_candidates_per_turn: int = Field(
+        default=8,
+        ge=1,
+        le=50,
+        description="Maximum extracted memory candidates per turn.",
+    )
 
 
 class AgentConfig(BaseModel):
@@ -265,13 +338,7 @@ class EmbeddingConfig(BaseModel):
     batch_size_text_cpu: int = Field(default=4, ge=1, le=64)
 
     # Images
-    image_backbone: Literal[
-        "auto",
-        "openclip_vitl14",
-        "openclip_vith14",
-        "siglip_base",
-        "bge_visualized",
-    ] = Field(default="auto")
+    image_backbone: ImageBackboneName = Field(default="auto")
     siglip_model_id: str = Field(default="google/siglip-base-patch16-224")
     normalize_image: bool = Field(default=True)
     batch_size_image: int = Field(default=8, ge=1, le=64)
@@ -288,6 +355,12 @@ class RetrievalConfig(BaseModel):
     use_reranking: bool = Field(default=True)
     reranking_top_k: int = Field(default=5, ge=1, le=20)
     reranker_normalize_scores: bool = Field(default=True)
+    enable_image_retrieval: bool = Field(
+        default=True,
+        description=(
+            "Enable visual retrieval (SigLIP text->image) and multimodal fusion."
+        ),
+    )
 
     # Server-side fusion settings (ADR-024 v2.8)
     fusion_mode: Literal["rrf", "dbsf"] = Field(
@@ -310,8 +383,6 @@ class RetrievalConfig(BaseModel):
     named_vectors_multi_head_enabled: bool = Field(default=False)
     # Router and feature toggles (ADR-003)
     router: Literal["auto", "simple", "hierarchical", "graph"] = Field(default="auto")
-    # Deprecated legacy flag removed; use enable_server_hybrid
-    hierarchy_enabled: bool = Field(default=True)
     graph_enabled: bool = Field(default=False)
     # Server-side hybrid via Qdrant Query API fusion (prefetch + RRF/DBSF).
     # This specifically controls registration of a server-side hybrid tool in
@@ -398,6 +469,27 @@ class CacheConfig(BaseModel):
     filename: str = Field(default="docmind.duckdb")
 
 
+class ArtifactsConfig(BaseModel):
+    """Local content-addressed artifact storage (page images, thumbnails)."""
+
+    dir: Path | None = Field(
+        default=None,
+        description="Optional override; default is data_dir/artifacts",
+    )
+    max_total_mb: int = Field(
+        default=4096,
+        ge=100,
+        le=200_000,
+        description="Best-effort artifact GC budget (MB)",
+    )
+    gc_min_age_seconds: int = Field(
+        default=3600,
+        ge=0,
+        le=31_536_000,
+        description="Do not GC artifacts newer than this age (seconds)",
+    )
+
+
 class HashingConfig(BaseModel):
     """Deterministic hashing and canonicalisation configuration."""
 
@@ -439,10 +531,11 @@ class DatabaseConfig(BaseModel):
     vector_store_type: str = Field(default="qdrant")
     qdrant_url: str = Field(default="http://localhost:6333")
     qdrant_collection: str = Field(default="docmind_docs")
+    qdrant_image_collection: str = Field(default="docmind_images")
     qdrant_timeout: int = Field(default=60, ge=10, le=300)
 
     # SQL Database
-    sqlite_db_path: Path = Field(default=Path("./data/docmind.db"))
+    sqlite_db_path: Path = Field(default=Path("docmind.db"))
     enable_wal_mode: bool = Field(default=True)
 
 
@@ -539,13 +632,7 @@ class MonitoringConfig(BaseModel):
 class DocMindSettings(BaseSettings):
     """Unified DocMind AI configuration with Pydantic Settings V2."""
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_prefix="DOCMIND_",
-        env_nested_delimiter="__",
-        case_sensitive=False,
-        extra="ignore",
-    )
+    model_config = SETTINGS_MODEL_CONFIG
 
     # Core Application
     app_name: str = Field(default="DocMind AI")
@@ -562,6 +649,7 @@ class DocMindSettings(BaseSettings):
 
     # File System Paths
     data_dir: Path = Field(default=Path("./data"))
+    artifacts: ArtifactsConfig = Field(default_factory=ArtifactsConfig)
     cache_dir: Path = Field(default=Path("./cache"))
     log_file: Path = Field(default=Path("./logs/docmind.log"))
 
@@ -662,13 +750,6 @@ class DocMindSettings(BaseSettings):
     dspy_metric_threshold: float = Field(default=0.8, ge=0.5, le=1.0)
     enable_dspy_bootstrapping: bool = Field(default=True)
 
-    # GraphRAG legacy (prefer nested graphrag_cfg)
-    graphrag_relationship_extraction: bool = Field(default=False)
-    graphrag_entity_resolution: str = Field(default="fuzzy")
-    graphrag_max_hops: int = Field(default=2, ge=1, le=5)
-    graphrag_max_triplets: int = Field(default=1000, ge=100, le=10000)
-    graphrag_chunk_size: int = Field(default=1024, ge=256, le=4096)
-
     # UI Configuration moved to nested UIConfig structure
 
     # Nested Configuration Models
@@ -688,6 +769,7 @@ class DocMindSettings(BaseSettings):
     graphrag_cfg: GraphRAGConfig = Field(default_factory=GraphRAGConfig)
     snapshots: SnapshotConfig = Field(default_factory=SnapshotConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
+    image: ImageConfig = Field(default_factory=ImageConfig)
     hybrid: HybridConfig = Field(default_factory=HybridConfig)
 
     # Alias fields mapped to nested configs for ergonomic top-level
@@ -699,10 +781,16 @@ class DocMindSettings(BaseSettings):
     # Top-level LLM context window cap (ADR-004/024)
     llm_context_window_max: int = Field(default=131072, ge=8192, le=200000)
 
+    # Image encryption aliases (ADR-031 bridge)
+    img_aes_key_base64: str | None = Field(default=None)
+    img_kid: str | None = Field(default=None)
+    img_delete_plaintext: bool | None = Field(default=None)
+
     @model_validator(mode="after")
     def _apply_aliases_and_validate(self) -> "DocMindSettings":
         self._apply_alias_overrides()
         self._map_hybrid_to_retrieval()
+        self._normalize_persistence_paths()
         self._validate_endpoints_security()
         self._validate_lmstudio_url()
         return self
@@ -715,6 +803,9 @@ class DocMindSettings(BaseSettings):
             "chunk_size": (self.processing, "chunk_size", int),
             "chunk_overlap": (self.processing, "chunk_overlap", int),
             "enable_multi_agent": (self.agents, "enable_multi_agent", bool),
+            "img_aes_key_base64": (self.image, "img_aes_key_base64", str),
+            "img_kid": (self.image, "img_kid", str),
+            "img_delete_plaintext": (self.image, "img_delete_plaintext", bool),
         }
         for field, (target, attr, caster) in alias_targets.items():
             value = getattr(self, field, None)
@@ -740,6 +831,25 @@ class DocMindSettings(BaseSettings):
             logger.warning(
                 "Failed to sync hybrid config into retrieval settings: %s", exc
             )
+
+    def _normalize_persistence_paths(self) -> None:
+        """Normalize configured DB paths to live under data_dir by default."""
+        for section, attr in (("chat", "sqlite_path"), ("database", "sqlite_db_path")):
+            candidate = getattr(getattr(self, section, None), attr, None)
+            if not isinstance(candidate, Path):
+                continue
+            if candidate.is_absolute():
+                continue
+            if candidate.parent != Path("."):
+                # _normalize_persistence_paths: only relocate bare filenames.
+                # If `candidate` includes any parent directory
+                # (`candidate.parent != Path(".")`), preserve it as-is rather than
+                # forcing it under `data_dir`.
+                continue
+            target = getattr(self, section, None)
+            if target is None:
+                continue
+            setattr(target, attr, self.data_dir / candidate)
 
     @field_validator("lmstudio_base_url", mode="before")
     @classmethod
@@ -896,26 +1006,14 @@ class DocMindSettings(BaseSettings):
             Mapping with GraphRAG enablement and extraction/traversal settings.
             Router initialization consumes this helper directly.
         """
-        # Prefer nested configuration; fallback to top-level fields
-        if hasattr(self, "graphrag_cfg") and isinstance(
-            self.graphrag_cfg, GraphRAGConfig
-        ):
-            c = self.graphrag_cfg
-            return {
-                "enabled": self.is_graphrag_enabled(),
-                "relationship_extraction": c.relationship_extraction,
-                "entity_resolution": c.entity_resolution,
-                "max_hops": c.max_hops,
-                "max_triplets": c.max_triplets,
-                "chunk_size": c.chunk_size,
-            }
+        c = self.graphrag_cfg
         return {
             "enabled": self.is_graphrag_enabled(),
-            "relationship_extraction": self.graphrag_relationship_extraction,
-            "entity_resolution": self.graphrag_entity_resolution,
-            "max_hops": self.graphrag_max_hops,
-            "max_triplets": self.graphrag_max_triplets,
-            "chunk_size": self.graphrag_chunk_size,
+            "relationship_extraction": c.relationship_extraction,
+            "entity_resolution": c.entity_resolution,
+            "max_hops": c.max_hops,
+            "max_triplets": c.max_triplets,
+            "chunk_size": c.chunk_size,
         }
 
     def is_graphrag_enabled(self) -> bool:
@@ -1021,6 +1119,7 @@ settings = DocMindSettings()
 __all__ = [
     "AgentConfig",
     "AnalysisConfig",
+    "ArtifactsConfig",
     "CacheConfig",
     "ChatConfig",
     "DatabaseConfig",

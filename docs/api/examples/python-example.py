@@ -5,6 +5,8 @@ This example demonstrates how to use the DocMind AI internal Python API
 for document analysis and multi-agent coordination.
 """
 
+from __future__ import annotations
+
 import asyncio
 from pathlib import Path
 
@@ -16,7 +18,7 @@ from src.agents.coordinator import MultiAgentCoordinator
 from src.config import settings
 
 
-async def main():
+def main() -> None:
     """Main example demonstrating DocMind AI capabilities."""
     print("DocMind AI Python API Example")
     print("=" * 40)
@@ -42,29 +44,22 @@ async def main():
     print("\n3. Setting up conversation memory...")
     memory = ChatMemoryBuffer.from_defaults(token_limit=settings.vllm.context_window)
 
-    # 4. Load Documents
+    # 4. Load Documents (example only)
     print("\n4. Loading documents...")
     document_paths = [
         "/path/to/Q4_2024_Financial_Report.pdf",
         "/path/to/Healthcare_Division_Analysis.xlsx",
         "/path/to/Technology_Metrics_Q4.docx",
     ]
-
-    # In a real scenario, you would have actual document paths
-    # For this example, we'll simulate document loading
     print(f"   Documents to process: {len(document_paths)}")
     for path in document_paths:
         print(f"   - {Path(path).name}")
 
-    # Uncomment this line when you have actual documents:
-    # documents = await load_documents_unstructured(document_paths, settings)
-
-    # For demonstration, we'll proceed without actual documents
-    documents = []  # Placeholder
+    # NOTE: In the shipped app, ingestion/indexing is handled via Streamlit pages
+    # and the ingestion pipeline. This example focuses on coordinator usage.
 
     # 5. Process Queries
     print("\n5. Processing queries with multi-agent coordination...")
-
     queries = [
         "What are the key financial trends in Q4 2024?",
         "How did the Technology division perform compared to Healthcare?",
@@ -78,69 +73,56 @@ async def main():
             # Add user query to memory
             memory.put(ChatMessage(role="user", content=query))
 
-            # Process query with multi-agent coordination
-            response = await coordinator.aprocess_query(
-                query=query,
-                context=memory,
-                documents=documents,  # In real usage, pass actual documents
-                options={
-                    "enable_citations": True,
-                    "performance_mode": "balanced",
-                    "include_agent_trace": True,
-                },
-            )
+            response = coordinator.process_query(query=query, context=memory)
 
             # Add response to memory
             memory.put(ChatMessage(role="assistant", content=response.content))
 
             # Display results
-            print(f"   Response ({response.execution_time:.2f}s):")
+            print(f"   Response ({response.processing_time:.2f}s):")
             print(f"   {response.content[:200]}...")
-            print(f"   Confidence: {response.confidence:.2f}")
-            print(f"   Agents Used: {len(response.agents_invoked)}")
+            print(f"   Validation score: {response.validation_score:.2f}")
+            print(f"   Sources: {len(response.sources)}")
+            print(f"   Fallback used: {response.fallback_used}")
 
-            if hasattr(response, "citations") and response.citations:
-                print(f"   Citations: {len(response.citations)}")
-                for citation in response.citations[:2]:  # Show first 2
-                    print(f"     - {citation.source}: {citation.relevance:.2f}")
-
-        except Exception as e:
+        except Exception as e:  # pragma: no cover - docs example
             print(f"   Error processing query: {e}")
 
     # 6. System Status
-    print("\n6. System Performance:")
+    print("\n6. System Status:")
     try:
-        status = coordinator.get_system_status()
-        print(f"   Overall Status: {status.overall_status}")
-        print(f"   Active Agents: {len(status.active_agents)}")
-        print(f"   GPU Utilization: {status.gpu_utilization}%")
-        print(f"   VRAM Usage: {status.vram_usage_gb:.1f}GB / {status.vram_total_gb}GB")
-    except Exception as e:
+        status = coordinator.validate_system_status()
+        for key, ok in status.items():
+            print(f"   {key}: {ok}")
+    except Exception as e:  # pragma: no cover - docs example
         print(f"   Status unavailable: {e}")
 
     # 7. Memory Usage
     print("\n7. Conversation Memory:")
     messages = memory.get_all()
-    token_usage = memory.get_all_token_count()
+
+    token_usage_fn = getattr(memory, "get_all_token_count", None)
+    token_usage_raw = token_usage_fn() if callable(token_usage_fn) else None
+    token_usage = token_usage_raw if isinstance(token_usage_raw, int) else None
+
     print(f"   Total Messages: {len(messages)}")
-    print(f"   Token Usage: {token_usage:,} / {memory.token_limit:,}")
-    print(f"   Context Utilization: {token_usage / memory.token_limit:.1%}")
+    if token_usage is not None:
+        print(f"   Token Usage: {token_usage:,} / {memory.token_limit:,}")
+        print(f"   Context Utilization: {token_usage / memory.token_limit:.1%}")
+    else:
+        print("   Token Usage: unavailable (LlamaIndex API mismatch)")
 
     print("\n" + "=" * 40)
     print("Example completed successfully!")
 
 
-async def document_search_example():
+def document_search_example() -> None:
     """Example of advanced document search capabilities."""
     print("\nDocument Search Example")
     print("-" * 30)
 
-    # This would work with actual documents
-    # documents = await load_documents_unstructured(file_paths, settings)
-    # index = await create_index_async(documents, settings)
-
     print("Search capabilities:")
-    print("- Hybrid search (dense + sparse embeddings)")
+    print("- Server-side hybrid search (dense + sparse)")
     print("- BGE-M3 unified embeddings")
     print("- Reranking with BGE-reranker-v2-m3")
     print("- Server-side fusion (RRF default; DBSF optional)")
@@ -148,15 +130,10 @@ async def document_search_example():
         "- Router/Query Engine via router_factory "
         "(semantic + hybrid + optional knowledge_graph)"
     )
-
-    # Example (pseudo): build router with vector + optional graph
-    # from src.retrieval.router_factory import build_router_engine
-    # router = build_router_engine(vector_index, graph_index, settings)
-    # response = router.query("Find relationships between X and Y")
     print("- Semantic filtering and relevance scoring")
 
 
-async def streaming_example():
+async def streaming_example() -> None:
     """Example of streaming analysis."""
     print("\nStreaming Analysis Example")
     print("-" * 30)
@@ -170,7 +147,7 @@ async def streaming_example():
     print("- WebSocket support (REST API)")
 
     # Simulated streaming output
-    async def simulate_stream():
+    async def simulate_stream() -> None:
         updates = [
             {"type": "agent_start", "agent": "query_router", "task": "Analyzing query"},
             {"type": "agent_complete", "agent": "query_router", "duration": 0.12},
@@ -201,7 +178,7 @@ async def streaming_example():
     await simulate_stream()
 
 
-def configuration_example():
+def configuration_example() -> None:
     """Example of configuration management."""
     print("\nConfiguration Management Example")
     print("-" * 35)
@@ -212,34 +189,13 @@ def configuration_example():
     print(f"  GPU Memory: {settings.vllm.gpu_memory_utilization}")
     print(f"  Agent Timeout: {settings.agents.decision_timeout}ms")
 
-    print("\nDynamic configuration:")
-    print("- Runtime settings modification")
-    print("- Hardware optimization")
-    print("- Environment variable overrides")
-    print("- Configuration validation")
-
-    # Example configuration patterns
-    print("\nConfiguration patterns:")
-    print("  # Temporary override")
-    print("  with settings.temporary_override({")
-    print("      'agents.decision_timeout': 500,")
-    print("      'retrieval.top_k': 15")
-    print("  }):")
-    print("      # Operations with modified settings")
-    print("      pass")
-
 
 if __name__ == "__main__":
-    """Run the examples."""
-
     print("DocMind AI Python API Examples")
     print("============================\n")
 
-    # Run main example
-    asyncio.run(main())
-
-    # Additional examples
-    asyncio.run(document_search_example())
+    main()
+    document_search_example()
     asyncio.run(streaming_example())
     configuration_example()
 

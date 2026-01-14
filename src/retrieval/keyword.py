@@ -18,25 +18,19 @@ from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
+from llama_index.core.schema import NodeWithScore, QueryBundle
 from loguru import logger
 from qdrant_client import QdrantClient
+from qdrant_client.common.client_exceptions import ResourceExhaustedResponse
 
-try:  # optional across qdrant-client versions
-    from qdrant_client.common.client_exceptions import ResourceExhaustedResponse
-except (ImportError, AttributeError):  # pragma: no cover - older clients / shape drift
-
-    class ResourceExhaustedResponse(Exception):  # type: ignore[no-redef]  # noqa: N818
-        """Fallback for missing qdrant-client rate-limit exception."""
-
+from src.retrieval.sparse_query import encode_to_qdrant
+from src.utils.qdrant_exceptions import QDRANT_SCHEMA_EXCEPTIONS
+from src.utils.qdrant_utils import QDRANT_PAYLOAD_FIELDS, nodes_from_query_result
+from src.utils.storage import get_client_config
+from src.utils.telemetry import log_jsonl
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from qdrant_client.http.models import QueryResponse as QdrantQueryResponse
-from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedResponse
-
-from src.retrieval.sparse_query import encode_to_qdrant
-from src.utils.storage import get_client_config
-from src.utils.telemetry import log_jsonl
 
 
 @dataclass(frozen=True)
@@ -46,14 +40,7 @@ class KeywordParams:
     collection: str
     top_k: int = 10
     using: str = "text-sparse"
-    with_payload: tuple[str, ...] = (
-        "doc_id",
-        "page_id",
-        "chunk_id",
-        "text",
-        "modality",
-        "image_path",
-    )
+    with_payload: tuple[str, ...] = QDRANT_PAYLOAD_FIELDS
     rate_limit_retries: int = 2
     rate_limit_backoff_base_s: float = 0.5
     rate_limit_backoff_max_s: float = 8.0
@@ -118,14 +105,8 @@ class KeywordSparseRetriever:
         try:
             result = self._query_points_with_retry(sparse_vec)
         except (
-            ResponseHandlingException,
-            UnexpectedResponse,
+            *QDRANT_SCHEMA_EXCEPTIONS,
             ResourceExhaustedResponse,
-            ConnectionError,
-            TimeoutError,
-            OSError,
-            ValueError,
-            TypeError,
         ) as exc:
             logger.warning(
                 "Qdrant keyword query failed (error_type=%s)", type(exc).__name__
@@ -138,44 +119,12 @@ class KeywordSparseRetriever:
             )
             return []
 
-        points = (
-            getattr(result, "points", None) or getattr(result, "result", None) or []
+        nodes = nodes_from_query_result(
+            result,
+            top_k=int(self.params.top_k),
+            id_keys=("chunk_id", "page_id", "doc_id"),
+            prefer_point_id=True,
         )
-        # Defensive: normalize to a plain list for slicing/sorting.
-        if points is None:  # pragma: no cover - defensive
-            points = []
-        elif not isinstance(points, list):
-            try:
-                points = list(points)
-            except TypeError:  # pragma: no cover - defensive
-                points = []
-        # Stable ordering: score desc, id asc (avoid tie nondeterminism)
-        ordered = sorted(
-            points,
-            key=lambda p: (
-                -float(getattr(p, "score", 0.0)),
-                str(getattr(p, "id", "")),
-            ),
-        )
-
-        nodes: list[NodeWithScore] = []
-        for p in ordered[: int(self.params.top_k)]:
-            payload = getattr(p, "payload", {}) or {}
-            score = float(getattr(p, "score", 0.0))
-            text = payload.get("text") or ""
-            nid = (
-                str(p.id)
-                if getattr(p, "id", None) is not None
-                else str(
-                    payload.get("chunk_id")
-                    or payload.get("page_id")
-                    or payload.get("doc_id")
-                    or ""
-                )
-            )
-            node = TextNode(text=text, id_=nid)
-            node.metadata.update({k: v for k, v in payload.items() if k != "text"})
-            nodes.append(NodeWithScore(node=node, score=score))
 
         self._emit_telemetry(
             t0=t0, return_count=len(nodes), sparse_fallback=False, error_type=None

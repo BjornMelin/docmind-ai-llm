@@ -21,7 +21,10 @@ class TestPlanQuery:
     def test_plan_query_simple(self):
         """Simple complexity passes query through without decomposition."""
         result_json = plan_query.invoke(
-            {"query": "What is AI?", "complexity": "simple"}
+            {
+                "query": "What is AI?",
+                "complexity": "simple",
+            }
         )
         result = json.loads(result_json)
 
@@ -36,7 +39,10 @@ class TestPlanQuery:
     def test_plan_query_comparison(self):
         """Comparison queries produce parallel tasks and entity coverage."""
         result_json = plan_query.invoke(
-            {"query": "Compare AI vs ML performance", "complexity": "complex"}
+            {
+                "query": "Compare AI vs ML performance",
+                "complexity": "complex",
+            }
         )
         result = json.loads(result_json)
 

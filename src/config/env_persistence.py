@@ -62,7 +62,7 @@ def persist_env(vars_to_set: dict[str, str], *, env_path: Path | None = None) ->
     for key, value in vars_to_set.items():
         try:
             _validate_env_key(key)
-            if value == "":
+            if not value:
                 unset_key(str(target), key)
             else:
                 _validate_env_value(value)

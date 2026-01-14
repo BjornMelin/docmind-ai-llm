@@ -16,47 +16,55 @@ Example:
     Using the multi-agent coordinator:
 
         from src.agents.coordinator import MultiAgentCoordinator
-        from llama_index.core.memory import ChatMemoryBuffer
-
         coordinator = MultiAgentCoordinator()
         response = coordinator.process_query(
             "Compare AI vs ML techniques",
-            context=ChatMemoryBuffer.from_defaults()
+            context=None
         )
         # response.content contains the generated text
 """
 
 import asyncio
 import contextlib
+import threading
 import time
+import warnings
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from typing import Any, cast
 
+from langchain.agents import create_agent
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.prebuilt import create_react_agent
 from langgraph_supervisor import create_supervisor
 from langgraph_supervisor.handoff import create_forward_message_tool
 
 # Import LlamaIndex Settings for context window access
-from llama_index.core.memory import ChatMemoryBuffer
 from llama_index.core.utils import get_tokenizer
 from loguru import logger
 from opentelemetry import metrics, trace
+from opentelemetry.trace import Span
 
 # Registry utilities
 # Note: tool imports are performed lazily inside _setup_agent_graph to avoid
 # importing heavy dependencies at module import time (improves Streamlit tests
 # that stub LlamaIndex modules).
 from src.agents.registry import DefaultToolRegistry, RetryLlamaIndexLLM, ToolRegistry
+from src.agents.tools.memory import (
+    MemoryConsolidationPolicy,
+    apply_consolidation_policy,
+    consolidate_memory_candidates,
+    extract_memory_candidates,
+)
 from src.config import settings
 from src.config.langchain_factory import build_chat_model
 from src.dspy_integration import DSPyLlamaIndexRetriever, is_dspy_available
 from src.telemetry.opentelemetry import configure_observability
 
 # Import agent-specific models
-from .models import AgentResponse, MultiAgentState
+from .models import AgentResponse, MultiAgentGraphState, MultiAgentState
 
 _COORDINATOR_TRACER = trace.get_tracer("docmind.agents.coordinator")
 _COORDINATOR_LATENCY = None
@@ -112,6 +120,9 @@ class ContextManager:
 COORDINATION_OVERHEAD_THRESHOLD = 0.2  # seconds (200ms target)
 CONTEXT_TRIM_STRATEGY = "last"
 PARALLEL_TOOL_CALLS_ENABLED = True
+MEMORY_CONSOLIDATION_MAX_WORKERS = 2
+MEMORY_CONSOLIDATION_TIMEOUT_S = 10.0
+MEMORY_CONSOLIDATION_RELEASE_GRACE_S = 30.0
 
 
 def _shared_llm_attempts() -> int:
@@ -162,6 +173,8 @@ class MultiAgentCoordinator:
         max_agent_timeout: float = settings.agents.decision_timeout,
         tool_registry: ToolRegistry | None = None,
         use_shared_llm_client: bool | None = None,
+        checkpointer: Any | None = None,
+        store: Any | None = None,
     ):
         """Initialize multi-agent coordinator.
 
@@ -173,6 +186,10 @@ class MultiAgentCoordinator:
             max_agent_timeout: Maximum time for agent responses (seconds)
             tool_registry: Optional tool registry (primarily for testing)
             use_shared_llm_client: Override shared LlamaIndex LLM wrapper flag.
+            checkpointer: Optional LangGraph checkpointer (e.g., SqliteSaver) for
+                durable thread persistence. Defaults to in-memory saver.
+            store: Optional LangGraph BaseStore for long-term memory. When
+                provided, tools can access it via ToolRuntime/store.
         """
         configure_observability(settings)
         self.model_path = model_path
@@ -211,8 +228,9 @@ class MultiAgentCoordinator:
         self.avg_processing_time = 0.0
         self.avg_coordination_overhead = 0.0
 
-        # Create memory for state persistence
-        self.memory = InMemorySaver()
+        # Checkpointer + store (ADR-058). Defaults to in-memory for tests.
+        self.checkpointer = checkpointer or InMemorySaver()
+        self.store = store
 
         # Initialize components
         self.llm = None
@@ -225,8 +243,29 @@ class MultiAgentCoordinator:
 
         # Lazy initialization
         self._setup_complete = False
+        self._memory_executor = ThreadPoolExecutor(
+            max_workers=MEMORY_CONSOLIDATION_MAX_WORKERS,
+            thread_name_prefix="docmind-memory",
+        )
+        self._memory_consolidation_semaphore = threading.BoundedSemaphore(
+            MEMORY_CONSOLIDATION_MAX_WORKERS
+        )
+        self._memory_executor_closed = False
 
         logger.info("MultiAgentCoordinator initialized (model: %s)", model_path)
+
+    def close(self) -> None:
+        """Release resources held by the coordinator."""
+        if self._memory_executor_closed:
+            return
+        self._memory_executor_closed = True
+        with contextlib.suppress(Exception):
+            self._memory_executor.shutdown(wait=False)
+
+    def __del__(self) -> None:  # pragma: no cover - best-effort cleanup
+        """Best-effort cleanup during interpreter teardown."""
+        with contextlib.suppress(Exception):
+            self.close()
 
     def _ensure_setup(self) -> bool:
         """Ensure all components are set up (lazy initialization)."""
@@ -296,8 +335,10 @@ class MultiAgentCoordinator:
             self._setup_complete = True
             return True
 
-        except (RuntimeError, ValueError, AttributeError) as e:
-            logger.error("Failed to setup coordinator: %s", e)
+        except (RuntimeError, ValueError, AttributeError, ImportError) as e:
+            logger.exception(
+                "Failed to setup coordinator ({}): {}", type(e).__name__, e
+            )
             return False
 
     def _setup_agent_graph(self) -> None:
@@ -325,11 +366,12 @@ class MultiAgentCoordinator:
             )
 
             agents: dict[str, Any] = {
-                name: create_react_agent(
+                name: create_agent(
                     model,
                     tools=tool_loader(),
-                    state_schema=MultiAgentState,
+                    state_schema=MultiAgentGraphState,
                     name=name,
+                    store=self.store,
                 )
                 for name, tool_loader in agent_specs
             }
@@ -347,23 +389,37 @@ class MultiAgentCoordinator:
             # - output_mode: "last_message" (structured metadata stays in state)
             # - add_handoff_messages: True (handoff propagation)
             # - include forward message tool in tools list
-            self.graph = create_supervisor(
-                agents=supervisor_agents,
-                model=model,
-                prompt=system_prompt,
-                parallel_tool_calls=PARALLEL_TOOL_CALLS_ENABLED,
-                output_mode="last_message",
-                add_handoff_messages=True,
-                pre_model_hook=self._create_pre_model_hook(),
-                post_model_hook=self._create_post_model_hook(),
-                tools=[forward_tool],
-            )
+            with warnings.catch_warnings():
+                # langgraph-supervisor currently relies on the deprecated
+                # `langgraph.prebuilt.create_react_agent`; suppress that warning
+                # until an upstream release removes the call (latest as of 0.0.31).
+                # TODO: Track upstream langgraph-supervisor release; remove suppression
+                # when create_react_agent move is fixed
+                # (target: langgraph-supervisor >0.0.31).
+                warnings.filterwarnings(
+                    "ignore",
+                    message=r"create_react_agent has been moved.*",
+                    category=DeprecationWarning,
+                )
+                self.graph = create_supervisor(
+                    agents=supervisor_agents,
+                    model=model,
+                    prompt=system_prompt,
+                    parallel_tool_calls=PARALLEL_TOOL_CALLS_ENABLED,
+                    output_mode="last_message",
+                    add_handoff_messages=True,
+                    pre_model_hook=self._create_pre_model_hook(),
+                    post_model_hook=self._create_post_model_hook(),
+                    tools=[forward_tool],
+                )
 
             # Store agents for reference
             self.agents = agents
 
-            # Compile graph with memory
-            self.compiled_graph = self.graph.compile(checkpointer=self.memory)
+            # Compile graph with checkpointer + optional store (ADR-058).
+            self.compiled_graph = self.graph.compile(
+                checkpointer=self.checkpointer, store=self.store
+            )
 
             logger.info("Agent graph setup completed successfully")
 
@@ -474,7 +530,7 @@ class MultiAgentCoordinator:
             # Normalize flag naming across code paths
             "parallel_execution_active": bool(
                 state.get("parallel_execution_active")
-                or state.get("parallel_tool_calls", False)
+                or state.get("parallel_tool_calls")
             ),
             "optimization_enabled": True,
             "model_path": self.model_path,
@@ -529,12 +585,171 @@ class MultiAgentCoordinator:
             _COORDINATOR_LATENCY.record(float(latency_s), attributes=attributes)
             _COORDINATOR_COUNTER.add(1, attributes=attributes)
 
+    def _start_span(
+        self, exit_stack: contextlib.ExitStack, thread_id: str, query_length: int
+    ) -> Span:
+        """Start an OpenTelemetry span for query processing with attributes.
+
+        Args:
+            exit_stack: Context manager stack for span lifecycle.
+            thread_id: Unique thread identifier for tracing.
+            query_length: Character length of the input query.
+
+        Returns:
+            Active span for the coordinator operation.
+        """
+        span = exit_stack.enter_context(
+            _COORDINATOR_TRACER.start_as_current_span("coordinator.process_query")
+        )
+        span.set_attribute("coordinator.thread_id", thread_id)
+        span.set_attribute("query.length", query_length)
+        return span
+
+    def _build_initial_state(
+        self,
+        query: str,
+        start_time: float,
+        tools_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Build the initial state dict for the agent workflow.
+
+        Args:
+            query: User query string.
+            start_time: Process start timestamp for timing.
+            tools_data: Tool configuration data for agents.
+
+        Returns:
+            Initial MultiAgentState as a dict.
+        """
+        return MultiAgentState(
+            messages=[HumanMessage(content=query)],
+            tools_data=tools_data,
+            total_start_time=start_time,
+            output_mode="last_message",
+            parallel_execution_active=True,
+        ).model_dump()
+
+    def _handle_timeout_response(
+        self, query: str, context: Any | None, start_time: float
+    ) -> tuple[AgentResponse, bool]:
+        """Handle workflow timeout by falling back to basic RAG or error response.
+
+        Args:
+            query: Original user query.
+            context: Optional context (unused in fallback).
+            start_time: Query processing start time.
+
+        Returns:
+            Tuple of (AgentResponse, used_fallback_flag).
+        """
+        if self.enable_fallback:
+            response = self._fallback_basic_rag(query, context, start_time)
+            try:
+                response.metadata["reason"] = "timeout"
+                response.metadata["fallback_source"] = "basic_rag"
+                if isinstance(response.optimization_metrics, dict):
+                    response.optimization_metrics["timeout"] = True
+                else:
+                    response.optimization_metrics = {"timeout": True}
+            except (KeyError, TypeError, AttributeError) as exc:
+                logger.debug("Failed to annotate fallback metadata: %s", exc)
+            return response, True
+        processing_time = time.perf_counter() - start_time
+        response = AgentResponse(
+            content=("The multi-agent system timed out while processing your request."),
+            sources=[],
+            metadata={"fallback_used": True, "reason": "timeout"},
+            validation_score=0.0,
+            processing_time=processing_time,
+            optimization_metrics={"timeout": True},
+        )
+        return response, True
+
+    def _handle_workflow_result(
+        self,
+        result: dict[str, Any] | None,
+        query: str,
+        context: Any | None,
+        start_time: float,
+        coordination_time: float,
+    ) -> tuple[AgentResponse, bool, bool]:
+        """Process the final workflow result or handle timeout fallback.
+
+        Args:
+            result: Workflow output state dict, or None on timeout.
+            query: Original user query.
+            context: Optional context for fallback.
+            start_time: Query processing start time.
+            coordination_time: Time spent coordinating agents.
+
+        Returns:
+            Tuple of (AgentResponse, workflow_timed_out, used_fallback).
+        """
+        workflow_timed_out = bool(isinstance(result, dict) and result.get("timed_out"))
+        if not workflow_timed_out:
+            response = self._extract_response(
+                result or {}, query, start_time, coordination_time
+            )
+            return response, False, False
+
+        logger.warning("Coordinator detected timeout; invoking fallback policy")
+        response, used_fallback = self._handle_timeout_response(
+            query, context, start_time
+        )
+        self._record_query_metrics(time.perf_counter() - start_time, False)
+        return response, True, used_fallback
+
+    def _update_metrics_after_response(
+        self,
+        workflow_timed_out: bool,
+        used_fallback: bool,
+        processing_time: float,
+        coordination_time: float,
+    ) -> None:
+        """Update internal performance metrics after processing a response.
+
+        Args:
+            workflow_timed_out: Whether the workflow exceeded timeout.
+            used_fallback: Whether fallback was used.
+            processing_time: Total query processing time.
+            coordination_time: Time spent coordinating agents.
+        """
+        if not workflow_timed_out:
+            self.successful_queries += 1
+        self._update_performance_metrics(processing_time, coordination_time)
+
+    def _annotate_span(
+        self,
+        span: Span,
+        workflow_timed_out: bool,
+        used_fallback: bool,
+        processing_time: float,
+    ) -> None:
+        """Annotate the OpenTelemetry span with query processing outcomes.
+
+        Args:
+            span: Active span to annotate.
+            workflow_timed_out: Whether the workflow timed out.
+            used_fallback: Whether fallback was invoked.
+            processing_time: Total processing time in seconds.
+        """
+        span.set_attribute("coordinator.workflow_timeout", bool(workflow_timed_out))
+        span.set_attribute(
+            "coordinator.fallback", bool(workflow_timed_out and used_fallback)
+        )
+        span.set_attribute("coordinator.success", not workflow_timed_out)
+        span.set_attribute(
+            "coordinator.processing_time_ms", round(processing_time * 1000.0, 3)
+        )
+
     def process_query(
         self,
         query: str,
-        context: ChatMemoryBuffer | None = None,
+        context: Any | None = None,
         settings_override: dict[str, Any] | None = None,
         thread_id: str = "default",
+        user_id: str = "local",
+        checkpoint_id: str | None = None,
     ) -> AgentResponse:
         """Process user query through multi-agent pipeline.
 
@@ -543,9 +758,11 @@ class MultiAgentCoordinator:
 
         Args:
             query: User query to process
-            context: Optional conversation context for continuity
+            context: Optional caller-provided context (not persisted).
             settings_override: Optional settings to override defaults
             thread_id: Thread ID for conversation continuity
+            user_id: User namespace identifier (used for memory scoping).
+            checkpoint_id: Optional checkpoint id to resume from (time travel).
 
         Returns:
             AgentResponse with content, sources, metadata, and performance metrics
@@ -563,130 +780,90 @@ class MultiAgentCoordinator:
                 "Failed to initialize coordinator", start_time
             )
 
-        exit_stack = contextlib.ExitStack()
-        span = exit_stack.enter_context(
-            _COORDINATOR_TRACER.start_as_current_span("coordinator.process_query")
-        )
-        span.set_attribute("coordinator.thread_id", thread_id)
-        span.set_attribute("query.length", len(query))
+        with contextlib.ExitStack() as exit_stack:
+            span = self._start_span(exit_stack, thread_id, len(query))
 
-        try:
-            tools_data: dict[str, Any] = self.tool_registry.build_tools_data(
-                settings_override
-            )
-
-            # Initialize state with execution parameters
-            initial_state = MultiAgentState(
-                messages=[HumanMessage(content=query)],
-                tools_data=tools_data,
-                context=context,
-                total_start_time=start_time,
-                output_mode="last_message",
-                parallel_execution_active=True,
-            )
-
-            # Run multi-agent workflow with performance tracking
-            coordination_start = time.perf_counter()
-            result = self._run_agent_workflow(initial_state, thread_id)
-            coordination_time = time.perf_counter() - coordination_start
-
-            # Handle timeout signaled by workflow
-            workflow_timed_out = bool(
-                isinstance(result, dict) and result.get("timed_out")
-            )
-            used_fallback = False
-            if workflow_timed_out:
-                logger.warning("Coordinator detected timeout; invoking fallback policy")
-                if self.enable_fallback:
-                    response = self._fallback_basic_rag(query, context, start_time)
-                    used_fallback = True
-                    # annotate fallback
-                    try:
-                        response.metadata["reason"] = "timeout"
-                        response.metadata["fallback_source"] = "basic_rag"
-                        # Add timeout indicator to optimization metrics consistently
-                        if isinstance(response.optimization_metrics, dict):
-                            response.optimization_metrics["timeout"] = True
-                        else:
-                            response.optimization_metrics = {"timeout": True}
-                    except (KeyError, TypeError, AttributeError) as exc:
-                        logger.debug("Failed to annotate fallback metadata: %s", exc)
-                else:
-                    processing_time = time.perf_counter() - start_time
-                    response = AgentResponse(
-                        content=(
-                            "The multi-agent system timed out while "
-                            "processing your request."
-                        ),
-                        sources=[],
-                        metadata={"fallback_used": True, "reason": "timeout"},
-                        validation_score=0.0,
-                        processing_time=processing_time,
-                        optimization_metrics={"timeout": True},
-                    )
-
-                # Best-effort analytics logging for timeout path
-                self._record_query_metrics(time.perf_counter() - start_time, False)
-            else:
-                # Extract response from final state
-                response = self._extract_response(
-                    result, query, start_time, coordination_time
+            try:
+                tools_data: dict[str, Any] = self.tool_registry.build_tools_data(
+                    settings_override
                 )
 
-            # Update performance metrics
-            processing_time = time.perf_counter() - start_time
-            if workflow_timed_out:
-                if used_fallback:
-                    self.fallback_queries += 1
-            else:
-                self.successful_queries += 1
-            self._update_performance_metrics(processing_time, coordination_time)
+                # Initialize state with execution parameters
+                initial_state = self._build_initial_state(query, start_time, tools_data)
 
-            # Best-effort analytics logging (never impact user flow)
-            if not workflow_timed_out:
-                self._record_query_metrics(processing_time, True)
+                # Run multi-agent workflow with performance tracking
+                coordination_start = time.perf_counter()
+                result = self._run_agent_workflow(
+                    initial_state,
+                    thread_id=thread_id,
+                    user_id=user_id,
+                    checkpoint_id=checkpoint_id,
+                    runtime_context=settings_override,
+                )
+                coordination_time = time.perf_counter() - coordination_start
 
-            # Validate performance targets
-            if coordination_time > COORDINATION_OVERHEAD_THRESHOLD:
-                logger.warning(
-                    "Coordination overhead %.3fs exceeds threshold",
+                response, workflow_timed_out, used_fallback = (
+                    self._handle_workflow_result(
+                        result, query, context, start_time, coordination_time
+                    )
+                )
+
+                # Update performance metrics
+                processing_time = time.perf_counter() - start_time
+                self._update_metrics_after_response(
+                    workflow_timed_out,
+                    used_fallback,
+                    processing_time,
                     coordination_time,
                 )
 
-            span.set_attribute("coordinator.workflow_timeout", bool(workflow_timed_out))
-            span.set_attribute(
-                "coordinator.fallback", bool(workflow_timed_out and used_fallback)
-            )
-            span.set_attribute(
-                "coordinator.success", not workflow_timed_out or used_fallback
-            )
-            span.set_attribute(
-                "coordinator.processing_time_ms", round(processing_time * 1000.0, 3)
-            )
-            exit_stack.close()
+                # Memory consolidation (SPEC-041)
+                if not workflow_timed_out:
+                    self._schedule_memory_consolidation(
+                        result or {}, thread_id=thread_id, user_id=user_id
+                    )
 
-            logger.info(
-                "Query processed successfully in %.3fs (coordination: %.3fs)",
-                processing_time,
-                coordination_time,
-            )
-            return response
+                # Best-effort analytics logging (never impact user flow)
+                if not workflow_timed_out:
+                    self._record_query_metrics(processing_time, True)
 
-        except (RuntimeError, ValueError, AttributeError, TimeoutError) as e:
-            if "span" in locals() and span is not None:
+                # Validate performance targets
+                if coordination_time > COORDINATION_OVERHEAD_THRESHOLD:
+                    logger.warning(
+                        "Coordination overhead {overhead:.3f}s exceeds threshold",
+                        overhead=coordination_time,
+                    )
+
+                self._annotate_span(
+                    span, workflow_timed_out, used_fallback, processing_time
+                )
+
+                logger.info(
+                    "Query processed in {processing:.3f}s "
+                    "(coordination: {coordination:.3f}s)",
+                    processing=processing_time,
+                    coordination=coordination_time,
+                )
+                return response
+
+            except (RuntimeError, ValueError, AttributeError, TimeoutError) as exc:
                 span.set_attribute("coordinator.success", False)
-                span.set_attribute("coordinator.error", str(e))
-            if "exit_stack" in locals():
-                exit_stack.close()
-            logger.error("Multi-agent processing failed: %s", e)
+                span.set_attribute("coordinator.error", str(exc))
+                logger.error("Multi-agent processing failed: {}", exc)
 
-            # Fallback to basic RAG if enabled
-            if self.enable_fallback:
-                return self._fallback_basic_rag(query, context, start_time)
-            return self._create_error_response(str(e), start_time)
+                # Fallback to basic RAG if enabled
+                if self.enable_fallback:
+                    return self._fallback_basic_rag(query, context, start_time)
+                return self._create_error_response(str(exc), start_time)
 
     def _run_agent_workflow(
-        self, initial_state: MultiAgentState, thread_id: str
+        self,
+        initial_state: dict[str, Any],
+        *,
+        thread_id: str,
+        user_id: str,
+        checkpoint_id: str | None,
+        runtime_context: dict[str, Any] | None,
     ) -> dict[str, Any]:
         """Run the multi-agent workflow with timeout protection.
 
@@ -704,11 +881,16 @@ class MultiAgentCoordinator:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
 
-            config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+            cfg: dict[str, Any] = {"thread_id": str(thread_id), "user_id": str(user_id)}
+            if checkpoint_id:
+                cfg["checkpoint_id"] = str(checkpoint_id)
+            config: RunnableConfig = {"configurable": cfg}
             result: dict[str, Any] | None = None
-            for state in self.compiled_graph.stream(
+            graph = cast(Any, self.compiled_graph)
+            for state in graph.stream(
                 initial_state,
                 config=config,
+                context=runtime_context,
                 stream_mode="values",
             ):
                 if isinstance(state, dict):
@@ -724,7 +906,9 @@ class MultiAgentCoordinator:
                     result = cast(
                         dict[str, Any], model_dump() if callable(model_dump) else {}
                     )
-                elapsed = time.perf_counter() - initial_state.total_start_time
+                elapsed = time.perf_counter() - float(
+                    initial_state.get("total_start_time", 0.0)
+                )
                 if elapsed > self.max_agent_timeout:
                     logger.warning("Agent workflow timeout after %.2fs", elapsed)
                     try:
@@ -742,7 +926,7 @@ class MultiAgentCoordinator:
                 "(thread_id=%s)",
                 thread_id,
             )
-            return initial_state.model_dump()
+            return initial_state
 
         except (RuntimeError, ValueError, AttributeError, TimeoutError) as e:
             logger.error("Agent workflow execution failed: %s", e)
@@ -842,7 +1026,7 @@ class MultiAgentCoordinator:
     def _fallback_basic_rag(
         self,
         query: str,
-        _context: ChatMemoryBuffer | None,
+        _context: Any | None,
         start_time: float,
     ) -> AgentResponse:
         """Fallback to basic RAG when multi-agent system fails."""
@@ -890,7 +1074,12 @@ class MultiAgentCoordinator:
     def _update_performance_metrics(
         self, processing_time: float, coordination_time: float
     ) -> None:
-        """Update performance tracking metrics."""
+        """Update running averages for processing and coordination times.
+
+        Args:
+            processing_time: Total query processing time in seconds.
+            coordination_time: Agent coordination overhead in seconds.
+        """
         # Update running averages
         if self.total_queries > 0:
             self.avg_processing_time = (
@@ -946,6 +1135,130 @@ class MultiAgentCoordinator:
         stats["adr_compliance"] = self.validate_adr_compliance()
         return stats
 
+    # --- Persistence helpers (ADR-058) ---
+
+    def get_state_values(
+        self,
+        *,
+        thread_id: str,
+        user_id: str = "local",
+        checkpoint_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Return the persisted state values for a thread (latest by default)."""
+        if not self._ensure_setup():
+            return {}
+        if self.compiled_graph is None:
+            return {}
+        cfg: dict[str, Any] = {"thread_id": str(thread_id), "user_id": str(user_id)}
+        if checkpoint_id:
+            cfg["checkpoint_id"] = str(checkpoint_id)
+        snap = self.compiled_graph.get_state({"configurable": cfg})
+        values = getattr(snap, "values", None)
+        return values if isinstance(values, dict) else {}
+
+    def list_checkpoints(
+        self, *, thread_id: str, user_id: str = "local", limit: int = 20
+    ) -> list[dict[str, Any]]:
+        """List recent checkpoints for a thread (newest first)."""
+        if not self._ensure_setup():
+            return []
+        if self.compiled_graph is None:
+            return []
+        cfg: dict[str, Any] = {"thread_id": str(thread_id), "user_id": str(user_id)}
+        out: list[dict[str, Any]] = []
+        try:
+            for snap in self.compiled_graph.get_state_history(
+                {"configurable": cfg}, limit=int(limit)
+            ):
+                config = getattr(snap, "config", None)
+                conf = config.get("configurable") if isinstance(config, dict) else None
+                conf = conf if isinstance(conf, dict) else {}
+                out.append(
+                    {
+                        "checkpoint_id": conf.get("checkpoint_id"),
+                        "checkpoint_ns": conf.get("checkpoint_ns", ""),
+                    }
+                )
+        except Exception as exc:
+            logger.debug("Checkpoint listing failed: %s", exc)
+        return out
+
+    def fork_from_checkpoint(
+        self,
+        *,
+        thread_id: str,
+        user_id: str = "local",
+        checkpoint_id: str,
+    ) -> str | None:
+        """Fork a new branch head from a prior checkpoint (SPEC-041 / ADR-058).
+
+        Fetches the checkpoint state first to verify metadata is present, then
+        uses update_state with as_node="__copy__" for time-travel fork.
+        Requires LangGraph >=0.2.0+ with checkpoint persistence support.
+        """
+        if not self._ensure_setup() or self.compiled_graph is None:
+            return None
+
+        cfg: dict[str, Any] = {
+            "thread_id": str(thread_id),
+            "user_id": str(user_id),
+            "checkpoint_id": str(checkpoint_id),
+        }
+        config: RunnableConfig = {"configurable": cfg}
+
+        # First, fetch the checkpoint to verify it exists and preserve metadata
+        try:
+            source_state = self.compiled_graph.get_state(config)
+            if not source_state or not source_state.values:
+                logger.debug(
+                    "Checkpoint not found or empty (thread_id=%s checkpoint_id=%s)",
+                    thread_id,
+                    checkpoint_id,
+                )
+                return None
+        except (RuntimeError, ValueError, AttributeError) as exc:
+            logger.debug(
+                "Failed to fetch checkpoint (thread_id=%s checkpoint_id=%s): %s",
+                thread_id,
+                checkpoint_id,
+                exc,
+            )
+            return None
+
+        # Now fork the checkpoint using update_state with __copy__ node
+        try:
+            # LangGraph special update that clones the selected checkpoint into a
+            # new head (time-travel fork) without running the workflow.
+            # Note: as_node="__copy__" is LangGraph 0.2.0+ API for
+            # metadata preservation.
+            new_config = self.compiled_graph.update_state(
+                config, None, as_node="__copy__"
+            )
+        except (RuntimeError, ValueError, AttributeError, TypeError) as exc:
+            # Specific exception handling for LangGraph API errors
+            logger.debug(
+                "Checkpoint fork failed (thread_id=%s checkpoint_id=%s): %s",
+                thread_id,
+                checkpoint_id,
+                exc,
+            )
+            return None
+        except Exception as exc:
+            # Catch any unexpected exceptions but log them for debugging
+            logger.debug(
+                "Unexpected error during checkpoint fork "
+                "(thread_id=%s checkpoint_id=%s): %s",
+                thread_id,
+                checkpoint_id,
+                exc,
+            )
+            return None
+
+        conf = new_config.get("configurable") if isinstance(new_config, dict) else None
+        conf = conf if isinstance(conf, dict) else {}
+        new_checkpoint_id = conf.get("checkpoint_id")
+        return str(new_checkpoint_id) if new_checkpoint_id else None
+
     def validate_system_status(self) -> dict[str, bool]:
         """Validate system components and performance."""
         return {
@@ -987,6 +1300,194 @@ class MultiAgentCoordinator:
             # Context support for 128k tokens
             "context_128k_support": self.max_context_length >= 131072,
         }
+
+    def _consolidate_memories(
+        self,
+        final_state: dict[str, Any],
+        thread_id: str,
+        user_id: str,
+    ) -> None:
+        """Perform background memory consolidation."""
+        logger.debug(
+            "Starting background memory consolidation for thread {}", thread_id
+        )
+        if self.store is None:
+            return
+
+        try:
+            start_time = time.monotonic()
+
+            def _timed_out() -> bool:
+                return (time.monotonic() - start_time) > MEMORY_CONSOLIDATION_TIMEOUT_S
+
+            if _timed_out():
+                logger.debug(
+                    "Memory consolidation timed out before start for thread {}",
+                    thread_id,
+                )
+                return
+
+            # 1. Get current checkpoint info for source tracking
+            config: RunnableConfig = {
+                "configurable": {"thread_id": thread_id, "user_id": user_id}
+            }
+            checkpoint_id = "latest"
+            if self.compiled_graph:
+                state = self.compiled_graph.get_state(config)
+                if state and state.config:
+                    checkpoint_id = state.config.get("configurable", {}).get(
+                        "checkpoint_id", "latest"
+                    )
+
+            if _timed_out():
+                logger.debug("Memory consolidation timed out for thread {}", thread_id)
+                return
+
+            policy = MemoryConsolidationPolicy(
+                similarity_threshold=float(settings.chat.memory_similarity_threshold),
+                low_importance_threshold=float(
+                    settings.chat.memory_low_importance_threshold
+                ),
+                low_importance_ttl_minutes=int(
+                    settings.chat.memory_low_importance_ttl_days
+                )
+                * 24
+                * 60,
+                max_items_per_namespace=int(
+                    settings.chat.memory_max_items_per_namespace
+                ),
+                max_candidates_per_turn=int(
+                    settings.chat.memory_max_candidates_per_turn
+                ),
+            )
+
+            # 2. Extract candidates from the conversation turn
+            messages = final_state.get("messages", [])
+            candidates = extract_memory_candidates(
+                messages, checkpoint_id=checkpoint_id, llm=self.llm, policy=policy
+            )
+            if not candidates:
+                return
+            if _timed_out():
+                logger.debug("Memory consolidation timed out for thread {}", thread_id)
+                return
+
+            # 3. Consolidate within the specific namespace
+            # Namespace: ("memories", "{user_id}", "{thread_id}")
+            namespace = ("memories", str(user_id), str(thread_id))
+            actions = consolidate_memory_candidates(
+                candidates, self.store, namespace, policy=policy
+            )
+            if _timed_out():
+                logger.debug("Memory consolidation timed out for thread {}", thread_id)
+                return
+
+            # 4. Apply policy using the durable store
+            apply_consolidation_policy(self.store, namespace, actions, policy=policy)
+
+        except Exception as exc:
+            logger.debug("Memory consolidation background task failed: {}", exc)
+
+    def _schedule_memory_consolidation(
+        self,
+        final_state: dict[str, Any],
+        *,
+        thread_id: str,
+        user_id: str,
+    ) -> None:
+        """Schedule memory consolidation off the critical path."""
+        if self.store is None:
+            return
+        if not self._memory_consolidation_semaphore.acquire(blocking=False):
+            logger.debug(
+                "Skipping memory consolidation; max in-flight reached for thread {}",
+                thread_id,
+            )
+            return
+
+        future = self._memory_executor.submit(
+            self._consolidate_memories, final_state, thread_id, user_id
+        )
+
+        def _release_slot() -> None:
+            with contextlib.suppress(ValueError):
+                self._memory_consolidation_semaphore.release()
+
+        def _watch_future() -> None:
+            should_release = True
+            released = threading.Event()
+
+            def _release_once(reason: str) -> None:
+                if released.is_set():
+                    return
+                released.set()
+                logger.debug(
+                    "Releasing memory consolidation slot ({}) for thread {}",
+                    reason,
+                    thread_id,
+                )
+                _release_slot()
+
+            def _release_if_stuck() -> None:
+                if future.done():
+                    return
+                logger.warning(
+                    "Memory consolidation still running after timeout+grace "
+                    "for thread {}",
+                    thread_id,
+                )
+                _release_once("grace-timeout")
+
+            try:
+                future.result(timeout=MEMORY_CONSOLIDATION_TIMEOUT_S)
+            except FuturesTimeoutError:
+                logger.warning(
+                    "Memory consolidation timed out after {}s for thread {}",
+                    MEMORY_CONSOLIDATION_TIMEOUT_S,
+                    thread_id,
+                )
+                if not future.cancel():
+                    logger.debug(
+                        "Memory consolidation still running after timeout for "
+                        "thread {}",
+                        thread_id,
+                    )
+
+                    # Attach callback to release slot when future eventually completes.
+                    # This prevents semaphore leak when task doesn't respond to cancel.
+                    def _on_future_done(fut: Any) -> None:
+                        with contextlib.suppress(Exception):
+                            fut.result()  # Log any exception but don't propagate
+                        _release_once("done")
+
+                    try:
+                        future.add_done_callback(_on_future_done)
+                        should_release = False  # Callback/timer will handle release
+                        threading.Timer(
+                            MEMORY_CONSOLIDATION_RELEASE_GRACE_S, _release_if_stuck
+                        ).start()
+                    except (RuntimeError, TypeError) as exc:
+                        # If callback cannot be added (rare; future may be done),
+                        # release immediately as fallback
+                        logger.debug(
+                            "Could not attach done callback for thread {}: {}; "
+                            "releasing slot immediately",
+                            thread_id,
+                            exc,
+                        )
+                        _release_once("callback-failed")
+                        should_release = False  # Already released, avoid double-release
+            except Exception as exc:
+                logger.debug("Memory consolidation task failed: {}", exc)
+            finally:
+                if should_release:
+                    _release_once("completed")
+
+        threading.Thread(
+            target=_watch_future,
+            name="docmind-memory-watch",
+            daemon=True,
+        ).start()
 
 
 # Factory function for coordinator

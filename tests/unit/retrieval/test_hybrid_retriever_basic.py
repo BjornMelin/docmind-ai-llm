@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
+from src.retrieval.hybrid import HybridParams, ServerHybridRetriever
 
 
 class _Point:
@@ -69,7 +69,7 @@ def test_hybrid_retriever_dedup_and_order(monkeypatch: pytest.MonkeyPatch) -> No
     def _fake_query_points(*_args, **_kwargs):  # type: ignore[no-untyped-def]
         return resp
 
-    params = _HybridParams(collection="col", fused_top_k=10, dedup_key="page_id")
+    params = HybridParams(collection="col", fused_top_k=10, dedup_key="page_id")
     retr = ServerHybridRetriever(params)
     monkeypatch.setattr(retr._client, "query_points", _fake_query_points)  # type: ignore[attr-defined]
 
@@ -92,7 +92,7 @@ def test_hybrid_sparse_unavailable_fallback(monkeypatch: pytest.MonkeyPatch) -> 
     def _fake_query_points(*_args, **_kwargs):  # type: ignore[no-untyped-def]
         return resp
 
-    params = _HybridParams(collection="c")
+    params = HybridParams(collection="c")
     retr = ServerHybridRetriever(params)
     monkeypatch.setattr(retr, "_encode_sparse", lambda _t: None)
     monkeypatch.setattr(retr._client, "query_points", _fake_query_points)  # type: ignore[attr-defined]

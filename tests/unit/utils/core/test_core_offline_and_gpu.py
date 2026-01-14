@@ -116,8 +116,8 @@ async def test_managed_async_qdrant_client_closes(monkeypatch):
     # Patch qdrant async client constructor used in core
     monkeypatch.setattr(c.qdrant_client, "AsyncQdrantClient", _AClient)
 
-    async with c.managed_async_qdrant_client(url="http://localhost:6333") as _cli:
-        assert isinstance(_cli, _AClient)
+    async with c.managed_async_qdrant_client(url="http://localhost:6333") as cli:
+        assert isinstance(cli, _AClient)
     assert closed["v"] is True
 
 

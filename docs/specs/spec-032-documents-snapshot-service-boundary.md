@@ -66,7 +66,7 @@ The service must write manifest metadata with the following fields (matching `Sn
 
 When present, `graph_exports` entries include export metadata such as:
 
-- `path` (workspace-relative), `format`, `seed_count`, `size_bytes`, `duration_ms`, `sha256`
+- `filename`, `format`, `seed_count`, `size_bytes`, `duration_ms`, `sha256`
 - `created_at` (ISO timestamp) when available
 
 ### Documents page responsibilities

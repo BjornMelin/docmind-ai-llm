@@ -189,42 +189,23 @@ def _iter_edges(
             j += 1
 
 
-def _render_rel_map_jsonl(
+def _build_rel_map_rows(
     *,
     store: Any,
     seed_node_ids: Sequence[str],
     depth: int,
-) -> list[str]:
-    """Best-effort conversion of store rel_map to JSONL lines."""
-    # Newer API: store.get_rel_map(node_ids=[...], depth=n) returning JSON strings.
-    if hasattr(store, "get_rel_map"):
-        try:
-            rel_map = store.get_rel_map(node_ids=list(seed_node_ids), depth=depth)
-            if isinstance(rel_map, list) and rel_map and isinstance(rel_map[0], str):
-                return [line for line in rel_map if str(line).strip()]
-        except TypeError:
-            pass
-        except (
-            AttributeError,
-            RuntimeError,
-            ValueError,
-        ):  # pragma: no cover
-            logger.debug("get_rel_map(node_ids=...) failed", exc_info=True)
-
-    # Older API:
-    # nodes = store.get(ids=[...]); rel_paths = store.get_rel_map(nodes, depth=n)
+) -> list[dict[str, Any]]:
+    """Best-effort conversion of store rel_map to dict rows."""
     if not (hasattr(store, "get") and hasattr(store, "get_rel_map")):
         return []
     try:
         nodes = list(store.get(ids=list(seed_node_ids)))
         rel_paths = list(store.get_rel_map(nodes, depth=depth))
     except (AttributeError, RuntimeError, TypeError, ValueError):  # pragma: no cover
-        logger.debug("Legacy get_rel_map(nodes, depth=...) failed", exc_info=True)
+        logger.debug("get_rel_map(nodes, depth=...) failed", exc_info=True)
         return []
 
-    import json
-
-    lines: list[str] = []
+    rows: list[dict[str, Any]] = []
     for path_idx, rel_path in enumerate(rel_paths):
         try:
             for head, tail, maybe_edge, path_depth in _iter_edges(rel_path, depth):
@@ -232,18 +213,36 @@ def _render_rel_map_jsonl(
                     _relation_label(maybe_edge) if maybe_edge is not None else "related"
                 )
                 sources = list({*(_source_ids(head) + _source_ids(tail))})
-                row = {
-                    "subject": _node_identifier(head),
-                    "relation": relation,
-                    "object": _node_identifier(tail),
-                    "depth": path_depth,
-                    "path_id": path_idx,
-                    "source_ids": sources,
-                }
-                lines.append(json.dumps(row, ensure_ascii=False))
+                rows.append(
+                    {
+                        "subject": _node_identifier(head),
+                        "relation": relation,
+                        "object": _node_identifier(tail),
+                        "depth": path_depth,
+                        "path_id": path_idx,
+                        "source_ids": sources,
+                    }
+                )
         except TypeError:  # pragma: no cover - defensive
             continue
-    return lines
+    return rows
+
+
+def _render_rel_map_jsonl(
+    *,
+    store: Any,
+    seed_node_ids: Sequence[str],
+    depth: int,
+) -> list[str]:
+    """Best-effort conversion of store rel_map to JSONL lines."""
+    import json
+
+    return [
+        json.dumps(row, ensure_ascii=False)
+        for row in _build_rel_map_rows(
+            store=store, seed_node_ids=seed_node_ids, depth=depth
+        )
+    ]
 
 
 def export_graph_jsonl(
@@ -309,74 +308,14 @@ def export_graph_parquet(
 
     path_obj = Path(output_path)
     path_obj.parent.mkdir(parents=True, exist_ok=True)
-
-    # Newer API: store.store_rel_map_df(node_ids=[...], depth=n) -> df with to_parquet()
-    if hasattr(store, "store_rel_map_df"):
-        try:
-            df = store.store_rel_map_df(node_ids=node_ids, depth=int(depth))
-        except TypeError:
-            df = store.store_rel_map_df(node_ids, int(depth))
-        try:
-            with graph_export_span(
-                adapter_name=ctx.adapter_name,
-                fmt="parquet",
-                depth=int(depth),
-                seed_count=len(node_ids),
-            ) as span:
-                df.to_parquet(path_obj)
-                bytes_written = path_obj.stat().st_size if path_obj.exists() else 0
-                record_graph_export_event(
-                    span, path=path_obj, bytes_written=bytes_written
-                )
-            ctx.telemetry.graph_exported(
-                adapter_name=ctx.adapter_name,
-                fmt="parquet",
-                bytes_written=bytes_written,
-                depth=int(depth),
-                seed_count=len(node_ids),
-            )
-            return
-        except ImportError as exc:  # pragma: no cover - optional dependency path
-            logger.debug("Parquet export skipped: {}", exc)
-            return
-
-    # Legacy fallback:
-    # build rows from rel_paths and write Parquet via pyarrow if present.
     try:
         import pyarrow as pa
         import pyarrow.parquet as pq
-    except ImportError:  # pragma: no cover - optional dependency
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        logger.debug("PyArrow not installed, skipping Parquet export: {}", exc)
         return
 
-    if not (hasattr(store, "get") and hasattr(store, "get_rel_map")):
-        return
-    try:
-        nodes = list(store.get(ids=node_ids))
-        rel_paths = list(store.get_rel_map(nodes, depth=int(depth)))
-    except Exception:  # pragma: no cover - defensive
-        return
-
-    rows: list[dict[str, Any]] = []
-    for path_idx, rel_path in enumerate(rel_paths):
-        try:
-            for head, tail, maybe_edge, path_depth in _iter_edges(rel_path, int(depth)):
-                relation = (
-                    _relation_label(maybe_edge) if maybe_edge is not None else "related"
-                )
-                sources = list({*(_source_ids(head) + _source_ids(tail))})
-                rows.append(
-                    {
-                        "subject": _node_identifier(head),
-                        "relation": relation,
-                        "object": _node_identifier(tail),
-                        "depth": path_depth,
-                        "path_id": path_idx,
-                        "source_ids": sources,
-                    }
-                )
-        except TypeError:  # pragma: no cover - defensive
-            continue
-
+    rows = _build_rel_map_rows(store=store, seed_node_ids=node_ids, depth=int(depth))
     if not rows:
         return
 

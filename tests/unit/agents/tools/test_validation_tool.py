@@ -158,7 +158,11 @@ class TestValidateResponse:
         )
         low_conf = json.loads(
             validate_response.invoke(
-                {"query": "What is AI?", "response": "I don't know.", "sources": "[]"}
+                {
+                    "query": "What is AI?",
+                    "response": "I don't know.",
+                    "sources": "[]",
+                }
             )
         )
         assert high_conf["suggested_action"] in ["accept", "refine"]

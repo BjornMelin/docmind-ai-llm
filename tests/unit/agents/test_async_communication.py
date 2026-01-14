@@ -58,7 +58,10 @@ class TestAsyncAgentCommunication:
             mock_factory.create_tools_from_indexes.return_value = [Mock()]
 
             result = route_query.invoke(
-                {"query": "What is machine learning?", "state": mock_state}
+                {
+                    "query": "What is machine learning?",
+                    "state": mock_state,
+                }
             )
 
         # Then: Tool executes successfully with state context
@@ -96,7 +99,10 @@ class TestAsyncAgentCommunication:
 
             # Simulate async tool chain
             route_result = route_query.invoke(
-                {"query": "Follow-up question", "state": mock_state}
+                {
+                    "query": "Follow-up question",
+                    "state": mock_state,
+                }
             )
 
             # Update state with routing decision
@@ -141,7 +147,10 @@ class TestAsyncAgentCommunication:
             router_start = time.perf_counter()
             with patch("src.agents.tool_factory.ToolFactory"):
                 route_result = route_query.invoke(
-                    {"query": "Performance test query", "state": mock_state}
+                    {
+                        "query": "Performance test query",
+                        "state": mock_state,
+                    }
                 )
             router_time = time.perf_counter() - router_start
             mock_state["agent_timings"]["router"] = router_time
@@ -150,7 +159,10 @@ class TestAsyncAgentCommunication:
             retrieval_start = time.perf_counter()
             with patch("src.agents.tool_factory.ToolFactory"):
                 retrieval_result = retrieve_documents.invoke(
-                    {"query": "Performance test query", "state": mock_state}
+                    {
+                        "query": "Performance test query",
+                        "state": mock_state,
+                    }
                 )
             retrieval_time = time.perf_counter() - retrieval_start
             mock_state["agent_timings"]["retrieval"] = retrieval_time
@@ -198,12 +210,18 @@ class TestAsyncAgentCommunication:
 
             # First call triggers failure in aggregation path but should not raise
             first_result = retrieve_documents.invoke(
-                {"query": "Error test query", "state": mock_state}
+                {
+                    "query": "Error test query",
+                    "state": mock_state,
+                }
             )
 
             # Second call should succeed (simulating recovery)
             result = retrieve_documents.invoke(
-                {"query": "Error test query", "state": mock_state}
+                {
+                    "query": "Error test query",
+                    "state": mock_state,
+                }
             )
 
         # Then: Error recovery works properly
@@ -233,14 +251,20 @@ class TestAsyncAgentCommunication:
                     asyncio.create_task(
                         asyncio.to_thread(
                             lambda: route_query.invoke(
-                                {"query": "Parallel query 1", "state": mock_state}
+                                {
+                                    "query": "Parallel query 1",
+                                    "state": mock_state,
+                                }
                             )
                         )
                     ),
                     asyncio.create_task(
                         asyncio.to_thread(
                             lambda: retrieve_documents.invoke(
-                                {"query": "Parallel query 2", "state": mock_state}
+                                {
+                                    "query": "Parallel query 2",
+                                    "state": mock_state,
+                                }
                             )
                         )
                     ),
@@ -304,7 +328,10 @@ class TestAsyncAgentCommunication:
 
             with patch("src.agents.tool_factory.ToolFactory"):
                 result = route_query.invoke(
-                    {"query": "Context test query", "state": processed_state}
+                    {
+                        "query": "Context test query",
+                        "state": processed_state,
+                    }
                 )
 
             final_state = post(processed_state)

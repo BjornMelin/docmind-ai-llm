@@ -16,17 +16,18 @@ MOCK CLEANUP COMPLETE:
 - Implemented boundary-only mocking for external dependencies
 """
 
-import sys
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-# Mark all tests in this module as E2E
-pytestmark = pytest.mark.e2e
-
-# Fix import path for tests
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from tests.e2e.helpers import (
+    assert_documents_have_required_metadata,
+    configure_hardware_mocks,
+    install_heavy_dependencies,
+    install_mock_torch,
+    patch_document_loader,
+    patch_hardware_validation,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -36,15 +37,12 @@ def setup_document_processing_dependencies(monkeypatch):
     Uses monkeypatch instead of sys.modules anti-pattern.
     Only mocks heavy external dependencies at boundaries.
     """
-    # Mock torch with complete attributes
-    mock_torch = MagicMock()
-    mock_torch.__version__ = "2.7.1+cu126"
-    mock_torch.__spec__ = MagicMock()
-    mock_torch.__spec__.name = "torch"
-    mock_torch.cuda.is_available.return_value = True
-    mock_torch.device = MagicMock()
-    mock_torch.tensor = MagicMock()
-    monkeypatch.setitem(sys.modules, "torch", mock_torch)
+    install_mock_torch(
+        monkeypatch,
+        include_cuda_props=False,
+        include_device=True,
+        include_tensor=True,
+    )
 
     # Mock heavy external dependencies
     heavy_dependencies = [
@@ -59,9 +57,7 @@ def setup_document_processing_dependencies(monkeypatch):
         "qdrant_client",
     ]
 
-    for dependency in heavy_dependencies:
-        if dependency not in sys.modules:
-            monkeypatch.setitem(sys.modules, dependency, MagicMock())
+    install_heavy_dependencies(monkeypatch, heavy_dependencies)
 
 
 def test_document_processing_components_import():
@@ -100,9 +96,7 @@ def test_document_processing_components_import():
 async def test_document_loading_functionality():
     """Test document loading functionality with mocked dependencies."""
     # Mock the document loading function before importing
-    with patch(
-        "src.utils.document.load_documents_unstructured", create=True
-    ) as mock_load_docs:
+    with patch_document_loader() as mock_load_docs:
         # Setup mock document loading response
         from llama_index.core import Document
 
@@ -146,14 +140,10 @@ async def test_document_loading_functionality():
             assert all(isinstance(doc, Document) for doc in loaded_documents)
 
             # Validate document structure
-            for doc in loaded_documents:
-                assert doc.text is not None
-                assert len(doc.text) > 0
-                assert doc.metadata is not None
-                assert "source" in doc.metadata
-                assert "page" in doc.metadata
-                assert "chunk_id" in doc.metadata
-                assert doc.metadata["source"] == "test_document.pdf"
+            assert_documents_have_required_metadata(
+                loaded_documents,
+                expected_source="test_document.pdf",
+            )
 
             # Validate content
             assert "test document" in loaded_documents[0].text.lower()
@@ -173,21 +163,10 @@ async def test_document_loading_functionality():
 def test_hardware_detection_and_validation():
     """Test hardware detection and system validation functionality."""
     # Mock hardware detection and validation functions
-    with (
-        patch("src.utils.core.detect_hardware", create=True) as mock_detect,
-        patch(
-            "src.utils.core.validate_startup_configuration", create=True
-        ) as mock_validate,
-    ):
+    with patch_hardware_validation() as (mock_detect, mock_validate):
         # Setup mocks
-        mock_detect.return_value = {
-            "gpu_name": "RTX 4090",
-            "vram_total_gb": 24,
-            "cuda_available": True,
-            "system_ram_gb": 64,
-            "cpu_cores": 16,
-        }
-        mock_validate.return_value = True
+        configure_hardware_mocks(mock_detect, mock_validate)
+        mock_detect.return_value.update({"system_ram_gb": 64, "cpu_cores": 16})
 
         try:
             from src.config.settings import DocMindSettings
@@ -401,13 +380,8 @@ async def test_integrated_document_processing_workflow():
     """Integration test for the complete document processing workflow."""
     # Mock all external dependencies
     with (
-        patch(
-            "src.utils.document.load_documents_unstructured", create=True
-        ) as mock_load,
-        patch("src.utils.core.detect_hardware", create=True) as mock_detect,
-        patch(
-            "src.utils.core.validate_startup_configuration", create=True
-        ) as mock_validate,
+        patch_document_loader() as mock_load,
+        patch_hardware_validation() as (mock_detect, mock_validate),
     ):
         # Setup mocks
         from llama_index.core import Document
@@ -422,12 +396,7 @@ async def test_integrated_document_processing_workflow():
         ]
         mock_load.return_value = mock_documents
 
-        mock_detect.return_value = {
-            "gpu_name": "RTX 4090",
-            "vram_total_gb": 24,
-            "cuda_available": True,
-        }
-        mock_validate.return_value = True
+        configure_hardware_mocks(mock_detect, mock_validate)
 
         try:
             # Import components

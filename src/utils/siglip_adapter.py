@@ -5,11 +5,10 @@ numpy vector, suitable for MultiModalVectorStoreIndex flows that expect a
 CLIP-like interface.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 import numpy as np
+from loguru import logger
 
 
 class SiglipEmbedding:
@@ -47,8 +46,8 @@ class SiglipEmbedding:
     def _choose_device(self) -> str:
         """Select device via core helper; fall back to CPU when torch import fails.
 
-        This avoids test-only branches; we simply attempt an import to determine
-        if the runtime has torch available and then defer to select_device.
+        Attempt a torch import to detect runtime availability, then delegate to
+        the shared select_device() helper when present.
         """
         try:
             import torch  # type: ignore
@@ -73,7 +72,7 @@ class SiglipEmbedding:
                 return "cpu"
 
     def _load_siglip_transformers(self) -> None:
-        """Direct transformers-based SigLIP loading as a compatibility path."""
+        """Direct transformers-based SigLIP loading fallback."""
         from transformers import SiglipModel, SiglipProcessor  # type: ignore
 
         model: Any = SiglipModel.from_pretrained(self.model_id)
@@ -124,6 +123,15 @@ class SiglipEmbedding:
         except (AttributeError, ValueError, TypeError):
             self._dim = None
 
+    def _move_to_device(self, tensor: Any | None) -> Any | None:
+        if tensor is None:
+            return None
+        if self.device == "cuda":
+            return tensor.to("cuda")
+        if self.device == "mps":
+            return tensor.to("mps")
+        return tensor
+
     def get_image_embedding(self, image: Any) -> np.ndarray:
         """Return L2-normalized SigLIP features for a single image.
 
@@ -140,21 +148,152 @@ class SiglipEmbedding:
         try:
             import torch  # type: ignore
 
-            inputs = self._proc(
-                images=[image],
-                return_tensors="pt",  # type: ignore[attr-defined]
-            )
+            inputs = self._proc(images=[image], return_tensors="pt")  # type: ignore[call-arg]
             pix = inputs.get("pixel_values")
-            if self.device == "cuda":
-                pix = pix.to("cuda")
-            elif self.device == "mps":
-                pix = pix.to("mps")
+            if pix is None:  # pragma: no cover - defensive
+                raise RuntimeError("SigLIP processor returned no pixel_values")
+            pix = self._move_to_device(pix)
             with torch.no_grad():  # type: ignore[name-defined]
-                feats = self._model.get_image_features(pixel_values=pix)
+                feats = self._model.get_image_features(pixel_values=pix)  # type: ignore[union-attr]
                 feats = feats / feats.norm(dim=-1, keepdim=True)
                 vec = feats[0].detach().cpu().numpy().astype(np.float32)
             return vec
         except (ImportError, AttributeError, RuntimeError, ValueError, TypeError):
-            # Return zeros if inference fails unexpectedly
             dim = int(self._dim or 768)
             return np.zeros(dim, dtype=np.float32)
+
+    def get_text_embedding(self, text: str) -> np.ndarray:
+        """Return L2-normalized SigLIP text features for a single text query.
+
+        This enables cross-modal text->image retrieval in the same SigLIP space.
+        """
+        self._ensure_loaded()
+        if self._model is None or self._proc is None:
+            dim = int(self._dim or 768)
+            return np.zeros(dim, dtype=np.float32)
+        try:
+            import torch  # type: ignore
+
+            inputs = self._proc(  # type: ignore[call-arg]
+                text=[str(text)],
+                return_tensors="pt",
+                padding="max_length",
+                truncation=True,
+            )
+            input_ids = inputs.get("input_ids")
+            attn = inputs.get("attention_mask")
+            input_ids = self._move_to_device(input_ids)
+            attn = self._move_to_device(attn)
+            with torch.no_grad():  # type: ignore[name-defined]
+                feats = self._model.get_text_features(  # type: ignore[union-attr]
+                    input_ids=input_ids,
+                    attention_mask=attn,
+                )
+                feats = feats / feats.norm(dim=-1, keepdim=True)
+                vec = feats[0].detach().cpu().numpy().astype(np.float32)
+            return vec
+        except (ImportError, AttributeError, RuntimeError, ValueError, TypeError):
+            dim = int(self._dim or 768)
+            return np.zeros(dim, dtype=np.float32)
+
+    def get_image_embeddings(
+        self, images: list[Any], *, batch_size: int = 8
+    ) -> np.ndarray:
+        """Return L2-normalized SigLIP image features for a batch of images."""
+        if not images:
+            dim = int(self._dim or 768)
+            return np.empty((0, dim), dtype=np.float32)
+        self._ensure_loaded()
+        if self._model is None or self._proc is None:
+            dim = int(self._dim or 768)
+            return np.zeros((len(images), dim), dtype=np.float32)
+
+        try:
+            import torch  # type: ignore
+        except (ImportError, ModuleNotFoundError):  # pragma: no cover
+            dim = int(self._dim or 768)
+            return np.zeros((len(images), dim), dtype=np.float32)
+
+        bs = max(1, int(batch_size))
+        out: list[np.ndarray] = []
+        try:
+            for i in range(0, len(images), bs):
+                batch = images[i : i + bs]
+                inputs = self._proc(images=batch, return_tensors="pt")  # type: ignore[call-arg]
+                pix = inputs.get("pixel_values")
+                if pix is None:  # pragma: no cover - defensive
+                    raise RuntimeError("SigLIP processor returned no pixel_values")
+                pix = self._move_to_device(pix)
+                with torch.no_grad():  # type: ignore[name-defined]
+                    feats = self._model.get_image_features(pixel_values=pix)  # type: ignore[union-attr]
+                    feats = feats / feats.norm(dim=-1, keepdim=True)
+                    out.append(feats.detach().cpu().numpy().astype(np.float32))
+        except Exception:
+            logger.debug(
+                "siglip batch embedding failed for images count=%d dim=%s",
+                len(images),
+                self._dim,
+                exc_info=True,
+            )
+            dim = int(self._dim or 768)
+            return np.zeros((len(images), dim), dtype=np.float32)
+        return (
+            np.concatenate(out, axis=0)
+            if out
+            else np.empty((0, int(self._dim or 768)), dtype=np.float32)
+        )
+
+    def get_text_embeddings(
+        self, texts: list[str], *, batch_size: int = 8
+    ) -> np.ndarray:
+        """Return L2-normalized SigLIP text features for a batch of texts."""
+        if not texts:
+            dim = int(self._dim or 768)
+            return np.empty((0, dim), dtype=np.float32)
+        self._ensure_loaded()
+        if self._model is None or self._proc is None:
+            dim = int(self._dim or 768)
+            return np.zeros((len(texts), dim), dtype=np.float32)
+
+        try:
+            import torch  # type: ignore
+        except (ImportError, ModuleNotFoundError):  # pragma: no cover
+            dim = int(self._dim or 768)
+            return np.zeros((len(texts), dim), dtype=np.float32)
+
+        bs = max(1, int(batch_size))
+        out: list[np.ndarray] = []
+        try:
+            for i in range(0, len(texts), bs):
+                batch = [str(t) for t in texts[i : i + bs]]
+                inputs = self._proc(  # type: ignore[call-arg]
+                    text=batch,
+                    return_tensors="pt",
+                    padding="max_length",
+                    truncation=True,
+                )
+                input_ids = inputs.get("input_ids")
+                attn = inputs.get("attention_mask")
+                input_ids = self._move_to_device(input_ids)
+                attn = self._move_to_device(attn)
+                with torch.no_grad():  # type: ignore[name-defined]
+                    feats = self._model.get_text_features(  # type: ignore[union-attr]
+                        input_ids=input_ids,
+                        attention_mask=attn,
+                    )
+                    feats = feats / feats.norm(dim=-1, keepdim=True)
+                    out.append(feats.detach().cpu().numpy().astype(np.float32))
+        except Exception:
+            logger.debug(
+                "siglip batch embedding failed for texts count=%d dim=%s",
+                len(texts),
+                self._dim,
+                exc_info=True,
+            )
+            dim = int(self._dim or 768)
+            return np.zeros((len(texts), dim), dtype=np.float32)
+        return (
+            np.concatenate(out, axis=0)
+            if out
+            else np.empty((0, int(self._dim or 768)), dtype=np.float32)
+        )

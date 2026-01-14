@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from qdrant_client import models as qmodels
 
-from src.retrieval.hybrid import ServerHybridRetriever, _HybridParams
+from src.retrieval.hybrid import HybridParams, ServerHybridRetriever
 
 
 def _mk_point(pid: str, did: str, score: float, payload: dict | None = None):
@@ -41,7 +41,7 @@ def test_dedup_unique_by_doc_id(monkeypatch):
     Args:
         monkeypatch: pytest fixture for mocking object attributes.
     """
-    params = _HybridParams(
+    params = HybridParams(
         collection="c", fused_top_k=10, fusion_mode="rrf", dedup_key="doc_id"
     )
     retr = ServerHybridRetriever(params)

@@ -13,14 +13,17 @@ pytestmark = pytest.mark.unit
     reason="cryptography not available",
 )
 def test_encrypt_decrypt_roundtrip(tmp_path, monkeypatch):
+    from src.config.settings import settings
     from src.utils.security import decrypt_file, encrypt_file
 
     # Setup key (32 bytes base64) and kid
     key = os.urandom(32)
     import base64
 
-    monkeypatch.setenv("DOCMIND_IMG_AES_KEY_BASE64", base64.b64encode(key).decode())
-    monkeypatch.setenv("DOCMIND_IMG_KID", "kid-1")
+    monkeypatch.setattr(
+        settings.image, "img_aes_key_base64", base64.b64encode(key).decode()
+    )
+    monkeypatch.setattr(settings.image, "img_kid", "kid-1")
 
     p = Path(tmp_path) / "x.bin"
     src = os.urandom(128)

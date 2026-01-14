@@ -145,9 +145,7 @@ def test_retrieval_agent_success_path(monkeypatch: pytest.MonkeyPatch):
         "graphrag_used": False,
     }
 
-    monkeypatch.setattr(
-        mod, "create_react_agent", lambda *_, **__: _make_stub_agent(payload)
-    )
+    monkeypatch.setattr(mod, "create_agent", lambda *_, **__: _make_stub_agent(payload))
 
     agent = mod.RetrievalAgent(llm=None, tools_data={})
     assert agent.total_retrievals == 0
@@ -177,9 +175,7 @@ def test_retrieval_agent_falls_back_on_bad_payload(monkeypatch: pytest.MonkeyPat
         "query_optimized": "q",
     }
 
-    monkeypatch.setattr(
-        mod, "create_react_agent", lambda *_, **__: _bad_payload_agent()
-    )
+    monkeypatch.setattr(mod, "create_agent", lambda *_, **__: _bad_payload_agent())
     monkeypatch.setattr(mod, "retrieve_documents", _DummyTool(fallback_payload))
 
     agent = mod.RetrievalAgent(llm=None, tools_data={})
@@ -204,7 +200,7 @@ def test_retrieval_agent_error_fallback(monkeypatch: pytest.MonkeyPatch):
         "error": "tool crash",
     }
 
-    monkeypatch.setattr(mod, "create_react_agent", lambda *_, **__: _raising_agent())
+    monkeypatch.setattr(mod, "create_agent", lambda *_, **__: _raising_agent())
     monkeypatch.setattr(mod, "retrieve_documents", _DummyTool(fallback_payload))
 
     agent = mod.RetrievalAgent(llm=None, tools_data={})
@@ -235,7 +231,7 @@ def test_retrieval_agent_direct_tool_invoke_wrapper(monkeypatch: pytest.MonkeyPa
 
     tool = _InvokeOnlyTool(fallback_payload)
 
-    monkeypatch.setattr(mod, "create_react_agent", lambda *_, **__: _raising_agent())
+    monkeypatch.setattr(mod, "create_agent", lambda *_, **__: _raising_agent())
     monkeypatch.setattr(mod, "retrieve_documents", tool)
 
     tools_data = {"vector": "vec"}
@@ -264,7 +260,7 @@ def test_retrieval_agent_direct_tool_unwrapped_invoke(monkeypatch: pytest.Monkey
 
     tool = _InvokeOnlyTool(payload)
 
-    monkeypatch.setattr(mod, "create_react_agent", lambda *_, **__: _raising_agent())
+    monkeypatch.setattr(mod, "create_agent", lambda *_, **__: _raising_agent())
     monkeypatch.setattr(mod, "retrieve_documents", tool)
 
     agent = mod.RetrievalAgent(llm=None, tools_data={})
@@ -289,7 +285,7 @@ def test_retrieval_agent_direct_tool_malformed_payload(
             """Return malformed content to trigger payload parsing failure."""
             return "not-json"
 
-    monkeypatch.setattr(mod, "create_react_agent", lambda *_, **__: _raising_agent())
+    monkeypatch.setattr(mod, "create_agent", lambda *_, **__: _raising_agent())
     monkeypatch.setattr(mod, "retrieve_documents", _BadInvokeTool())
 
     agent = mod.RetrievalAgent(llm=None, tools_data={})
@@ -337,7 +333,7 @@ def test_direct_tool_invocation_prioritises_kwargs(
     """Direct invocation should pass keyword payloads when supported."""
     from src.agents import retrieval as mod
 
-    monkeypatch.setattr(mod, "create_react_agent", lambda *_, **__: _raising_agent())
+    monkeypatch.setattr(mod, "create_agent", lambda *_, **__: _raising_agent())
     agent = mod.RetrievalAgent(llm=None, tools_data={"vector": "v"})
 
     kw_tool = _KwargTool()
@@ -359,7 +355,7 @@ def test_direct_tool_invocation_supplies_state_for_positional_tools(
     """Direct invocation must not drop state when tools accept positional query."""
     from src.agents import retrieval as mod
 
-    monkeypatch.setattr(mod, "create_react_agent", lambda *_, **__: _raising_agent())
+    monkeypatch.setattr(mod, "create_agent", lambda *_, **__: _raising_agent())
     tools_data = {"vector": "v"}
     agent = mod.RetrievalAgent(llm=None, tools_data=tools_data)
 
@@ -382,7 +378,7 @@ def test_direct_tool_invocation_retries_with_payload(
     """If kwargs invocation fails, retry with a payload mapping."""
     from src.agents import retrieval as mod
 
-    monkeypatch.setattr(mod, "create_react_agent", lambda *_, **__: _raising_agent())
+    monkeypatch.setattr(mod, "create_agent", lambda *_, **__: _raising_agent())
     agent = mod.RetrievalAgent(llm=None, tools_data={"vector": "v"})
 
     dict_tool = _DictOnlyTool()
@@ -404,7 +400,7 @@ def test_direct_tool_invocation_raises_original_type_error(
     """The initial TypeError should propagate if both attempts fail."""
     from src.agents import retrieval as mod
 
-    monkeypatch.setattr(mod, "create_react_agent", lambda *_, **__: _raising_agent())
+    monkeypatch.setattr(mod, "create_agent", lambda *_, **__: _raising_agent())
     agent = mod.RetrievalAgent(llm=None, tools_data={})
 
     class _AlwaysTypeError:

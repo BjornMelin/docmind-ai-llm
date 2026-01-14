@@ -106,3 +106,19 @@ def test_cuda_error_context_reraise_true():
     mod = importlib.import_module("src.utils.storage")
     with pytest.raises(RuntimeError), mod.cuda_error_context("probe", reraise=True):
         raise RuntimeError("fail")
+
+
+@pytest.mark.unit
+def test_cuda_error_context_system_and_import_errors():
+    """Covers non-RuntimeError branches for cuda_error_context."""
+    mod = importlib.import_module("src.utils.storage")
+
+    with mod.cuda_error_context("probe", reraise=False, default_return=9) as ctx:
+        raise OSError("disk")
+    assert ctx.get("result") == 9
+    assert "error" in ctx
+
+    with mod.cuda_error_context("probe", reraise=False, default_return=11) as ctx:
+        raise ImportError("missing")
+    assert ctx.get("result") == 11
+    assert "error" in ctx

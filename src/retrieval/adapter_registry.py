@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 from loguru import logger
 
 from src.retrieval.adapters.protocols import AdapterFactoryProtocol
@@ -27,11 +29,13 @@ def register_adapter(factory: AdapterFactoryProtocol) -> None:
     """Register an adapter factory by name."""
     _REGISTRY[factory.name] = factory
     logger.debug("Registered graph adapter '{}'", factory.name)
+    _cached_default_adapter_health.cache_clear()
 
 
 def unregister_adapter(name: str) -> None:
     """Remove an adapter factory from the registry."""
     _REGISTRY.pop(name, None)
+    _cached_default_adapter_health.cache_clear()
 
 
 def get_adapter(name: str | None = None) -> AdapterFactoryProtocol:
@@ -77,12 +81,13 @@ def resolve_adapter(
     return get_adapter()
 
 
-# Register default adapter eagerly so callers can rely on lookups.
-ensure_default_adapter()
+# Register default adapter lazily on first lookup —
+# `ensure_default_adapter()` is intentionally not called here.
 
 
-def get_default_adapter_health() -> tuple[bool, str, str]:
-    """Return a tuple of (supported, adapter_name, guidance)."""
+@lru_cache(maxsize=1)
+def _cached_default_adapter_health() -> tuple[bool, str, str]:
+    """Return cached GraphRAG adapter health details."""
     ensure_default_adapter()
     try:
         adapter = get_adapter()
@@ -92,6 +97,13 @@ def get_default_adapter_health() -> tuple[bool, str, str]:
     name = getattr(adapter, "name", "unknown")
     hint = getattr(adapter, "dependency_hint", GRAPH_DEPENDENCY_HINT)
     return supports, name, hint
+
+
+def get_default_adapter_health(*, force_refresh: bool = False) -> tuple[bool, str, str]:
+    """Return a tuple of (supported, adapter_name, guidance)."""
+    if force_refresh:
+        _cached_default_adapter_health.cache_clear()
+    return _cached_default_adapter_health()
 
 
 __all__ = [

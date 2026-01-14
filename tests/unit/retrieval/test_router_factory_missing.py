@@ -44,6 +44,7 @@ def test_router_engine_requires_llama(monkeypatch: pytest.MonkeyPatch) -> None:
             use_reranking=False,
             enable_server_hybrid=False,
             reranking_top_k=None,
+            enable_image_retrieval=True,
         ),
         database=SimpleNamespace(qdrant_collection="col"),
     )
@@ -81,6 +82,7 @@ def test_router_engine_warns_when_graph_disabled(
             use_reranking=False,
             enable_server_hybrid=False,
             reranking_top_k=None,
+            enable_image_retrieval=True,
         ),
         graphrag_cfg=SimpleNamespace(default_path_depth=1),
         database=SimpleNamespace(qdrant_collection="col"),
@@ -99,7 +101,7 @@ def test_router_engine_warns_when_graph_disabled(
     finally:
         logger.remove(token)
 
-    assert get_router_tool_names(router) == ["semantic_search"]
+    assert get_router_tool_names(router) == ["semantic_search", "multimodal_search"]
     assert any(rf.GRAPH_DEPENDENCY_HINT in message for message in captured), (
         f"Expected warning containing '{rf.GRAPH_DEPENDENCY_HINT}', got: {captured}"
     )

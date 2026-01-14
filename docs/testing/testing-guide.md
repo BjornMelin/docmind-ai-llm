@@ -124,6 +124,18 @@ uv run python -m pytest tests/system/ -v  # GPU required
 @pytest.mark.slow         # Long-running tests
 ```
 
+### UI AppTest Guidance
+
+For Streamlit AppTest UI checks:
+
+- Prefer reusing existing AppTest fixtures instead of adding extra `AppTest` runs.
+- Run tests from a temporary working directory (`monkeypatch.chdir(tmp_path)`) to
+  avoid local `.env` coupling and reduce file-watcher overhead.
+- Use `default_timeout=` on `AppTest.from_file(…)` for CI stability; avoid
+  strict wall-clock assertions in functional tests.
+- CI cold-starts can be slow; integration tests pre-warm AppTest once in
+  `tests/integration/conftest.py` (avoid per-test timeout bumps where possible).
+
 ## Patterns
 
 ### 1. Boundary Testing Fixtures
@@ -472,9 +484,13 @@ uv run python -m pytest -m "requires_gpu" --timeout=600
 
 #### Current Coverage Status
 
-- **Measured Coverage**: 3.51% (realistic baseline)
-- **Target Coverage**: 35% minimum for production
-- **Critical Modules**: Agents (40%), Core (35%), Models (80%), Config (60%)
+- **Target Coverage**: 80% line coverage (global)
+- **Branch Coverage**: Not enforced by default. Consider adding branch coverage
+  as a future enhancement: start with a lower threshold (e.g., 60%) and raise
+  it over time. Example command:
+  `uv run python -m pytest --cov=src --cov-branch --cov-report=term-missing --cov-fail-under=60 tests/`
+  (start with `--cov-fail-under=60` for branch coverage, then ratchet up).
+- **Critical Modules**: Agents, Core, Models, Config should meet or exceed target.
 
 #### Coverage Commands
 
@@ -486,7 +502,11 @@ uv run python -m pytest --cov=src --cov-report=term-missing tests/unit/
 uv run python -m pytest --cov=src --cov-report=html tests/unit/
 
 # Coverage with quality gates
-uv run python -m pytest --cov=src --cov-fail-under=35 tests/
+uv run python -m pytest --cov=src --cov-fail-under=80 tests/
+
+# Coverage with branch metrics (start lower and ratchet up)
+uv run python -m pytest --cov=src --cov-branch --cov-report=term-missing \
+  --cov-fail-under=60 tests/
 ```
 
 ## Test Development Guidelines
@@ -814,8 +834,8 @@ The testing framework integrates with CI/CD through quality gates:
   run: |
     # Coverage enforcement
     COVERAGE=$(python -c "import xml.etree.ElementTree as ET; tree = ET.parse('coverage.xml'); print(float(tree.getroot().get('line-rate', 0)) * 100)")
-    if (( $(echo "${COVERAGE} >= 35.0" | bc -l) )); then
-      echo "✓ Coverage threshold met (${COVERAGE}% >= 35.0%)"
+    if (( $(echo "${COVERAGE} >= 80.0" | bc -l) )); then
+      echo "✓ Coverage threshold met (${COVERAGE}% >= 80.0%)"
     else
       echo "✗ Coverage below threshold"
       exit 1
@@ -824,7 +844,7 @@ The testing framework integrates with CI/CD through quality gates:
 
 ### Quality Metrics
 
-- **Minimum Coverage**: 35% for merge approval
+- **Minimum Coverage**: 80% for merge approval
 - **Test Success Rate**: 95% for stable tests
 - **Performance Benchmarks**: No regression > 10%
 - **Mock Reduction**: Target 60%+ reduction in legacy files

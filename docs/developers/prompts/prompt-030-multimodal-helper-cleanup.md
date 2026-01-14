@@ -1,6 +1,6 @@
 # Implementation Prompt — Multimodal Helper Cleanup
 
-Implements `ADR-049` + `SPEC-030`.
+Implements `ADR-049` + `SPEC-030` (final-release hygiene; no placeholder multimodal “toy pipeline” in `src/`).
 
 **Read first (repo truth):**
 
@@ -39,10 +39,10 @@ This is a deletion/cleanup task. Prefer local repo truth.
 **Parallel preflight (use `multi_tool_use.parallel`):**
 
 - Confirm real usage:
-  - `rg -n \"\\bsrc\\.utils\\.multimodal\\b|\\bmultimodal\\.py\\b\" -S src tests docs`
-  - `rg -n \"TODO\\(multimodal-phase-2\\)\" -S src/utils/multimodal.py || true`
-- Read before delete:
-  - `sed -n '1,120p' src/utils/multimodal.py` (ensure no production exports are expected)
+  - `rg -n \"\\bsrc\\.utils\\.multimodal\\b|\\butils\\.multimodal\\b|\\bmultimodal\\.py\\b\" -S src tests docs scripts templates`
+  - `rg -n \"TODO\\(multimodal-phase-2\\)\" -S src || true`
+- Verify already-implemented canonical multimodal stack remains intact:
+  - `rg -n \"SigLIP|siglip|ColPali|open_image_encrypted\" -S src/retrieval src/models src/utils`
 
 **Architecture gate (optional but cheap):**
 
@@ -50,7 +50,7 @@ This is a deletion/cleanup task. Prefer local repo truth.
 
 **Editing discipline:**
 
-- Use `functions.apply_patch` with `*** Delete File: src/utils/multimodal.py` and delete/update test files in the same patch to keep diffs reviewable.
+- Use `functions.apply_patch` to delete the dead module/tests and update docs in the same patch to keep diffs reviewable.
 
 ## **Implementation Executor Template (DocMind / Python)**
 
@@ -71,15 +71,15 @@ You must keep changes minimal, library-first, and maintainable.
 
 ### **Feature Context (Filled)**
 
-**Primary Task:** Remove `src/utils/multimodal.py` and its tests if it is not used by production code, eliminating TODO placeholders and dead code.
+**Primary Task:** Remove the dead `src/utils/multimodal.py` toy helper (and its tests) if it is not used by production code, and update docs that still reference it.
 
 **Why now:** The module is a test-only “toy pipeline” with TODOs, which is not acceptable for v1 release readiness.
 
 **Definition of Done (DoD):**
 
-- `src/utils/multimodal.py` removed (or moved out of production package) and no production imports remain.
+- `src/utils/multimodal.py` removed and no imports remain.
 - Tests referencing it are removed/updated.
-- Docs/architecture maps updated to remove references (or ticketed under WP08 if explicitly deferred).
+- Docs/architecture maps updated to remove references and point to the canonical multimodal components.
 - Quality gates pass.
 
 **In-scope modules/files (initial):**
@@ -88,10 +88,14 @@ You must keep changes minimal, library-first, and maintainable.
 - `tests/unit/utils/multimodal/` (delete/update)
 - `docs/specs/traceability.md`
 - `docs/developers/system-architecture.md` (if referenced)
+- `docs/specs/prompts/completed/spec-003-embeddings.prompt.md` (historical drift cleanup)
 
 **Out-of-scope (explicit):**
 
-- Building a real multimodal pipeline.
+- Building or extending multimodal pipeline features (ingestion → image indexing → multimodal retrieval → UI). Those are covered by:
+  - ADR: `docs/developers/adrs/ADR-058-final-multimodal-pipeline-and-persistence.md`
+  - SPEC: `docs/specs/spec-042-final-multimodal-pipeline-and-persistence.md`
+  - Prompts: `docs/developers/prompts/prompt-0042-multimodal-ingestion.md`, `docs/developers/prompts/prompt-0043-hybrid-retrieval-logic.md`, `docs/developers/prompts/prompt-0044-ui-and-persistence.md`
 
 ---
 
@@ -116,10 +120,10 @@ You must keep changes minimal, library-first, and maintainable.
 
 0. [ ] Read ADR/SPEC/RTM and restate DoD in your plan.
 
-1. [ ] Confirm unused in production: `rg "src\\.utils\\.multimodal" src/`.
+1. [ ] Confirm unused in production: `rg "src\\.utils\\.multimodal" -S src/`.
 2. [ ] Delete `src/utils/multimodal.py`.
 3. [ ] Delete/update `tests/unit/utils/multimodal/*`.
-4. [ ] Update docs references if present (or coordinate with WP08).
+4. [ ] Update doc drift: remove references and point to SigLIP/ColPali canonical modules.
 5. [ ] Update RTM row and run quality gates.
 
 Commands:

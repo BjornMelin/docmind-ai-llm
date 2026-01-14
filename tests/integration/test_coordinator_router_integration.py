@@ -13,6 +13,7 @@ import pytest
 
 from src.agents.coordinator import MultiAgentCoordinator
 from src.agents.registry import DefaultToolRegistry
+from tests.integration.coordinator_helpers import patch_supervisor_and_react
 
 # Rationale: tests set minimal coordinator internals to avoid heavy setup.
 
@@ -25,13 +26,7 @@ def test_coordinator_injected_state_router_engine_visible(supervisor_stream_shim
     through compiled_graph.stream(...), which the shim forwards from the
     initial_state provided to process_query().
     """
-    with (
-        _patch(
-            "src.agents.coordinator.create_supervisor",
-            return_value=supervisor_stream_shim,
-        ),
-        _patch("src.agents.coordinator.create_react_agent"),
-    ):
+    with patch_supervisor_and_react(supervisor_stream_shim):
         # Bypass full __init__ setup; only set required attrs for the test
         with _patch.object(MultiAgentCoordinator, "__init__", return_value=None):
             coord = MultiAgentCoordinator()  # type: ignore[call-arg]
@@ -61,9 +56,12 @@ def test_coordinator_injected_state_router_engine_visible(supervisor_stream_shim
                 optimization_metrics={},
             )
 
-        def _workflow_passthrough(initial_state, _thread_id):
-            # Return a dict final state that preserves tools_data
-            return {"messages": [], "tools_data": dict(initial_state.tools_data)}
+        def _workflow_passthrough(initial_state, *_a, **_k):
+            # In final-release persistence, injected objects flow via runtime
+            # context (not serialized into tools_data).
+            runtime_context = _k.get("runtime_context") or {}
+            tools_data = {"router_engine": runtime_context.get("router_engine")}
+            return {"messages": [], "tools_data": tools_data}
 
         with (
             _patch.object(

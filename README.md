@@ -32,6 +32,8 @@ Design goals:
 - **Multi-agent coordination:** LangGraph supervisor orchestrates five agents (router, planner, retrieval, synthesis, validation).
 - **Snapshots and reproducibility:** DuckDB KV cache plus snapshot manifests with corpus/config hashes; graph exports as JSONL/Parquet (Parquet requires PyArrow).
 - **PDF page images:** PyMuPDF renders page images to WebP/JPEG; optional AES-GCM encryption with `.enc` outputs and just-in-time decryption for visual scoring.
+- **ArtifactStore (multimodal durability):** Page images/thumbnails are stored as content-addressed `ArtifactRef(sha256, suffix)` (no base64 blobs or host paths in durable stores).
+- **Multimodal UX:** Chat renders image sources and supports query-by-image “Visual search” (SigLIP) for image-rich PDFs.
 - **Offline-first design:** Runs fully offline once models are present; remote endpoints must be explicitly enabled.
 - **GPU acceleration:** Optional vLLM + FlashInfer stack (gpu extra) for fast local inference.
 - **Robust retries and logging:** Tenacity-backed retries for LLM calls and structured logging via Loguru.
@@ -468,6 +470,7 @@ flowchart TD
 
 - **Unified Text Embeddings:** BGE-M3 (BAAI/bge-m3) via LlamaIndex for dense vectors (1024D); sparse query vectors via FastEmbed BM42/BM25 when available.
 - **Multimodal:** SigLIP visual scoring by default; OpenCLIP optional. ColPali visual reranking is optional (multimodal extra).
+- **Multimodal retrieval (PDF images):** `multimodal_search` fuses text hybrid with SigLIP text→image retrieval over a dedicated Qdrant image collection and returns image-bearing sources for rendering.
 - **Fusion:** Server-side RRF via Qdrant Query API when `DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=true` (DBSF optional).
 - **Deduplication:** Configurable key via `DOCMIND_RETRIEVAL__DEDUP_KEY` (page_id|doc_id); default = `page_id`.
 - **Router composition:** See `src/retrieval/router_factory.py` (tools: `semantic_search`, `hybrid_search`, `knowledge_graph`). Selector preference: `PydanticSingleSelector` (preferred) → `LLMSingleSelector` fallback. The `knowledge_graph` tool is activated only when a PropertyGraphIndex is present and healthy; otherwise the router uses vector/hybrid only.
@@ -595,7 +598,7 @@ maxUploadSize = 200
 **Cache Configuration**:
 
 - Ingestion cache: DuckDB KV store under `./cache/docmind.duckdb` (see `DOCMIND_CACHE__DIR` and `DOCMIND_CACHE__FILENAME`).
-- PDF page images: stored under `./cache/page_images/` (encrypted when enabled).
+- PDF page images: rendered under `./cache/page_images/` and stored durably as content-addressed artifacts under `./data/artifacts/` by default.
 - Model weights: cached via Hugging Face defaults (`~/.cache/huggingface`).
 
 ## Performance Defaults and Monitoring

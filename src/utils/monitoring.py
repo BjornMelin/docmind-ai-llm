@@ -14,7 +14,7 @@ Key features:
 
 import sys
 import time
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Callable, Generator
 from contextlib import asynccontextmanager, contextmanager
 from typing import Any
 
@@ -22,6 +22,38 @@ import psutil
 from loguru import logger
 
 from src.config import settings
+
+
+def _make_otel_log_patcher(
+    enabled: bool,
+) -> Callable[[Any], None]:
+    def _patch(record: Any) -> None:
+        if not isinstance(record, dict):
+            return
+        extra = record.get("extra")
+        if not isinstance(extra, dict):
+            extra = {}
+            record["extra"] = extra
+        extra.setdefault("otelTraceID", "")
+        extra.setdefault("otelSpanID", "")
+        extra.setdefault("otelTraceSampled", "false")
+        if not enabled:
+            return
+        try:
+            from opentelemetry import trace as _trace
+
+            ctx = _trace.get_current_span().get_span_context()
+            if ctx is None or not getattr(ctx, "is_valid", False):
+                return
+            extra["otelTraceID"] = f"{int(ctx.trace_id):032x}"
+            extra["otelSpanID"] = f"{int(ctx.span_id):016x}"
+            extra["otelTraceSampled"] = (
+                "true" if bool(getattr(ctx.trace_flags, "sampled", False)) else "false"
+            )
+        except Exception:
+            return
+
+    return _patch
 
 
 def setup_logging(log_level: str = "INFO", log_file: str | None = None) -> None:
@@ -34,6 +66,20 @@ def setup_logging(log_level: str = "INFO", log_file: str | None = None) -> None:
     # Remove default handler
     logger.remove()
 
+    obs_cfg = getattr(settings, "observability", None)
+    obs_enabled = (
+        bool(getattr(obs_cfg, "enabled", False))
+        and float(getattr(obs_cfg, "sampling_ratio", 1.0) or 0.0) > 0.0
+    )
+    logger.configure(patcher=_make_otel_log_patcher(obs_enabled))
+
+    prefix = ""
+    if obs_enabled:
+        prefix = (
+            "trace_id={extra[otelTraceID]} span_id={extra[otelSpanID]} "
+            "sampled={extra[otelTraceSampled]} | "
+        )
+
     # Add console handler with colors
     logger.add(
         sys.stderr,
@@ -41,6 +87,7 @@ def setup_logging(log_level: str = "INFO", log_file: str | None = None) -> None:
         format=(
             "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
             "<level>{level: <8}</level> | "
+            f"{prefix}"
             "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
             "<level>{message}</level>"
         ),
@@ -52,8 +99,11 @@ def setup_logging(log_level: str = "INFO", log_file: str | None = None) -> None:
         logger.add(
             log_file,
             level=log_level,
-            format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | "
-            "{name}:{function}:{line} - {message}",
+            format=(
+                "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | "
+                f"{prefix}"
+                "{name}:{function}:{line} - {message}"
+            ),
             rotation="10 MB",
             retention="7 days",
             compression="gz",

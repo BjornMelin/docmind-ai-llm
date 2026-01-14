@@ -187,8 +187,13 @@ def _set_active_lock(lock: SnapshotLock | None) -> None:
 
 def begin_snapshot(base_dir: Path | None = None) -> Path:
     """Create a locked workspace for snapshot persistence."""
-    if _get_active_lock() is not None:
-        raise RuntimeError("Snapshot lock already held; finalize or cleanup first.")
+    active_lock = _get_active_lock()
+    if active_lock is not None:
+        # Clear stale in-memory lock references that outlive the lock file.
+        if not active_lock.path.exists():
+            _set_active_lock(None)
+        else:
+            raise RuntimeError("Snapshot lock already held; finalize or cleanup first.")
 
     paths = _snapshot_paths(base_dir)
     paths.base_dir.mkdir(parents=True, exist_ok=True)
@@ -221,8 +226,10 @@ def _release_active_lock() -> None:
     lock = _get_active_lock()
     if lock is None:
         return
-    lock.release()
-    _set_active_lock(None)
+    try:
+        lock.release()
+    finally:
+        _set_active_lock(None)
 
 
 def cleanup_tmp(tmp_dir: Path) -> None:
@@ -281,11 +288,9 @@ def _garbage_collect(paths: SnapshotPaths) -> None:
     keep = max(1, int(config.retention_count))
     grace = max(0, int(config.gc_grace_seconds))
     versions = sorted(
-        [
-            p
-            for p in paths.base_dir.iterdir()
-            if p.is_dir() and not p.name.startswith("_tmp-")
-        ]
+        p
+        for p in paths.base_dir.iterdir()
+        if p.is_dir() and not p.name.startswith("_tmp-")
     )
     if len(versions) <= keep:
         return
@@ -585,11 +590,9 @@ def recover_snapshots(base_dir: Path | None = None) -> None:
         return
 
     versions = sorted(
-        [
-            p
-            for p in paths.base_dir.iterdir()
-            if p.is_dir() and not p.name.startswith("_tmp-")
-        ]
+        p
+        for p in paths.base_dir.iterdir()
+        if p.is_dir() and not p.name.startswith("_tmp-")
     )
     if not versions:
         with suppress(FileNotFoundError):
@@ -607,6 +610,37 @@ def _hash_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             hasher.update(chunk)
     return hasher.hexdigest()
+
+
+def _entries_valid(snapshot_dir: Path, entries: list[dict[str, Any]]) -> bool:
+    """Validate manifest entries against on-disk files and hashes.
+
+    Enforces path boundary: all resolved entry paths must remain within snapshot_dir
+    to prevent directory traversal attacks (e.g., ../../../etc/passwd).
+    """
+    base = snapshot_dir.resolve()
+    for entry in entries:
+        rel = entry.get("path")
+        if not rel:
+            return False
+        try:
+            target = (snapshot_dir / Path(rel)).resolve()
+        except (
+            OSError,
+            RuntimeError,
+        ):  # pragma: no cover - defense against symlink loops
+            return False
+        # Enforce boundary: target must be inside the snapshot directory
+        try:
+            target.relative_to(base)
+        except ValueError:
+            # Path is outside snapshot_dir boundary
+            return False
+        if not target.exists():
+            return False
+        if _hash_file(target) != entry.get("sha256"):
+            return False
+    return True
 
 
 def verify_snapshot(snapshot_dir: Path) -> bool:
@@ -628,15 +662,8 @@ def verify_snapshot(snapshot_dir: Path) -> bool:
     if expected is None:
         return False
 
-    for entry in entries:
-        rel = entry.get("path")
-        if not rel:
-            return False
-        target = snapshot_dir / Path(rel)
-        if not target.exists():
-            return False
-        if _hash_file(target) != entry.get("sha256"):
-            return False
+    if not _entries_valid(snapshot_dir, entries):
+        return False
 
     aggregate = sha256()
     for entry in entries:
@@ -669,7 +696,17 @@ __all__ = [
 
 
 class SnapshotManager:
-    """Compatibility wrapper for UI components expecting a class API."""
+    """Convenience wrapper for creating and persisting immutable snapshots.
+
+    Snapshots store serialized vector indices, property graphs, and exports within
+    an immutable directory structure. Per ADR-058, paths stored in manifest.jsonl
+    are **snapshot-internal relative references only**—never absolute paths or
+    stable external identifiers. These paths are confined to the snapshot boundary
+    and are not exposed via the public API.
+
+    Callers should use load_manifest_entries() to read manifest metadata, which
+    validates all paths remain within the snapshot directory boundary.
+    """
 
     def __init__(self, storage_dir: Path) -> None:
         """Initialize the manager with the provided storage directory.
@@ -721,6 +758,16 @@ class SnapshotManager:
     ) -> None:
         """Write manifest metadata describing the snapshot contents.
 
+        Writes three files to tmp_dir: manifest.jsonl (entries), manifest.meta.json
+        (metadata), and manifest.checksum (SHA256 of manifest.jsonl).
+
+        **Important invariant (ADR-058):** Paths written to manifest.jsonl are
+        snapshot-internal relative references (relative to tmp_dir), confined to
+        the snapshot boundary, and are NOT stable external identifiers. These paths
+        must never be persisted elsewhere or exposed outside the snapshot boundary.
+        Use load_manifest_entries() to safely read entries with built-in path
+        validation.
+
         Args:
             tmp_dir: Temporary snapshot workspace directory.
             index_id: Identifier representing the persisted index.
@@ -738,9 +785,8 @@ class SnapshotManager:
             "corpus_hash": corpus_hash,
             "config_hash": config_hash,
             "versions": versions or {},
+            "graph_exports": graph_exports or [],
         }
-        if graph_exports:
-            metadata["graph_exports"] = graph_exports
         write_manifest(tmp_dir, metadata)
 
     def finalize_snapshot(self, tmp_dir: Path) -> Path:

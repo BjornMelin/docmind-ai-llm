@@ -58,8 +58,10 @@ dependencies = [
     "llama-index-embeddings-openai>=0.5.1,<0.6.0",
     "llama-index-readers-file>=0.5.6,<0.6.0",
     # Agentic Orchestration
-    "langgraph>=1.0.5,<2.0.0",           # Graph-based orchestration
+    "langgraph==1.0.5",                  # Graph-based orchestration (pin to avoid ToolRuntime API churn)
+    "langgraph-checkpoint-sqlite==3.0.1",  # Durable checkpoints + sqlite-vec
     "langgraph-supervisor>=0.0.31,<0.1.0",  # Multi-agent supervisor
+    "langchain>=1.2.2,<2.0.0",           # Agent factory (create_agent) for LangGraph v1
     "langchain-core>=1.2.6,<2.0.0",      # Shared interfaces
     "langchain-openai>=1.1.6,<2.0.0",    # LangChain OpenAI bindings
     # Retrieval & Reranking Extras
@@ -176,9 +178,32 @@ Manual Installation Steps (if needed):
 line-length = 88
 target-version = "py311"
 extend-exclude = ["opensrc"]
+preview = false
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "N", "S", "B", "A", "C4", "PT", "SIM", "TID", "D", "RUF", "PLE", "PLC", "PLW"]
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "N",
+    "S",
+    "B",
+    "A",
+    "C4",
+    "PT",
+    "SIM",
+    "TID",
+    "D",
+    "RUF",
+    "PLE",
+    "PLC",
+    "PLW",
+    "PLR0911",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+]
 # Stricter linting with pylint-equivalent rules; keep a short, explicit ignore set.
 ignore = [
     # Docstring style conflicts
@@ -194,7 +219,7 @@ ignore = [
     "PLW1514",  # unspecified-encoding (handled by project defaults)
     "PLW0603",  # global-statement (acceptable in limited cases)
     "PLW2901",  # loop variable overwritten (common pattern for line stripping)
-    # Note: PLR (refactoring) rules not selected - they're too strict for this project
+    # Note: PLR is opt-in via explicit PLR091x design rules only.
 ]
 # Ensure unused or mistyped noqa comments are flagged and pilot ANN rules.
 extend-select = ["RUF100", "ANN001", "ANN002", "ANN003"]
@@ -208,19 +233,33 @@ extend-select = ["RUF100", "ANN001", "ANN002", "ANN003"]
     "RUF005",  # list concatenation shortcuts allowed in tests
     "RUF017",  # performance anti-patterns acceptable in tests
     "N802",    # test AST visitors use conventional names
+    "B903",  # lightweight helper classes in tests
     "ANN001", "ANN002", "ANN003",  # pilot annotations off in tests
     "ANN201", "ANN202", "ANN204",
     "D100", "D103",  # don't require docstrings in tests
     "PLC0415",  # import-outside-toplevel in tests
+    "PLC1901",  # empty string checks are fine in tests
+    "PLC2701",  # private imports ok for test coverage
+    "PLW0108",  # inline lambdas ok in monkeypatches
     "PLW0603",  # global-statement in test fixtures
+    "RUF029",  # async helpers without awaits are ok in tests
+    "S404",  # subprocess usage in tests (e2e helpers)
 ]
 "scripts/**/*.py" = [
     "PLC0415",  # import-outside-toplevel in scripts
+    "S404",  # subprocess usage in scripts
 ]
 "scripts/check_coverage.py" = ["RUF001", "RUF002", "RUF003"]
 "scripts/run_quality_gates.py" = ["RUF013"]
 "docs/**/*.py" = [
     "RUF001", "RUF002", "RUF003",  # unicode in examples/docstrings
+]
+"src/pages/04_settings.py" = [
+    "PLR0914",  # settings page is intentionally wide to keep UI cohesive
+]
+"tools/eval/run_beir.py" = [
+    "PLC2701",  # private import is intentional for eval script
+    "PLR0914",  # CLI entrypoint is intentionally wide
 ]
 
 [tool.ruff.lint.isort]
@@ -235,6 +274,12 @@ max-args = 10
 max-bool-expr = 5
 max-branches = 15
 max-locals = 20
+# Slightly relaxed ceilings for orchestration-style code (CLI entrypoints, Streamlit page glue, scripts/tools)
+# where nested guards and positional arg wiring are sometimes clearer than heavy indirection.
+# For core `src/` logic, prefer extracting helpers and using keyword-only args/config objects; CI runs
+# a stricter pass via `ruff-core.toml` to flag overly positional APIs for refactor.
+max-nested-blocks = 5
+max-positional-args = 10
 max-public-methods = 30
 max-returns = 6
 max-statements = 50
@@ -302,7 +347,7 @@ asyncio_default_fixture_loop_scope = "function"
 # Development-only dependency groups (PEP 735); not published as package metadata.
 [dependency-groups]
 dev = [
-    "ruff>=0.13.0,<0.14.0",
+    "ruff>=0.13.0,<0.15.0",
     "pyright[nodejs]>=1.1.407,<1.2.0",
     "pytest>=8.3.1,<9.0.0",
     "pytest-asyncio>=1.3.0,<2.0.0",
@@ -330,6 +375,7 @@ performance = [
 quality = [
     "pre-commit>=4.0.1",
     "coverage[toml]>=7.6.0",
+    "pyright[nodejs]>=1.1.407,<1.2.0",
     "pytest-xdist>=3.6.0",  # Parallel test execution
     "pytest-timeout>=2.3.1",  # Test timeout enforcement
     "pytest-mock>=3.14.0",  # Enhanced mocking support
@@ -356,18 +402,6 @@ omit = [
     "test_logs/*",
     "cache/*",
     "logs/*",
-    "src/agents/*",
-    "src/app.py",
-    "src/containers.py",
-    "src/core/*",
-    "src/dspy_integration.py",
-    "src/prompting/*",
-    "src/retrieval/*",
-    "src/utils/security.py",
-    "src/utils/storage.py",
-    "src/utils/telemetry.py",
-    "src/models/embeddings.py",
-    "src/processing/pdf_pages.py",
 ]
 branch = true
 data_file = "coverage/.coverage"
@@ -387,7 +421,7 @@ exclude_lines = [
     "except ImportError:",
     "if TYPE_CHECKING:",
 ]
-fail_under = 45.0
+fail_under = 80.0
 precision = 2
 show_missing = true
 skip_covered = false
@@ -414,7 +448,7 @@ unit_test_time_threshold_seconds = 0.1
 performance_regression_threshold = 1.5
 
 # Coverage enforcement
-min_line_coverage_percent = 65.0
+min_line_coverage_percent = 80.0
 min_branch_coverage_percent = 0.0
 coverage_fail_on_decrease = false
 coverage_regression_threshold = 0.95
@@ -436,3 +470,35 @@ enable_quality_gate_enforcement = true
 enable_intelligent_test_selection = true
 enable_fast_feedback_mode = true
 enable_deployment_gate_validation = true
+
+# Pyright Type Checking Configuration - Optimized for Performance
+[tool.pyright]
+include = ["src", "tools"]
+exclude = [
+    "**/__pycache__",
+    ".venv",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".benchmarks",
+    "cache",
+    "data",
+    "docs",
+    "logs",
+    "storage",
+    "templates",
+    "unused",
+    "opensrc",
+    "embeddings_cache",
+    "htmlcov",
+    ".opencode",
+    ".codex",
+    "**/*.egg-info",
+]
+pythonVersion = "3.11"
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "standard"
+reportMissingTypeStubs = "none"
+# Disable library code analysis for faster type checking
+# Trade-off: Less complete type info for untyped libraries (mitigated by reportMissingTypeStubs = "none")
+useLibraryCodeForTypes = false

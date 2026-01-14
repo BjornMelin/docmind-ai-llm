@@ -6,7 +6,7 @@ This directory contains comprehensive test quality gates and monitoring infrastr
 
 ### 1. Coverage Threshold Checker (`check_coverage.py`)
 
-Target gates: 80% line and 75% branch coverage with detailed reporting. Note: CI currently enforces a lower fail-under (29.71%) defined in `pyproject.toml` and is trending upward. Override thresholds on-demand with `--threshold`/`--branch-threshold`.
+Enforced gate: 80% line coverage with detailed reporting; branch coverage is tracked but not enforced (`min_branch_coverage_percent = 0.0`). Override thresholds on-demand with `--threshold`.
 
 ```bash
 # Basic usage
@@ -21,7 +21,7 @@ uv run python scripts/check_coverage.py --new-code-only --diff-from main
 
 **Features:**
 
-- Line and branch coverage validation (targets)  
+- Line coverage validation (80% enforced); branch coverage tracking (not enforced; `min_branch_coverage_percent = 0.0`)  
 - New code coverage tracking
 - Detailed HTML reports
 - CI/CD integration support
@@ -51,6 +51,50 @@ uv run python scripts/performance_monitor.py --collection-only
 - Integration with existing performance tests
 
 Regression checks compare durations and memory (CPU peak, GPU VRAM peak when available) against the recorded baseline.
+
+#### Key Measurement Flows
+
+The following flows represent the critical path and are automatically measured during regression checks:
+
+1. **Document Upload & Ingestion**: Processing PDF/Text files into the pipeline.
+   - Target (P95): <=500ms for a 10-page PDF
+2. **Embedding Generation**: Performance of BGE-M3/SigLIP models (latency/throughput).
+   - Target (P95): <100ms/page (SigLIP), <50ms/chunk (BGE-M3)
+3. **Retrieval Latency**: Hybrid search (dense + sparse) query execution time.
+   - Target (P95): <200ms per query
+4. **Chat Inference**: Token generation speed (tok/s) and time-to-first-token.
+   - Target (P95): TTFT <500ms, >=30 tok/s sustained
+5. **UI Load & Routing**: Streamlit page transition and initial component render times.
+   - Target (P95): initial render <800ms, route switch <300ms
+6. **Ingestion Pipeline**: End-to-end processing from document to vector store.
+   - Target (P95): <5s for a 10-page PDF
+
+Targets are illustrative and hardware-dependent; adjust as needed. Regression checks
+still gate on >20% change vs the recorded baseline.
+
+#### Measurement Procedure
+
+1. **Prepare Environment**: Ensure no background processes are consuming significant resources.
+2. **Execute Monitor**: Run the script with the `--run-tests` flag to execute performance-marked tests.
+
+   ```bash
+   uv run python scripts/performance_monitor.py --run-tests --check-regressions
+   ```
+
+3. **Analyze Results**: Review the generated report in `tests/performance/reports/`. Any regression >20% will trigger a failure (exit code 1).
+
+#### Baseline Management
+
+Baselines establish the "ground truth" for performance.
+
+1. **Create Baseline**: Capture metrics from a known-good state (e.g., `main` branch or a release tag).
+
+   ```bash
+   uv run python scripts/performance_monitor.py --run-tests --baseline
+   ```
+
+2. **Store Baseline**: Baseline artifacts are stored in `tests/performance/baselines/`. Commit these files to the repository to share the baseline across environments.
+3. **Update Frequency**: Re-establish baselines only after significant architectural changes or environment migrations (e.g., new hardware).
 
 ### 3. Test Suite Health Monitor (`test_health.py`)
 
@@ -193,7 +237,7 @@ uv run python scripts/performance_monitor.py --report --days 30
 
 ## Success Criteria
 
-✅ **Coverage**: >80% line coverage, >75% branch coverage  
+✅ **Coverage**: >80% line coverage (aspirational target; overrideable with `--threshold`)
 ✅ **Performance**: <20% regression in test execution  
 ✅ **Health**: <5 flaky tests, minimal anti-patterns  
 ✅ **Integration**: All pre-commit hooks pass  

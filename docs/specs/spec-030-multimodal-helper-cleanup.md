@@ -2,9 +2,9 @@
 spec: SPEC-030
 title: Multimodal Helper Cleanup (Remove Unused `src.utils.multimodal`)
 version: 1.0.0
-date: 2026-01-09
+date: 2026-01-12
 owners: ["ai-arch"]
-status: Draft
+status: Completed
 related_requirements:
   - NFR-MAINT-003: No TODO/dead code in production modules.
 related_adrs: ["ADR-049"]
@@ -41,10 +41,10 @@ Remove `src/utils/multimodal.py` from the production package if it is unused by 
 
 ## RTM updates (docs/specs/traceability.md)
 
-Add a planned row:
+Add a dedicated row:
 
-- NFR-MAINT-003: “Remove unused multimodal helper”
+- NFR-MAINT-003.1: “Remove unused multimodal helper”
   - Code: `src/utils/multimodal.py` (deleted)
-  - Tests: `tests/unit/utils/multimodal/*` (deleted/updated)
-  - Verification: test
-  - Status: Planned → Implemented
+  - Tests: `tests/unit/utils/multimodal/*` (deleted)
+  - Verification: inspection + quality gates
+  - Status: Implemented

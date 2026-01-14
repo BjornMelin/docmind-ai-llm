@@ -11,29 +11,28 @@ Key behaviors:
 - Optional structured-output flag for vLLM (SPEC-007 prep)
 """
 
-import logging
 import os
 import threading
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, cast
 
 from llama_index.core import Settings
+from loguru import logger
 
 from src.config.llm_factory import build_llm
-from src.models.embeddings import (
-    BackboneName,
-    ImageEmbedder,
-    TextEmbedder,
-    UnifiedEmbedder,
-)
+from src.models.embedding_constants import ImageBackboneName
 from src.telemetry.opentelemetry import setup_metrics, setup_tracing
 
 from .settings import DocMindSettings, settings
 
 if TYPE_CHECKING:  # pragma: no cover
     from llama_index.core.base.embeddings.base import BaseEmbedding
+
+    from src.models.embeddings import ImageEmbedder
 else:
     BaseEmbedding = Any
+    ImageEmbedder = Any
+
 
 # Text embeddings default wrapper
 # NOTE: Avoid heavy imports at module import-time. The embedding constructor
@@ -44,9 +43,6 @@ _HF_EMBED_LOCK = threading.Lock()
 
 # Keep text embeddings defaulting to HuggingFaceEmbedding (BGE-M3) for
 # consistency with tri-mode retrieval and VectorStoreIndex usage.
-
-logger = logging.getLogger(__name__)
-
 
 # Removed host-level checks; rely on centralized settings-side validation
 
@@ -84,7 +80,7 @@ def setup_vllm_env() -> None:
     for key, value in vllm_env.items():
         if key not in os.environ:
             os.environ[key] = value
-            logger.debug("Set %s=%s", key, value)
+            logger.debug("Set {}={}", key, value)
 
     logger.info("vLLM environment variables configured for FP8 optimization")
 
@@ -131,6 +127,16 @@ def startup_init(cfg: "DocMindSettings" = settings) -> None:
         cfg.log_file.parent.mkdir(parents=True, exist_ok=True)
         if cfg.database.sqlite_db_path.parent != cfg.data_dir:
             cfg.database.sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
+        if hasattr(cfg, "chat") and getattr(cfg.chat, "sqlite_path", None):
+            # Defensive: chat DB dir should not block startup
+            try:
+                cfg.chat.sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                logger.warning(
+                    "Chat DB directory creation failed (non-blocking) for {}: {}",
+                    cfg.chat.sqlite_path,
+                    exc,
+                )
 
         # Telemetry env bridge (local JSONL sink still honored elsewhere)
         if not bool(getattr(cfg, "telemetry_enabled", True)):
@@ -138,9 +144,7 @@ def startup_init(cfg: "DocMindSettings" = settings) -> None:
 
         # Observability: log config highlights
         try:
-            from loguru import logger as _logger
-
-            _logger.info(
+            logger.info(
                 "Startup: backend=%s base_url=%s timeout=%s hybrid=%s fusion=%s",
                 cfg.llm_backend,
                 getattr(cfg, "backend_base_url_normalized", None),
@@ -149,12 +153,11 @@ def startup_init(cfg: "DocMindSettings" = settings) -> None:
                 str(getattr(cfg.retrieval, "fusion_mode", "rrf")),
             )
         except (
-            ImportError,
             AttributeError,
             TypeError,
             ValueError,
         ) as exc:  # pragma: no cover - logging must not fail
-            logger.debug("Startup logging failed: %s", exc)
+            logger.debug("Startup logging failed: {}", exc)
     except (
         OSError,
         AttributeError,
@@ -162,7 +165,7 @@ def startup_init(cfg: "DocMindSettings" = settings) -> None:
         ValueError,
     ) as exc:  # pragma: no cover - defensive
         # Do not crash app on startup side-effects; callers may retry/log
-        logger.warning("startup_init encountered error: %s", exc)
+        logger.warning("startup_init encountered error: {}", exc)
         return
 
     setup_tracing(cfg)
@@ -184,7 +187,7 @@ def initialize_integrations(
     setup_vllm_env()
     setup_llamaindex(force_llm=force_llm, force_embed=force_embed)
     logger.info(
-        "All integrations initialized successfully (force_llm=%s, force_embed=%s)",
+        "All integrations initialized successfully (force_llm={}, force_embed={})",
         force_llm,
         force_embed,
     )
@@ -208,20 +211,24 @@ def get_unified_embedder():  # pragma: no cover - simple factory
     This is a lightweight entry point for app code to opt into the
     library-first TextEmbedder (BGE-M3) and ImageEmbedder (OpenCLIP/SigLIP).
     """
+    from src.models.embeddings import ImageEmbedder, TextEmbedder, UnifiedEmbedder
+
     device = "cuda" if settings.enable_gpu_acceleration else "cpu"
     text = TextEmbedder(model_name=settings.embedding.model_name, device=device)
-    image = ImageEmbedder(backbone="siglip_base", device=device)
+    image = ImageEmbedder(backbone=settings.embedding.image_backbone, device=device)
     return UnifiedEmbedder(text=text, image=image, strict_image_types=True)
 
 
 def get_image_embedder(
-    backbone: BackboneName = "siglip_base",
+    backbone: ImageBackboneName = "siglip_base",
 ) -> ImageEmbedder:  # pragma: no cover - simple factory
     """Return an ImageEmbedder with the requested backbone.
 
-    Default backbone is SigLIP (preferred). Accepts "openclip_vitl14",
-    "openclip_vith14", or "siglip_base".
+    Default backbone is SigLIP (preferred). Accepts "auto", "openclip_vitl14",
+    "openclip_vith14", "siglip_base", or "bge_visualized".
     """
+    from src.models.embeddings import ImageEmbedder
+
     device = "cuda" if settings.enable_gpu_acceleration else "cpu"
     return ImageEmbedder(backbone=backbone, device=device)
 
@@ -255,7 +262,7 @@ def _configure_llm() -> None:
     try:
         settings._validate_endpoints_security()
     except ValueError as err:
-        logger.warning("LLM configuration blocked by security policy: %s", err)
+        logger.warning("LLM configuration blocked by security policy: {}", err)
         Settings.llm = None
         return
 
@@ -264,17 +271,16 @@ def _configure_llm() -> None:
         provider = settings.llm_backend
         model_name = settings.model or settings.vllm.model
         base_url = getattr(settings, "backend_base_url_normalized", None)
+        streaming = bool(getattr(settings, "llm_streaming_enabled", True))
         logger.info(
-            "LLM configured via factory: provider=%s model=%s base_url=%s",
+            "LLM configured via factory: provider={} model={} base_url={} streaming={}",
             provider,
             model_name,
             base_url,
+            streaming,
         )
-        streaming = bool(getattr(settings, "llm_streaming_enabled", True))
-        logger.info("counter.provider_used: %s", provider)
-        logger.info("counter.streaming_enabled: %s", streaming)
     except (ImportError, RuntimeError, ValueError, OSError) as exc:
-        logger.warning("Could not configure LLM: %s", exc, exc_info=True)
+        logger.opt(exception=True).warning("Could not configure LLM: {}", exc)
         Settings.llm = None
 
 
@@ -325,13 +331,13 @@ def _configure_embeddings() -> None:
             trust_remote_code=emb_cfg.get("trust_remote_code", False),
         )
         logger.info(
-            "Embedding model configured: %s %s (device=%s)",
+            "Embedding model configured: {} {} (device={})",
             type(Settings.embed_model).__name__,
             model_name,
             device,
         )
     except (ImportError, RuntimeError, ValueError, OSError) as exc:
-        logger.warning("Could not configure embeddings: %s", exc, exc_info=True)
+        logger.opt(exception=True).warning("Could not configure embeddings: {}", exc)
         Settings.embed_model = None
 
 
@@ -343,12 +349,14 @@ def _configure_context_settings() -> None:
         )
         Settings.num_output = settings.vllm.max_tokens
         logger.info(
-            "Context configured: %d window, %d max tokens",
+            "Context configured: {} window, {} max tokens",
             int(Settings.context_window),
             int(Settings.num_output),
         )
     except (AttributeError, ValueError) as exc:
-        logger.warning("Could not set context configuration: %s", exc, exc_info=True)
+        logger.opt(exception=True).warning(
+            "Could not set context configuration: {}", exc
+        )
 
 
 def _configure_structured_outputs() -> None:

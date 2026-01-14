@@ -25,7 +25,7 @@ import asyncio
 import gc
 from collections.abc import AsyncGenerator, Callable, Generator
 from contextlib import asynccontextmanager, contextmanager, suppress
-from typing import Any, cast
+from typing import Any
 
 try:  # Optional torch; CPU-only environments must not fail at import
     import torch  # type: ignore
@@ -44,6 +44,11 @@ from qdrant_client.http.models import (
 )
 
 from src.config import settings
+from src.utils.qdrant_exceptions import (
+    QDRANT_SCHEMA_EXCEPTIONS,
+    QDRANT_TRANSPORT_EXCEPTIONS,
+)
+from src.utils.qdrant_utils import get_collection_params
 
 # Preferred sparse models (logging/telemetry; selection handled by fastembed if present)
 PREFERRED_SPARSE_MODEL = "Qdrant/bm42-all-minilm-l6-v2-attentions"
@@ -108,11 +113,7 @@ def _safe_collection_exists(client: QdrantClient, name: str) -> bool:
     try:
         return bool(client.collection_exists(name))
     except (
-        ResponseHandlingException,
-        UnexpectedResponse,
-        ConnectionError,
-        TimeoutError,
-        OSError,
+        *QDRANT_TRANSPORT_EXCEPTIONS,
         ValueError,
     ) as exc:  # pragma: no cover - defensive
         logger.warning("collection_exists check failed: %s", exc)
@@ -231,11 +232,7 @@ def ensure_hybrid_collection(
         try:
             _create_hybrid_collection(client, collection_name, dense_dim)
         except (
-            ResponseHandlingException,
-            UnexpectedResponse,
-            ConnectionError,
-            TimeoutError,
-            OSError,
+            *QDRANT_TRANSPORT_EXCEPTIONS,
             ValueError,
         ) as exc:  # pragma: no cover - defensive
             logger.warning(
@@ -244,9 +241,7 @@ def ensure_hybrid_collection(
         return
 
     try:
-        info = client.get_collection(collection_name)
-        params = getattr(info, "config", info)
-        params = getattr(params, "params", params)
+        params = get_collection_params(client, collection_name)
 
         dense_cfg = getattr(params, "vectors", None) or getattr(
             params, "vectors_config", None
@@ -286,16 +281,7 @@ def ensure_hybrid_collection(
             )
         else:
             logger.debug("Hybrid schema already present for '%s'", collection_name)
-    except (
-        ResponseHandlingException,
-        UnexpectedResponse,
-        ConnectionError,
-        TimeoutError,
-        OSError,
-        ValueError,
-        TypeError,
-        AttributeError,
-    ) as exc:  # pragma: no cover - defensive
+    except QDRANT_SCHEMA_EXCEPTIONS as exc:  # pragma: no cover - defensive
         logger.warning("ensure_hybrid_collection skipped: %s", exc)
 
 
@@ -541,14 +527,7 @@ def create_vector_store(
                 collection_name,
                 dense_dim=_dense_embedding_size,
             )
-        except (
-            ResponseHandlingException,
-            UnexpectedResponse,
-            ConnectionError,
-            TimeoutError,
-            OSError,
-            ValueError,
-        ):  # pragma: no cover - defensive ensure
+        except QDRANT_TRANSPORT_EXCEPTIONS:  # pragma: no cover - defensive ensure
             logger.warning(
                 "ensure_hybrid_collection failed; proceeding with store creation"
             )
@@ -596,27 +575,11 @@ def persist_image_metadata(
         system errors.
     """
     try:
-        # qdrant-client 1.15.x exposes update_payload (deprecated);
-        # 1.16.0+ uses set_payload.
-        update_payload = getattr(client, "update_payload", None)
-        if callable(update_payload):
-            cast(Any, update_payload)(
-                collection_name=collection_name,
-                points=[point_id],
-                payload=metadata,
-            )
-        else:
-            set_payload = getattr(client, "set_payload", None)
-            if not callable(set_payload):
-                raise AttributeError(
-                    "Qdrant client lacks payload update methods "
-                    "(update_payload/set_payload)"
-                )
-            cast(Any, set_payload)(
-                collection_name=collection_name,
-                points=[point_id],
-                payload=metadata,
-            )
+        client.set_payload(
+            collection_name=collection_name,
+            points=[point_id],
+            payload=metadata,
+        )
         return True
     except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover - defensive
         logger.warning("persist_image_metadata failed for %s: %s", point_id, exc)
@@ -986,9 +949,11 @@ def get_safe_vram_usage() -> float:
         VRAM usage in GB (0.0 if CUDA unavailable or error)
     """
     return safe_cuda_operation(
-        lambda: torch.cuda.memory_allocated() / settings.monitoring.bytes_to_gb_divisor
-        if (torch is not None and torch.cuda.is_available())
-        else 0.0,
+        lambda: (
+            torch.cuda.memory_allocated() / settings.monitoring.bytes_to_gb_divisor
+            if (torch is not None and torch.cuda.is_available())
+            else 0.0
+        ),
         "VRAM usage check",
         default_return=0.0,
     )
@@ -1040,8 +1005,10 @@ def get_safe_gpu_info() -> dict[str, Any]:
                     )
 
                 info["allocated_memory_gb"] = safe_cuda_operation(
-                    lambda: t.cuda.memory_allocated(0)
-                    / settings.monitoring.bytes_to_gb_divisor,
+                    lambda: (
+                        t.cuda.memory_allocated(0)
+                        / settings.monitoring.bytes_to_gb_divisor
+                    ),
                     "allocated memory",
                     0.0,
                 )

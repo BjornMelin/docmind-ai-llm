@@ -9,18 +9,21 @@ from __future__ import annotations
 
 import contextlib
 import os
-import tempfile
 from pathlib import Path
 from typing import Any, cast
 
 import fitz  # PyMuPDF
 import numpy as np
 from llama_index.core.schema import ImageDocument
+from loguru import logger
 from PIL import Image  # type: ignore
 from PIL.Image import Resampling  # type: ignore
 
 from src.config import settings
-from src.utils.security import encrypt_file
+from src.persistence.artifacts import ArtifactStore
+from src.utils.security import encrypt_file, get_image_kid
+
+_PAGE_TEXT_MAX_CHARS = 8000
 
 
 def _phash(img: Image.Image, hash_size: int = 8) -> str:
@@ -98,7 +101,7 @@ def _save_with_format(
 
 def _render_pdf_pages(
     pdf_path: Path, out_dir: Path, dpi: int = 200, *, encrypt: bool | None = None
-) -> list[tuple[int, Path, fitz.Rect, str]]:
+) -> list[tuple[int, Path, fitz.Rect, str, str]]:
     """Render PDF pages to image files while preserving deterministic names.
 
     Output filenames follow the ``<stem>__page-<n>`` convention and reuse
@@ -112,14 +115,15 @@ def _render_pdf_pages(
         encrypt: Whether to encrypt rendered outputs; ``None`` defers to settings.
 
     Returns:
-        list[tuple[int, Path, fitz.Rect, str]]: One entry per page containing
-        the 1-based page number, output image path, page rectangle, and hash.
+        list[tuple[int, Path, fitz.Rect, str, str]]: One entry per page containing
+        the 1-based page number, output image path, page rectangle, phash, and
+        extracted page text (best-effort).
     """
     pdf_path = Path(pdf_path)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    results: list[tuple[int, Path, fitz.Rect, str]] = []
+    results: list[tuple[int, Path, fitz.Rect, str, str]] = []
     pdf_mtime = pdf_path.stat().st_mtime if pdf_path.exists() else 0.0
 
     with fitz.open(pdf_path) as doc:
@@ -128,15 +132,43 @@ def _render_pdf_pages(
         for idx in range(doc.page_count):
             page_num = idx + 1
             page = doc.load_page(idx)
+            # Best-effort page text extraction for downstream grounding.
+            try:
+                page_text = (cast(Any, page).get_text("text") or "").strip()
+            except Exception:  # pragma: no cover - PyMuPDF quirks
+                page_text = ""
+            if len(page_text) > _PAGE_TEXT_MAX_CHARS:
+                page_text = page_text[:_PAGE_TEXT_MAX_CHARS]
             img_stem = f"{pdf_path.stem}__page-{page_num}"
-            # Paths depend on chosen format; compute stem only here
-            img_path = out_dir / (img_stem + ".webp")
+            # Paths depend on chosen format/encryption; select an existing file
+            # if present to avoid re-render loops for encrypted outputs.
+            base = out_dir / img_stem
+            candidates = [
+                base.with_suffix(".webp.enc"),
+                base.with_suffix(".webp"),
+                base.with_suffix(".jpg.enc"),
+                base.with_suffix(".jpg"),
+                base.with_suffix(".jpeg.enc"),
+                base.with_suffix(".jpeg"),
+            ]
+            existing = next((p for p in candidates if p.exists()), None)
+            img_path = existing or base.with_suffix(".webp")
 
-            # Refresh if missing or source PDF is newer
+            # Refresh if missing, source PDF is newer, or encryption flag changed.
+            # Otherwise we can incorrectly reuse plaintext when encryption is enabled
+            # (or vice versa), breaking expectations and downstream consumers.
+            wants_encrypt = (
+                getattr(settings.processing, "encrypt_page_images", False)
+                if encrypt is None
+                else bool(encrypt)
+            )
             needs_render = True
-            if img_path.exists():
+            if existing is not None:
+                existing_is_enc = img_path.suffix == ".enc"
                 try:
-                    needs_render = img_path.stat().st_mtime < pdf_mtime
+                    needs_render = (img_path.stat().st_mtime < pdf_mtime) or (
+                        existing_is_enc != wants_encrypt
+                    )
                 except OSError:
                     needs_render = True
 
@@ -150,12 +182,11 @@ def _render_pdf_pages(
                 # set the image mtime to at least the source PDF's mtime.
                 with contextlib.suppress(OSError):
                     os.utime(img_path, (pdf_mtime, pdf_mtime))
-                results.append((page_num, img_path, page.rect, phash))
+                results.append((page_num, img_path, page.rect, phash, page_text))
             else:
                 # If not re-rendered, recompute phash on the fly for metadata.
                 # Handle encrypted images by decrypting to a temporary file.
                 ph = ""
-                tmp: str | None = None
                 try:
                     from src.utils.images import open_image_encrypted
 
@@ -163,11 +194,7 @@ def _render_pdf_pages(
                         ph = _phash(im) if im is not None else ""
                 except (OSError, ValueError, RuntimeError):
                     ph = ""
-                finally:
-                    if tmp:
-                        with contextlib.suppress(Exception):
-                            os.remove(tmp)
-                results.append((page_num, img_path, page.rect, ph))
+                results.append((page_num, img_path, page.rect, ph, page_text))
 
     return results
 
@@ -176,6 +203,7 @@ def pdf_pages_to_image_documents(
     pdf_path: Path,
     dpi: int = 200,
     output_dir: Path | None = None,
+    document_id: str | None = None,
     *,
     encrypt: bool | None = None,
 ) -> tuple[list[ImageDocument], Path]:
@@ -185,6 +213,7 @@ def pdf_pages_to_image_documents(
         pdf_path: Path to the PDF file
         dpi: Render resolution (dots per inch)
         output_dir: Directory to save images. Created if ``None``.
+        document_id: Optional stable document identifier for metadata linkage.
         encrypt: Whether to encrypt rendered outputs (defaults to settings).
 
     Returns:
@@ -192,26 +221,76 @@ def pdf_pages_to_image_documents(
         directory containing the rendered assets.
     """
     pdf_path = Path(pdf_path)
-    out_dir = Path(output_dir) if output_dir else Path(tempfile.mkdtemp())
+    if output_dir:
+        out_dir = Path(output_dir)
+    else:
+        # Prefer a stable cache location under settings.cache_dir rather than a
+        # temp directory that could leak in logs/persistence.
+        out_dir = settings.cache_dir / "page_images" / pdf_path.stem
+    out_dir.mkdir(parents=True, exist_ok=True)
     entries = _render_pdf_pages(pdf_path, out_dir, dpi, encrypt=encrypt)
     docs: list[ImageDocument] = []
+    failed_pages: list[tuple[int, str]] = []
+    # Store rendered images as content-addressed artifacts and reference jailed
+    # artifact paths in ImageDocument nodes.
+    store = ArtifactStore.from_settings(settings)
+    doc_id = str(document_id or pdf_path.stem or "document")
 
-    for i, path, _rect, phash in entries:
+    for i, path, _rect, phash, page_text in entries:
+        step = "put_file"
+        ref = None
+        try:
+            ref = store.put_file(path)
+            step = "resolve_path"
+            resolved_path = store.resolve_path(ref)
+        except (OSError, ValueError) as exc:
+            logger.exception(
+                "ArtifactStore.{} failed for PDF page image "
+                "(page={}, path={}, phash={}, ref={})",
+                step,
+                i,
+                path,
+                phash,
+                ref,
+            )
+            failed_pages.append((i, f"{step}: {exc}"))
+            continue
+
         meta: dict[str, Any] = {
             "page": i,
             "modality": "pdf_page_image",
-            "source": str(pdf_path),
+            # Avoid persisting raw filesystem paths in metadata.
+            "source": pdf_path.name,
+            "source_filename": pdf_path.name,
             "phash": phash,
+            "page_text": page_text,
         }
-        if str(path).endswith(".enc"):
+        meta.update(
+            {
+                "doc_id": doc_id,
+                "document_id": doc_id,
+                "page_id": f"{doc_id}::page::{i}",
+            }
+        )
+        if path.suffix == ".enc":
             meta.update(
                 {
                     "encrypted": True,
-                    "kid": os.getenv("DOCMIND_IMG_KID", "") or None,
+                    "kid": get_image_kid(),
                 }
             )
-        docs.append(ImageDocument(image_path=str(path), metadata=meta))
+        meta.update(
+            {
+                "image_artifact_id": ref.sha256,
+                "image_artifact_suffix": ref.suffix,
+            }
+        )
+        docs.append(ImageDocument(image_path=str(resolved_path), metadata=meta))
 
+    if failed_pages:
+        logger.warning(
+            "Failed to store {} page(s): {}", len(failed_pages), failed_pages
+        )
     return docs, out_dir
 
 
@@ -246,13 +325,14 @@ def save_pdf_page_images(
             "image_path": str(path),
             "bbox": [float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y1)],
             "phash": phash,
+            "page_text": page_text,
             **(
-                {"encrypted": True, "kid": os.getenv("DOCMIND_IMG_KID", "") or None}
-                if str(path).endswith(".enc")
+                {"encrypted": True, "kid": get_image_kid()}
+                if path.suffix == ".enc"
                 else {}
             ),
         }
-        for idx, path, rect, phash in entries
+        for idx, path, rect, phash, page_text in entries
     ]
 
 

@@ -9,6 +9,8 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
+from llama_index.core.schema import NodeWithScore, TextNode
+
 
 def test_reranking_timeouts_and_final_telemetry(monkeypatch):  # type: ignore[no-untyped-def]
     """Ensure settings-driven timeouts are respected and telemetry includes keys.
@@ -56,18 +58,13 @@ def test_reranking_timeouts_and_final_telemetry(monkeypatch):  # type: ignore[no
 
     monkeypatch.setattr(rmod, "build_text_reranker", _stub_build_text_reranker)
 
-    # Minimal node shims (text modality by default)
-    class _Node:
-        def __init__(self, node_id: str):
-            self.node_id = node_id
-            self.metadata = {"modality": "text"}
-
-    class _NWS:
-        def __init__(self, i: int):
-            self.node = _Node(f"n{i}")
-            self.score = 0.1 * i
-
-    nodes = [_NWS(i) for i in range(5)]
+    nodes = [
+        NodeWithScore(
+            node=TextNode(text=f"t{i}", id_=f"n{i}", metadata={"modality": "text"}),
+            score=0.1 * i,
+        )
+        for i in range(5)
+    ]
 
     # Query bundle shim
     class _QB:

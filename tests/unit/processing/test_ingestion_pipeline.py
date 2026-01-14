@@ -61,7 +61,9 @@ async def test_ingest_documents_with_bytes_payload(tmp_path: Path) -> None:
     assert result.duration_ms >= 0
     assert result.manifest.payload_count == len(result.nodes)
     assert result.metadata["document_count"] == 1
-    assert Path(result.metadata["docstore_path"]).exists()
+    assert result.metadata["docstore_enabled"] is True
+    assert cfg.docstore_path is not None
+    assert cfg.docstore_path.exists()
 
 
 @pytest.mark.asyncio
@@ -86,8 +88,12 @@ async def test_ingest_documents_with_path(tmp_path: Path) -> None:
     result = await ingest_documents(cfg, inputs, embedding=DummyEmbedding())
 
     assert result.manifest.corpus_hash
-    assert result.metadata["cache_path"].endswith("docmind.duckdb")
+    assert result.metadata["cache_db"] == "docmind.duckdb"
     assert (tmp_path / "docstore.json").exists()
+    assert result.documents
+    for doc in result.documents:
+        meta = getattr(doc, "metadata", {}) or {}
+        assert "source_path" not in meta
 
 
 def test_ingest_documents_sync_wrapper(tmp_path: Path) -> None:
@@ -177,7 +183,7 @@ def test_resolve_embedding_configures_llamaindex(
 
 @pytest.mark.asyncio
 async def test_ingest_documents_without_embedding_warns_and_runs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """ingest_documents proceeds when embeddings remain unavailable."""
     from src.processing import ingestion_pipeline as module
@@ -206,20 +212,23 @@ async def test_ingest_documents_without_embedding_warns_and_runs(
     monkeypatch.setattr(module, "build_ingestion_pipeline", _fake_build)
     monkeypatch.setattr(module, "get_settings_embed_model", lambda: None)
     monkeypatch.setattr(module, "setup_llamaindex", lambda **_: None)
+    warnings: list[str] = []
+
+    def _warn(msg: str, *args: Any, **kwargs: Any) -> None:
+        warnings.append(str(msg))
+
+    monkeypatch.setattr(module.logger, "warning", _warn, raising=False)
 
     cfg = IngestionConfig(
         cache_dir=tmp_path / "cache", docstore_path=tmp_path / "docstore.json"
     )
     inputs = [IngestionInput(document_id="doc", payload_bytes=b"payload")]
 
-    with caplog.at_level("WARNING"):
-        result = await module.ingest_documents(cfg, inputs, embedding=None)
+    result = await module.ingest_documents(cfg, inputs, embedding=None)
 
     assert call_state["embedding"] is None
     assert result.nodes == [{"doc_id": "doc", "text": "payload"}]
-    assert any(
-        "No embedding model configured" in record.message for record in caplog.records
-    )
+    assert any("No embedding model configured" in msg for msg in warnings)
 
 
 def test_document_from_input_falls_back_on_type_error(tmp_path: Path) -> None:
@@ -275,7 +284,7 @@ def test_load_documents_uses_reader(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr(module, "UnstructuredReader", DummyReader)
     monkeypatch.setattr(
-        module, "_page_image_exports", lambda path, cfg, flag: ["export"]
+        module, "_page_image_exports", lambda *args, **kwargs: ["export"]
     )
 
     sample = tmp_path / "sample.pdf"

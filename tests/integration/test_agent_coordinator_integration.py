@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import pytest
 
+from tests.integration.coordinator_helpers import patch_supervisor_and_react
+
 
 @pytest.mark.integration
 class TestAgentCoordinatorShimIntegration:
@@ -21,13 +23,7 @@ class TestAgentCoordinatorShimIntegration:
 
             from src.agents.coordinator import MultiAgentCoordinator
 
-            with (
-                _patch(
-                    "src.agents.coordinator.create_supervisor",
-                    return_value=supervisor_stream_shim,
-                ),
-                _patch("src.agents.coordinator.create_react_agent"),
-            ):
+            with patch_supervisor_and_react(supervisor_stream_shim):
                 with _patch.object(
                     MultiAgentCoordinator, "__init__", return_value=None
                 ):
@@ -56,13 +52,7 @@ class TestAgentCoordinatorShimIntegration:
 
             from src.agents.coordinator import MultiAgentCoordinator
 
-            with (
-                _patch(
-                    "src.agents.coordinator.create_supervisor",
-                    return_value=supervisor_stream_shim,
-                ),
-                _patch("src.agents.coordinator.create_react_agent"),
-            ):
+            with patch_supervisor_and_react(supervisor_stream_shim):
                 with _patch.object(
                     MultiAgentCoordinator, "__init__", return_value=None
                 ):

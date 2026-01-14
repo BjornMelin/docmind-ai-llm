@@ -1,128 +1,188 @@
 ---
 spec: SPEC-002
-title: Document Ingestion with Unstructured + LlamaIndex IngestionPipeline and Page Images
-version: 1.0.1
-date: 2025-09-09
+title: Document Ingestion (LlamaIndex IngestionPipeline + PDF Page Images)
+version: 1.1.0
+date: 2026-01-12
 owners: ["ai-arch"]
 status: Revised
 related_requirements:
-  - FR-ING-001: The system SHALL parse PDFs, Office docs, images using Unstructured.
-  - FR-ING-002: The system SHALL emit canonical nodes with deterministic IDs and lineage.
-  - FR-ING-003: The system SHALL emit `pdf_page_image` artifacts for visual reranking.
+  - FR-ING-001: The system SHALL parse PDFs and common office/text formats using library-first loaders.
+  - FR-ING-002: The system SHALL emit canonical nodes with stable identifiers and safe metadata.
+  - FR-ING-003: The system SHALL export PDF page images for multimodal retrieval and UI rendering.
   - NFR-MAINT-001: Use library caching for node+transform hashing.
-related_adrs: ["ADR-002","ADR-003","ADR-010"]
+related_adrs: ["ADR-002","ADR-003","ADR-030","ADR-031","ADR-058"]
 ---
-
 
 ## Objective
 
-Standardize ingestion using **Unstructured** (`partition(auto)`) with strategy mapping (`hi_res` / `fast` / `ocr_only`), plus OCR fallback. Integrate with **LlamaIndex IngestionPipeline** using a custom `UnstructuredTransformation` and a DuckDBKV‑backed `IngestionCache`. Emit `pdf_page_image` nodes and maintain deterministic IDs for all emitted nodes.
+Provide a **final-release, library-first** ingestion pipeline that:
 
-### Optional GraphRAG Build (Note)
+1. Loads documents via **LlamaIndex** primitives (UnstructuredReader when installed; safe plaintext fallback).
+2. Chunks text via `TokenTextSplitter` and optionally enriches nodes via `TitleExtractor`.
+3. Uses `IngestionCache` (DuckDB KV) for deterministic reuse.
+4. Exports **PDF page images** (WebP/JPEG, optional `*.enc` encryption).
+5. Wires multimodal exports into the final-release multimodal stack:
+   - store images as content-addressed artifacts (`ArtifactRef(sha256, suffix)`),
+   - best-effort index images into Qdrant for SigLIP retrieval,
+   - never persist base64 blobs or host paths in durable stores.
 
-After core ingestion completes, an optional GraphRAG build MAY be invoked (feature‑flagged) to construct a `PropertyGraphIndex` for the current corpus. See SPEC‑006 and ADR‑038 for UI toggle, persistence (SnapshotManager), and routing.
+This spec describes ingestion and page-image export/index wiring. For full end-to-end
+multimodal behavior and persistence invariants, see:
 
-## Changelog
+- `docs/developers/adrs/ADR-058-final-multimodal-pipeline-and-persistence.md`
+- `docs/specs/spec-042-final-multimodal-pipeline-and-persistence.md`
 
-- 1.0.1 (2025-09-09): Added optional GraphRAG build note and cross‑links
+## Final-release invariants (must hold)
 
-## Architecture
+1. **No base64 blobs in durable stores** (Qdrant payloads, LangGraph SQLite checkpoints/store, telemetry JSONL).
+2. **No raw filesystem paths in durable stores.** Durable references use `ArtifactRef(sha256, suffix)`.
+3. **Fail open**: optional dependencies (UnstructuredReader, SigLIP, Qdrant) must not break ingestion.
 
-- Entry point: `src/processing/document_processor.py`.
-- Transformation: `UnstructuredTransformation` (a LlamaIndex `TransformComponent`) performs:
-  - `unstructured.partition.auto.partition(path, **config)` to extract elements
-  - Heuristic chunking:
-    - Prefer `unstructured.chunking.title.chunk_by_title` when title density ≥ 5% or ≥ 3 titles
-    - Else fallback to `unstructured.chunking.basic.chunk_elements`
-  - Preserve Unstructured metadata (page_number, coordinates, HTML, image path)
-  - Convert chunks to `llama_index.core.Document` nodes with deterministic `doc_id`
-- Caching: `IngestionCache` with `DuckDBKVStore` at `./cache/docmind.duckdb`
-- Page images: `src/processing/pdf_pages.py::save_pdf_page_images()` renders stable `__page-<n>.png` files (idempotent) and returns `page_no`, `image_path`, `bbox`; `DocumentProcessor` appends `pdf_page_image` metadata elements to the result
-- Deterministic IDs: `src/processing/utils.py::sha256_id()` normalizes and hashes `(source_path, page_no, text_or_image_hash)`
+## Architecture (repo truth)
 
-### Rationale & Alternatives (Library‑First)
+### Entry points
 
-- Why not use `partition(..., chunking_strategy=...)` end‑to‑end?
-  - Unstructured exposes `chunking_strategy` on some partitioners, but does not surface all tuning knobs (e.g., `combine_text_under_n_chars`, `multipage_sections`) across file types via the `partition` facade. Selecting chunker explicitly (`chunk_by_title` vs `basic`) keeps the heuristic and parameterization in our control while still leveraging the built‑in chunkers.
-  - We considered `llama_index.readers.file.unstructured` readers; however, integrating Unstructured directly as a `TransformComponent` lets us (a) preserve full Unstructured metadata, (b) control chunking heuristics, and (c) plug into `IngestionCache` seamlessly. This reduces custom code elsewhere and centralizes ingestion logic.
-  - LlamaIndex splitters (e.g., `SentenceSplitter`, `TokenTextSplitter`) are powerful, but our target is layout‑aware chunking that Unstructured already provides (by‑title/table‑aware). We use LlamaIndex only for orchestration/caching.
+- Ingestion pipeline assembly and execution: `src/processing/ingestion_pipeline.py`
+  - `build_ingestion_pipeline(cfg, embedding=...)`
+  - `_load_documents(cfg, inputs)` (UnstructuredReader + fallback)
+  - `_page_image_exports(...)` (PDF page images via PyMuPDF)
+  - `_index_page_images(...)` (ArtifactStore + SigLIP + Qdrant)
 
-- Why DuckDBKVStore for caching?
-  - Official LlamaIndex supports KV stores (Redis/DuckDB). DuckDBKVStore is local‑first, requires zero services, and works well for CI and offline testing. It also keeps the cache as a single file (`./cache/docmind.duckdb`), simplifying lifecycle and stats.
+### Implementation version
 
-## Key Libraries
+This spec describes the ingestion pipeline as implemented in commit
+`046e9d75318d305cc808e7ee9f1448cb62cb0d82`.
+Key modules:
+- `src/processing/ingestion_pipeline.py` @ `046e9d75318d305cc808e7ee9f1448cb62cb0d82`
+- `src/processing/pdf_pages.py` @ `046e9d75318d305cc808e7ee9f1448cb62cb0d82`
+- `src/persistence/artifacts.py` @ `046e9d75318d305cc808e7ee9f1448cb62cb0d82`
+- `src/retrieval/image_index.py` @ `046e9d75318d305cc808e7ee9f1448cb62cb0d82`
 
-- `unstructured.partition.auto.partition`
-- `unstructured.chunking.title.chunk_by_title`, `unstructured.chunking.basic.chunk_elements`
-- `llama_index.core.ingestion.IngestionPipeline`, `IngestionCache`
-- `llama_index.storage.kvstore.duckdb.DuckDBKVStore`
-- `fitz` (PyMuPDF) for page rendering
+### Document loading (library-first)
 
-See also: LlamaIndex TransformComponent examples and KV cache usage in the official docs; Unstructured chunker signatures (`chunk_by_title`, `chunk_elements`) for supported parameters.
+- Preferred: `llama_index.readers.file.UnstructuredReader` (when installed)
+- Fallback: plaintext `Path.read_text(...)` for UTF-8-ish inputs
+- Metadata hygiene:
+  - drop path-like metadata keys (`source_path`, `file_path`, `path`)
+  - normalize `metadata["source"]` to a basename when it is path-like.
 
-## Touched Files
+### Chunking and enrichment
 
-- `src/processing/document_processor.py`: UnstructuredTransformation, strategy mapping, caching, page-image emission, deterministic IDs
-- `src/processing/pdf_pages.py`: `save_pdf_page_images(pdf_path, out_dir, dpi=180)` with stable naming and bbox
-- `src/processing/utils.py`: `sha256_id()` normalization + hashing; `is_unstructured_like()` guard for test doubles
-- `src/models/schemas.py`: `PdfPageImageNode` model (page_no, bbox, modality, source_path, hash); `ErrorResponse` enriched (traceback, suggestion)
+Pipeline transforms (in order):
 
-## Performance Budgets
+1. `TokenTextSplitter(chunk_size, chunk_overlap, separator="\n")`
+2. Optional: `TitleExtractor(show_progress=False)` (best-effort; skip on failure)
+3. Optional: embedding transform (resolved from settings when not injected)
 
-- Partition + page-image extraction: target ≤ 1.5 s per 10 pages (mid hardware)
-- Re-ingestion cache hit ratio: target ≥ 0.7
+### Caching / docstore
 
-## Acceptance Criteria
+- Cache: `IngestionCache` backed by `DuckDBKVStore` at `${cache_dir}/${cache_filename}`
+  - defaults to `./cache/docmind.duckdb` (see `DOCMIND_CACHE__DIR`, `DOCMIND_CACHE__FILENAME`)
+- Docstore: `SimpleDocumentStore` with optional persistence when configured by `IngestionConfig`
+
+### PDF page images (export)
+
+- Rendering: `src/processing/pdf_pages.py::save_pdf_page_images(...)`
+  - Stable naming: `<stem>__page-<n>.(webp|jpg)[.enc]`
+  - Optional encryption: `DOCMIND_PROCESSING__ENCRYPT_PAGE_IMAGES=true` (writes `*.enc`)
+  - Best-effort `page_text`, `bbox`, `phash` in returned metadata
+- Export packaging: `src/models/processing.py::ExportArtifact`
+  - `ExportArtifact.path` is runtime-only (excluded from serialization) to prevent accidental
+    persistence of host paths.
+
+### Artifacts (durable image references)
+
+- Content-addressed artifact store: `src/persistence/artifacts.py`
+  - Stores page images and thumbnails under `data/artifacts` by default.
+  - Durable reference: `ArtifactRef(sha256, suffix)`
+
+### Image indexing (best-effort; part of ingestion)
+
+Ingestion performs a best-effort post-step for `image/*` exports:
+
+1. Convert image export files → `ArtifactRef` via `ArtifactStore.put_file(...)`
+2. Generate thumbnail (best-effort) → `ArtifactRef`
+3. Index into Qdrant image collection (`settings.database.qdrant_image_collection`)
+   using SigLIP embeddings:
+   - helper: `src/retrieval/image_index.py`
+   - payload is **thin**: ids + artifact refs + page metadata
+   - no base64 and no raw filesystem paths
+
+## Configuration (canonical env vars)
+
+```bash
+# Cache
+DOCMIND_CACHE__DIR=./cache
+DOCMIND_CACHE__FILENAME=docmind.duckdb
+
+# PDF page images (optional encryption)
+DOCMIND_PROCESSING__ENCRYPT_PAGE_IMAGES=false
+DOCMIND_IMG_AES_KEY_BASE64=
+DOCMIND_IMG_KID=local-key-1
+DOCMIND_IMG_DELETE_PLAINTEXT=false
+
+# Artifact store (content-addressed)
+# DOCMIND_ARTIFACTS__DIR=./data/artifacts
+DOCMIND_ARTIFACTS__MAX_TOTAL_MB=4096
+DOCMIND_ARTIFACTS__GC_MIN_AGE_SECONDS=3600
+
+# Qdrant collections
+DOCMIND_DATABASE__QDRANT_URL=http://localhost:6333
+DOCMIND_DATABASE__QDRANT_COLLECTION=docmind_docs
+DOCMIND_DATABASE__QDRANT_IMAGE_COLLECTION=docmind_images
+DOCMIND_DATABASE__QDRANT_TIMEOUT=60
+```
+
+## Acceptance criteria
 
 ```gherkin
 Feature: Ingestion pipeline
-  Scenario: PDF with tables
-    Given a multi-page PDF with tables
-    When I ingest with strategy auto
-    Then nodes SHALL include text chunks and pdf_page_image entries
-    And subsequent runs SHALL reuse cache entries
 
-  Scenario: OCR fallback
-    Given a scanned PDF
-    Then partition SHALL use OCR agent and produce text chunks
+  Scenario: PDF ingestion exports page images
+    Given a multi-page PDF
+    When I ingest the file
+    Then the ingestion result includes image exports for each page
+    And exported images use deterministic names (<stem>__page-<n>.*)
+
+  Scenario: Metadata hygiene
+    Given an input with a local file path
+    When I ingest the file
+    Then no durable output contains raw filesystem paths
+    And any path-like metadata["source"] is normalized to a safe basename
+
+  Scenario: Fail-open image indexing
+    Given a PDF and Qdrant is unavailable
+    When I ingest the file
+    Then ingestion succeeds and returns text outputs
+    And image indexing reports enabled but zero indexed (best-effort)
 ```
 
-## Detailed Checklist
+## Touched files (canonical)
 
-- [x] Use `strategy="auto"` policy implemented via strategy mapping and configuration per file type; pages with tables/images handled with high‑resolution path; scanned/no text handled via OCR path; text‑dominant via fast path.
-- [x] OCR path available for scanned/image‑only inputs; text nodes are produced under OCR.
-- [x] Persist DuckDBKV cache at `./cache/docmind.duckdb` through `IngestionCache`.
-- [x] Emit deterministic IDs using SHA‑256 of normalized content + source/page lineage; include page‑image nodes with bbox.
+- `src/processing/ingestion_pipeline.py`
+- `src/processing/pdf_pages.py`
+- `src/persistence/artifacts.py`
+- `src/retrieval/image_index.py`
+- `src/utils/images.py`
+- `src/utils/security.py`
+- `src/utils/document.py`
+- `src/models/processing.py`
 
-## RTM (Requirements Traceability)
+## Tests (repo truth)
 
-- FR-ING-001 (parse via Unstructured):
-  - Code: `src/processing/document_processor.py` (partition, strategy mapping)
-  - Tests: `tests/integration/test_chunking_integration.py`, `tests/unit/processing/*`
-- FR-ING-002 (deterministic IDs & lineage):
-  - Code: `src/processing/utils.py::sha256_id`, `src/processing/document_processor.py` (node_id, parent_id)
-  - Tests: `tests/unit/processing/test_deterministic_ids.py` (added), chunking unit/integration assertions
-- FR-ING-003 (page images):
-  - Code: `src/processing/pdf_pages.py`, `src/processing/document_processor.py` emission with modality=pdf_page_image
-  - Tests: `tests/integration/test_ingestion_pipeline_pdf_images.py`, `tests/unit/processing/test_pdf_pages_helpers.py`
+- Integration:
+  - `tests/integration/test_ingestion_pipeline_pdf_images.py`
+- Unit:
+  - `tests/unit/processing/test_ingestion_pipeline.py`
+  - `tests/unit/processing/test_reindex_purges_stale_image_points.py`
+  - `tests/unit/persistence/test_artifact_store.py`
+  - `tests/unit/utils/test_images_thumbnail_and_encrypted_open.py`
 
 ## Validation & Quality
 
-- Fast tests: `uv run python scripts/run_tests.py --fast`
-- Full coverage: `uv run python scripts/run_tests.py --coverage`
-- Lint/format: `uv run ruff format . && uv run ruff check . --fix`
-- Note: Ruff enforces pylint-equivalent rules via `PL*` selectors in `pyproject.toml`; no standalone pylint run is required.
-- CI quality gates: `uv run python scripts/run_quality_gates.py --ci --report`
-  - Note: current project-wide coverage baseline is ~70.5%; CI coverage gate is configured at 80% and may fail until broader areas gain tests
-
-## References
-
-- Unstructured partition strategies (auto/hi_res/fast) and OCR fallback
-- LlamaIndex IngestionPipeline + IngestionCache + DuckDBKVStore
-- PyMuPDF page rendering best practices (idempotent writes, bbox capture)
-
-## Unstructured Strategy & OCR Fallback
-
-- The default parsing strategy SHOULD be `strategy=auto` with automatic OCR fallback for scanned PDFs.
-- Emitted nodes MUST include deterministic IDs and complete metadata where applicable (e.g., `doc_id`, `page_id`, `chunk_id`, `modality`).
-- PDF page image artifacts MAY be emitted for downstream visual pipelines.
+```bash
+uv run ruff format .
+uv run ruff check . --fix
+uv run pyright
+uv run python scripts/run_tests.py --fast
+```

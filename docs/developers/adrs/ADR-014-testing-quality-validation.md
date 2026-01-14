@@ -131,7 +131,7 @@ def test_golden_quality():
 ## Testing
 
 - Parametrize canonical queries; verify thresholds
-- Run in CI with `uv run pytest -q`
+- Run in CI with `uv run pytest -q` (note: `-q` for clean output; use `-v` for verbose debugging)
 
 ## Consequences
 

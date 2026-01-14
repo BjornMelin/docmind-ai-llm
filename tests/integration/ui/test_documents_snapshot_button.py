@@ -26,7 +26,11 @@ def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[AppTest]:
     """Create an AppTest instance for the Documents page with stubs for side effects."""
     from src.config.settings import settings as app_settings
 
+    monkeypatch.setenv("DOCMIND_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("DOCMIND_CACHE_DIR", str(tmp_path / "cache"))
     app_settings.data_dir = tmp_path
+    app_settings.chat.sqlite_path = tmp_path / "chat.db"
+    app_settings.database.sqlite_db_path = tmp_path / "docmind.db"
 
     prev_modules = {
         name: sys.modules.get(name)
@@ -92,7 +96,7 @@ def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[AppTest]:
 
 
 @pytest.mark.integration
-def test_snapshot_rebuild_button(documents_app_test: AppTest, tmp_path: Path) -> None:
+def test_snapshot_rebuild_button(documents_app_test: AppTest) -> None:
     """Click the rebuild button and assert the snapshot directory is created."""
     app = documents_app_test.run()
     assert not app.exception
@@ -102,12 +106,12 @@ def test_snapshot_rebuild_button(documents_app_test: AppTest, tmp_path: Path) ->
 
     result = rebuild_buttons[0].click().run()
 
-    storage = tmp_path / "storage"
     found = False
     for _ in range(10):
-        if storage.exists() and any(
-            p.is_dir() and not p.name.startswith("_tmp-") for p in storage.iterdir()
-        ):
+        from src.persistence.snapshot import latest_snapshot_dir
+
+        snap = latest_snapshot_dir()
+        if snap is not None and snap.is_dir() and not snap.name.startswith("_tmp-"):
             found = True
             break
         time.sleep(0.05)

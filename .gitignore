@@ -194,9 +194,11 @@ all-specs-adrs.xml
 .cursorignore
 opensrc/
 .codex/
+.opencode/
 
 # Snapshot persistence artifacts
 storage/
+!tests/unit/utils/storage/
 data/storage/
 data/uploads/
 **/_tmp-*/
@@ -221,6 +223,10 @@ TODO.md
 # Document processing cache
 # cache/
 *.db
+*.db-wal
+*.db-shm
+*.sqlite-wal
+*.sqlite-shm
 
 # Tool caches
 .ruff_cache/
@@ -331,3 +337,4 @@ data/**/*.db
 
 # opensrc - source code for packages
 opensrc/
+data/.corpus_manifest.json

@@ -16,6 +16,12 @@ class _Node:
         self.id = node_id
         self.name = node_id
         self.properties = props
+        self.source_id = props.get("source_id")
+
+
+class _Edge:
+    def __init__(self, label: str) -> None:
+        self.label = label
 
 
 class _Store:
@@ -31,39 +37,13 @@ class _Store:
             _Node("B", source_id="b"),
         ]
 
-    def get_rel_map(self, node_ids=None, depth=1, **_kwargs):
+    def get_rel_map(self, graph_nodes, depth=1, **_kwargs):
         """Return a minimal relation path from the given nodes."""
-        depth_value = int(depth)
-        items = list(node_ids or [])
+        del depth
+        items = list(graph_nodes or [])
         if len(items) < 2:
             return []
-        return [
-            json.dumps(
-                {
-                    "subject": items[0],
-                    "relation": "related",
-                    "object": items[1],
-                    "depth": depth_value,
-                }
-            )
-        ]
-
-    class _Frame:
-        """Stub DataFrame for export tests."""
-
-        def __init__(self, rows: list[str]) -> None:
-            """Initialize with row data."""
-            self._rows = rows
-
-        def to_parquet(self, path: Path) -> None:
-            """Write stub parquet file."""
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(b"PAR1")
-
-    def store_rel_map_df(self, node_ids=None, depth=1, **_kwargs: object) -> _Frame:
-        """Get relationship map as a frame."""
-        rows = self.get_rel_map(node_ids=node_ids, depth=depth)
-        return self._Frame(rows)
+        return [[items[0], _Edge("related"), items[1]]]
 
 
 class _PgIndex:

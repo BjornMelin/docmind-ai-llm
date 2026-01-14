@@ -24,6 +24,8 @@ from llama_index.core.schema import NodeWithScore, QueryBundle
 from loguru import logger
 
 from src.config import settings
+from src.persistence.artifacts import ArtifactRef, ArtifactStore
+from src.retrieval.rrf import rrf_merge
 from src.utils.core import has_cuda_vram, resolve_device
 from src.utils.telemetry import log_jsonl
 
@@ -60,6 +62,14 @@ def _colpali_timeout_ms() -> int:
         ValueError,
     ):  # pragma: no cover - defensive default
         return 400
+
+
+def _get_siglip_prune_m() -> int:
+    """Return SigLIP prune threshold with defensive defaults."""
+    try:
+        return int(getattr(settings.retrieval, "siglip_prune_m", SIGLIP_PRUNE_M))
+    except (AttributeError, ValueError, TypeError):
+        return SIGLIP_PRUNE_M
 
 
 # Policy thresholds
@@ -136,35 +146,6 @@ def _run_with_timeout(fn: Callable[[], Any], timeout_ms: int) -> Any | None:
 # removed local _has_cuda_vram wrapper; use core.has_cuda_vram directly
 
 
-def _rrf_merge(
-    lists: list[list[NodeWithScore]], k_constant: int
-) -> list[NodeWithScore]:
-    """Rank-level Reciprocal Rank Fusion over multiple reranked lists.
-
-    Args:
-        lists: List of ranked lists to merge.
-        k_constant: RRF k-constant for score calculation.
-
-    Returns:
-        list[NodeWithScore]: Fused list sorted by RRF scores.
-    """
-    scores: dict[str, tuple[float, NodeWithScore]] = {}
-    for ranked in lists:
-        for rank, nws in enumerate(ranked, start=1):
-            nid = nws.node.node_id
-            inc = 1.0 / (k_constant + rank)
-            cur = scores.get(nid)
-            if cur is None:
-                scores[nid] = (inc, nws)
-            else:
-                scores[nid] = (cur[0] + inc, cur[1])
-    fused_list = list(scores.values())
-    fused_list.sort(
-        key=lambda t: (-float(t[0]), str(getattr(t[1].node, "node_id", "")))
-    )
-    return [n for _score, n in fused_list]
-
-
 def _compute_siglip_scores(
     model: Any,
     processor: Any,
@@ -227,14 +208,26 @@ def _load_siglip() -> tuple[Any, Any, str]:  # (model, processor, device)
 def _extract_image_paths(ns: list[NodeWithScore]) -> list[str]:
     """Extract possible image paths from node metadata and attributes."""
     out: list[str] = []
+
+    store: ArtifactStore | None = None  # Lazy init on first artifact ref.
     for nn in ns:
         meta = getattr(nn.node, "metadata", {}) or {}
-        p = (
-            meta.get("image_path")
-            or meta.get("path")
-            or getattr(nn.node, "image_path", None)
-            or getattr(nn.node, "path", None)
-        )
+        p = ""
+        # Resolve local paths from stable artifact refs rather than accepting raw
+        # filesystem paths from node metadata.
+        img_id = meta.get("image_artifact_id")
+        img_sfx = meta.get("image_artifact_suffix")
+        if not img_id:
+            img_id = meta.get("thumbnail_artifact_id")
+            img_sfx = meta.get("thumbnail_artifact_suffix")
+        if img_id:
+            try:
+                if store is None:
+                    store = ArtifactStore.from_settings(settings)
+                ref = ArtifactRef(sha256=str(img_id), suffix=str(img_sfx or ""))
+                p = str(store.resolve_path(ref))
+            except (ValueError, FileNotFoundError, OSError, AttributeError):
+                p = ""
         out.append(str(p) if p else "")
     return out
 
@@ -253,8 +246,8 @@ def _load_images_for_siglip(
     for pth in paths:
         if pth:
             try:
-                with open_image_encrypted(pth) as _im:
-                    imgs.append(_im.convert("RGB").copy() if _im is not None else None)
+                with open_image_encrypted(pth) as im:
+                    imgs.append(im.convert("RGB").copy() if im is not None else None)
             except (OSError, ValueError, RuntimeError, TypeError, ImportError):
                 imgs.append(None)
         else:
@@ -456,137 +449,129 @@ class MultimodalReranker(BaseNodePostprocessor):
     - Time budgets and fail-open behavior
     """
 
-    def _postprocess_nodes(
-        self, nodes: list[NodeWithScore], query_bundle: QueryBundle | None = None
-    ) -> list[NodeWithScore]:
-        """Apply modality-aware reranking with time budgets and fail-open behavior.
+    def _run_stage(
+        self, name: str, fn: Callable[[], list[NodeWithScore]], timeout_ms: int
+    ) -> list[NodeWithScore] | None:
+        """Run a rerank stage with timeout telemetry."""
+        started = _now_ms()
+        res = _run_with_timeout(fn, timeout_ms)
+        log_jsonl(
+            {
+                "rerank.stage": name,
+                "rerank.topk": int(settings.retrieval.reranking_top_k),
+                "rerank.latency_ms": int(_now_ms() - started),
+                "rerank.timeout": res is None,
+            }
+        )
+        return res
 
-        Args:
-            nodes: List of nodes to rerank.
-            query_bundle: Query bundle containing the search query.
+    def _run_text_stage(
+        self, text_nodes: list[NodeWithScore], query_bundle: QueryBundle
+    ) -> list[NodeWithScore] | None:
+        """Execute text reranking stage."""
+        if not text_nodes:
+            return []
+        reranker = build_text_reranker(top_n=settings.retrieval.reranking_top_k)
 
-        Returns:
-            list[NodeWithScore]: Reranked nodes sorted by relevance scores.
-        """
-        if not nodes or not query_bundle:
-            return nodes
-        text_nodes, visual_nodes = self._split_by_modality(nodes)
-        # Stage 2: text rerank with timeout (outer guard) + cooperative batches
-        lists: list[list[NodeWithScore]] = []
+        def _do_text() -> list[NodeWithScore]:
+            return reranker.postprocess_nodes(
+                text_nodes, query_str=query_bundle.query_str
+            )
 
-        def _run_stage(
-            name: str, fn: Callable[[], list[NodeWithScore]], timeout_ms: int
-        ) -> list[NodeWithScore] | None:
-            s = _now_ms()
-            res = _run_with_timeout(fn, timeout_ms)
+        return self._run_stage("text", _do_text, _text_timeout_ms() + 50)
+
+    def _run_visual_stage(
+        self,
+        visual_nodes: list[NodeWithScore],
+        query_bundle: QueryBundle,
+        lists: list[list[NodeWithScore]],
+    ) -> tuple[list[list[NodeWithScore]], bool]:
+        """Execute visual reranking stages and return timeout flag."""
+        if not visual_nodes:
+            return lists, False
+        v_start = _now_ms()
+        try:
+            sr = _siglip_rescore(
+                query_bundle.query_str, visual_nodes, _siglip_timeout_ms()
+            )
+            lists.append(sr)
             log_jsonl(
                 {
-                    "rerank.stage": name,
+                    "rerank.stage": "visual",
                     "rerank.topk": int(settings.retrieval.reranking_top_k),
-                    "rerank.latency_ms": int(_now_ms() - s),
-                    "rerank.timeout": res is None,
+                    "rerank.latency_ms": int(_now_ms() - v_start),
+                    "rerank.timeout": False,
                 }
             )
-            return res
+        except (RuntimeError, ValueError, OSError, TypeError, ImportError) as exc:
+            logger.warning("SigLIP rerank error: {} — continue without", exc)
 
         try:
-            if text_nodes:
-                reranker = build_text_reranker(top_n=settings.retrieval.reranking_top_k)
+            if self._should_enable_colpali(visual_nodes, lists):
+                base = lists[-1] if lists else visual_nodes
+                prune_m = _get_siglip_prune_m()
+                pruned = base[: max(1, prune_m)]
 
-                def _do_text():
-                    return reranker.postprocess_nodes(
-                        text_nodes, query_str=query_bundle.query_str
-                    )
+                def _do_colpali() -> list[NodeWithScore]:
+                    return build_visual_reranker(
+                        top_n=min(COLPALI_FINAL_M, settings.retrieval.reranking_top_k)
+                    ).postprocess_nodes(pruned, query_str=query_bundle.query_str)
 
-                tr = _run_stage("text", _do_text, _text_timeout_ms() + 50)
-                if tr is None:
-                    logger.warning("Text rerank timeout; fail-open")
-                    return nodes
-                lists.append(tr)
-        except (RuntimeError, ValueError, OSError, TypeError) as exc:
-            logger.warning("Text rerank error: {} — fail-open", exc)
-        # Stage 3: visual rerank — SigLIP default within budget
-        v_start = _now_ms()
-        # Visual stage runs whenever visual nodes exist (no UI toggle)
-        if visual_nodes:
-            try:
-                sr = _siglip_rescore(
-                    query_bundle.query_str, visual_nodes, _siglip_timeout_ms()
+                remaining = max(
+                    0,
+                    _siglip_timeout_ms()
+                    + _colpali_timeout_ms()
+                    - int(_now_ms() - v_start),
                 )
-                lists.append(sr)
-                log_jsonl(
-                    {
-                        "rerank.stage": "visual",
-                        "rerank.topk": int(settings.retrieval.reranking_top_k),
-                        "rerank.latency_ms": int(_now_ms() - v_start),
-                        "rerank.timeout": False,
-                    }
-                )
-            except (RuntimeError, ValueError, OSError, TypeError, ImportError) as exc:
-                logger.warning("SigLIP rerank error: {} — continue without", exc)
-            # Optional Stage 3b: ColPali policy (only when visual nodes exist)
-            try:
-                if self._should_enable_colpali(visual_nodes, lists):
-                    base = lists[-1] if lists else visual_nodes
-                    try:
-                        prune_m = int(
-                            getattr(
-                                settings.retrieval, "siglip_prune_m", SIGLIP_PRUNE_M
-                            )
-                        )
-                    except (AttributeError, ValueError, TypeError):
-                        prune_m = SIGLIP_PRUNE_M
-                    pruned = base[: max(1, prune_m)]
+                cr = self._run_stage("colpali", _do_colpali, remaining)
+                if cr is None:
+                    logger.warning("ColPali rerank timeout; continue without")
+                else:
+                    lists.append(cr)
+        except (RuntimeError, ValueError) as exc:
+            logger.warning("ColPali rerank error: {} — continue without", exc)
 
-                    def _do_colpali():
-                        return build_visual_reranker(
-                            top_n=min(
-                                COLPALI_FINAL_M, settings.retrieval.reranking_top_k
-                            )
-                        ).postprocess_nodes(pruned, query_str=query_bundle.query_str)
+        if _now_ms() - v_start > (_siglip_timeout_ms() + _colpali_timeout_ms()):
+            logger.warning("Visual rerank timeout; fail-open")
+            log_jsonl(
+                {
+                    "rerank.stage": "visual",
+                    "rerank.topk": int(settings.retrieval.reranking_top_k),
+                    "rerank.latency_ms": int(_now_ms() - v_start),
+                    "rerank.timeout": True,
+                    "rerank.executor": getattr(
+                        settings.retrieval, "rerank_executor", "thread"
+                    ),
+                }
+            )
+            return lists, True
+        return lists, False
 
-                    remaining = max(
-                        0,
-                        _siglip_timeout_ms()
-                        + _colpali_timeout_ms()
-                        - int(_now_ms() - v_start),
-                    )
-                    cr = _run_stage("colpali", _do_colpali, remaining)
-                    if cr is None:
-                        logger.warning("ColPali rerank timeout; continue without")
-                    else:
-                        lists.append(cr)
-            except (RuntimeError, ValueError) as exc:
-                logger.warning("ColPali rerank error: {} — continue without", exc)
-            # Only enforce visual-stage timeout when visual processing attempted
-            if _now_ms() - v_start > (_siglip_timeout_ms() + _colpali_timeout_ms()):
-                logger.warning("Visual rerank timeout; fail-open")
-                log_jsonl(
-                    {
-                        "rerank.stage": "visual",
-                        "rerank.topk": int(settings.retrieval.reranking_top_k),
-                        "rerank.latency_ms": int(_now_ms() - v_start),
-                        "rerank.timeout": True,
-                        "rerank.executor": getattr(
-                            settings.retrieval, "rerank_executor", "thread"
-                        ),
-                    }
-                )
-                return nodes
-        if not lists:
-            return nodes[: settings.retrieval.reranking_top_k]
-        fused = _rrf_merge(lists, k_constant=int(settings.retrieval.rrf_k))
-        # De-dup and cap
+    def _fuse_and_dedup(self, lists: list[list[NodeWithScore]]) -> list[NodeWithScore]:
+        """Fuse rerank results and deduplicate nodes."""
+        fused = rrf_merge(lists, k_constant=int(settings.retrieval.rrf_k))
         seen: set[str] = set()
         out: list[NodeWithScore] = []
         for n in fused:
-            if n.node.node_id in seen:
+            meta = getattr(n.node, "metadata", {}) or {}
+            key = str(meta.get("page_id") or n.node.node_id)
+            if key in seen:
                 continue
-            seen.add(n.node.node_id)
+            seen.add(key)
             out.append(n)
             if len(out) >= settings.retrieval.reranking_top_k:
                 break
-        # Emit final delta metric: simple change count in top-k ids
+        return out
+
+    def _emit_final_metrics(
+        self,
+        nodes: list[NodeWithScore],
+        out: list[NodeWithScore],
+        *,
+        text_nodes: list[NodeWithScore],
+        visual_nodes: list[NodeWithScore],
+    ) -> None:
+        """Emit final rerank telemetry metrics."""
         try:
             configured_k = settings.retrieval.reranking_top_k
             effective_k = min(10, configured_k)
@@ -610,7 +595,6 @@ class MultimodalReranker(BaseNodePostprocessor):
                     else ("visual" if bool(visual_nodes) else "none")
                 )
             )
-            # simple score stats
             try:
                 scores = [float(n.score or 0.0) for n in out]
             except (TypeError, ValueError):  # pragma: no cover - defensive
@@ -644,6 +628,47 @@ class MultimodalReranker(BaseNodePostprocessor):
             )
         except (RuntimeError, ValueError, OSError, TypeError) as exc:
             logger.warning("Final rerank metrics error: {} — skipping telemetry", exc)
+
+    def _postprocess_nodes(
+        self, nodes: list[NodeWithScore], query_bundle: QueryBundle | None = None
+    ) -> list[NodeWithScore]:
+        """Apply modality-aware reranking with time budgets and fail-open behavior.
+
+        Args:
+            nodes: List of nodes to rerank.
+            query_bundle: Query bundle containing the search query.
+
+        Returns:
+            list[NodeWithScore]: Reranked nodes sorted by relevance scores.
+        """
+        if not nodes or not query_bundle:
+            return nodes
+        text_nodes, visual_nodes = self._split_by_modality(nodes)
+        lists: list[list[NodeWithScore]] = []
+
+        try:
+            tr = self._run_text_stage(text_nodes, query_bundle)
+            if tr is None:
+                logger.warning("Text rerank timeout; fail-open")
+                return nodes
+            if tr:
+                lists.append(tr)
+        except (RuntimeError, ValueError, OSError, TypeError) as exc:
+            logger.warning("Text rerank error: {} — fail-open", exc)
+
+        lists, timed_out = self._run_visual_stage(visual_nodes, query_bundle, lists)
+        if timed_out:
+            return nodes
+        if not lists:
+            return nodes[: settings.retrieval.reranking_top_k]
+
+        out = self._fuse_and_dedup(lists)
+        self._emit_final_metrics(
+            nodes,
+            out,
+            text_nodes=text_nodes,
+            visual_nodes=visual_nodes,
+        )
         return out
 
     @staticmethod

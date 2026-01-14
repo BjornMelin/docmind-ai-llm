@@ -4,14 +4,14 @@ title: Chat Persistence + Hybrid Agentic Memory (LangGraph SQLite Checkpointer +
 version: 1.0.0
 date: 2026-01-09
 owners: ["ai-arch"]
-status: Draft
+status: Implemented
 related_requirements:
   - FR-022: Persist chat history locally across refresh/restart with per-session clear/purge.
   - NFR-SEC-001: Offline-first; remote endpoints blocked by default.
   - NFR-SEC-002: Local data remains on device; logging excludes sensitive content.
   - NFR-REL-001: Crash-safe persistence and recovery.
-related_adrs: ["ADR-057", "ADR-011", "ADR-016", "ADR-024", "ADR-047", "ADR-055"]
-notes: "ADR-055 is currently 'Proposed' status; update reference when it advances to 'Accepted'."
+related_adrs: ["ADR-058", "ADR-057", "ADR-011", "ADR-016", "ADR-024", "ADR-047", "ADR-055"]
+notes: "ADR-058 is the integrated source of truth (supersedes ADR-057). ADR-055 is currently 'Proposed' status; update reference when it advances to 'Accepted'."
 ---
 
 ## Goals
@@ -114,20 +114,28 @@ class LlamaIndexEmbeddingsAdapter(Embeddings):
 
 #### C) Memory extraction + consolidation (final-release)
 
-Long-term memory must not be an unbounded append-only log. Implement a deterministic, testable consolidation pipeline inspired by state-of-the-art “ADD/UPDATE/DELETE/NOOP” memory update patterns:
+Long-term memory must not be an unbounded append-only log. Implement a deterministic, testable consolidation pipeline inspired by state-of-the-art “ADD/UPDATE/DELETE/NOOP” memory update patterns (see internal implementation in [src/agents/tools/memory.py](src/agents/tools/memory.py) and [src/persistence/memory_store.py](src/persistence/memory_store.py)):
 
-1) **Extract candidates** from the most recent conversation turn into a fixed schema:
+1. **Extract candidates** from the most recent conversation turn into a fixed schema:
    - memories must be small, user-relevant facts/preferences
    - each candidate includes: `content`, `kind` (`fact|preference|todo|project_state`), `importance` (0..1), `source_checkpoint_id`, and optional `tags`
-2) **Update policy**:
+2. **Update policy**:
    - retrieve the top-N nearest existing memories in the same namespace (vector search)
    - decide per candidate: `ADD`, `UPDATE(existing_id)`, `DELETE(existing_id)`, or `NOOP`
    - write changes back to the store
-3) **Retention / TTL**:
+3. **Retention / TTL**:
    - apply TTL for low-importance items
    - enforce max per-namespace counts (evict oldest/lowest-importance)
-4) **User controls**:
+4. **User controls**:
    - UI must provide memory review and delete/purge per-user and per-session
+
+Configuration defaults (settings.chat):
+
+- `memory_similarity_threshold` (0.85)
+- `memory_low_importance_threshold` (0.3)
+- `memory_low_importance_ttl_days` (14)
+- `memory_max_items_per_namespace` (200)
+- `memory_max_candidates_per_turn` (8)
 
 Namespace conventions:
 
@@ -152,21 +160,34 @@ class MemoryCandidate(BaseModel):
 Example payloads:
 
 ```json
-{"content":"Prefers dark mode","kind":"preference","importance":0.7,"source_checkpoint_id":"chkpt_01"}
+{
+  "content": "Prefers dark mode",
+  "kind": "preference",
+  "importance": 0.7,
+  "source_checkpoint_id": "chkpt_01"
+}
 ```
 
 ```json
-{"content":"Project roadmap doc lives in /docs/specs","kind":"fact","importance":1.0,"source_checkpoint_id":"chkpt_99","tags":["docs","project_state"]}
+{
+  "content": "Project roadmap doc lives in /docs/specs",
+  "kind": "fact",
+  "importance": 1.0,
+  "source_checkpoint_id": "chkpt_99",
+  "tags": ["docs", "project_state"]
+}
 ```
 
 ### Release scope (v1.0 vs. roadmap)
 
 **Release 1.0 (v1) scope:**
+
 - Durable checkpoints + session registry
 - Long-term memory storage with explicit `ADD/UPDATE/DELETE/NOOP` policy
 - Basic TTL and per-namespace caps with user-visible review/delete
 
 **Roadmap (post-v1):**
+
 - More advanced importance scoring and automated conflict resolution
 - Background consolidation scheduling with adaptive cadence
 
@@ -192,7 +213,7 @@ Important Streamlit behavior:
 
 The system must list sessions and store user-friendly titles. The LangGraph checkpointer does not provide “list all thread_ids” as a stable public API.
 
-Implement a small session registry table in the Chat DB:
+Implement a small session registry table in the Chat DB (see [src/persistence/chat_db.py](src/persistence/chat_db.py)):
 
 - `chat_session`
   - `thread_id TEXT PRIMARY KEY`
@@ -209,7 +230,7 @@ Indexes:
 
 ### Time travel UX semantics
 
-Expose in Chat sidebar:
+Expose in Chat sidebar (orchestrated by [src/agents/coordinator.py](src/agents/coordinator.py)):
 
 1. List checkpoints for current `thread_id` (reverse chronological).
 2. User selects one checkpoint to fork.
@@ -245,7 +266,7 @@ Threats and controls:
    - Provide explicit UI controls: memory review + delete + session purge.
    - Default to “store only salient facts/preferences” (explicit extract + update policy) rather than raw logs.
 2. **Prompt-injection memory poisoning**
-   - Treat memories as *untrusted* facts: store provenance and allow user review.
+   - Treat memories as _untrusted_ facts: store provenance and allow user review.
    - Use fixed tool schemas; do not allow arbitrary system prompt writes.
 3. **SQL injection**
    - Never interpolate user-provided keys into SQL.
@@ -292,12 +313,7 @@ Threats and controls:
 
 ## RTM Updates
 
-Update `docs/specs/requirements.md`:
+Completed:
 
-- Replace FR-022 “Source: SPEC-024/ADR-043” with “Source: SPEC-041/ADR-057”.
-- Add new FRs for session management, branching/time travel, and long-term memory management (review/purge).
-
-Update `docs/specs/traceability.md`:
-
-- FR-022: point to new modules/tests and mark as `Planned`.
-- Add new rows for session management + time travel + memory review.
+- `docs/specs/requirements.md` now cites `SPEC-041/ADR-058` for FR-022 and includes FR-030..032 as implemented.
+- `docs/specs/traceability.md` includes FR-022 + FR-030..032 rows pointing to the current modules and tests.

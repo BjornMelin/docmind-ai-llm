@@ -10,6 +10,7 @@ from .processing import (
     IngestionInput,
     IngestionResult,
     ManifestSummary,
+    ProcessingStrategy,
 )
 from .schemas import (
     AgentDecision,
@@ -47,6 +48,7 @@ __all__ = [
     "ManifestSummary",
     "PerformanceMetrics",
     "PersistenceError",
+    "ProcessingStrategy",
     "QueryRequest",
     "SearchResult",
     "StorageStats",

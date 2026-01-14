@@ -52,6 +52,15 @@ jobs:
           uvx ruff format --check .
           uvx ruff check --fix --exit-non-zero-on-fix .
 
+      - name: Quality Gate - Ruff (core limits)
+        run: |
+          uvx ruff check src --config ruff-core.toml
+          echo "::notice::Core lint uses stricter max-positional-args; review core API surfaces periodically."
+
+      - name: Quality Gate - Pyright
+        run: |
+          uv run pyright --threads 4
+
       - name: Quality Gate - No TODO/FIXME/XXX placeholders
         run: |
           if rg -n "\\b(TODO|FIXME|XXX)\\b" src tests docs scripts tools; then
@@ -67,9 +76,8 @@ jobs:
         run: |
           uv run python scripts/run_tests.py --fast
 
-      - name: Run unit/integration with coverage (soft gate)
+      - name: Run unit/integration with coverage
         if: ${{ matrix.profile == 'base' }}
-        continue-on-error: true
         env:
           REQUIRE_REAL_LLAMA: ${{ matrix.profile == 'llama' && '1' || '0' }}
         run: |

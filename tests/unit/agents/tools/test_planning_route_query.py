@@ -6,9 +6,10 @@ Split from legacy tests/unit/agents/test_tools.py per migration plan.
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
+from langchain_core.messages import HumanMessage
 
 from src.agents.tools.planning import route_query
 
@@ -76,11 +77,13 @@ class TestRouteQuery:
 
     def test_route_query_with_context(self):
         """Presence of chat history marks context_dependent true."""
-        mock_state = {"context": MagicMock()}
-        mock_state["context"].chat_history = [
-            MagicMock(content="Previous question about AI"),
-            MagicMock(content="Another question"),
-        ]
+        mock_state = {
+            "messages": [
+                HumanMessage(content="Previous question about AI"),
+                HumanMessage(content="Another question"),
+                HumanMessage(content="What about this topic?"),
+            ]
+        }
 
         result_json = route_query.invoke(
             {
