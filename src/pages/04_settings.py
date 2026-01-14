@@ -696,8 +696,17 @@ def _persist_env_from_validated(validated: DocMindSettings) -> None:
         key = getattr(exc, "key", "")
         suffix = f" (key={key})" if key else ""
         st.error(f"Failed to write .env{suffix}: {exc}")
+        log_jsonl(
+            {
+                "settings.save": True,
+                "success": False,
+                "reason": exc.__class__.__name__,
+                "error": str(exc),
+            }
+        )
     else:
         st.success("Saved to .env")
+        log_jsonl({"settings.save": True, "success": True})
 
 
 def _render_cache_controls() -> None:
