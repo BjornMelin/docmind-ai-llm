@@ -19,17 +19,39 @@ Usage:
 
 from __future__ import annotations
 
-# IMPORTANT: import order matters.
-#
-# - Import and bind the settings instance first so `from src.config import settings`
-#   always resolves to the settings object (not the `src.config.settings` module).
-# - Then import integration entrypoints without triggering initialization.
-# ruff: noqa: I001
+from importlib import import_module
+from typing import TYPE_CHECKING, Any
+
 from .settings import settings
-from .integrations import initialize_integrations, setup_llamaindex
+
+if TYPE_CHECKING:  # pragma: no cover
+    from src.config.integrations import initialize_integrations, setup_llamaindex
 
 __all__ = [
     "initialize_integrations",
     "settings",
     "setup_llamaindex",
 ]
+
+_EXPORTS: dict[str, tuple[str, str]] = {
+    "initialize_integrations": (".integrations", "initialize_integrations"),
+    "setup_llamaindex": (".integrations", "setup_llamaindex"),
+}
+
+
+def __getattr__(name: str) -> Any:
+    """Lazily resolve integration helpers to keep `import src.config` light."""
+    try:
+        module_name, attr_name = _EXPORTS[name]
+    except KeyError as exc:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from exc
+
+    module = import_module(module_name, package=__name__)
+    value = getattr(module, attr_name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    """Customize dir() to include all exports."""
+    return sorted(set(list(globals()) + __all__))

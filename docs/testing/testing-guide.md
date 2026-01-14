@@ -124,12 +124,15 @@ uv run python -m pytest tests/system/ -v  # GPU required
 @pytest.mark.slow         # Long-running tests
 ```
 
-### UI AppTest Performance Guard
+### UI AppTest Guidance
 
-For Streamlit AppTest UI checks, we add a lightweight wall-clock budget to catch
-render regressions (see `tests/integration/test_settings_app_test.py`). Use a
-generous CI budget (`CI`/`GITHUB_ACTIONS`) and a tighter local budget; keep the
-test functional rather than a micro-benchmark.
+For Streamlit AppTest UI checks:
+
+- Prefer reusing existing AppTest fixtures instead of adding extra `AppTest` runs.
+- Run tests from a temporary working directory (`monkeypatch.chdir(tmp_path)`) to
+  avoid local `.env` coupling and reduce file-watcher overhead.
+- Use `default_timeout=` on `AppTest.from_file(...)` for CI stability; avoid
+  strict wall-clock assertions in functional tests.
 
 ## Patterns
 

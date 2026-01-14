@@ -100,7 +100,7 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
 - Keep import-time work minimal (pages rerun).
 - Use `st.cache_resource` for long-lived objects (DB connections, checkpointers, clients).
-- AppTest: prefer deterministic stubs + small render-time budgets over increasing `timeout=...`.
+- AppTest: run from temp cwd; reuse fixtures; set `default_timeout=` for CI stability.
 
 ## Ingestion / processing
 
@@ -184,7 +184,7 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
 - Boundary-first; keep unit tests <5s and integration <30s when possible.
 - Use markers: `unit|integration|system` + `requires_gpu|requires_network|requires_ollama`.
-- AppTest: render-time budgets (looser in CI) + deterministic stubs.
+- AppTest: temp cwd + deterministic stubs; avoid extra AppTest runs.
 - Prefer patching real consumer seams, not `src.app` (see `docs/developers/testing-notes.md`).
 
 ## Docs

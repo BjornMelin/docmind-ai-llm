@@ -15,7 +15,6 @@ import streamlit as st
 from pydantic import ValidationError
 
 from src.config.env_persistence import persist_env
-from src.config.integrations import initialize_integrations
 from src.config.settings import DocMindSettings, settings
 from src.retrieval.adapter_registry import get_default_adapter_health
 from src.ui.components.provider_badge import provider_badge
@@ -259,6 +258,8 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
 
     model_label = validated.model or validated.vllm.model
     try:
+        from src.config.integrations import initialize_integrations
+
         initialize_integrations(force_llm=True, force_embed=False)
     except (
         OSError,
@@ -539,17 +540,28 @@ def _validate_gguf_inputs(
     clean_llamacpp_url = (llamacpp_url or "").strip()
     clean_gguf_path = (gguf_path or "").strip()
     is_llamacpp = provider == "llamacpp"
+    if not is_llamacpp:
+        return ui_errors, None
+
+    # Server mode: base URL provided -> no local GGUF validation required.
+    if clean_llamacpp_url:
+        return ui_errors, None
+
+    # Local mode: require a valid GGUF path.
+    if not clean_gguf_path:
+        ui_errors.append(
+            "Provide either a llama.cpp base URL or a local GGUF model path."
+        )
+        return ui_errors, None
+
     resolved_gguf_path = resolve_valid_gguf_path(clean_gguf_path)
-    gguf_missing_for_local = not clean_llamacpp_url and not clean_gguf_path
-    if is_llamacpp and (resolved_gguf_path is None) and (not gguf_missing_for_local):
+    if resolved_gguf_path is None:
         ui_errors.append(
             "Invalid GGUF model path. File must exist, have a .gguf extension, "
             "and be under the allowed base directories."
         )
-    if is_llamacpp and gguf_missing_for_local:
-        ui_errors.append(
-            "Provide either a llama.cpp base URL or a local GGUF model path."
-        )
+        return ui_errors, None
+
     return ui_errors, resolved_gguf_path
 
 
@@ -559,6 +571,11 @@ def _build_candidate_settings(
     """Build a settings payload for validation."""
     provider = str(values.get("provider", ""))
     is_llamacpp = provider == "llamacpp"
+    llamacpp_model_path = (
+        str(resolved_gguf_path)
+        if is_llamacpp and resolved_gguf_path is not None
+        else str(settings.vllm.llamacpp_model_path)
+    )
     return {
         "llm_backend": provider,
         "model": str(values.get("model", "")).strip() or None,
@@ -569,13 +586,7 @@ def _build_candidate_settings(
         "llamacpp_base_url": str(values.get("llamacpp_url", "")).strip() or None,
         "llm_request_timeout_seconds": int(values.get("timeout_s", 0)),
         "enable_gpu_acceleration": bool(values.get("use_gpu")),
-        "vllm": {
-            "llamacpp_model_path": (
-                str(resolved_gguf_path)
-                if is_llamacpp and resolved_gguf_path is not None
-                else ""
-            )
-        },
+        "vllm": {"llamacpp_model_path": llamacpp_model_path},
         "security": {
             "allow_remote_endpoints": bool(values.get("allow_remote")),
             "endpoint_allowlist": list(settings.security.endpoint_allowlist),
