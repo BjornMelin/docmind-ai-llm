@@ -231,11 +231,6 @@ Indexes:
 ### Time travel UX semantics
 
 Expose in Chat sidebar (orchestrated by [src/agents/coordinator.py](../../src/agents/coordinator.py)):
-...
-3. fork state from a checkpoint
-4. resume state from the fork
-...
-6. Ensure both histories remain accessible (session remains the same `thread_id` but different checkpoint lineage).
 
 1. List checkpoints for current `thread_id` (reverse chronological).
 2. User selects one checkpoint to fork.
