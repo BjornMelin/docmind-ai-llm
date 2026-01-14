@@ -11,10 +11,16 @@ def extract_manifest(doc_path: Path) -> dict:
     """Extracts the JSON manifest from system-architecture.md."""
     content = doc_path.read_text()
 
-    match = re.search(r"```json\s+(.*?)\s+```", content, re.DOTALL)
-    if not match:
+    # This extracts the first JSON block — ensure the structural parity manifest is first.
+    matches = re.findall(r"```json\s+(.*?)\s+```", content, re.DOTALL)
+    if len(matches) > 1:
+        raise ValueError(
+            "Found multiple JSON blocks in system-architecture.md; "
+            "ensure the manifest is the first JSON block."
+        )
+    if not matches:
         raise ValueError("Could not find JSON manifest in system-architecture.md")
-    return json.loads(match.group(1))
+    return json.loads(matches[0])
 
 
 def verify_parity():

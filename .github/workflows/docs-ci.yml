@@ -37,5 +37,11 @@ jobs:
       - name: Verify structural parity (Docs vs Src)
         run: uv run python scripts/verify_structural_parity.py
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+          cache: 'npm'
+
       - name: Lint markdown files
         run: npx markdownlint-cli docs/**/*.md

@@ -33,10 +33,8 @@ def check_links(search_paths: list[str]) -> list[dict]:
 
                     # Simple markdown link regex
                     # Improved regex to avoid false positives from code blocks
-                    # Matches [label](link) where label doesn't start with quotes or [
-                    found_links = re.findall(
-                        r"\[([^\"'\[\]][^\]]*?)\]\((.*?)\)", content
-                    )
+                    # Matches standard [label](link) pairs, including quoted labels.
+                    found_links = re.findall(r"\[([^\]]+)\]\(([^)]+)\)", content)
 
                     for _, link in found_links:
                         # Skip web links
