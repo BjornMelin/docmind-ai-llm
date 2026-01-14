@@ -27,7 +27,7 @@ def check_links(search_paths: list[str]) -> list[dict]:
                     try:
                         with open(file_path, encoding="utf-8") as f:
                             content = f.read()
-                    except Exception as e:
+                    except OSError as e:
                         print(f"Error reading {file_path}: {e}")
                         continue
 

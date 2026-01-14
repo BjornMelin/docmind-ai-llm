@@ -1005,10 +1005,6 @@ multimodal = [
 ]
 observability = [
     { name = "llama-index-observability-otel" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc" },
-    { name = "opentelemetry-exporter-otlp-proto-http" },
-    { name = "opentelemetry-sdk" },
-    { name = "portalocker" },
 ]
 
 [package.dev-dependencies]
@@ -1091,16 +1087,12 @@ requires-dist = [
     { name = "openai", specifier = ">=1.109.1,<2.0.0" },
     { name = "openai-whisper", specifier = "==20250625" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.39.1,<2.0.0" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc", marker = "extra == 'observability'", specifier = ">=1.39.1,<2.0.0" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.39.1,<2.0.0" },
-    { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'observability'", specifier = ">=1.39.1,<2.0.0" },
     { name = "opentelemetry-sdk", specifier = ">=1.39.1,<2.0.0" },
-    { name = "opentelemetry-sdk", marker = "extra == 'observability'", specifier = ">=1.39.1,<2.0.0" },
     { name = "pandas", specifier = ">=2.2,<3.0" },
     { name = "pillow", specifier = ">=11.0.0,<12.0.0" },
     { name = "plotly", specifier = ">=5.22,<6.0" },
     { name = "portalocker", specifier = ">=3.2.0,<4.0.0" },
-    { name = "portalocker", marker = "extra == 'observability'", specifier = ">=3.2.0,<4.0.0" },
     { name = "pyarrow", specifier = ">=21.0.0,<22.0.0" },
     { name = "pydantic", specifier = "==2.11.7" },
     { name = "pydantic-settings", specifier = "==2.10.1" },

@@ -11,7 +11,7 @@ def extract_manifest(doc_path: Path) -> dict:
     """Extracts the JSON manifest from system-architecture.md."""
     content = doc_path.read_text()
 
-    # This extracts the first JSON block — ensure the structural parity manifest is first.
+    # Extracts the first JSON block - ensure the structural parity manifest is first.
     matches = re.findall(r"```json\s+(.*?)\s+```", content, re.DOTALL)
     if len(matches) > 1:
         raise ValueError(
@@ -36,6 +36,9 @@ def verify_parity():
         sys.exit(1)
 
     canonical = set(manifest.get("canonical_src", []))
+
+    if not src_path.exists() or not src_path.is_dir():
+        raise ValueError("src/ directory not found")
 
     # Get actual top-level directories in src/ (ignoring __pycache__ and hidden)
     actual = {
@@ -65,7 +68,7 @@ def verify_parity():
             print(f"FAILED: {err}")
         sys.exit(1)
     else:
-        print("SUCCESS: Documentation structural parity verified (v2.0.0).")
+        print("SUCCESS: Documentation structural parity verified.")
         sys.exit(0)
 
 

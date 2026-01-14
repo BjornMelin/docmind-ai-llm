@@ -105,10 +105,6 @@ graph = [
     "kuzu>=0.11.3,<1.0.0",
 ]
 observability = [
-    "opentelemetry-sdk>=1.39.1,<2.0.0",
-    "opentelemetry-exporter-otlp-proto-http>=1.39.1,<2.0.0",
-    "opentelemetry-exporter-otlp-proto-grpc>=1.39.1,<2.0.0",
-    "portalocker>=3.2.0,<4.0.0",
     "llama-index-observability-otel>=0.2.1,<0.3.0",
 ]
 multimodal = [
