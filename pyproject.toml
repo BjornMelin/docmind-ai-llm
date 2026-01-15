@@ -19,8 +19,8 @@ dependencies = [
     "python-dotenv==1.1.1",
     "loguru>=0.7.3,<1.0.0",
     "tenacity>=9.1.2,<10.0.0",
-    "pydantic==2.11.7",
-    "pydantic-settings==2.10.1",
+    "pydantic==2.12.5",
+    "pydantic-settings==2.12.0",
     "cryptography>=46.0.0",                 # Image encryption at rest (ADR-058)
     # UI / App Framework
     "streamlit>=1.52.2,<2.0.0",
