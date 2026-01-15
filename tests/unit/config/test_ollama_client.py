@@ -103,8 +103,11 @@ def test_get_ollama_web_tools_disabled() -> None:
 
 @pytest.mark.unit
 def test_get_ollama_web_tools_enabled_requires_api_key() -> None:
-    cfg = DocMindSettings(ollama_enable_web_search=True)
-    cfg.security.allow_remote_endpoints = True
+    cfg = DocMindSettings(
+        ollama_enable_web_search=False,
+        security={"allow_remote_endpoints": True},
+    )
+    cfg.ollama_enable_web_search = True
     with pytest.raises(ValueError, match=r"API key"):
         _ = get_ollama_web_tools(cfg)
 
@@ -147,8 +150,11 @@ def test_get_ollama_web_tools_returns_client_bound_tools(
         "src.config.ollama_client._cached_client",
         lambda *_, **__: fake_client,
     )
-    cfg = DocMindSettings(ollama_enable_web_search=True, ollama_api_key="key-123")
-    cfg.security.allow_remote_endpoints = True
+    cfg = DocMindSettings(
+        ollama_enable_web_search=True,
+        ollama_api_key="key-123",
+        security={"allow_remote_endpoints": True},
+    )
     tools = get_ollama_web_tools(cfg)
     assert {tool.__name__ for tool in tools} == {"web_search", "web_fetch"}
     tools[0](query="docmind", max_results=2)
