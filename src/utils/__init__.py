@@ -3,7 +3,6 @@
 This package provides small, reusable helpers used across the app, grouped into:
 
 - `core`: async timers, startup validation, resource helpers
-- `document`: document loading, cache management, spaCy bootstrapping
 - `monitoring`: logging and performance monitoring utilities
 - `storage`: Qdrant/vector store helpers and safe GPU contexts
 """
@@ -15,16 +14,6 @@ from .core import (
     managed_async_qdrant_client,
     managed_gpu_operation,
     validate_startup_configuration,
-)
-
-# Document operations
-from .document import (
-    clear_document_cache,
-    ensure_spacy_model,
-    get_cache_stats,
-    get_document_info,
-    load_documents_from_directory,
-    load_documents_unstructured,
 )
 from .hashing import sha256_file
 from .images import ensure_thumbnail, open_image_encrypted
@@ -41,12 +30,8 @@ from .monitoring import (
     setup_logging,
 )
 from .security import decrypt_file, encrypt_file, get_image_kid
-
-# Storage and resource management operations
 from .storage import (
-    # Resource management operations
     async_gpu_memory_context,
-    # Database operations
     clear_collection,
     create_async_client,
     create_sync_client,
@@ -70,7 +55,6 @@ __all__ = [
     "async_performance_timer",
     "async_timer",
     "clear_collection",
-    "clear_document_cache",
     "create_async_client",
     "create_sync_client",
     "create_vector_store",
@@ -78,11 +62,8 @@ __all__ = [
     "decrypt_file",
     "detect_hardware",
     "encrypt_file",
-    "ensure_spacy_model",
     "ensure_thumbnail",
-    "get_cache_stats",
     "get_collection_info",
-    "get_document_info",
     "get_image_kid",
     "get_memory_usage",
     "get_performance_monitor",
@@ -90,8 +71,6 @@ __all__ = [
     "get_safe_vram_usage",
     "get_system_info",
     "gpu_memory_context",
-    "load_documents_from_directory",
-    "load_documents_unstructured",
     "log_error_with_context",
     "log_performance",
     "managed_async_qdrant_client",
