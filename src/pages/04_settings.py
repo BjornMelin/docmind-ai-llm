@@ -8,6 +8,7 @@ pre-validation to avoid persisting invalid configuration.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from pathlib import Path, PurePath
 from typing import Any, TypedDict
 
@@ -221,6 +222,11 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
             "llm_request_timeout_seconds": validated.llm_request_timeout_seconds,
             "enable_gpu_acceleration": validated.enable_gpu_acceleration,
             "ollama_base_url": validated.ollama_base_url,
+            "ollama_api_key": validated.ollama_api_key,
+            "ollama_enable_web_search": validated.ollama_enable_web_search,
+            "ollama_embed_dimensions": validated.ollama_embed_dimensions,
+            "ollama_enable_logprobs": validated.ollama_enable_logprobs,
+            "ollama_top_logprobs": validated.ollama_top_logprobs,
             "vllm_base_url": validated.vllm_base_url,
             "lmstudio_base_url": validated.lmstudio_base_url,
             "llamacpp_base_url": validated.llamacpp_base_url,
@@ -317,10 +323,22 @@ def main() -> None:
     provider = _render_provider_section()
     model, context_window, timeout_s, use_gpu = _render_model_section()
     ollama_url, vllm_url, lmstudio_url, llamacpp_url = _render_provider_urls()
+    (
+        ollama_api_key,
+        ollama_enable_web_search,
+        ollama_embed_dimensions,
+        ollama_enable_logprobs,
+        ollama_top_logprobs,
+    ) = _render_ollama_advanced_section()
     gguf_path = _render_gguf_path()
     allow_remote = _render_security_section()
     rrf_k, t_text, t_siglip, t_colpali, t_total = _render_retrieval_section()
     _render_graphrag_section(graphrag_health)
+    _render_ollama_web_search_warning(
+        enabled=ollama_enable_web_search,
+        allow_remote=allow_remote,
+        allowlist=settings.security.endpoint_allowlist,
+    )
 
     ui_errors, resolved_gguf_path = _validate_gguf_inputs(
         provider, llamacpp_url, gguf_path
@@ -330,6 +348,11 @@ def main() -> None:
         "model": model,
         "context_window": context_window,
         "ollama_url": ollama_url,
+        "ollama_api_key": ollama_api_key,
+        "ollama_enable_web_search": ollama_enable_web_search,
+        "ollama_embed_dimensions": ollama_embed_dimensions,
+        "ollama_enable_logprobs": ollama_enable_logprobs,
+        "ollama_top_logprobs": ollama_top_logprobs,
         "vllm_url": vllm_url,
         "lmstudio_url": lmstudio_url,
         "llamacpp_url": llamacpp_url,
@@ -424,6 +447,59 @@ def _render_provider_urls() -> tuple[str, str, str, str]:
             placeholder="http://localhost:8080/v1",
         )
     return ollama_url, vllm_url, lmstudio_url, llamacpp_url
+
+
+def _render_ollama_advanced_section() -> tuple[str, bool, int | None, bool, int]:
+    """Render Ollama advanced settings and return values.
+
+    Returns:
+        Tuple of (api_key, enable_web_search, embed_dimensions, enable_logprobs,
+        top_logprobs).
+    """
+    st.subheader("Ollama (Advanced)")
+    st.caption("Optional Ollama-native features (cloud web tools are opt-in).")
+    api_key_value = (
+        settings.ollama_api_key.get_secret_value()
+        if settings.ollama_api_key is not None
+        else ""
+    )
+    api_key = st.text_input(
+        "Ollama API key (optional)",
+        type="password",
+        value=api_key_value,
+        help="Required for Ollama Cloud web_search/web_fetch tools.",
+    )
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        enable_web_search = st.checkbox(
+            "Enable Ollama web search tools",
+            value=bool(settings.ollama_enable_web_search),
+        )
+    with col2:
+        embed_dim_raw = int(
+            st.number_input(
+                "Embed dimensions (0 = default)",
+                min_value=0,
+                max_value=8192,
+                value=int(settings.ollama_embed_dimensions or 0),
+            )
+        )
+    with col3:
+        enable_logprobs = st.checkbox(
+            "Enable Ollama logprobs",
+            value=bool(settings.ollama_enable_logprobs),
+        )
+    top_logprobs = int(
+        st.number_input(
+            "Top logprobs (0-20)",
+            min_value=0,
+            max_value=20,
+            value=int(settings.ollama_top_logprobs),
+            disabled=not enable_logprobs,
+        )
+    )
+    embed_dimensions = int(embed_dim_raw) if embed_dim_raw > 0 else None
+    return api_key, enable_web_search, embed_dimensions, enable_logprobs, top_logprobs
 
 
 def _render_gguf_path() -> str:
@@ -578,6 +654,11 @@ class SettingsFormValues(TypedDict):
     model: str
     context_window: int
     ollama_url: str
+    ollama_api_key: str
+    ollama_enable_web_search: bool
+    ollama_embed_dimensions: int | None
+    ollama_enable_logprobs: bool
+    ollama_top_logprobs: int
     vllm_url: str
     lmstudio_url: str
     llamacpp_url: str
@@ -607,6 +688,11 @@ def _build_candidate_settings(
         "model": str(values["model"]).strip() or None,
         "context_window": int(values["context_window"]),
         "ollama_base_url": str(values["ollama_url"]).strip(),
+        "ollama_api_key": str(values["ollama_api_key"]).strip() or None,
+        "ollama_enable_web_search": bool(values["ollama_enable_web_search"]),
+        "ollama_embed_dimensions": values["ollama_embed_dimensions"],
+        "ollama_enable_logprobs": bool(values["ollama_enable_logprobs"]),
+        "ollama_top_logprobs": int(values["ollama_top_logprobs"]),
         "vllm_base_url": str(values["vllm_url"]).strip() or None,
         "lmstudio_base_url": str(values["lmstudio_url"]).strip(),
         "llamacpp_base_url": str(values["llamacpp_url"]).strip() or None,
@@ -646,6 +732,32 @@ def _render_validation(ui_errors: list[str], validation_errors: list[str]) -> No
     st.subheader("Validation")
     for msg in ui_errors + validation_errors:
         st.error(msg)
+
+
+def _render_ollama_web_search_warning(
+    *, enabled: bool, allow_remote: bool, allowlist: Sequence[str]
+) -> None:
+    """Warn when Ollama Cloud web tools are enabled but not fully allowed.
+
+    Args:
+        enabled: Whether web tools are enabled.
+        allow_remote: Whether remote endpoints are allowed.
+        allowlist: Current endpoint allowlist.
+    """
+    if not enabled:
+        return
+    if not allow_remote:
+        st.warning(
+            "Ollama web tools require remote endpoints. Enable "
+            "`DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS`."
+        )
+        return
+    normalized = {str(entry).strip().lower() for entry in allowlist if entry}
+    if not any("ollama.com" in entry for entry in normalized):
+        st.warning(
+            "Ollama web tools require `https://ollama.com` in "
+            "`DOCMIND_SECURITY__ENDPOINT_ALLOWLIST`."
+        )
 
 
 def _render_actions(validated: DocMindSettings | None, ui_errors: list[str]) -> None:
@@ -689,6 +801,23 @@ def _persist_env_from_validated(validated: DocMindSettings) -> None:
             "true" if validated.enable_gpu_acceleration else "false"
         ),
         "DOCMIND_OLLAMA_BASE_URL": validated.ollama_base_url,
+        "DOCMIND_OLLAMA_API_KEY": (
+            validated.ollama_api_key.get_secret_value()
+            if validated.ollama_api_key is not None
+            else ""
+        ),
+        "DOCMIND_OLLAMA_ENABLE_WEB_SEARCH": (
+            "true" if validated.ollama_enable_web_search else "false"
+        ),
+        "DOCMIND_OLLAMA_EMBED_DIMENSIONS": (
+            str(validated.ollama_embed_dimensions)
+            if validated.ollama_embed_dimensions is not None
+            else ""
+        ),
+        "DOCMIND_OLLAMA_ENABLE_LOGPROBS": (
+            "true" if validated.ollama_enable_logprobs else "false"
+        ),
+        "DOCMIND_OLLAMA_TOP_LOGPROBS": str(int(validated.ollama_top_logprobs)),
         "DOCMIND_VLLM_BASE_URL": (validated.vllm_base_url or ""),
         "DOCMIND_LMSTUDIO_BASE_URL": validated.lmstudio_base_url,
         "DOCMIND_LLAMACPP_BASE_URL": (validated.llamacpp_base_url or ""),
