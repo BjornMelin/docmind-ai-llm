@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src.config import settings
+from src.config import bootstrap_settings, settings
 
 
 def main() -> None:  # pragma: no cover - Streamlit entrypoint
@@ -21,6 +21,7 @@ def main() -> None:  # pragma: no cover - Streamlit entrypoint
     The function does not take any parameters and does not return any values.
     It runs the Streamlit navigation loop to handle page routing.
     """
+    bootstrap_settings()
     app_title = getattr(settings, "app_name", "DocMind AI")
     st.set_page_config(page_title=app_title, page_icon="🧠", layout="wide")
 

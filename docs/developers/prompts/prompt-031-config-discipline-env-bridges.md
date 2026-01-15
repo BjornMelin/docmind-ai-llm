@@ -105,15 +105,14 @@ You must keep changes minimal, library-first, and maintainable.
 
 ### FEATURE CONTEXT (FILLED)
 
-**Primary Task:** Centralize JSONL telemetry + image encryption env config in `DocMindSettings` and remove `os.getenv` sprawl from core modules.
+**Primary Task:** Complete config discipline work by eliminating remaining `os.getenv` drift and formalizing the hashing secret wiring described in ADR-050.
 
 **Why now:** Scattered env reads undermine settings discipline and hide security-sensitive toggles. There is also an `ADR-047` marker and a hashing secret that must be formalized for keyed fingerprints (safe logging correlation) and for the existing HMAC canonicalization utilities in `src/utils/canonicalization.py` (so tests and production share the same policy).
 
 **Definition of Done (DoD):**
 
-- `TelemetryConfig` and `ImageEncryptionConfig` exist in `src/config/settings.py`.
-- `DOCMIND_TELEMETRY_*`, `DOCMIND_IMG_*`, and `DOCMIND_ENVIRONMENT` map through settings.
-- `src/utils/telemetry.py`, `src/utils/security.py`, `src/processing/pdf_pages.py`, and `src/telemetry/opentelemetry.py` do not call `os.getenv`.
+- `DOCMIND_TELEMETRY_*` and `DOCMIND_ENVIRONMENT` map through `DocMindSettings` (and/or explicit env bridges in `src/config/*`), so `.env` and env vars both work per Pydantic Settings precedence (env > `.env`).
+- `src/utils/telemetry.py` and `src/telemetry/opentelemetry.py` do not call `os.getenv` (env reads, if required, live in `src/config/*`).
 - `ADR-047` marker removed (replaced with real ADR reference) and `settings.hashing.hmac_secret` is treated as a real local secret:
   - validator error messages reference `DOCMIND_HASHING__HMAC_SECRET`
   - the secret can be used by `src/utils/log_safety.py` (SPEC-028) for keyed fingerprints and by `src/utils/canonicalization.py` for canonical hashes
@@ -123,10 +122,8 @@ You must keep changes minimal, library-first, and maintainable.
 **In-scope modules/files (initial):**
 
 - `src/config/settings.py`
-- `src/utils/telemetry.py`
-- `src/utils/security.py`
-- `src/processing/pdf_pages.py`
-- `src/telemetry/opentelemetry.py`
+- `src/utils/log_safety.py`
+- `src/utils/canonicalization.py`
 - `tests/unit/config/` (new tests)
 - `docs/specs/traceability.md`
 
@@ -167,14 +164,12 @@ Must pass:
 
 1. [ ] Inventory env reads: `rg "os\\.getenv\\(" src/`.
 2. [ ] Add new settings groups and mappings in `src/config/settings.py`.
-3. [ ] Refactor `src/utils/telemetry.py` to read from `settings` (no env reads).
-4. [ ] Refactor image encryption env reads to settings and update callers.
-5. [ ] Refactor OTEL resource env read (`DOCMIND_ENVIRONMENT`) to settings.
-6. [ ] Replace `ADR-047` marker with a real ADR reference and formalize hashing secret UX:
+3. [ ] Refactor remaining consumers to use `settings` (no env reads outside `src/config/*`).
+4. [ ] Replace `ADR-047` marker with a real ADR reference and formalize hashing secret UX:
    - update validator error message to reference `DOCMIND_HASHING__HMAC_SECRET`
    - add a unit test for the mapping/validation message
-7. [ ] Add/update unit tests for settings mappings and telemetry.
-8. [ ] Update RTM row and run quality gates.
+5. [ ] Add/update unit tests for settings mappings and telemetry.
+6. [ ] Update RTM row and run quality gates.
 
 Commands:
 

@@ -9,7 +9,6 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import json
-import os
 import random
 from collections import Counter
 from contextvars import ContextVar
@@ -19,7 +18,12 @@ from typing import Any
 
 from loguru import logger
 
-from src.config.settings import settings
+from src.config.settings import (
+    get_telemetry_disabled,
+    get_telemetry_rotate_bytes,
+    get_telemetry_sample,
+    settings,
+)
 
 TELEMETRY_JSONL_PATH = Path("./logs/telemetry.jsonl")
 # Public constant for consumers that need the canonical telemetry path.
@@ -52,11 +56,8 @@ def _ensure_dir(path: Path) -> None:
 
 
 def _maybe_rotate(path: Path) -> None:
-    """Rotate file if it exceeds DOCMIND_TELEMETRY_ROTATE_BYTES (size-based)."""
-    try:
-        limit = int(os.getenv("DOCMIND_TELEMETRY_ROTATE_BYTES", "0"))
-    except (ValueError, TypeError):
-        limit = 0
+    """Rotate file if it exceeds the configured size limit (size-based)."""
+    limit = get_telemetry_rotate_bytes()
     if limit <= 0:
         return
     try:
@@ -131,16 +132,9 @@ def log_jsonl(event: dict[str, Any]) -> None:
         event: Flat key-value telemetry dictionary.
     """
     # avoid network/file egress if disabled
-    if os.getenv("DOCMIND_TELEMETRY_DISABLED", "false").lower() in {"1", "true", "yes"}:
+    if get_telemetry_disabled():
         return
-    # sampling
-    try:
-        rate = float(os.getenv("DOCMIND_TELEMETRY_SAMPLE", "1.0"))
-    except (ValueError, TypeError):
-        rate = 1.0
-    # Clamp sampling rate into [0,1] once, then sample.
-    # rate=1.0 logs all events; rate=0.0 logs none.
-    rate = max(0.0, min(1.0, rate))
+    rate = get_telemetry_sample()
     if rate < 1.0 and random.random() >= rate:  # noqa: S311
         return
 

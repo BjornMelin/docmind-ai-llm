@@ -8,6 +8,24 @@ This page summarizes common runtime configuration for DocMind AI. For a full dev
 - Context window and timeouts
 - GPU acceleration (CUDA) and memory utilization
 
+## Avoid Global API Keys (Optional)
+
+By default, exported environment variables take precedence over `.env`.
+
+If you have global machine variables like `OPENAI_API_KEY` set but want DocMind
+to use only DocMind-scoped configuration, you can opt in to one of these modes:
+
+- Prefer repo `.env` over exported env vars for DocMind settings:
+  - `DOCMIND_CONFIG__DOTENV_PRIORITY=dotenv_first`
+  - Safety: `security.*` remains env-first.
+- Prevent dependencies from using global env vars (allowlist only):
+  - `DOCMIND_CONFIG__ENV_MASK_KEYS=OPENAI_API_KEY`
+- Provide a compatible env var for dependencies from DocMind settings:
+  - Set `DOCMIND_OPENAI__API_KEY=...` and then:
+  - `DOCMIND_CONFIG__ENV_OVERLAY=OPENAI_API_KEY:openai.api_key`
+
+These modes are intended for local development; avoid in production.
+
 ## Retrieval & GraphRAG
 
 ```bash

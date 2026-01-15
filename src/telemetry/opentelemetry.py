@@ -357,8 +357,8 @@ def _build_resource(app_settings: DocMindSettings) -> Resource:
     }
     with suppress(metadata.PackageNotFoundError):
         attributes["service.version"] = metadata.version("docmind_ai_llm")
-    if environment := os.getenv("DOCMIND_ENVIRONMENT"):
-        attributes["deployment.environment"] = environment
+    if app_settings.environment:
+        attributes["deployment.environment"] = app_settings.environment
     return Resource.create(attributes)
 
 

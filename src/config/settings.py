@@ -9,10 +9,13 @@ Usage:
 """
 
 import base64
+import os
+import re
 from collections.abc import Callable
 from contextlib import suppress
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from urllib.parse import urlparse
 
 from loguru import logger
@@ -25,18 +28,163 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
+from src.config.dotenv import resolve_dotenv_path
 from src.models.embedding_constants import ImageBackboneName
 
 SETTINGS_MODEL_CONFIG = SettingsConfigDict(
-    env_file=".env",
+    env_file=None,
     env_prefix="DOCMIND_",
     env_nested_delimiter="__",
     case_sensitive=False,
     extra="ignore",
     populate_by_name=True,
 )
+
+DotenvPriorityMode = Literal["env_first", "dotenv_first"]
+
+# Bootstrapped mode for this process. When unset, defaults to env-first.
+_DOTENV_PRIORITY_MODE: DotenvPriorityMode | None = None
+
+_CONFIG_ENV_PREFIX = "DOCMIND_CONFIG__"
+_VALID_ENV_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
+
+
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Return a merged mapping where `override` wins."""
+    merged: dict[str, Any] = dict(base)
+    for key, value in override.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key] = _deep_merge(cast(dict[str, Any], merged[key]), value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _get_dotenv_priority_mode() -> DotenvPriorityMode:
+    raw = os.getenv(f"{_CONFIG_ENV_PREFIX}DOTENV_PRIORITY")
+    if raw:
+        value = raw.strip().lower()
+        if value in {"env_first", "dotenv_first"}:
+            return cast(DotenvPriorityMode, value)
+    if _DOTENV_PRIORITY_MODE is not None:
+        return _DOTENV_PRIORITY_MODE
+    return "env_first"
+
+
+def _parse_csv(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [part.strip() for part in value.split(",") if part.strip()]
+
+
+def _validate_env_key_name(key: str) -> None:
+    if not key or _VALID_ENV_KEY_RE.fullmatch(key) is None:
+        raise ValueError("Invalid env var key; expected [A-Z][A-Z0-9_]*")
+
+
+def _validate_env_value_no_controls(value: str) -> None:
+    if re.search(r"[\x00-\x1f\x7f]", value):
+        raise ValueError("Env var value contains control characters")
+
+
+@dataclass(frozen=True, slots=True)
+class _BootstrapOptions:
+    dotenv_priority: DotenvPriorityMode | None
+    env_mask_keys: list[str]
+    env_overlays: list[tuple[str, str]]
+
+
+def _read_bootstrap_options(dotenv_path: Path) -> _BootstrapOptions:
+    """Read DOCMIND_CONFIG__* toggles from env (preferred) or repo `.env` (fallback)."""
+    dotenv_kv: dict[str, str | None] = {}
+    try:
+        from dotenv import dotenv_values as _dotenv_values
+
+        dotenv_kv = cast(
+            dict[str, str | None],
+            _dotenv_values(dotenv_path, encoding="utf-8", interpolate=False),
+        )
+    except Exception:
+        dotenv_kv = {}
+
+    def _cfg(name: str) -> str | None:
+        key = f"{_CONFIG_ENV_PREFIX}{name}"
+        if key in os.environ:
+            return os.environ[key]
+        return dotenv_kv.get(key)
+
+    raw_priority = _cfg("DOTENV_PRIORITY")
+    if raw_priority is None:
+        dotenv_priority = None
+    else:
+        value = raw_priority.strip().lower()
+        if value not in {"env_first", "dotenv_first"}:
+            raise ValueError(
+                "DOCMIND_CONFIG__DOTENV_PRIORITY must be 'env_first' or 'dotenv_first'"
+            )
+        dotenv_priority = cast(DotenvPriorityMode, value)
+
+    env_mask_keys: list[str] = []
+    for key in _parse_csv(_cfg("ENV_MASK_KEYS")):
+        _validate_env_key_name(key)
+        if key.startswith(_CONFIG_ENV_PREFIX):
+            raise ValueError("Refusing to mask DOCMIND_CONFIG__* keys")
+        env_mask_keys.append(key)
+
+    overlays: list[tuple[str, str]] = []
+    for spec in _parse_csv(_cfg("ENV_OVERLAY")):
+        if ":" not in spec:
+            raise ValueError(
+                "DOCMIND_CONFIG__ENV_OVERLAY entries must be KEY:settings.path"
+            )
+        key, path = spec.split(":", 1)
+        key = key.strip()
+        path = path.strip()
+        _validate_env_key_name(key)
+        if not path or any(part.strip() == "" for part in path.split(".")):
+            raise ValueError(f"Invalid settings path for overlay key={key}")
+        overlays.append((key, path))
+
+    return _BootstrapOptions(
+        dotenv_priority=dotenv_priority,
+        env_mask_keys=env_mask_keys,
+        env_overlays=overlays,
+    )
+
+
+def _apply_env_mask(keys: list[str]) -> None:
+    for key in keys:
+        with suppress(KeyError):
+            del os.environ[key]
+
+
+def _apply_env_overlay(overlays: list[tuple[str, str]]) -> None:
+    for key, path in overlays:
+        current: Any = settings
+        for part in path.split("."):
+            if not hasattr(current, part):
+                raise ValueError(f"Unknown settings path for overlay key={key}: {path}")
+            current = getattr(current, part)
+
+        if isinstance(current, SecretStr):
+            value = current.get_secret_value()
+        elif current is None:
+            value = ""
+        else:
+            value = str(current)
+
+        if not value:
+            with suppress(KeyError):
+                del os.environ[key]
+            continue
+        _validate_env_value_no_controls(value)
+        os.environ[key] = value
 
 
 class VLLMConfig(BaseModel):
@@ -754,6 +902,45 @@ class DocMindSettings(BaseSettings):
     )
     enable_gpu_acceleration: bool = Field(default=True)
 
+    # Environment / telemetry
+    environment: str | None = Field(
+        default=None,
+        description=(
+            "Optional environment name (e.g., dev/staging/prod). When set, it is "
+            "used for telemetry/resource tagging (DOCMIND_ENVIRONMENT)."
+        ),
+    )
+    telemetry_enabled: bool = Field(
+        default=True,
+        description=(
+            "Convenience enable/disable toggle for local JSONL telemetry sink "
+            "(DOCMIND_TELEMETRY_ENABLED)."
+        ),
+    )
+    telemetry_disabled: bool = Field(
+        default=False,
+        description=(
+            "Disable local JSONL telemetry sink regardless of telemetry_enabled "
+            "(DOCMIND_TELEMETRY_DISABLED)."
+        ),
+    )
+    telemetry_sample: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Sampling rate for local JSONL telemetry events (DOCMIND_TELEMETRY_SAMPLE)."
+        ),
+    )
+    telemetry_rotate_bytes: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Rotate local telemetry JSONL file at this size in bytes (0 disables) "
+            "(DOCMIND_TELEMETRY_ROTATE_BYTES)."
+        ),
+    )
+
     # Feature flags
     guided_json_enabled: bool = Field(
         default=False, description="Structured outputs available (SPEC-007 prep)"
@@ -826,12 +1013,68 @@ class DocMindSettings(BaseSettings):
     @model_validator(mode="after")
     def _apply_aliases_and_validate(self) -> "DocMindSettings":
         self._apply_alias_overrides()
+        self._apply_telemetry_bridge()
         self._map_hybrid_to_retrieval()
         self._normalize_persistence_paths()
         self._validate_endpoints_security()
         self._validate_lmstudio_url()
         self._validate_web_search_config()
         return self
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Customize precedence, optionally preferring repo `.env` over env vars.
+
+        Default remains: init kwargs > environment > dotenv > secrets.
+
+        When `DOCMIND_CONFIG__DOTENV_PRIORITY=dotenv_first`, `.env` wins over
+        environment variables for DocMind settings, except for the `security`
+        subtree where environment variables remain higher precedence as a safety
+        guard.
+        """
+        if _get_dotenv_priority_mode() != "dotenv_first":
+            return init_settings, env_settings, dotenv_settings, file_secret_settings
+
+        def combined_env_dotenv() -> dict[str, Any]:
+            env_data = cast(dict[str, Any], env_settings())
+            dotenv_data = cast(dict[str, Any], dotenv_settings())
+            merged = _deep_merge(env_data, dotenv_data)  # dotenv wins by default
+
+            # Guardrail: security config is env-first even when dotenv-first.
+            if "security" in env_data:
+                merged_security = merged.get("security", {})
+                if isinstance(merged_security, dict) and isinstance(
+                    env_data["security"], dict
+                ):
+                    merged["security"] = _deep_merge(
+                        cast(dict[str, Any], merged_security),
+                        cast(dict[str, Any], env_data["security"]),
+                    )
+                else:
+                    merged["security"] = env_data["security"]
+            return merged
+
+        return (
+            init_settings,
+            cast(PydanticBaseSettingsSource, combined_env_dotenv),
+            file_secret_settings,
+        )
+
+    def _apply_telemetry_bridge(self) -> None:
+        """Apply telemetry enabled/disabled bridge semantics.
+
+        ``telemetry_disabled`` is the hard kill switch. ``telemetry_enabled`` is a
+        convenience toggle for callers/docs that prefer an enable flag.
+        """
+        if not self.telemetry_enabled:
+            self.telemetry_disabled = True
 
     def _apply_alias_overrides(self) -> None:
         alias_targets: dict[str, tuple[object, str, Callable[[Any], Any]]] = {
@@ -1172,7 +1415,134 @@ class DocMindSettings(BaseSettings):
 
 
 # Global settings instance - primary interface for the application
-settings = DocMindSettings()
+settings = DocMindSettings(_env_file=None)  # type: ignore[arg-type]
+
+_DOTENV_BOOTSTRAPPED = False
+
+
+def _parse_env_bool(value: str) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def get_telemetry_disabled() -> bool:
+    """Return effective telemetry disabled flag.
+
+    The process environment is checked first to keep tests hermetic and to honor
+    runtime env overrides without requiring a settings reload.
+    """
+    raw = os.getenv("DOCMIND_TELEMETRY_DISABLED")
+    if raw is not None:
+        return _parse_env_bool(raw)
+    return bool(getattr(settings, "telemetry_disabled", False))
+
+
+def get_telemetry_sample() -> float:
+    """Return effective telemetry sample rate (0.0..1.0)."""
+    raw = os.getenv("DOCMIND_TELEMETRY_SAMPLE")
+    if raw is not None:
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            value = 1.0
+    else:
+        value = float(getattr(settings, "telemetry_sample", 1.0))
+    return max(0.0, min(1.0, value))
+
+
+def get_telemetry_rotate_bytes() -> int:
+    """Return effective telemetry rotate bytes limit."""
+    raw = os.getenv("DOCMIND_TELEMETRY_ROTATE_BYTES")
+    if raw is not None:
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            value = 0
+    else:
+        value = int(getattr(settings, "telemetry_rotate_bytes", 0))
+    return max(0, value)
+
+
+def apply_settings_in_place(current: DocMindSettings, updated: DocMindSettings) -> None:
+    """Update an existing settings singleton in-place (do not rebind).
+
+    Many modules follow the recommended import pattern `from src.config import settings`
+    which captures the singleton instance at import time. Rebinding would create
+    stale references, so we mutate the existing instance.
+    """
+    if not isinstance(current, DocMindSettings) or not isinstance(
+        updated, DocMindSettings
+    ):
+        raise TypeError("apply_settings_in_place expects DocMindSettings instances")
+
+    field_names = set(DocMindSettings.model_fields)
+    current_dict = cast(dict[str, Any], current.__dict__)
+    for key in list(current_dict):
+        if key not in field_names:
+            del current_dict[key]
+
+    for field in DocMindSettings.model_fields:
+        object.__setattr__(current, field, getattr(updated, field))
+
+    object.__setattr__(
+        current,
+        "__pydantic_fields_set__",
+        set(getattr(updated, "__pydantic_fields_set__", set())),
+    )
+    object.__setattr__(
+        current, "__pydantic_extra__", getattr(updated, "__pydantic_extra__", None)
+    )
+    object.__setattr__(
+        current, "__pydantic_private__", getattr(updated, "__pydantic_private__", None)
+    )
+
+
+def reset_bootstrap_state() -> None:
+    """Reset bootstrap state for testing. Not for production use."""
+    global _DOTENV_BOOTSTRAPPED, _DOTENV_PRIORITY_MODE
+    _DOTENV_BOOTSTRAPPED = False
+    _DOTENV_PRIORITY_MODE = None
+
+
+def bootstrap_settings(
+    *, env_file: Path | None = None, force: bool = False
+) -> Path | None:
+    """Optionally load dotenv into the process-global settings singleton.
+
+    This is an explicit startup step (no import-time dotenv IO). It is safe to call
+    multiple times; subsequent calls are no-ops unless `force=True`.
+
+    Returns:
+        The dotenv path used when loading occurred, otherwise None.
+    """
+    global _DOTENV_BOOTSTRAPPED
+    if _DOTENV_BOOTSTRAPPED and not force:
+        return None
+
+    dotenv_path = env_file if env_file is not None else resolve_dotenv_path()
+    try:
+        exists = dotenv_path.is_file()
+    except OSError:
+        exists = False
+
+    if not exists:
+        _DOTENV_BOOTSTRAPPED = True
+        return None
+
+    global _DOTENV_PRIORITY_MODE
+    opts = _read_bootstrap_options(dotenv_path)
+    _DOTENV_PRIORITY_MODE = opts.dotenv_priority
+
+    # Optional: remove selected global env vars so third-party libs won't pick them up.
+    _apply_env_mask(opts.env_mask_keys)
+
+    updated = DocMindSettings(_env_file=dotenv_path)  # type: ignore[arg-type]
+    apply_settings_in_place(settings, updated)
+
+    # Optional: overlay allowlisted env vars from validated settings values.
+    _apply_env_overlay(opts.env_overlays)
+    _DOTENV_BOOTSTRAPPED = True
+    return dotenv_path
+
 
 # Startup side-effects (logging, env bridges) are handled in startup_init()
 # located in src.config.integrations.
@@ -1194,5 +1564,10 @@ __all__ = [
     "SemanticCacheConfig",
     "UIConfig",
     "VLLMConfig",
+    "apply_settings_in_place",
+    "bootstrap_settings",
+    "get_telemetry_disabled",
+    "get_telemetry_rotate_bytes",
+    "get_telemetry_sample",
     "settings",
 ]

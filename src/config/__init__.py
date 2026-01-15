@@ -26,14 +26,17 @@ from .settings import settings
 
 if TYPE_CHECKING:  # pragma: no cover
     from src.config.integrations import initialize_integrations, setup_llamaindex
+    from src.config.settings import bootstrap_settings
 
 __all__ = [
+    "bootstrap_settings",
     "initialize_integrations",
     "settings",
     "setup_llamaindex",
 ]
 
 _EXPORTS: dict[str, tuple[str, str]] = {
+    "bootstrap_settings": (".settings", "bootstrap_settings"),
     "initialize_integrations": (".integrations", "initialize_integrations"),
     "setup_llamaindex": (".integrations", "setup_llamaindex"),
 }

@@ -97,6 +97,49 @@ The system automatically maps environment variables to the Pydantic model using 
 - `DOCMIND_VLLM__CONTEXT_WINDOW=131072` → `settings.vllm.context_window`
 - `DOCMIND_GRAPHRAG_CFG__ENABLED=true` → `settings.graphrag_cfg.enabled`
 
+### Settings Source Precedence
+
+DocMind relies on Pydantic Settings defaults for settings-source priority:
+
+1. **Init kwargs** (explicit constructor arguments)
+2. **Environment variables** (`DOCMIND_*`)
+3. **Dotenv** (`.env`, when explicitly loaded via `bootstrap_settings()` or `_env_file=...`)
+4. **Defaults** (model field defaults)
+
+This means `.env` does **not** override already-exported environment variables.
+
+Dotenv policy:
+
+- The process-global `src.config.settings.settings` singleton does **not** read `.env` at import time.
+- The Streamlit entrypoint (`src/app.py`) calls `bootstrap_settings()` once at startup to opt into loading `.env`.
+
+### Advanced: Dotenv Override Modes and Env Masking
+
+By default, DocMind follows the 12-factor convention: exported environment
+variables win over `.env`.
+
+For local development, you can opt into "dotenv-first" behavior **for DocMind
+settings only** (does not change third-party libraries that read `os.environ`
+directly):
+
+- `DOCMIND_CONFIG__DOTENV_PRIORITY=env_first|dotenv_first` (default: `env_first`)
+
+Safety guardrail:
+
+- Even when `dotenv_first` is enabled, `settings.security.*` remains **env-first**
+  so a local `.env` cannot accidentally weaken the offline-first / allowlist posture.
+
+If you need to prevent accidental use of global machine env vars (e.g.
+`OPENAI_API_KEY`) by dependencies, use an explicit allowlist:
+
+- `DOCMIND_CONFIG__ENV_MASK_KEYS=OPENAI_API_KEY,ANTHROPIC_API_KEY`
+  - Removes the listed keys from `os.environ` at startup (before most imports).
+- `DOCMIND_CONFIG__ENV_OVERLAY=OPENAI_API_KEY:openai.api_key`
+  - After settings are validated, sets `os.environ[OPENAI_API_KEY]` from
+    `settings.openai.api_key`.
+
+Do not use these override modes in production environments.
+
 ### Top-Level Aliases
 
 For convenience, the following top-level overrides are supported:

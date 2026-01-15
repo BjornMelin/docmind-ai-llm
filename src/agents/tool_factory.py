@@ -50,8 +50,6 @@ from src.utils.telemetry import log_jsonl
 KG_SIMILARITY_TOP_K = 10
 
 # Tool configuration constants
-DEFAULT_RERANKING_TOP_K = settings.retrieval.reranking_top_k
-DEFAULT_VECTOR_SIMILARITY_TOP_K = settings.retrieval.top_k
 
 
 class ToolFactory:
@@ -204,7 +202,7 @@ class ToolFactory:
         post = _get_pp(
             "kg",
             use_reranking=bool(getattr(settings.retrieval, "use_reranking", True)),
-            top_n=DEFAULT_RERANKING_TOP_K,
+            top_n=settings.retrieval.reranking_top_k,
         )
         query_engine = build_pg_query_engine(
             kg_index,

@@ -120,7 +120,7 @@ Metric recording is fail-open: `record_graph_export_metric(...)` is a no-op unle
 
 DocMind emits local JSONL events to `logs/telemetry.jsonl` via `log_jsonl(...)`.
 
-Controls (read directly from env vars; see SPEC-031 for consolidation work):
+Controls (sourced from settings; can be set via env vars or `.env` per Pydantic Settings precedence; see SPEC-031):
 
 - `DOCMIND_TELEMETRY_DISABLED` → disables event writes
 - `DOCMIND_TELEMETRY_SAMPLE=0.0..1.0` → sampling rate

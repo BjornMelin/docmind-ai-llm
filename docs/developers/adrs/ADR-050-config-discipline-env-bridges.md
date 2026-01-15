@@ -30,10 +30,7 @@ DocMind’s configuration contract is:
 
 Current drift points:
 
-- `src/utils/telemetry.py` reads `DOCMIND_TELEMETRY_*` via `os.getenv`
-- `src/telemetry/opentelemetry.py` reads `DOCMIND_ENVIRONMENT` via `os.getenv`
-- image encryption helpers read `DOCMIND_IMG_*` via `os.getenv`
-- `src/config/settings.py` contains an `ADR-XXX` marker for hashing config
+- hashing config still contains an `ADR-XXX` marker and needs a real ADR reference
 - `HashingConfig`’s validator error message references the wrong env var name (it should point to `DOCMIND_HASHING__HMAC_SECRET`)
 - `src/utils/canonicalization.py` implements HMAC-based canonical hashes and is test-covered, but is not yet wired to `DocMindSettings.hashing` (and the secret is required for keyed fingerprints in safe logging; ADR-047)
 

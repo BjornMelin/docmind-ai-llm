@@ -12,6 +12,8 @@ from pathlib import Path
 
 from dotenv import set_key, unset_key
 
+from src.config.dotenv import resolve_dotenv_path
+
 _KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
 
@@ -54,7 +56,7 @@ def persist_env(vars_to_set: dict[str, str], *, env_path: Path | None = None) ->
     Raises:
         EnvPersistError: When a specific key cannot be written/removed.
     """
-    target = env_path or Path(".env")
+    target = env_path or resolve_dotenv_path()
     if not target.exists():
         with suppress(FileExistsError):  # pragma: no cover - race-safe
             target.open("x", encoding="utf-8").close()

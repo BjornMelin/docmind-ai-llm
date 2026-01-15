@@ -45,7 +45,12 @@ Previous configuration was over‑abstracted and duplicated framework features. 
 
 ## Decision
 
-Use Pydantic `BaseSettings` for app‑specific configuration and LlamaIndex `Settings` for LLM/embedding configuration. Hybrid and reranking are always‑on with internal caps/timeouts; enforce `llm.context_window_max=131072`. Follow nested env var mapping (`DOCMIND_{SECTION}__{FIELD}`) per project conventions. Default hybrid fusion is server‑side RRF in Qdrant; DBSF is optional and gated by env/version support. Prefer BM42 sparse (FastEmbed) with IDF modifier.
+Use Pydantic `BaseSettings` for app‑specific configuration and LlamaIndex `Settings` for LLM/embedding configuration. Hybrid and reranking are always‑on with internal caps/timeouts; enforce `llm.context_window_max=131072`. Follow nested env var mapping (`DOCMIND_{SECTION}__{FIELD}`) per project conventions.
+
+Settings source precedence follows Pydantic Settings v2 defaults (highest → lowest):
+init kwargs > environment variables > dotenv (`.env`) > secrets dir > defaults. This means `.env` does **not** override already-exported environment variables.
+
+Default hybrid fusion is server‑side RRF in Qdrant; DBSF is optional and gated by env/version support. Prefer BM42 sparse (FastEmbed) with IDF modifier.
 
 Amendment (OpenAI‑compatible servers & Local‑First):
 
@@ -240,7 +245,18 @@ class DocMindSettings(BaseSettings):
     cache: CacheConfig = Field(default_factory=CacheConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
 
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="DOCMIND_", extra="forbid")
+    model_config = SettingsConfigDict(
+        # Dotenv is loaded explicitly at startup via `bootstrap_settings()` to
+        # avoid import-time filesystem reads and to keep tests hermetic.
+        env_file=None,
+        env_prefix="DOCMIND_",
+        env_nested_delimiter="__",
+        case_sensitive=False,
+        # Allow non-DOCMIND keys in `.env` (python-dotenv interop) without
+        # raising ValidationError on settings load.
+        extra="ignore",
+        populate_by_name=True,
+    )
 ```
 
 In `src/config/llm_factory.py` (backend selection):

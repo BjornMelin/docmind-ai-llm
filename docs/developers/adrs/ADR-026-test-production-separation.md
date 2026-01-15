@@ -15,7 +15,10 @@ References:
 
 ## Description
 
-Achieve clean test–prod separation using pytest fixtures to instantiate isolated Pydantic Settings; remove all test hooks from production config.
+Achieve clean test–prod separation by keeping production configuration pure and using pytest fixtures to:
+
+- construct isolated `DocMindSettings` instances when testing pure functions/services, and
+- reset the process-global `src.config.settings.settings` singleton **in-place** for tests that exercise UI/runtime code paths that import the singleton.
 
 ## Context
 
@@ -41,9 +44,13 @@ Production settings had test‑specific branches causing drift and complexity. W
 
 Use pytest fixtures for config; keep prod settings pure.
 
+Important implementation constraint:
+
+- Do **not** rebind `src.config.settings.settings` during tests. Many modules use the recommended import pattern `from src.config import settings`, which captures the singleton instance at import time; rebinding creates stale references and can make the suite order-dependent. Prefer in-place mutation/reset of the existing instance.
+
 ## High-Level Architecture
 
-pytest → fixtures → settings instance → tests
+pytest → fixtures → (isolated settings instance OR in-place singleton reset) → tests
 
 ## Related Requirements
 
@@ -74,9 +81,33 @@ pytest → fixtures → settings instance → tests
 
 ```python
 # tests/conftest.py (skeleton)
+from pathlib import Path
+
+import pytest
+from collections.abc import Iterator
+
+from src.config.settings import DocMindSettings
+
 @pytest.fixture
-def app_settings():
-    return make_settings(env={"DOCMIND_DEBUG": "true"})
+def app_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)  # avoid reading a developer .env file
+    monkeypatch.setenv("DOCMIND_LLM_BACKEND", "ollama")
+    return DocMindSettings()
+
+
+@pytest.fixture
+def reset_global_settings() -> Iterator[None]:
+    import importlib
+
+    def _reset_in_place() -> None:
+        settings_mod = importlib.import_module("src.config.settings")
+        current = settings_mod.settings
+        fresh = settings_mod.DocMindSettings(_env_file=None)
+        settings_mod.apply_settings_in_place(current, fresh)
+
+    _reset_in_place()
+    yield
+    _reset_in_place()
 ```
 
 ## Testing
@@ -87,16 +118,24 @@ def app_settings():
 ```python
 @pytest.mark.unit
 def test_settings_isolation(app_settings):
-    assert app_settings.debug is True
+    assert app_settings.llm_backend == "ollama"
+
+
+@pytest.mark.integration
+def test_ui_with_global_settings(
+    reset_global_settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test that global-singleton settings are reset between tests."""
+    import importlib
+
+    monkeypatch.setenv("DOCMIND_LLM_BACKEND", "openai")
+    settings_mod = importlib.import_module("src.config.settings")
+    settings_mod.bootstrap_settings(force=True)
+    assert settings_mod.settings.llm_backend == "openai"
+    # reset_global_settings fixture automatically resets on teardown
 ```
 
 ## Consequences
-
-### Configuration
-
-```env
-DOCMIND_TEST__DEBUG=true
-```
 
 ### Positive Outcomes
 
