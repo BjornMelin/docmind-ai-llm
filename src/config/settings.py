@@ -20,6 +20,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    SecretStr,
     computed_field,
     field_validator,
     model_validator,
@@ -34,6 +35,7 @@ SETTINGS_MODEL_CONFIG = SettingsConfigDict(
     env_nested_delimiter="__",
     case_sensitive=False,
     extra="ignore",
+    populate_by_name=True,
 )
 
 
@@ -707,7 +709,41 @@ class DocMindSettings(BaseSettings):
             "Global context window cap. If set, overrides nested vllm.context_window"
         ),
     )
-    ollama_base_url: str = Field(default="http://localhost:11434")
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+    )
+    ollama_api_key: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Optional Ollama Cloud API key (Bearer token). When set, it is used to "
+            "authenticate to https://ollama.com for cloud access and web search."
+        ),
+    )
+    ollama_enable_web_search: bool = Field(
+        default=False,
+        description=(
+            "Enable Ollama Cloud web_search/web_fetch tools (requires API key and "
+            "remote endpoints allowed)."
+        ),
+    )
+    ollama_embed_dimensions: int | None = Field(
+        default=None,
+        ge=1,
+        description="Optional /api/embed dimensions truncation for supported models.",
+    )
+    ollama_enable_logprobs: bool = Field(
+        default=False,
+        description="Enable token logprobs for Ollama chat/generate (default: off).",
+    )
+    ollama_top_logprobs: int = Field(
+        default=0,
+        ge=0,
+        le=20,
+        description=(
+            "Number of alternative tokens per position to include when logprobs are "
+            "enabled (0-20)."
+        ),
+    )
     lmstudio_base_url: str = Field(default="http://localhost:1234/v1")
     vllm_base_url: str | None = Field(
         default=None, description="vLLM server endpoint (OpenAI or native)"
