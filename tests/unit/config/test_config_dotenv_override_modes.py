@@ -29,8 +29,7 @@ def _restore_env(keys: list[str] | None, snapshot: dict[str, str]) -> None:
 def _reset_settings_module(mod) -> None:  # type: ignore[no-untyped-def]
     fresh = mod.DocMindSettings(_env_file=None)  # type: ignore[arg-type]
     mod.apply_settings_in_place(mod.settings, fresh)
-    mod._DOTENV_BOOTSTRAPPED = False  # type: ignore[attr-defined]
-    mod._DOTENV_PRIORITY_MODE = None  # type: ignore[attr-defined]
+    mod.reset_bootstrap_state()
 
 
 def test_dotenv_first_overrides_env_except_security_and_overlays_env(

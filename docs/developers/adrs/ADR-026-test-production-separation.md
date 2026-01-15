@@ -81,6 +81,8 @@ pytest → fixtures → (isolated settings instance OR in-place singleton reset)
 
 ```python
 # tests/conftest.py (skeleton)
+from collections.abc import Iterator
+
 @pytest.fixture
 def app_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.chdir(tmp_path)  # avoid reading a developer .env file
