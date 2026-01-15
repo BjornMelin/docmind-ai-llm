@@ -454,8 +454,44 @@ def run_web_search_agent(
                 )
                 continue
 
+            # Parse arguments - Ollama may return dict or JSON string
+            raw_args = call.function.arguments
+            if isinstance(raw_args, str):
+                try:
+                    parsed_args = json.loads(raw_args)
+                except json.JSONDecodeError as exc:
+                    logger.debug("Failed to parse tool arguments: %s", exc)
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_name": tool_name,
+                            "content": _error_payload(
+                                msg=f"Tool {tool_name} arguments invalid JSON",
+                                exc=exc,
+                            ),
+                        }
+                    )
+                    continue
+                if not isinstance(parsed_args, dict):
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_name": tool_name,
+                            "content": _error_payload(
+                                msg=f"Tool {tool_name} arguments must be object",
+                            ),
+                        }
+                    )
+                    continue
+                args = parsed_args
+            elif isinstance(raw_args, dict):
+                args = raw_args
+            else:
+                # Fallback for other mapping types
+                args = dict(raw_args) if raw_args else {}
+
             try:
-                result = fn(**dict(call.function.arguments))
+                result = fn(**args)
             except Exception as exc:  # pragma: no cover - defensive example loop
                 logger.debug(
                     "Ollama tool call failed: %s", exc.__class__.__name__, exc_info=True
