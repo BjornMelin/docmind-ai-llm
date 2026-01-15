@@ -86,6 +86,8 @@ Recommended env wiring in the `docmind` service:
   - `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` (default)
   - extend allowlist to include `ollama`:
     - `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST=["http://localhost","http://127.0.0.1","http://ollama"]`
+  - if `DOCMIND_OLLAMA_ENABLE_WEB_SEARCH=true`, add `https://ollama.com` to the
+    allowlist and explicitly enable remote endpoints
 
 Power users can still run vLLM/LM Studio externally and point DocMind at them (with allowlist rules), but compose does not bundle them.
 

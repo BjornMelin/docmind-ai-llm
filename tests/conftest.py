@@ -24,7 +24,12 @@ _REQUIRE_REAL_LLAMA = os.getenv("REQUIRE_REAL_LLAMA", "").lower() in {
 
 
 def _llama_available() -> bool:
-    return importlib.util.find_spec("llama_index.core") is not None
+    # `importlib.util.find_spec()` can raise `ValueError` when a test injects a
+    # stub module into `sys.modules` with `__spec__ = None`.
+    try:
+        return importlib.util.find_spec("llama_index.core") is not None
+    except (ImportError, ValueError):
+        return False
 
 
 def pytest_configure(config) -> None:  # type: ignore[no-untyped-def]
@@ -45,6 +50,30 @@ def pytest_runtest_setup(item) -> None:  # type: ignore[no-untyped-def]
             pytrace=False,
         )
     pytest.skip("llama_index.core not installed")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _streamlit_disable_repl_detection() -> Generator[None, None, None]:
+    """Avoid slow `inspect.stack()`-based REPL detection in Streamlit tests.
+
+    Streamlit's `env_util.is_repl()` can be surprisingly expensive in large
+    test suites because it inspects the stack and resolves filesystem paths.
+    AppTest runs Streamlit scripts directly, and the first element enqueue can
+    trigger this check. In our test suite, this can dominate `default_timeout`
+    budgets and create flakiness.
+    """
+    try:
+        from streamlit import env_util
+    except Exception:  # pragma: no cover - Streamlit may be missing in some envs
+        yield
+        return
+
+    mp = pytest.MonkeyPatch()
+    mp.setattr(env_util, "is_repl", lambda: False, raising=False)
+    try:
+        yield
+    finally:
+        mp.undo()
 
 
 @pytest.fixture(autouse=True)

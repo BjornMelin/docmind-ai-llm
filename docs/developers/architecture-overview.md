@@ -287,9 +287,16 @@ DocMind AI supports single-container and orchestrated deployments (Qdrant + App)
 QDRANT_HOST=localhost
 QDRANT_PORT=6333
 MODEL_CACHE_DIR=./models
-OLLAMA_HOST=http://localhost:11434
-ENABLE_GRAPHRAG=false
-ENABLE_DSPY=false
+# Preferred (DocMind config):
+DOCMIND_OLLAMA_BASE_URL=http://localhost:11434
+# Optional (Ollama Cloud / web search):
+DOCMIND_OLLAMA_API_KEY=
+DOCMIND_OLLAMA_ENABLE_WEB_SEARCH=false
+DOCMIND_OLLAMA_EMBED_DIMENSIONS=
+DOCMIND_OLLAMA_ENABLE_LOGPROBS=false
+DOCMIND_OLLAMA_TOP_LOGPROBS=0
+DOCMIND_ENABLE_GRAPHRAG=false
+DOCMIND_ENABLE_DSPY_OPTIMIZATION=false
 ```
 
 ## Integration Points

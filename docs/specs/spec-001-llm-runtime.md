@@ -11,7 +11,7 @@ related_requirements:
   - FR-LLM-003: Structured outputs SHALL be supported when provider allows.
   - NFR-PERF-001: p50 token throughput ≥ 20 tok/s on mid-GPU.
   - NFR-PORT-001: Windows, macOS, Linux support.
-related_adrs: ["ADR-001","ADR-004","ADR-009","ADR-010","ADR-024"]
+related_adrs: ["ADR-001","ADR-004","ADR-009","ADR-010","ADR-024","ADR-059"]
 ---
 
 
@@ -25,6 +25,13 @@ Provide a single, definitive LLM runtime with **four providers** selectable in t
   - `llama_index.llms.llama_cpp.LlamaCPP` for GGUF local models.
   - `llama_index.llms.openai_like.OpenAILike` for **vLLM**/**LM Studio**/**llama.cpp server** (OpenAI-compatible endpoints).
   - `llama_index.llms.ollama.Ollama` for **Ollama**.
+- For Ollama-native `/api/*` capabilities, use the official Ollama SDK helpers defined in `src/config/ollama_client.py` and follow SPEC-043. Ollama-native capabilities include:
+  - Structured outputs via the `format` parameter
+  - Thinking via the `think` parameter
+  - Tool-calling support
+  - Logprobs for token probabilities
+  - Embed `dimensions` for truncation
+  - Optional cloud web tools (web_search/web_fetch)
 - Central factory: `src/config/llm_factory.py`.
 - UI wiring: `src/pages/04_settings.py` controls provider, model, base URLs, and advanced knobs.
 - Respect environment via `src/config/settings.py` and surfacing in UI.
@@ -66,6 +73,7 @@ from src.config.llm_factory import build_llm
 ## Determinism & Structured Outputs
 
 - When provider is **vLLM** and server supports **xgrammar/guided_json**, enable schema-guided decoding in agent layer (see SPEC-007).
+- When using Ollama-native APIs, prefer Ollama’s `format` parameter for structured outputs (SPEC-043) and validate with Pydantic where applicable.
 
 ## Performance Budgets
 

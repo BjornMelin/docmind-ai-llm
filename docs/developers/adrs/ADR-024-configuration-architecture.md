@@ -371,6 +371,11 @@ DOCMIND_AGENTS__ENABLE_PARALLEL_TOOL_EXECUTION=true
 # LLM / vLLM (ADR-004/010)
 DOCMIND_VLLM__MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8
 DOCMIND_OLLAMA_BASE_URL=http://localhost:11434
+DOCMIND_OLLAMA_API_KEY= # optional; required for Ollama Cloud
+DOCMIND_OLLAMA_ENABLE_WEB_SEARCH=false
+DOCMIND_OLLAMA_EMBED_DIMENSIONS=
+DOCMIND_OLLAMA_ENABLE_LOGPROBS=false
+DOCMIND_OLLAMA_TOP_LOGPROBS=0
 DOCMIND_LMSTUDIO_BASE_URL=http://localhost:1234/v1
 DOCMIND_VLLM__VLLM_BASE_URL=http://localhost:8000
 DOCMIND_VLLM__TEMPERATURE=0.1
@@ -378,6 +383,15 @@ DOCMIND_VLLM__MAX_TOKENS=2048
 DOCMIND_VLLM__CONTEXT_WINDOW=131072
 DOCMIND_LLM_REQUEST_TIMEOUT_SECONDS=120
 DOCMIND_LLM_STREAMING_ENABLED=true
+
+# Note: DocMind uses DOCMIND_* as the canonical app config surface. Provider/daemon
+# env vars (e.g., OLLAMA_*) are intentionally not used for app config.
+
+# Security / remote endpoint policy (SPEC-011)
+# Required for Ollama Cloud usage (e.g., web_search/web_fetch) when enabled.
+DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false
+# Add https://ollama.com to the allowlist before enabling cloud access.
+# DOCMIND_SECURITY__ENDPOINT_ALLOWLIST=["http://localhost","http://127.0.0.1","https://ollama.com"]
 
 # Embeddings (ADR-002)
 DOCMIND_EMBEDDING__MODEL_NAME=BAAI/bge-m3

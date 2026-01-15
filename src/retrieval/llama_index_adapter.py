@@ -65,7 +65,13 @@ class LlamaIndexAdapterProtocol(Protocol):
 
 def llama_index_available() -> bool:
     """Return ``True`` when the optional ``llama_index.core`` package exists."""
-    return util.find_spec("llama_index.core") is not None
+    # `importlib.util.find_spec()` can raise `ValueError` when a test injects a
+    # stub module into `sys.modules` with `__spec__ = None` (a common pattern
+    # when mocking optional dependencies). Treat that as "not available".
+    try:
+        return util.find_spec("llama_index.core") is not None
+    except (ImportError, ValueError):
+        return False
 
 
 _ROUTER_ADAPTER_STATE: dict[str, LlamaIndexAdapterProtocol | None] = {"adapter": None}

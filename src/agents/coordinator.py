@@ -393,9 +393,8 @@ class MultiAgentCoordinator:
                 # langgraph-supervisor currently relies on the deprecated
                 # `langgraph.prebuilt.create_react_agent`; suppress that warning
                 # until an upstream release removes the call (latest as of 0.0.31).
-                # TODO: Track upstream langgraph-supervisor release; remove suppression
-                # when create_react_agent move is fixed
-                # (target: langgraph-supervisor >0.0.31).
+                # Track upstream langgraph-supervisor release; remove this suppression
+                # once the create_react_agent deprecation is eliminated upstream.
                 warnings.filterwarnings(
                     "ignore",
                     message=r"create_react_agent has been moved.*",

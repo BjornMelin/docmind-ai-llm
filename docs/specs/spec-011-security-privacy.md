@@ -9,7 +9,7 @@ related_requirements:
   - NFR-SEC-001: Network egress SHALL be off by default.
   - NFR-SEC-002: Providers and endpoints SHALL be allowlisted.
   - NFR-COMP-001: Licenses SHALL be documented for embedded models.
-related_adrs: ["ADR-031","ADR-024"]
+related_adrs: ["ADR-031","ADR-024","ADR-059"]
 ---
 
 
@@ -56,6 +56,15 @@ The system MAY encrypt page images at rest using AES‑GCM when enabled.
 - Default posture MUST be offline‑first; remote endpoints disabled unless explicitly allowlisted.
 - LM Studio endpoints MUST end with `/v1`.
 - Add tests to reject non‑allowlisted URLs when policy is strict.
+
+## Ollama Cloud & Web Tools (Optional)
+
+- Ollama Cloud access (including `web_search` / `web_fetch`) is a **remote endpoint** and MUST remain disabled unless explicitly enabled and allowlisted.
+- Enabling web tools requires:
+  - `DOCMIND_OLLAMA_ENABLE_WEB_SEARCH=true`
+  - An API key via `DOCMIND_OLLAMA_API_KEY`
+  - Remote endpoints enabled/allowlisted (`DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true` and allowlist includes `https://ollama.com`)
+- Secrets (API keys) MUST NOT be logged.
 
 ## Secrets Redaction & Telemetry
 

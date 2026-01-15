@@ -197,7 +197,7 @@ DOCMIND_PROCESSING__ENCRYPT_PAGE_IMAGES=false
 ### 1. Configuration Validation
 
 ```bash
-# Test configuration loads and resolves aliases correctly
+# Test configuration loads correctly
 python3 -c "
 from src.config import settings
 print(f'✅ App: {settings.app_name} v{settings.app_version}')

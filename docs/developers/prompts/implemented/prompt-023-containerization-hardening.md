@@ -149,7 +149,7 @@ You must keep changes minimal, library-first, and maintainable.
 - Docker CMD/ENTRYPOINT is valid (no shell in JSON array bug).
 - Container runs as non-root user.
 - `.dockerignore` exists and excludes `.env` and large dev artifacts.
-- `docker-compose.yml` uses canonical `DOCMIND_*` variables (no legacy names like `OLLAMA_BASE_URL`).
+- `docker-compose.yml` uses canonical `DOCMIND_*` variables (no provider/legacy env var names).
 - `docker-compose.yml` provides a `gpu` profile that runs **Ollama** with GPU access on an internal network (no host port publish by default), and DocMind connects via `DOCMIND_OLLAMA_BASE_URL=http://ollama:11434` with `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST` including `http://ollama`.
 - `docker-compose.prod.yml` provides `read_only: true` and `tmpfs` for `/tmp`.
 - `docs/specs/traceability.md` includes NFR-PORT-003 row (Planned → Implemented).

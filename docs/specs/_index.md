@@ -37,4 +37,5 @@
 - [spec-040-agent-deadline-propagation-and-router-injection.md](./spec-040-agent-deadline-propagation-and-router-injection.md)
 - [spec-041-chat-persistence-agentic-memory-langgraph-sqlite.md](./spec-041-chat-persistence-agentic-memory-langgraph-sqlite.md)
 - [spec-042-final-multimodal-pipeline-and-persistence.md](./spec-042-final-multimodal-pipeline-and-persistence.md)
+- [spec-043-ollama-native-capabilities.md](./spec-043-ollama-native-capabilities.md)
 - [superseded/](./superseded/index.md)

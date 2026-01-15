@@ -82,6 +82,8 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
   Scope: Template system, response shaping and configuration
 - **[ADR-004 — Local-First LLM Strategy](ADR-004-local-first-llm-strategy.md)**<br>
   Scope: Local-first backends and performance principles
+- **[ADR-059 — Ollama Native Capabilities and Cloud Gating](ADR-059-ollama-native-capabilities-and-cloud-gating.md)**<br>
+  Scope: Ollama-native `/api/*` capabilities, cloud web tools gating, and explicit streaming semantics
 
 ## Export & Output
 
@@ -119,6 +121,7 @@ Latest additions:
 - **ADR-040 (Accepted)** — Model predownload CLI
 - **ADR-041–ADR-053 (Proposed)** — Release Readiness work packages
 - **ADR-055–ADR-056 (Proposed)** — Ops metadata + agent deadline propagation work packages
+- **ADR-059 (Accepted)** — Ollama native capabilities + cloud gating
 
 ## Release Readiness (2026-01-09)
 
