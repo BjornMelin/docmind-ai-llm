@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from src.agents.registry import DefaultToolRegistry
 from src.agents.registry import tool_registry as tr
+from src.config.settings import DocMindSettings
 
 
 def test_build_tools_data_merges_overrides():
@@ -76,3 +77,29 @@ def test_reranking_fields_fail_closed_when_retrieval_missing() -> None:
     data = reg.build_tools_data()
     assert data["reranker_normalize_scores"] is False
     assert data["reranking_top_k"] == 0
+
+
+def _tool_names(tools) -> set[str]:
+    names = set()
+    for tool in tools:
+        name = getattr(tool, "name", None) or getattr(tool, "__name__", "")
+        if name:
+            names.add(str(name))
+    return names
+
+
+def test_registry_includes_ollama_web_tools_when_enabled() -> None:
+    cfg = DocMindSettings(ollama_enable_web_search=True, ollama_api_key="key-123")
+    cfg.security.allow_remote_endpoints = True
+    registry = DefaultToolRegistry(app_settings=cfg)
+    names = _tool_names(registry.get_retrieval_tools())
+    assert "ollama_web_search" in names
+    assert "ollama_web_fetch" in names
+
+
+def test_registry_excludes_ollama_web_tools_when_disabled() -> None:
+    cfg = DocMindSettings(ollama_enable_web_search=False)
+    registry = DefaultToolRegistry(app_settings=cfg)
+    names = _tool_names(registry.get_retrieval_tools())
+    assert "ollama_web_search" not in names
+    assert "ollama_web_fetch" not in names

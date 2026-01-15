@@ -102,6 +102,24 @@ def test_settings_apply_runtime_calls_initialize_integrations(
     # behavior in environments with additional optional dependencies (CI llama job).
     calls = _install_integrations_stub(monkeypatch)
 
+    # Change a few advanced Ollama settings and ensure Apply runtime propagates
+    # them immediately (without Save + reload).
+    for widget in app.text_input:
+        if "Ollama API key" in str(widget):
+            widget.set_value("key-apply-123").run()
+
+    for widget in app.checkbox:
+        if "Enable Ollama web search tools" in str(widget):
+            widget.set_value(True).run()
+        if "Enable Ollama logprobs" in str(widget):
+            widget.set_value(True).run()
+
+    for widget in app.number_input:
+        if "Embed dimensions" in str(widget):
+            widget.set_value(384).run()
+        if "Top logprobs" in str(widget):
+            widget.set_value(2).run()
+
     buttons = [b for b in app.button if getattr(b, "label", "") == "Apply runtime"]
     assert buttons, "Apply runtime button not found"
     buttons[0].click().run()
@@ -111,6 +129,13 @@ def test_settings_apply_runtime_calls_initialize_integrations(
     assert calls == [
         {"force_llm": True, "force_embed": False, "backend": _settings.llm_backend}
     ], f"Unexpected initialize_integrations calls: {calls}"
+
+    assert _settings.ollama_api_key is not None
+    assert _settings.ollama_api_key.get_secret_value() == "key-apply-123"
+    assert _settings.ollama_enable_web_search is True
+    assert _settings.ollama_embed_dimensions == 384
+    assert _settings.ollama_enable_logprobs is True
+    assert _settings.ollama_top_logprobs == 2
 
 
 def test_settings_save_persists_env(settings_app_test: AppTest, tmp_path: Path) -> None:
@@ -138,6 +163,22 @@ def test_settings_save_persists_env(settings_app_test: AppTest, tmp_path: Path) 
     if lmstudio_inputs := [w for w in text_inputs if "LM Studio base URL" in str(w)]:
         lmstudio_inputs[0].set_value("http://localhost:1234/v1").run()
 
+    # Ollama advanced settings
+    if api_key_inputs := [w for w in text_inputs if "Ollama API key" in str(w)]:
+        api_key_inputs[0].set_value("key-123").run()
+
+    for checkbox in app.checkbox:
+        if "Enable Ollama logprobs" in str(checkbox):
+            checkbox.set_value(True).run()
+        if "Enable Ollama web search tools" in str(checkbox):
+            checkbox.set_value(True).run()
+
+    for num_input in app.number_input:
+        if "Embed dimensions" in str(num_input):
+            num_input.set_value(384).run()
+        if "Top logprobs" in str(num_input):
+            num_input.set_value(2).run()
+
     # Click Save
     save_buttons = [b for b in app.button if getattr(b, "label", "") == "Save"]
     assert save_buttons, "Save button not found"
@@ -151,6 +192,11 @@ def test_settings_save_persists_env(settings_app_test: AppTest, tmp_path: Path) 
     values = dotenv_values(env_file)
     assert values.get("DOCMIND_MODEL") == "Hermes-2-Pro-Llama-3-8B"
     assert values.get("DOCMIND_LMSTUDIO_BASE_URL") == "http://localhost:1234/v1"
+    assert values.get("DOCMIND_OLLAMA_API_KEY") == "key-123"
+    assert values.get("DOCMIND_OLLAMA_ENABLE_WEB_SEARCH") == "true"
+    assert values.get("DOCMIND_OLLAMA_EMBED_DIMENSIONS") == "384"
+    assert values.get("DOCMIND_OLLAMA_ENABLE_LOGPROBS") == "true"
+    assert values.get("DOCMIND_OLLAMA_TOP_LOGPROBS") == "2"
 
 
 def test_settings_save_normalizes_lmstudio_url(
@@ -223,6 +269,27 @@ def test_settings_allow_remote_allows_remote_urls(settings_app_test: AppTest) ->
     assert apply_buttons[0].disabled is False
     assert save_buttons[0].disabled is False
     assert not list(app.error)
+
+
+def test_settings_warns_when_ollama_allowlist_missing(
+    settings_app_test: AppTest,
+) -> None:
+    """Enabling Ollama web tools should warn when allowlist lacks ollama.com."""
+    app = settings_app_test.run()
+    assert not app.exception
+
+    allow_remote = [w for w in app.checkbox if "Allow remote endpoints" in str(w)]
+    assert allow_remote, "Allow remote endpoints checkbox not found"
+    allow_remote[0].set_value(True).run()
+
+    web_tool_checks = [
+        w for w in app.checkbox if "Enable Ollama web search tools" in str(w)
+    ]
+    assert web_tool_checks, "Ollama web tools checkbox not found"
+    web_tool_checks[0].set_value(True).run()
+
+    warnings = [str(getattr(w, "value", "")) for w in app.warning]
+    assert any("ollama.com" in msg for msg in warnings), warnings
 
 
 def _ensure_gguf_file() -> Path:
