@@ -97,9 +97,8 @@ def reset_global_settings() -> Iterator[None]:
     def _reset_in_place() -> None:
         settings_mod = importlib.import_module("src.config.settings")
         current = settings_mod.settings
-        fresh = settings_mod.DocMindSettings()
-        for field in settings_mod.DocMindSettings.model_fields:
-            setattr(current, field, getattr(fresh, field))
+        fresh = settings_mod.DocMindSettings(_env_file=None)  # type: ignore[arg-type]
+        settings_mod.apply_settings_in_place(current, fresh)
 
     _reset_in_place()
     yield
@@ -114,7 +113,7 @@ def reset_global_settings() -> Iterator[None]:
 ```python
 @pytest.mark.unit
 def test_settings_isolation(app_settings):
-    assert app_settings.debug is True
+    assert app_settings.llm_backend == "ollama"
 ```
 
 ## Consequences
