@@ -164,24 +164,25 @@ def test_settings_save_persists_env(
     if api_key_inputs := [w for w in text_inputs if "Ollama API key" in str(w)]:
         api_key_inputs[0].set_value("key-123").run()
 
-    checkboxes = list(app.checkbox)
-    allow_remote = [w for w in checkboxes if "Allow remote endpoints" in str(w)]
+    allow_remote = [w for w in app.checkbox if "Allow remote endpoints" in str(w)]
     assert allow_remote, "Allow remote endpoints checkbox not found"
     allow_remote[0].set_value(True).run()
 
-    web_tools = [w for w in checkboxes if "Enable Ollama web search tools" in str(w)]
+    web_tools = [w for w in app.checkbox if "Enable Ollama web search tools" in str(w)]
     assert web_tools, "Ollama web tools checkbox not found"
     web_tools[0].set_value(True).run()
 
-    logprobs = [w for w in checkboxes if "Enable Ollama logprobs" in str(w)]
+    logprobs = [w for w in app.checkbox if "Enable Ollama logprobs" in str(w)]
     if logprobs:
         logprobs[0].set_value(True).run()
 
-    for num_input in app.number_input:
-        if "Embed dimensions" in str(num_input):
-            num_input.set_value(384).run()
-        if "Top logprobs" in str(num_input):
-            num_input.set_value(2).run()
+    embed_dims = [w for w in app.number_input if "Embed dimensions" in str(w)]
+    assert embed_dims, "Embed dimensions input not found"
+    embed_dims[0].set_value(384).run()
+
+    top_logprobs = [w for w in app.number_input if "Top logprobs" in str(w)]
+    assert top_logprobs, "Top logprobs input not found"
+    top_logprobs[0].set_value(2).run()
 
     # Click Save
     save_buttons = [b for b in app.button if getattr(b, "label", "") == "Save"]
