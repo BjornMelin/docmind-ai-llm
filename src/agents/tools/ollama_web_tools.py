@@ -149,6 +149,10 @@ def _json_with_limit(value: Any, *, max_chars: int) -> str:
     Returns:
         A JSON string that fits within the character limit.
     """
+    minimal_token = _json_dumps("")
+    if max_chars <= 0 or max_chars < len(minimal_token):
+        return minimal_token
+
     jsonable = _to_jsonable(value)
     payload = _json_dumps(jsonable)
     if len(payload) <= max_chars:

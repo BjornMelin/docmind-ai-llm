@@ -97,3 +97,15 @@ def test_tool_payload_truncation_keeps_valid_json(
     assert len(payload) <= mod._MAX_TOOL_RESULT_CHARS
     data = json.loads(payload)
     assert isinstance(data, dict)
+
+
+@pytest.mark.unit
+def test_json_with_limit_tiny_max_chars() -> None:
+    """Test _json_with_limit handles tiny max_chars with early floor return."""
+    val = "some long string"
+    # Minimal token '""' has length 2.
+    assert mod._json_with_limit(val, max_chars=0) == '""'
+    assert mod._json_with_limit(val, max_chars=-1) == '""'
+    assert mod._json_with_limit(val, max_chars=1) == '""'
+    # For exactly 2, it still returns minimal because search finds mid=0 -> "" -> '""'
+    assert mod._json_with_limit(val, max_chars=2) == '""'
