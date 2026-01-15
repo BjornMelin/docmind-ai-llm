@@ -293,8 +293,11 @@ def test_settings_warns_when_ollama_allowlist_missing(
     web_tool_checks[0].set_value(True).run()
 
     warnings = [str(getattr(w, "value", "")) for w in app.warning]
-    expected_warning = "Ollama web tools require `https://ollama.com` in"
-    assert any(expected_warning in msg for msg in warnings), warnings
+    expected_warning = (
+        "Ollama web tools require `https://ollama.com` in "
+        "`DOCMIND_SECURITY__ENDPOINT_ALLOWLIST`."
+    )
+    assert any(msg.strip() == expected_warning for msg in warnings), warnings
 
 
 def _ensure_gguf_file() -> Path:
