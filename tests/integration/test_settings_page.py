@@ -366,7 +366,14 @@ def reset_settings_after_test() -> Iterator[None]:
 
     def _reset_settings() -> None:
         settings_mod = importlib.import_module("src.config.settings")
-        settings_mod.settings = settings_mod.DocMindSettings()  # type: ignore[attr-defined]
+        current = settings_mod.settings
+        fresh = settings_mod.DocMindSettings(_env_file=None)  # type: ignore[arg-type,attr-defined]
+        if not isinstance(current, settings_mod.DocMindSettings):  # type: ignore[attr-defined]
+            raise TypeError(
+                "src.config.settings.settings was unexpectedly replaced with a "
+                f"{type(current)!r}; expected DocMindSettings"
+            )
+        settings_mod.apply_settings_in_place(current, fresh)  # type: ignore[attr-defined]
 
     # Setup: ensure clean state before test
     _reset_settings()

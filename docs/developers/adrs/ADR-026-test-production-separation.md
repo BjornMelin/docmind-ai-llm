@@ -15,7 +15,10 @@ References:
 
 ## Description
 
-Achieve clean test–prod separation using pytest fixtures to instantiate isolated Pydantic Settings; remove all test hooks from production config.
+Achieve clean test–prod separation by keeping production configuration pure and using pytest fixtures to:
+
+- construct isolated `DocMindSettings` instances when testing pure functions/services, and
+- reset the process-global `src.config.settings.settings` singleton **in-place** for tests that exercise UI/runtime code paths that import the singleton.
 
 ## Context
 
@@ -41,9 +44,13 @@ Production settings had test‑specific branches causing drift and complexity. W
 
 Use pytest fixtures for config; keep prod settings pure.
 
+Important implementation constraint:
+
+- Do **not** rebind `src.config.settings.settings` during tests. Many modules use the recommended import pattern `from src.config import settings`, which captures the singleton instance at import time; rebinding creates stale references and can make the suite order-dependent. Prefer in-place mutation/reset of the existing instance.
+
 ## High-Level Architecture
 
-pytest → fixtures → settings instance → tests
+pytest → fixtures → (isolated settings instance OR in-place singleton reset) → tests
 
 ## Related Requirements
 
@@ -76,7 +83,25 @@ pytest → fixtures → settings instance → tests
 # tests/conftest.py (skeleton)
 @pytest.fixture
 def app_settings():
-    return make_settings(env={"DOCMIND_DEBUG": "true"})
+    monkeypatch.chdir(tmp_path)  # avoid reading a developer .env file
+    monkeypatch.setenv("DOCMIND_LLM_BACKEND", "ollama")
+    return DocMindSettings()
+
+
+@pytest.fixture
+def reset_global_settings() -> Iterator[None]:
+    import importlib
+
+    def _reset_in_place() -> None:
+        settings_mod = importlib.import_module("src.config.settings")
+        current = settings_mod.settings
+        fresh = settings_mod.DocMindSettings()
+        for field in settings_mod.DocMindSettings.model_fields:
+            setattr(current, field, getattr(fresh, field))
+
+    _reset_in_place()
+    yield
+    _reset_in_place()
 ```
 
 ## Testing
@@ -91,12 +116,6 @@ def test_settings_isolation(app_settings):
 ```
 
 ## Consequences
-
-### Configuration
-
-```env
-DOCMIND_TEST__DEBUG=true
-```
 
 ### Positive Outcomes
 

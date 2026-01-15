@@ -34,6 +34,11 @@ In `src/config/settings.py`:
    - `DOCMIND_TELEMETRY_ROTATE_BYTES`
    - plus a configurable path defaulting to `./logs/telemetry.jsonl`
 
+   Compatibility note:
+   - These env vars are *flat* (not nested `__` keys). Prefer either top-level
+     `telemetry_*` fields (e.g., `telemetry_disabled`) or explicit aliases so
+     we do not introduce a parallel `DOCMIND_TELEMETRY__*` namespace.
+
 2. Add `ImageEncryptionConfig` mapping existing env variables:
 
    - `DOCMIND_IMG_AES_KEY_BASE64`
@@ -60,7 +65,11 @@ Replace `os.getenv` reads with `settings.*` lookups in:
 ### Backward compatibility
 
 - Existing env var names remain valid.
-- `.env` loading remains handled by `DocMindSettings` (do not add `load_dotenv()` elsewhere).
+- Dotenv loading remains handled by Pydantic Settings (do not add `load_dotenv()` elsewhere). In DocMind, `.env` is loaded explicitly at startup via `bootstrap_settings()` (or by passing `_env_file=...`) to avoid import-time filesystem reads and to keep tests hermetic.
+- Settings source precedence follows pydantic-settings defaults (init kwargs > env vars > `.env` (when loaded) > secrets > defaults); `.env` never overrides exported env vars.
+- Optional local-dev override modes (explicitly gated; not for production):
+  - `DOCMIND_CONFIG__DOTENV_PRIORITY=dotenv_first` can be used to make repo `.env` override exported env vars **for DocMind settings only**, with a safety guard that keeps `security.*` env-first.
+  - `DOCMIND_CONFIG__ENV_MASK_KEYS` / `DOCMIND_CONFIG__ENV_OVERLAY` provide an allowlist mechanism to prevent accidental usage of global machine env vars by dependencies and to expose compatible env vars sourced from validated settings.
 
 ## Testing strategy
 

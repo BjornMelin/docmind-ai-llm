@@ -63,6 +63,7 @@ We will:
 3. Persist `.env` updates using `python-dotenv` `set_key` / `unset_key`:
    - Use `quote_mode="auto"` to preserve readability.
    - Use `unset_key` for empty values where appropriate.
+   - Note: `.env` is intentionally lower precedence than already-exported environment variables (Pydantic Settings default). If an env var like `DOCMIND_LMSTUDIO_BASE_URL` is exported in the shell/process, it will override the `.env` value on the next load.
 
 ## High-Level Architecture
 
@@ -90,6 +91,7 @@ flowchart TD
   - invalid URL blocks Save/Apply and renders errors
   - valid change persists to `.env` and runtime apply binds LlamaIndex Settings.llm
   - provider badge renders without using `unsafe_allow_html=True`
+  - global settings are reset/mutated in-place between tests (avoid rebinding `src.config.settings.settings` to keep the suite order-independent)
 - Cross-reference SPEC-022 for the detailed test matrix and separation of unit vs. integration coverage.
 
 ## Consequences

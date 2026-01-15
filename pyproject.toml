@@ -16,7 +16,7 @@ classifiers = [
 ]
 dependencies = [
     # Application & Configuration (core runtime utilities)
-    "python-dotenv==1.1.1",
+    "python-dotenv==1.2.1",
     "loguru>=0.7.3,<1.0.0",
     "tenacity>=9.1.2,<10.0.0",
     "pydantic==2.12.5",

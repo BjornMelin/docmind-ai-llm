@@ -153,6 +153,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 - `src/ui/components/provider_badge.py` contains **no** `unsafe_allow_html=True` usage.
 - Settings Save/Apply validate a candidate settings payload before mutating global `settings` or writing `.env`.
+- Apply runtime updates the process-global settings singleton in-place (do not rebind `src.config.settings.settings`) so imports using `from src.config import settings` remain consistent.
 - `.env` persistence uses `python-dotenv` (`set_key`/`unset_key`) and is covered by tests.
 - AppTest/pytest coverage verifies invalid settings disable actions and valid settings apply/persist successfully.
 - `docs/specs/traceability.md` updated (planned → implemented row for FR-021).
@@ -197,6 +198,8 @@ Must pass:
 
 - Validate using `DocMindSettings` before persistence.
 - Do not scatter `os.getenv` in UI code.
+- Do not rebind `src.config.settings.settings` (mutate/apply in-place).
+- Remember Pydantic Settings precedence: env vars override `.env`. Saving `.env` does not affect values already exported into the process environment.
 
 ---
 

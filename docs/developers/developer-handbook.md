@@ -305,71 +305,27 @@ This section provides comprehensive guidance for implementing clean configuratio
 #### Production Settings Structure
 
 ```python
-from pathlib import Path
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import SettingsConfigDict
 
-class DocMindSettings(BaseSettings):
-    """Clean production configuration without test contamination."""
-    
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_prefix="DOCMIND_",
-        env_nested_delimiter="__",
-        case_sensitive=False,
-        extra="forbid",
-    )
+# src/config/settings.py (authoritative)
+SETTINGS_MODEL_CONFIG = SettingsConfigDict(
+    # Dotenv is loaded explicitly at startup via `bootstrap_settings()` to avoid
+    # import-time filesystem reads and to keep tests hermetic by default.
+    env_file=None,
+    env_prefix="DOCMIND_",
+    env_nested_delimiter="__",
+    case_sensitive=False,
+    # Allow non-DOCMIND keys in `.env` without failing settings load.
+    extra="ignore",
+    populate_by_name=True,
+)
 
-    # Core Application
-    app_name: str = Field(default="DocMind AI")
-    app_version: str = Field(default="2.0.0")
-    debug: bool = Field(default=False)
-    log_level: str = Field(default="INFO")
+# Recommended import pattern everywhere in the codebase:
+from src.config import settings
+from src.config import bootstrap_settings
 
-    # Agent Configuration (ADR-compliant)
-    enable_multi_agent: bool = Field(default=True)
-    agent_decision_timeout: int = Field(default=200, ge=10, le=1000)  # ADR-024: 200ms
-    max_agent_retries: int = Field(default=2, ge=0, le=5)
-    enable_fallback_rag: bool = Field(default=True)
-    max_concurrent_agents: int = Field(default=3, ge=1, le=10)
-
-    # LLM Configuration (ADR-004 compliant)
-    model_name: str = Field(default="Qwen/Qwen3-4B-Instruct-2507")
-    llm_backend: str = Field(default="vllm")
-    llm_base_url: str = Field(default="http://localhost:11434")
-    llm_temperature: float = Field(default=0.1, ge=0.0, le=2.0)
-    
-    # Context Management
-    context_window_size: int = Field(default=131072, ge=8192, le=200000)
-    enable_conversation_memory: bool = Field(default=True)
-
-    # Hardware and Performance
-    enable_gpu_acceleration: bool = Field(default=True)
-    max_vram_gb: float = Field(default=14.0, ge=1.0, le=80.0)
-    
-    # BGE-M3 Configuration (ADR-002 compliant)
-    model_name: str = Field(default="BAAI/bge-m3")  # In EmbeddingConfig
-    bge_m3_embedding_dim: int = Field(default=1024, ge=512, le=4096)
-    bge_m3_max_length: int = Field(default=8192, ge=512, le=16384)
-    
-    # File System Paths
-    data_dir: Path = Field(default=Path("./data"))
-    cache_dir: Path = Field(default=Path("./cache"))
-    sqlite_db_path: Path = Field(default=Path("./data/docmind.db"))
-    log_file: Path = Field(default=Path("./logs/docmind.log"))
-
-    def model_post_init(self, __context: Any) -> None:
-        """Create directories and validate configuration."""
-        # Directory creation
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Validation
-        if self.enable_gpu_acceleration and not torch.cuda.is_available():
-            logger.warning("GPU acceleration requested but CUDA not available")
-
-# Global settings instance
-settings = DocMindSettings()
+# Entrypoints should opt into dotenv exactly once:
+bootstrap_settings()
 ```
 
 #### Key Anti-Patterns to Avoid
@@ -408,88 +364,40 @@ def _sync_nested_models(self) -> None:
 
 #### Test Settings Hierarchy
 
-Use BaseSettings subclassing for clean test configuration:
+Prefer fixtures that:
+
+- run tests in a temp working directory (so a developer `.env` is not accidentally loaded), and
+- create isolated `DocMindSettings()` instances for pure code paths, or reset the global singleton in-place for UI/runtime code paths.
 
 ```python
-# tests/fixtures/test_settings.py
-from src.config.settings import DocMindSettings
-from pydantic import Field
+# tests/conftest.py (patterns)
+import importlib
+from collections.abc import Iterator
 
-class TestDocMindSettings(DocMindSettings):
-    """Test-specific configuration with overrides for fast testing."""
-    
-    model_config = SettingsConfigDict(
-        env_file=None,  # Don't load .env in tests
-        env_prefix="DOCMIND_TEST_",
-        validate_default=True
-    )
-    
-    # Test-optimized defaults
-    debug: bool = Field(default=True)
-    log_level: str = Field(default="DEBUG")
-    
-    # Disable expensive operations for unit tests
-    enable_gpu_acceleration: bool = Field(default=False)
-    enable_dspy_optimization: bool = Field(default=False) 
-    enable_performance_logging: bool = Field(default=False)
-    
-    # Smaller context for faster tests
-    context_window_size: int = Field(default=1024, ge=512, le=8192)
-    
-    # Test-specific timeout (faster than production)
-    agent_decision_timeout: int = Field(default=100, ge=10, le=1000)
-
-class IntegrationTestSettings(TestDocMindSettings):
-    """Integration test settings with moderate performance requirements."""
-    
-    enable_gpu_acceleration: bool = Field(default=True) 
-    context_window_size: int = Field(default=4096, ge=1024, le=32768)
-    agent_decision_timeout: int = Field(default=150, ge=50, le=500)
-
-class SystemTestSettings(DocMindSettings):
-    """System test settings - uses production defaults."""
-    pass  # Inherits all production settings
-```
-
-#### Pytest Fixture Patterns
-
-```python
-# tests/conftest.py
 import pytest
-from tests.fixtures.test_settings import TestDocMindSettings, IntegrationTestSettings
 
-@pytest.fixture(scope="session")
-def test_settings(tmp_path_factory) -> TestDocMindSettings:
-    """Primary test settings fixture for unit tests."""
-    temp_dir = tmp_path_factory.mktemp("test_settings")
-    
-    return TestDocMindSettings(
-        # Use temporary directories
-        data_dir=str(temp_dir / "data"),
-        cache_dir=str(temp_dir / "cache"),  
-        log_file=str(temp_dir / "logs" / "test.log"),
-        sqlite_db_path=str(temp_dir / "test.db"),
-    )
+from src.config.settings import DocMindSettings
 
-@pytest.fixture(scope="session") 
-def integration_settings(tmp_path_factory) -> IntegrationTestSettings:
-    """Integration test settings with moderate performance."""
-    temp_dir = tmp_path_factory.mktemp("integration_test")
-    
-    return IntegrationTestSettings(
-        data_dir=str(temp_dir / "data"),
-        cache_dir=str(temp_dir / "cache"),
-        # Enable realistic features for integration testing
-        enable_document_caching=True,
-        use_reranking=True,
-    )
 
 @pytest.fixture
-def settings_with_overrides():
-    """Factory fixture for creating settings with specific overrides."""
-    def _create_settings(**overrides):
-        return TestDocMindSettings(**overrides)
-    return _create_settings
+def isolated_settings(tmp_path, monkeypatch) -> DocMindSettings:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("DOCMIND_LLM_BACKEND", "ollama")
+    return DocMindSettings()
+
+
+@pytest.fixture
+def reset_global_settings() -> Iterator[None]:
+    def _reset_in_place() -> None:
+        settings_mod = importlib.import_module("src.config.settings")
+        current = settings_mod.settings
+        fresh = settings_mod.DocMindSettings()
+        for field in settings_mod.DocMindSettings.model_fields:
+            setattr(current, field, getattr(fresh, field))
+
+    _reset_in_place()
+    yield
+    _reset_in_place()
 ```
 
 ### Configuration Migration Patterns
@@ -515,20 +423,13 @@ class DocMindSettings(BaseSettings):
 **After: Clean Separation**:
 
 ```python
-# AFTER: Clean production configuration
-class DocMindSettings(BaseSettings):
-    """Production-only configuration - zero test contamination."""
-    model_name: str = Field(default="BAAI/bge-m3")  # In EmbeddingConfig  # Always BGE-M3
-    agent_decision_timeout: int = Field(default=200)  # ADR-compliant
-    
-    # No test code, no synchronization - clean Pydantic patterns
+# AFTER: Production configuration stays pure; tests control config via fixtures/env.
+from src.config.settings import DocMindSettings
 
-# Separate test configuration via inheritance
-class TestDocMindSettings(DocMindSettings):  
-    """Test configuration via inheritance - no production contamination."""
-    # Test-specific overrides only
-    enable_gpu_acceleration: bool = Field(default=False)
-    agent_decision_timeout: int = Field(default=100)  # Faster for tests
+def make_settings_for_test(tmp_path, monkeypatch) -> DocMindSettings:
+    monkeypatch.chdir(tmp_path)  # avoid reading a developer .env
+    monkeypatch.setenv("DOCMIND_LLM_BACKEND", "ollama")
+    return DocMindSettings()
 ```
 
 #### Test Migration Examples
@@ -543,17 +444,9 @@ def test_settings_default_values():
     assert settings.agents.decision_timeout == 200  # Correct timeout
 
 # After (uses proper test settings)
-def test_settings_default_values(test_settings):
-    """Updated to use test fixture and ADR-compliant values."""
-    # Test the actual BGE-M3 model name (ADR-002)
-    assert test_settings.embedding.model_name == "BAAI/bge-m3"
-    
-    # Test timeout matches production ADR requirement 
-    settings = DocMindSettings()  # Production settings
-    assert settings.agents.decision_timeout == 200
-    
-    # Test settings can have different timeout for test speed
-    assert test_settings.agents.decision_timeout == 100
+def test_settings_default_values(isolated_settings):
+    assert isolated_settings.embedding.model_name == "BAAI/bge-m3"
+    assert isolated_settings.agents.decision_timeout == 200
 ```
 
 **Pattern 2: Environment Variable Testing**:
@@ -1023,7 +916,7 @@ class DocMindSettings(BaseSettings):
     new_feature: NewFeatureConfig = Field(default_factory=NewFeatureConfig)
     
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=None,
         env_prefix="DOCMIND_",
         env_nested_delimiter="__",  # Enable DOCMIND_NEW_FEATURE__ENABLED
         case_sensitive=False

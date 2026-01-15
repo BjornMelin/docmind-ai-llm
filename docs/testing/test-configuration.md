@@ -132,7 +132,9 @@ class SystemTestSettings(DocMindSettings):
     """System test settings - uses production defaults."""
     
     model_config = SettingsConfigDict(
-        env_file=".env",  # Load production .env
+        # Dotenv loading is explicit; pass `_env_file=...` (or call
+        # `bootstrap_settings()` in the system-test harness) to opt in.
+        env_file=None,
         env_prefix="DOCMIND_",
         validate_default=True,
         extra="forbid",
@@ -145,7 +147,7 @@ class SystemTestSettings(DocMindSettings):
 **Key Features**:
 
 - Identical to production configuration
-- Loads actual `.env` file
+- Can opt into a specific dotenv file via `_env_file=...` in the harness
 - Tests real production scenarios
 - Requires full hardware setup (GPU, models)
 - Uses production environment prefix (`DOCMIND_`)
