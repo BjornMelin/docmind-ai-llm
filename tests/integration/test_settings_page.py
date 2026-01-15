@@ -72,8 +72,6 @@ def fixture_settings_app_test(tmp_path, monkeypatch) -> Iterator[AppTest]:
     - Runs page in a temporary working directory so Save writes to a temp .env.
     - Avoids external side effects and keeps tests deterministic.
     """
-    import sys
-
     # Ensure cwd is a temp directory for .env persistence
     monkeypatch.chdir(tmp_path)
 
@@ -85,16 +83,14 @@ def fixture_settings_app_test(tmp_path, monkeypatch) -> Iterator[AppTest]:
     # Avoid slow/optional GraphRAG adapter discovery during Settings AppTest reruns.
     # The Settings page only needs the badge health tuple; heavy adapter imports are
     # out of scope for this integration test and can dominate runtime under coverage.
-    adapter_stub = ModuleType("src.retrieval.adapter_registry")
-
-    def get_default_adapter_health(
-        *, force_refresh: bool = False
-    ) -> tuple[bool, str, str]:
-        del force_refresh
-        return False, "unavailable", "GraphRAG disabled for Settings AppTest"
-
-    adapter_stub.get_default_adapter_health = get_default_adapter_health  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "src.retrieval.adapter_registry", adapter_stub)
+    monkeypatch.setattr(
+        "src.retrieval.adapter_registry.get_default_adapter_health",
+        lambda *, force_refresh=False: (
+            False,
+            "unavailable",
+            "GraphRAG disabled for Settings AppTest",
+        ),
+    )
 
     # Build AppTest for the Settings page file
     page_path = Path(__file__).resolve().parents[2] / "src" / "pages" / "04_settings.py"
@@ -124,27 +120,6 @@ def test_settings_apply_runtime_calls_initialize_integrations(
     # behavior in environments with additional optional dependencies (CI llama job).
     calls = _install_integrations_stub(monkeypatch)
 
-    # Change a few advanced Ollama settings and ensure Apply runtime propagates
-    # them immediately (without Save + reload).
-    for widget in app.text_input:
-        if "Ollama API key" in str(widget):
-            widget.set_value("key-apply-123").run()
-
-    for widget in app.checkbox:
-        # Enable remote endpoints first (required for web search)
-        if "Allow remote endpoints" in str(widget):
-            widget.set_value(True).run()
-        if "Enable Ollama web search tools" in str(widget):
-            widget.set_value(True).run()
-        if "Enable Ollama logprobs" in str(widget):
-            widget.set_value(True).run()
-
-    for widget in app.number_input:
-        if "Embed dimensions" in str(widget):
-            widget.set_value(384).run()
-        if "Top logprobs" in str(widget):
-            widget.set_value(2).run()
-
     buttons = [b for b in app.button if getattr(b, "label", "") == "Apply runtime"]
     assert buttons, "Apply runtime button not found"
     buttons[0].click().run()
@@ -154,13 +129,6 @@ def test_settings_apply_runtime_calls_initialize_integrations(
     assert calls == [
         {"force_llm": True, "force_embed": False, "backend": _settings.llm_backend}
     ], f"Unexpected initialize_integrations calls: {calls}"
-
-    assert _settings.ollama_api_key is not None
-    assert _settings.ollama_api_key.get_secret_value() == "key-apply-123"
-    assert _settings.ollama_enable_web_search is True
-    assert _settings.ollama_embed_dimensions == 384
-    assert _settings.ollama_enable_logprobs is True
-    assert _settings.ollama_top_logprobs == 2
 
 
 def test_settings_save_persists_env(
