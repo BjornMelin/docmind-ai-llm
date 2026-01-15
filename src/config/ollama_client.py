@@ -13,7 +13,14 @@ from typing import Any, Literal, TypeVar, overload
 from urllib.parse import urlparse
 
 import ollama
-import ollama._types as otypes
+from ollama import (
+    ChatResponse,
+    EmbedResponse,
+    GenerateResponse,
+    Message,
+    Options,
+    Tool,
+)
 from pydantic import BaseModel
 
 from src.config.settings import DocMindSettings, settings
@@ -183,53 +190,53 @@ def get_ollama_client(cfg: DocMindSettings = settings) -> ollama.Client:
 def ollama_chat(
     *,
     model: str,
-    messages: Sequence[Mapping[str, Any] | otypes.Message],
-    tools: Sequence[Mapping[str, Any] | otypes.Tool | Callable[..., Any]] | None = None,
+    messages: Sequence[Mapping[str, Any] | Message],
+    tools: Sequence[Mapping[str, Any] | Tool | Callable[..., Any]] | None = None,
     stream: Literal[False],
     think: bool | Literal["low", "medium", "high"] | None = None,
     logprobs: bool | None = None,
     top_logprobs: int | None = None,
     response_format: Literal["", "json"] | dict[str, Any] | None = None,
-    options: Mapping[str, Any] | otypes.Options | None = None,
+    options: Mapping[str, Any] | Options | None = None,
     keep_alive: float | str | None = None,
     client: ollama.Client | None = None,
     cfg: DocMindSettings = settings,
-) -> otypes.ChatResponse: ...
+) -> ChatResponse: ...
 
 
 @overload
 def ollama_chat(
     *,
     model: str,
-    messages: Sequence[Mapping[str, Any] | otypes.Message],
-    tools: Sequence[Mapping[str, Any] | otypes.Tool | Callable[..., Any]] | None = None,
+    messages: Sequence[Mapping[str, Any] | Message],
+    tools: Sequence[Mapping[str, Any] | Tool | Callable[..., Any]] | None = None,
     stream: Literal[True],
     think: bool | Literal["low", "medium", "high"] | None = None,
     logprobs: bool | None = None,
     top_logprobs: int | None = None,
     response_format: Literal["", "json"] | dict[str, Any] | None = None,
-    options: Mapping[str, Any] | otypes.Options | None = None,
+    options: Mapping[str, Any] | Options | None = None,
     keep_alive: float | str | None = None,
     client: ollama.Client | None = None,
     cfg: DocMindSettings = settings,
-) -> Iterator[otypes.ChatResponse]: ...
+) -> Iterator[ChatResponse]: ...
 
 
 def ollama_chat(  # noqa: PLR0913
     *,
     model: str,
-    messages: Sequence[Mapping[str, Any] | otypes.Message],
-    tools: Sequence[Mapping[str, Any] | otypes.Tool | Callable[..., Any]] | None = None,
+    messages: Sequence[Mapping[str, Any] | Message],
+    tools: Sequence[Mapping[str, Any] | Tool | Callable[..., Any]] | None = None,
     stream: bool,
     think: bool | Literal["low", "medium", "high"] | None = None,
     logprobs: bool | None = None,
     top_logprobs: int | None = None,
     response_format: Literal["", "json"] | dict[str, Any] | None = None,
-    options: Mapping[str, Any] | otypes.Options | None = None,
+    options: Mapping[str, Any] | Options | None = None,
     keep_alive: float | str | None = None,
     client: ollama.Client | None = None,
     cfg: DocMindSettings = settings,
-) -> otypes.ChatResponse | Iterator[otypes.ChatResponse]:
+) -> ChatResponse | Iterator[ChatResponse]:
     """Call Ollama chat with explicit streaming semantics and optional features.
 
     Args:
@@ -278,11 +285,11 @@ def ollama_generate(
     logprobs: bool | None = None,
     top_logprobs: int | None = None,
     response_format: Literal["", "json"] | dict[str, Any] | None = None,
-    options: Mapping[str, Any] | otypes.Options | None = None,
+    options: Mapping[str, Any] | Options | None = None,
     keep_alive: float | str | None = None,
     client: ollama.Client | None = None,
     cfg: DocMindSettings = settings,
-) -> otypes.GenerateResponse: ...
+) -> GenerateResponse: ...
 
 
 @overload
@@ -295,11 +302,11 @@ def ollama_generate(
     logprobs: bool | None = None,
     top_logprobs: int | None = None,
     response_format: Literal["", "json"] | dict[str, Any] | None = None,
-    options: Mapping[str, Any] | otypes.Options | None = None,
+    options: Mapping[str, Any] | Options | None = None,
     keep_alive: float | str | None = None,
     client: ollama.Client | None = None,
     cfg: DocMindSettings = settings,
-) -> Iterator[otypes.GenerateResponse]: ...
+) -> Iterator[GenerateResponse]: ...
 
 
 def ollama_generate(  # noqa: PLR0913
@@ -311,11 +318,11 @@ def ollama_generate(  # noqa: PLR0913
     logprobs: bool | None = None,
     top_logprobs: int | None = None,
     response_format: Literal["", "json"] | dict[str, Any] | None = None,
-    options: Mapping[str, Any] | otypes.Options | None = None,
+    options: Mapping[str, Any] | Options | None = None,
     keep_alive: float | str | None = None,
     client: ollama.Client | None = None,
     cfg: DocMindSettings = settings,
-) -> otypes.GenerateResponse | Iterator[otypes.GenerateResponse]:
+) -> GenerateResponse | Iterator[GenerateResponse]:
     """Call Ollama generate with explicit streaming semantics and optional features.
 
     Args:
@@ -358,11 +365,11 @@ def ollama_embed(
     inputs: str | Sequence[str],
     dimensions: int | None = None,
     truncate: bool | None = None,
-    options: Mapping[str, Any] | otypes.Options | None = None,
+    options: Mapping[str, Any] | Options | None = None,
     keep_alive: float | str | None = None,
     client: ollama.Client | None = None,
     cfg: DocMindSettings = settings,
-) -> otypes.EmbedResponse:
+) -> EmbedResponse:
     """Call Ollama embed with optional dimensions support.
 
     Args:
@@ -423,10 +430,10 @@ def get_ollama_web_tools(cfg: DocMindSettings = settings) -> list[Callable[..., 
 def ollama_chat_structured(
     *,
     model: str,
-    messages: Sequence[Mapping[str, Any] | otypes.Message],
+    messages: Sequence[Mapping[str, Any] | Message],
     output_model: type[_TModel],
     think: bool | Literal["low", "medium", "high"] | None = None,
-    options: Mapping[str, Any] | otypes.Options | None = None,
+    options: Mapping[str, Any] | Options | None = None,
     keep_alive: float | str | None = None,
     client: ollama.Client | None = None,
     cfg: DocMindSettings = settings,

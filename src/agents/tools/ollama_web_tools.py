@@ -12,9 +12,9 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-import ollama._types as otypes
 from langchain_core.tools import tool
 from loguru import logger
+from ollama import Message, RequestError, ResponseError
 
 from src.config.ollama_client import get_ollama_web_tools, ollama_chat
 from src.config.settings import DocMindSettings, settings
@@ -263,8 +263,8 @@ def _ollama_web_search_impl(
     except (
         ValueError,
         ConnectionError,
-        otypes.RequestError,
-        otypes.ResponseError,
+        RequestError,
+        ResponseError,
         OSError,
         RuntimeError,
     ) as exc:
@@ -307,8 +307,8 @@ def _ollama_web_fetch_impl(*, url: str, cfg: DocMindSettings) -> str:
     except (
         ValueError,
         ConnectionError,
-        otypes.RequestError,
-        otypes.ResponseError,
+        RequestError,
+        ResponseError,
         OSError,
         RuntimeError,
     ) as exc:
@@ -427,9 +427,7 @@ def run_web_search_agent(
         if isinstance(name, str) and name:
             available[name] = tool_fn
 
-    messages: list[dict[str, Any] | otypes.Message] = [
-        {"role": "user", "content": prompt}
-    ]
+    messages: list[dict[str, Any] | Message] = [{"role": "user", "content": prompt}]
     effective_deadline = float(deadline_s)
     if effective_deadline == 0.0:
         effective_deadline = time.time() + float(settings.agents.decision_timeout)

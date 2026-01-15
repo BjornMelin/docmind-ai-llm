@@ -2,8 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-import ollama._types as otypes
 import pytest
+from ollama import (
+    ChatResponse,
+    EmbedResponse,
+    GenerateResponse,
+    Message,
+)
 from pydantic import BaseModel
 
 from src.config.ollama_client import (
@@ -22,29 +27,29 @@ class _FakeClient:
         self.embed_calls: list[dict[str, Any]] = []
         self.generate_calls: list[dict[str, Any]] = []
 
-    def chat(self, *_, **kwargs: Any) -> otypes.ChatResponse:
+    def chat(self, *_, **kwargs: Any) -> ChatResponse:
         self.chat_calls.append(kwargs)
-        return otypes.ChatResponse(
-            message=otypes.Message(role="assistant", content="ok"),
+        return ChatResponse(
+            message=Message(role="assistant", content="ok"),
             logprobs=[
-                otypes.Logprob(
-                    token="ok",  # noqa: S106
-                    logprob=-0.1,
-                    top_logprobs=[
-                        otypes.TokenLogprob(token="ok", logprob=-0.1),  # noqa: S106
-                        otypes.TokenLogprob(token="no", logprob=-1.2),  # noqa: S106
+                {
+                    "token": "ok",
+                    "logprob": -0.1,
+                    "top_logprobs": [
+                        {"token": "ok", "logprob": -0.1},
+                        {"token": "no", "logprob": -1.2},
                     ],
-                )
+                }
             ],
         )
 
-    def embed(self, *_, **kwargs: Any) -> otypes.EmbedResponse:
+    def embed(self, *_, **kwargs: Any) -> EmbedResponse:
         self.embed_calls.append(kwargs)
-        return otypes.EmbedResponse(embeddings=[[0.0, 1.0]])
+        return EmbedResponse(embeddings=[[0.0, 1.0]])
 
-    def generate(self, *_, **kwargs: Any) -> otypes.GenerateResponse:
+    def generate(self, *_, **kwargs: Any) -> GenerateResponse:
         self.generate_calls.append(kwargs)
-        return otypes.GenerateResponse(response="ok")
+        return GenerateResponse(response="ok")
 
 
 @pytest.mark.unit
@@ -171,10 +176,10 @@ def test_ollama_chat_structured_validates_pydantic() -> None:
         answer: str
 
     class _StructuredFakeClient(_FakeClient):
-        def chat(self, *_, **kwargs: Any) -> otypes.ChatResponse:
+        def chat(self, *_, **kwargs: Any) -> ChatResponse:
             self.chat_calls.append(kwargs)
-            return otypes.ChatResponse(
-                message=otypes.Message(
+            return ChatResponse(
+                message=Message(
                     role="assistant",
                     content='{"answer":"ok"}',
                 ),
