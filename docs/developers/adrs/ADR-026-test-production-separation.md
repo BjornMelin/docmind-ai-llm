@@ -81,7 +81,12 @@ pytest → fixtures → (isolated settings instance OR in-place singleton reset)
 
 ```python
 # tests/conftest.py (skeleton)
+from pathlib import Path
+
+import pytest
 from collections.abc import Iterator
+
+from src.config.settings import DocMindSettings
 
 @pytest.fixture
 def app_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
@@ -97,7 +102,7 @@ def reset_global_settings() -> Iterator[None]:
     def _reset_in_place() -> None:
         settings_mod = importlib.import_module("src.config.settings")
         current = settings_mod.settings
-        fresh = settings_mod.DocMindSettings(_env_file=None)  # type: ignore[arg-type]
+        fresh = settings_mod.DocMindSettings(_env_file=None)
         settings_mod.apply_settings_in_place(current, fresh)
 
     _reset_in_place()
