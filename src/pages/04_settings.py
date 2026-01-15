@@ -17,7 +17,7 @@ from pydantic import ValidationError
 
 from src.config.env_persistence import persist_env
 from src.config.settings import DocMindSettings, settings
-from src.retrieval.adapter_registry import get_default_adapter_health
+from src.retrieval import adapter_registry
 from src.ui.components.provider_badge import provider_badge
 from src.utils.telemetry import log_jsonl
 
@@ -318,7 +318,7 @@ def main() -> None:
     st.title("Settings · LLM Runtime")
 
     # Show badge
-    graphrag_health = get_default_adapter_health()
+    graphrag_health = adapter_registry.get_default_adapter_health()
     provider_badge(settings, graphrag_health=graphrag_health)
     provider = _render_provider_section()
     model, context_window, timeout_s, use_gpu = _render_model_section()
@@ -602,7 +602,7 @@ def _render_graphrag_section(
     """Render GraphRAG status section."""
     st.subheader("GraphRAG")
     if graphrag_health is None:
-        graphrag_health = get_default_adapter_health()
+        graphrag_health = adapter_registry.get_default_adapter_health()
     supports, adapter_name, hint = graphrag_health
     st.text_input("Adapter", value=adapter_name, disabled=True)
     st.text_input(
