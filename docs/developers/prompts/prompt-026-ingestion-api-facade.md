@@ -1,21 +1,20 @@
-# Implementation Prompt — Ingestion API + Legacy Facade Cleanup
+# implementation Prompt — Unified Ingestion API (Refactor)
 
 Implements `ADR-045` + `SPEC-026`.
 
 **Read first (repo truth):**
 
 - ADR: `docs/developers/adrs/ADR-045-ingestion-api-and-legacy-facade.md`
-- SPEC: `docs/specs/spec-026-ingestion-api-facade.md`
-- Requirements: `docs/specs/requirements.md` (FR-024, NFR-SEC-001)
+- SPEC: `docs/specs/spec-026-ingestion-api-facade.md` (Version 2.0 - Strict Unification)
 - RTM: `docs/specs/traceability.md`
+- Requirements: `docs/specs/requirements.md` (FR-024, NFR-SEC-001)
 
 ## Official docs (research during implementation)
 
-- <https://docs.llamaindex.ai/en/stable/module_guides/loading/ingestion_pipeline/> — LlamaIndex ingestion pipeline overview.
-- <https://docs.llamaindex.ai/en/stable/module_guides/loading/documents_and_nodes/> — Document/node concepts and file readers.
-- <https://docs.unstructured.io/> — Unstructured docs (partitioning strategies; offline-first cautions).
-- <https://pymupdf.readthedocs.io/> — PyMuPDF docs (PDF parsing/rendering primitives used by the repo).
-- <https://docs.python.org/3/library/pathlib.html> — `pathlib` path handling patterns (safe path joins, normalization).
+- <https://docs.llamaindex.ai/en/stable/module_guides/loading/ingestion_pipeline/> — LlamaIndex ingestion overview.
+- <https://docs.llamaindex.ai/en/stable/module_guides/loading/documents_and_nodes/> — Document/node concepts.
+- <https://docs.unstructured.io/> — Unstructured docs (partitioning strategies).
+- <https://docs.python.org/3/library/pathlib.html> — PathLib best practices.
 
 ## Tooling & Skill Strategy (fresh Codex sessions)
 
@@ -23,10 +22,9 @@ Implements `ADR-045` + `SPEC-026`.
 
 **Primary tools to leverage:**
 
-- `rg` for placeholder/legacy discovery (TODOs, NotImplemented stubs, old doc references).
-- Context7 for authoritative API signatures (LlamaIndex IngestionPipeline, UnstructuredReader, Pydantic models).
-- Exa for official LlamaIndex ingestion guidance if behavior is unclear.
-- `opensrc/` to confirm internal behavior (LlamaIndex + unstructured) when subtle (caching, docstore persist).
+- `rg` / `ls` for rigorous path validation and verifying cleanup.
+- Context7 for authoritative API signatures (LlamaIndex, Unstructured).
+- `mv` (shell) for moving test files.
 
 ### Prompt-specific Tool Playbook (optimize tool usage)
 
@@ -34,58 +32,31 @@ Implements `ADR-045` + `SPEC-026`.
 
 **Parallel preflight (use `multi_tool_use.parallel`):**
 
-- Locate placeholders and call sites:
-- `rg -n '(NotImplementedError|ingestion-phase-2|load_documents_|clear_document_cache)' -S src tests`
-  - `rg -n \"src\\.utils\\.document\" -S src tests`
-- Read in parallel:
-  - `src/utils/document.py`
-  - `src/processing/ingestion_pipeline.py`
-  - `src/ui/_ingest_adapter_impl.py` (if present; reuse stable patterns)
+- Locate legacy code to extract:
+  - `rg -n "load_documents" src/utils/document.py`
+  - `ls -F src/utils/document.py src/processing/`
+- Locate all call sites to update:
+  - `rg -n "src\.utils\.document" src tests`
+- Check existing tests to move:
+  - `ls tests/unit/utils/document/`
 
 **MCP resources first (when available):**
 
-- `functions.list_mcp_resources` → look for LlamaIndex/unstructured docs resources.
+- `functions.list_mcp_resources` → look for LlamaIndex/unstructured resources.
 - `functions.read_mcp_resource` → prefer local resources before web search.
 
 **Authoritative library docs (MCP, prefer over general web when applicable):**
 
-- LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs` / `functions.mcp__llama_index_docs__read_doc`
-- LangChain/LangGraph docs: `functions.mcp__langchain-docs__SearchDocsByLangChain` (only if ingestion triggers agent workflows directly)
-
-**API verification (Context7):**
-
-- `functions.mcp__context7__resolve-library-id` → `llama-index` (and optionally `unstructured`)
-- `functions.mcp__context7__query-docs` → confirm:
-  - ingestion pipeline + file reader APIs you plan to use
-  - any recommended patterns for deterministic ingestion / caching
+- LlamaIndex docs: `functions.mcp__llama_index_docs__search_docs` / `functions.mcp__llama_index_docs__grep_docs`
+- Context7: `functions.mcp__context7__query-docs` → `llama-index`
 
 **Security gate (required):**
 
 - `functions.mcp__zen__secaudit` must cover:
-  - path traversal and symlink escape prevention
-  - directory ingestion determinism
-  - offline-first posture (no implicit network calls)
+  - path traversal and symlink escape (input validation in `collect_paths` / `load_documents`).
+  - deterministic ordering of directory ingestion.
 
-**Review gate (recommended):**
-
-- `functions.mcp__zen__codereview` after implementation to ensure one canonical ingestion API and no legacy code paths remain.
-
-**MCP tool sequence (use when it adds signal):**
-
-1. `functions.mcp__zen__planner` → plan: new canonical API + facade + tests + doc updates.
-2. Context7:
-   - resolve `llama-index` (and optionally `unstructured`) and query docs for ingestion pipeline + readers
-3. `functions.mcp__zen__secaudit` → file/path traversal protection + symlink blocking (directory ingestion).
-4. `functions.mcp__zen__codereview` after implementation to ensure the facade is thin and no legacy paths remain.
-
-**opensrc (recommended):**
-
-```bash
-cat opensrc/sources.json | rg -n "llama-index|unstructured" || true
-# Fetch only if missing and behavior is surprising; treat opensrc/ as read-only.
-npx opensrc pypi:llama-index
-npx opensrc pypi:unstructured
-```
+---
 
 ## IMPLEMENTATION EXECUTOR TEMPLATE (DOCMIND / PYTHON)
 
@@ -95,81 +66,117 @@ You are an autonomous implementation agent for the **DocMind AI LLM** repository
 
 You will implement the feature described below end-to-end, including:
 
-- code changes
-- tests
-- documentation updates (ADR/SPEC/RTM)
-- deletion of dead code and removal of legacy/backcompat shims within scope
+- code changes (Refactor/Move)
+- tests (Migration/Update)
+- documentation updates (RTM)
+- **Deletion** of the legacy module
 
 You must keep changes minimal, library-first, and maintainable.
 
 ---
 
-### FEATURE CONTEXT (FILLED)
+### FEATURE CONTEXT (REFACTOR & UNIFY)
 
-**Primary Task:** Replace `src/utils/document.py` placeholders with a canonical ingestion API under `src/processing/` and keep `src.utils.document` as a thin forwarding facade (no duplicate ingestion logic).
+**Primary Task:** Consolidate all ingestion loading logic into a single canonical module `src/processing/ingestion_api.py` and **DELETE** `src/utils/document.py`.
 
-**Why now:** `src/utils/document.py` currently raises `NotImplementedError` and contains multiple TODOs; docs/tests reference these functions. This is a v1 ship blocker and undermines trust in the repo.
+**Why now:** ADR-045 v2 mandates a unified "Greenfield" architecture. The current split between `utils` and `processing` is ambiguous and technical debt. We are unifying the stack for a 2026-ready production baseline.
 
 **Definition of Done (DoD):**
 
-- No `TODO(...)` or `NotImplementedError` remains in `src/utils/document.py` or `src/processing/__init__.py`.
-- A typed canonical API exists at `src/processing/ingestion_api.py` and is used by the facade.
-- Directory ingestion blocks symlink traversal and is deterministic.
-- `clear_document_cache()` only touches `settings.cache_dir / "ingestion"` and is safe.
-- Unit tests cover path validation, hashing-based IDs, and facade behavior.
-- RTM updated: FR-024 planned → implemented.
+- `src/processing/ingestion_api.py` exists and is the **only** place where file loading/path sanitization happens.
+- `src/utils/document.py` is **DELETED**.
+- All imports of `src.utils.document` in `src/` and `tests/` are updated to `src.processing.ingestion_api` (or `src.processing`).
+- `tests/unit/utils/document/` are moved to `tests/unit/processing/` and pass.
+- Symlink traversal is explicitly blocked.
+- Project passes all linters and tests.
 
-**In-scope modules/files (initial):**
+**In-scope modules/files:**
 
-- `src/processing/ingestion_api.py` (new)
-- `src/processing/__init__.py`
-- `src/utils/document.py`
-- `tests/unit/processing/` (new tests)
-- `tests/unit/utils/document/` (new/updated tests)
-- `docs/specs/spec-026-ingestion-api-facade.md`
-- `docs/specs/traceability.md`
+- `src/processing/ingestion_api.py` (New - Extraction Target)
+- `src/utils/document.py` (Source - To Be Deleted)
+- `src/processing/ingestion_pipeline.py` (Update consumer)
+- `src/ui/_ingest_adapter_impl.py` (Update consumer)
+- `src/processing/__init__.py` (Export new API)
+- `tests/` (Refactor imports and file locations)
 
 **Out-of-scope (explicit):**
 
-- Large docs rewrites (handled in WP08).
-- Adding remote ingestion sources (HTTP/S3).
-- spaCy model downloading (offline-first).
+- Adding remote ingestion sources (S3/HTTP).
+- Changing the behavior of `UnstructuredReader` (keep existing logic, just move it).
 
 ---
 
-### STEP-BY-STEP EXECUTION PLAN (FILLED)
+### HARD RULES (EXECUTION)
 
-0. [ ] Read ADR/SPEC/RTM and restate DoD in your plan.
+#### 1) Python + Packaging
 
-1. [ ] Inspect current ingestion pipeline (`src/processing/ingestion_pipeline.py`) and Streamlit adapter (`src/ui/_ingest_adapter_impl.py`) to reuse stable-ID and config patterns.
-2. [ ] Implement `src/processing/ingestion_api.py`:
-   - deterministic path collection for directories
-   - symlink traversal prevention
-   - streaming SHA-256 hashing + `document_id = doc-<sha[:16]>`
-   - config construction from `settings`
-   - `ingest_paths` + `ingest_paths_sync`
-3. [ ] Update `src/processing/__init__.py`:
-   - remove placeholder TODO
-   - export canonical API functions
-4. [ ] Replace `src/utils/document.py` stubs with forwarding facade:
-   - preserve names/signatures where feasible
-   - emit `DeprecationWarning` on call
-   - implement safe cache clear/stats constrained to `settings.cache_dir / "ingestion"`
-5. [ ] Add/adjust unit tests to cover:
-   - symlink rejection
-   - deterministic ordering
-   - hashing-based IDs stable
-   - facade no longer raises
-6. [ ] Update RTM + run quality gates.
+- Python version must remain **3.11.x**.
+- Use **uv only**:
+  - `uv sync`
+  - `uv run <cmd>`
 
-Commands:
+#### 2) Style, Types, and Lint
+
+- `uv run ruff format .`
+- `uv run ruff check .`
+- `uv run pyright` (Must be clean after refactor)
+
+#### 3) Security & Offline-first
+
+- **Symlinks**: `path.resolve(strict=True)` must not resolve to an external path or be a symlink itself if `follow_symlinks=False`. Block traversal.
+- **Cache**: `clear_ingestion_cache` must only delete from `settings.cache_dir / "ingestion"`.
+
+---
+
+### STEP-BY-STEP EXECUTION PLAN
+
+You MUST produce a plan and keep exactly one step “in_progress” at a time.
+
+1. [ ] **Inspect & Plan**: Verify file paths and existing logic in `src/utils/document.py`.
+2. [ ] **Create Canonical API**:
+   - Create `src/processing/ingestion_api.py`.
+   - **Extract/Move** logic from `src/utils/document.py` (copy first).
+   - Ensure imports are updated relative to new location.
+   - Refine types and docstrings.
+3. [ ] **Refactor Consumers**:
+   - Update `src/processing/ingestion_pipeline.py` to use `src.processing.ingestion_api`.
+   - Update `src/ui/_ingest_adapter_impl.py`.
+   - Update `src/utils/__init__.py` (remove exports) and `src/processing/__init__.py` (add exports).
+4. [ ] **Migrate Tests**:
+   - Move `tests/unit/utils/document/*.py` to `tests/unit/processing/`.
+   - Update imports in all tests.
+   - Verify tests pass: `uv run python scripts/run_tests.py`.
+5. [ ] **Delete Legacy**:
+   - Delete `src/utils/document.py`.
+   - Remove `src/utils/document.py` references from any other files (check with `rg`).
+6. [ ] **Docs & Cleanup**:
+   - **Update References**: The following files reference `src.utils.document` and MUST be updated:
+     - `docs/developers/developer-handbook.md` (mock patches)
+     - `docs/developers/system-architecture.md` (imports/diagrams)
+     - `docs/developers/testing-notes.md`
+     - `docs/specs/spec-002-ingestion-pipeline.md`
+     - `docs/specs/spec-029-docs-consistency-pass.md`
+   - **Update Metadata**:
+     - `docs/developers/adrs/ADR-045-ingestion-api-and-legacy-facade.md`: Set `Status: Implemented`.
+     - `docs/specs/spec-026-ingestion-api-facade.md`: Set `status: Implemented`.
+   - **Traceability**: Update `docs/specs/traceability.md` (FR-024) to `Implemented`.
+   - **Archive Prompt**: Move this file to `docs/developers/prompts/implemented/` and prepend metadata:
+
+     ```markdown
+     <!--
+     Implemented-by: [Agent Name]
+     Date: YYYY-MM-DD
+     Version: [Resulting Version]
+     -->
+     ```
+
+**Commands (required):**
 
 ```bash
 uv sync
 uv run ruff format .
-uv run ruff check . --fix
+uv run ruff check .
 uv run pyright
-uv run python scripts/run_tests.py --fast
 uv run python scripts/run_tests.py
 ```
 
@@ -177,41 +184,24 @@ uv run python scripts/run_tests.py
 
 ### ANTI-PATTERN KILL LIST (IMMEDIATE DELETION/REWRITE)
 
-1. Duplicate ingestion logic in UI + processing + utils.
-2. “Accept any path” ingestion without symlink checks.
-3. Hashing based on filenames/mtimes only (must hash bytes for stable IDs).
-4. Cache clear that deletes outside `settings.cache_dir`.
-
----
-
-### MCP TOOL STRATEGY (FOR IMPLEMENTATION RUN)
-
-Follow the “Prompt-specific Tool Playbook” above. Use these tools as needed:
-
-1. `functions.mcp__zen__planner` → implementation plan (API + facade + tests).
-2. `functions.mcp__exa__web_search_exa` / `functions.mcp__exa__crawling_exa` → official LlamaIndex/unstructured docs if subtle behavior is unclear.
-3. `functions.mcp__context7__resolve-library-id` + `functions.mcp__context7__query-docs` → authoritative API details (`llama-index`, optional `unstructured`).
-4. `functions.mcp__gh_grep__searchGitHub` → real-world ingestion/facade patterns (optional).
-5. `functions.mcp__zen__analyze` → only if multiple ingestion paths emerge; keep one canonical API.
-6. `functions.mcp__zen__codereview` → post-implementation review (ensure facade is thin; no legacy path remains).
-7. `functions.mcp__zen__secaudit` → required security audit (path traversal, symlink escape).
-
-Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local discovery (`rg`) and parallel file reads.
+1. **Facade/Shim**: Do NOT leave `src/utils/document.py` behind as a proxy. Delete it.
+2. **Circular Imports**: Watch out when moving logic; if `ingestion_api` imports `ingestion_pipeline`, ensure `ingestion_pipeline` doesn't import `ingestion_api` in a way that cycles. (Input -> Pipeline is the correct flow).
+3. **Typos in Refactor**: Use IDE tools or careful search-replace to ensure `load_documents_unstructured` calls are correctly updated.
 
 ---
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement     | Status | Proof / Notes                                                                      |
-| --------------- | ------ | ---------------------------------------------------------------------------------- |
-| **Packaging**   |        | `uv sync` clean                                                                    |
-| **Formatting**  |        | `uv run ruff format .`                                                             |
-| **Lint**        |        | `uv run ruff check .` clean                                                        |
-| **Types**       |        | `uv run pyright` clean                                                             |
-| **Tests**       |        | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
-| **Docs**        |        | SPEC/RTM updated                                                                   |
-| **Security**    |        | symlink traversal blocked; cache clear constrained to `settings.cache_dir`         |
-| **Tech Debt**   |        | zero TODO/FIXME introduced; no placeholder stubs remain                            |
-| **Performance** |        | hashing is streaming; no import-time heavy work                                    |
+| Requirement     | Status | Proof / Notes                                                      |
+| --------------- | ------ | ------------------------------------------------------------------ |
+| **Packaging**   |        | `uv sync` clean                                                    |
+| **Formatting**  |        | `uv run ruff format .`                                             |
+| **Lint**        |        | `uv run ruff check .` clean                                        |
+| **Types**       |        | `uv run pyright` clean                                             |
+| **Tests**       |        | `uv run python scripts/run_tests.py` clean                         |
+| **Refactor**    |        | `src/utils/document.py` is DELETED                                 |
+| **Docs**        |        | All `src.utils.document` references updated in `docs/`             |
+| **Prompt**      |        | Moved to `implemented/` with metadata                              |
+| **Security**    |        | Symlinks blocked; Input validation localized in `ingestion_api.py` |
 
 **EXECUTE UNTIL COMPLETE.**
