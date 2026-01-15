@@ -164,14 +164,18 @@ def test_settings_save_persists_env(
     if api_key_inputs := [w for w in text_inputs if "Ollama API key" in str(w)]:
         api_key_inputs[0].set_value("key-123").run()
 
-    for checkbox in app.checkbox:
-        # Enable remote endpoints first (required for web search)
-        if "Allow remote endpoints" in str(checkbox):
-            checkbox.set_value(True).run()
-        if "Enable Ollama logprobs" in str(checkbox):
-            checkbox.set_value(True).run()
-        if "Enable Ollama web search tools" in str(checkbox):
-            checkbox.set_value(True).run()
+    checkboxes = list(app.checkbox)
+    allow_remote = [w for w in checkboxes if "Allow remote endpoints" in str(w)]
+    assert allow_remote, "Allow remote endpoints checkbox not found"
+    allow_remote[0].set_value(True).run()
+
+    web_tools = [w for w in checkboxes if "Enable Ollama web search tools" in str(w)]
+    assert web_tools, "Ollama web tools checkbox not found"
+    web_tools[0].set_value(True).run()
+
+    logprobs = [w for w in checkboxes if "Enable Ollama logprobs" in str(w)]
+    if logprobs:
+        logprobs[0].set_value(True).run()
 
     for num_input in app.number_input:
         if "Embed dimensions" in str(num_input):
