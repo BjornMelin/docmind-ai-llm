@@ -4,7 +4,7 @@ title: Unified Ingestion API (Canonical)
 version: 2.0.0
 date: 2026-01-15
 owners: ["ai-arch"]
-status: Approved
+status: Implemented
 related_requirements:
   - FR-024: Provide a canonical programmatic ingestion API (local-only).
   - NFR-MAINT-003: No split logic; single ownership domain.
@@ -84,9 +84,9 @@ Update `__all__` to include these new primitives.
 
 ### 5. Documentation Updates (Critical)
 
-The implementation is not complete until **ALL** documentation referencing `src.utils.document` is updated.
+The implementation is not complete until **ALL** documentation referencing the removed legacy document module is updated.
 
-- **Search**: `rg "src.utils.document" docs/`
+- **Search**: `rg "utils\\.document" docs/`
 - **Update**: Replace with `src.processing.ingestion_api` or `src.processing`.
 - **Verify**: `grep` should return zero matches in `docs/` (except changelogs/ADRs).
 

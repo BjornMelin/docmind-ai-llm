@@ -505,44 +505,34 @@ python scripts/run_tests.py --system     # Tier 3: Full system tests (<5min each
 ```python
 # Test individual functions with mocks
 import pytest
-from unittest.mock import Mock, patch
-from src.utils.document import process_document
+import sys
+from pathlib import Path
+from types import ModuleType
 
-class TestDocumentProcessing:
-    """Unit tests for document processing utilities."""
-    
-    @pytest.fixture
-    def mock_settings(self):
-        """Mock settings for testing."""
-        settings = Mock()
-        settings.processing.chunk_size = 1000
-        settings.processing.chunk_overlap = 100
-        return settings
-    
-    @patch('src.utils.document.parse_document_unstructured')
-    async def test_process_document_success(self, mock_parse, mock_settings):
-        """Test successful document processing."""
-        # Arrange
-        mock_parse.return_value = "Sample document content"
-        file_path = Path("test.pdf")
-        
-        # Act
-        result = await process_document(file_path, mock_settings)
-        
-        # Assert
-        assert result.chunks > 0
-        assert result.file_path == file_path
-        mock_parse.assert_called_once_with(file_path)
-    
-    @patch('src.utils.document.parse_document_unstructured')
-    async def test_process_document_parse_error(self, mock_parse, mock_settings):
-        """Test error handling in document processing."""
-        # Arrange
-        mock_parse.side_effect = Exception("Parse failed")
-        
-        # Act & Assert
-        with pytest.raises(DocumentProcessingError, match="Parse failed"):
-            await process_document(Path("invalid.pdf"), mock_settings)
+from src.processing import ingestion_api
+
+
+def test_collect_paths_filters_extensions(tmp_path: Path) -> None:
+    (tmp_path / "a.txt").write_text("x", encoding="utf-8")
+    (tmp_path / "b.md").write_text("y", encoding="utf-8")
+    (tmp_path / "c.png").write_bytes(b"nope")
+
+    paths = ingestion_api.collect_paths(tmp_path, recursive=False)
+    assert [p.name for p in paths] == ["a.txt", "b.md"]
+
+
+@pytest.mark.asyncio
+async def test_load_documents_falls_back_when_unstructured_missing(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setitem(sys.modules, "llama_index.readers.file", ModuleType("x"))
+
+    p = tmp_path / "a.txt"
+    p.write_text("hello", encoding="utf-8")
+
+    docs = await ingestion_api.load_documents([p])
+    assert docs
+    assert docs[0].metadata.get("source_filename") == "a.txt"
 ```
 
 ### Tier 2: Integration Tests (Lightweight Models)

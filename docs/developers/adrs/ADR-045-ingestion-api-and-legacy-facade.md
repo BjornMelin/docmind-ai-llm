@@ -1,7 +1,7 @@
 ---
 ADR: 045
 Title: Unified Ingestion Architecture (Greenfield)
-Status: Accepted
+Status: Implemented
 Version: 2.0
 Date: 2026-01-15
 Supersedes:

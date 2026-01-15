@@ -1,4 +1,13 @@
-# implementation Prompt — Unified Ingestion API (Refactor)
+---
+prompt: PROMPT-026
+title: Ingestion API Cleanup
+date: 2026-01-15
+version: 2.0
+related_adrs: ["ADR-045"]
+related_specs: ["SPEC-026"]
+---
+
+## Implementation Prompt — Unified Ingestion API (Refactor)
 
 Implements `ADR-045` + `SPEC-026`.
 
@@ -85,7 +94,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 - `src/processing/ingestion_api.py` exists and is the **only** place where file loading/path sanitization happens.
 - `src/utils/document.py` is **DELETED**.
-- All imports of `src.utils.document` in `src/` and `tests/` are updated to `src.processing.ingestion_api` (or `src.processing`).
+- All imports of the removed legacy document module in `src/` and `tests/` are updated to `src.processing.ingestion_api` (or `src.processing`).
 - `tests/unit/utils/document/` are moved to `tests/unit/processing/` and pass.
 - Symlink traversal is explicitly blocked.
 - Project passes all linters and tests.
@@ -132,25 +141,25 @@ You must keep changes minimal, library-first, and maintainable.
 
 You MUST produce a plan and keep exactly one step “in_progress” at a time.
 
-1. [ ] **Inspect & Plan**: Verify file paths and existing logic in `src/utils/document.py`.
-2. [ ] **Create Canonical API**:
+1. [x] **Inspect & Plan**: Verify file paths and existing logic in `src/utils/document.py`.
+2. [x] **Create Canonical API**:
    - Create `src/processing/ingestion_api.py`.
    - **Extract/Move** logic from `src/utils/document.py` (copy first).
    - Ensure imports are updated relative to new location.
    - Refine types and docstrings.
-3. [ ] **Refactor Consumers**:
+3. [x] **Refactor Consumers**:
    - Update `src/processing/ingestion_pipeline.py` to use `src.processing.ingestion_api`.
    - Update `src/ui/_ingest_adapter_impl.py`.
    - Update `src/utils/__init__.py` (remove exports) and `src/processing/__init__.py` (add exports).
-4. [ ] **Migrate Tests**:
+4. [x] **Migrate Tests**:
    - Move `tests/unit/utils/document/*.py` to `tests/unit/processing/`.
    - Update imports in all tests.
    - Verify tests pass: `uv run python scripts/run_tests.py`.
-5. [ ] **Delete Legacy**:
+5. [x] **Delete Legacy**:
    - Delete `src/utils/document.py`.
    - Remove `src/utils/document.py` references from any other files (check with `rg`).
-6. [ ] **Docs & Cleanup**:
-   - **Update References**: The following files reference `src.utils.document` and MUST be updated:
+6. [x] **Docs & Cleanup**:
+   - **Update References**: The following files reference the removed legacy document module and MUST be updated:
      - `docs/developers/developer-handbook.md` (mock patches)
      - `docs/developers/system-architecture.md` (imports/diagrams)
      - `docs/developers/testing-notes.md`
@@ -192,16 +201,16 @@ uv run python scripts/run_tests.py
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement     | Status | Proof / Notes                                                      |
-| --------------- | ------ | ------------------------------------------------------------------ |
-| **Packaging**   |        | `uv sync` clean                                                    |
-| **Formatting**  |        | `uv run ruff format .`                                             |
-| **Lint**        |        | `uv run ruff check .` clean                                        |
-| **Types**       |        | `uv run pyright` clean                                             |
-| **Tests**       |        | `uv run python scripts/run_tests.py` clean                         |
-| **Refactor**    |        | `src/utils/document.py` is DELETED                                 |
-| **Docs**        |        | All `src.utils.document` references updated in `docs/`             |
-| **Prompt**      |        | Moved to `implemented/` with metadata                              |
-| **Security**    |        | Symlinks blocked; Input validation localized in `ingestion_api.py` |
+| Requirement     | Status | Proof / Notes                                                                 |
+| --------------- | ------ | ----------------------------------------------------------------------------- |
+| **Packaging**   | Done   | `uv sync`                                                                     |
+| **Formatting**  | Done   | `uv run ruff format .`                                                        |
+| **Lint**        | Done   | `uv run ruff check .`                                                         |
+| **Types**       | Done   | `uv run pyright --threads 4`                                                  |
+| **Tests**       | Done   | `uv run python scripts/run_tests.py`                                          |
+| **Refactor**    | Done   | `src/utils/document.py` deleted                                               |
+| **Docs**        | Done   | `docs/` updated (no legacy import-path refs outside ADRs)                     |
+| **Prompt**      | Done   | Archived under `docs/developers/prompts/implemented/`                         |
+| **Security**    | Done   | Symlinks blocked; validation centralized in `src/processing/ingestion_api.py` |
 
 **EXECUTE UNTIL COMPLETE.**

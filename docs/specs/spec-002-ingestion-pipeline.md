@@ -44,7 +44,7 @@ multimodal behavior and persistence invariants, see:
 
 - Ingestion pipeline assembly and execution: `src/processing/ingestion_pipeline.py`
   - `build_ingestion_pipeline(cfg, embedding=...)`
-  - `_load_documents(cfg, inputs)` (UnstructuredReader + fallback)
+  - `_load_documents(cfg, inputs)` (loads via `src/processing/ingestion_api.py`)
   - `_page_image_exports(...)` (PDF page images via PyMuPDF)
   - `_index_page_images(...)` (ArtifactStore + SigLIP + Qdrant)
 
@@ -161,12 +161,12 @@ Feature: Ingestion pipeline
 ## Touched files (canonical)
 
 - `src/processing/ingestion_pipeline.py`
+- `src/processing/ingestion_api.py`
 - `src/processing/pdf_pages.py`
 - `src/persistence/artifacts.py`
 - `src/retrieval/image_index.py`
 - `src/utils/images.py`
 - `src/utils/security.py`
-- `src/utils/document.py`
 - `src/models/processing.py`
 
 ## Tests (repo truth)
