@@ -250,7 +250,10 @@ def test_settings_invalid_remote_url_disables_actions(
     )
 
 
-def test_settings_allow_remote_allows_remote_urls(settings_app_test: AppTest) -> None:
+def test_settings_allow_remote_allows_remote_urls(
+    settings_app_test: AppTest,
+    reset_settings_after_test: None,
+) -> None:
     """Remote URLs should be allowed when allow_remote_endpoints is enabled."""
     app = settings_app_test.run()
     assert not app.exception
