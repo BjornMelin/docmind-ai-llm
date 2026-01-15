@@ -388,7 +388,10 @@ def get_langchain_web_tools(
         return []
     try:
         _ = get_ollama_web_tools(cfg)
-    except Exception:
+    except Exception as e:
+        logger.debug(
+            "failed to get ollama web tools for cfg=%s: %s", cfg, e, exc_info=True
+        )
         return []
     return _make_langchain_web_tools(cfg)
 
@@ -430,7 +433,7 @@ def run_web_search_agent(
     messages: list[dict[str, Any] | Message] = [{"role": "user", "content": prompt}]
     effective_deadline = float(deadline_s)
     if effective_deadline == 0.0:
-        effective_deadline = time.time() + float(settings.agents.decision_timeout)
+        effective_deadline = time.time() + float(cfg.agents.decision_timeout)
 
     for _ in range(max_steps):
         remaining_time = max(0.0, effective_deadline - time.time())

@@ -18,7 +18,7 @@ from src.config.ollama_client import (
     ollama_embed,
     ollama_generate,
 )
-from src.config.settings import DocMindSettings
+from src.config.settings import DocMindSettings, SecurityConfig
 
 
 class _FakeClient:
@@ -108,11 +108,14 @@ def test_get_ollama_web_tools_disabled() -> None:
 
 @pytest.mark.unit
 def test_get_ollama_web_tools_enabled_requires_api_key() -> None:
-    cfg = DocMindSettings(
-        ollama_enable_web_search=False,
-        security={"allow_remote_endpoints": True},
+    # Use model_construct to bypass validation that requires api_key when web
+    # search is enabled.
+    cfg = DocMindSettings.model_construct(
+        ollama_enable_web_search=True,
+        ollama_api_key=None,
+        security=SecurityConfig(allow_remote_endpoints=True),
+        llm_request_timeout_seconds=120,
     )
-    cfg.ollama_enable_web_search = True
     with pytest.raises(ValueError, match=r"API key"):
         _ = get_ollama_web_tools(cfg)
 
@@ -162,8 +165,11 @@ def test_get_ollama_web_tools_returns_client_bound_tools(
     )
     tools = get_ollama_web_tools(cfg)
     assert {tool.__name__ for tool in tools} == {"web_search", "web_fetch"}
-    tools[0](query="docmind", max_results=2)
-    tools[1](url="https://example.com")
+
+    name_to_tool = {tool.__name__: tool for tool in tools}
+    name_to_tool["web_search"](query="docmind", max_results=2)
+    name_to_tool["web_fetch"](url="https://example.com")
+
     assert fake_client.calls == [
         ("web_search", {"query": "docmind", "max_results": 2}),
         ("web_fetch", {"url": "https://example.com"}),

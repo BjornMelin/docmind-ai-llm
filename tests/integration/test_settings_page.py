@@ -82,7 +82,8 @@ def fixture_settings_app_test(tmp_path, monkeypatch) -> Iterator[AppTest]:
     # Build AppTest for the Settings page file
     page_path = Path(__file__).resolve().parents[2] / "src" / "pages" / "04_settings.py"
     try:
-        yield AppTest.from_file(str(page_path), default_timeout=20)
+        # Default timeout needs to tolerate slower CI/coverage runs.
+        yield AppTest.from_file(str(page_path), default_timeout=60)
     finally:
         LISettings.llm = original_llm
         LISettings.embed_model = original_embed
