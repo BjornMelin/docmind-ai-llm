@@ -138,36 +138,15 @@ model = os.getenv("DOCMIND_MODEL")  # Don't do this
 DocMind AI uses async/await throughout for optimal performance:
 
 ```python
-# Agent coordination - async pattern
+# Agent coordination - public API pattern
 class MultiAgentCoordinator:
-    async def arun(self, query: str) -> str:
-        """Execute multi-agent coordination asynchronously."""
-        
-        # Route query
-        routing = await self.router_agent.arun(query)
-        
-        # Plan if complex
-        if routing.complexity > 0.7:
-            plan = await self.planner_agent.arun(query, routing)
-        else:
-            plan = SimpleExecutionPlan(query)
-        
-        # Execute retrieval
-        documents = await self.retrieval_agent.arun(query, plan)
-        
-        # Synthesize and validate in parallel
-        synthesis_task = asyncio.create_task(
-            self.synthesis_agent.arun(query, documents)
-        )
-        validation_task = asyncio.create_task(
-            self.validator_agent.arun(query, documents)
-        )
-        
-        synthesis, validation = await asyncio.gather(
-            synthesis_task, validation_task
-        )
-        
-        return self.finalize_response(synthesis, validation)
+    def process_query(self, query: str, context: Any | None = None) -> AgentResponse:
+        """Execute multi-agent coordination synchronously."""
+
+        # Internal workflow execution (async loop wrapped)
+        result = self._run_agent_workflow(query, context)
+
+        return self._extract_response(result, query)
 ```
 
 ### Document Processing Pattern
@@ -511,6 +490,8 @@ from types import ModuleType
 
 from src.processing import ingestion_api
 
+pytestmark = pytest.mark.unit
+
 
 def test_collect_paths_filters_extensions(tmp_path: Path) -> None:
     (tmp_path / "a.txt").write_text("x", encoding="utf-8")
@@ -566,12 +547,12 @@ class TestMultiAgentIntegration:
         query = "What are the key findings in the uploaded documents?"
         
         # Act
-        response = await coordinator.arun(query)
+        response = coordinator.process_query(query)
         
         # Assert
-        assert response is not None
-        assert len(response) > 0
-        assert coordinator.last_execution_time < 5000  # <5s for integration test
+        assert response.content is not None
+        assert len(response.content) > 0
+        assert response.processing_time < 5.0  # <5s for integration test
     
     async def test_parallel_agent_execution(self, coordinator):
         """Test agents can run in parallel."""
@@ -581,14 +562,13 @@ class TestMultiAgentIntegration:
             "Extract conclusions"
         ]
         
-        # Execute queries in parallel
-        tasks = [coordinator.arun(query) for query in queries]
-        results = await asyncio.gather(*tasks)
+        # Execute queries (synchronous calls)
+        results = [coordinator.process_query(query) for query in queries]
         
         # Verify all succeeded
         assert len(results) == len(queries)
         for result in results:
-            assert result is not None
+            assert result.content is not None
 ```
 
 ### Tier 3: System Tests (Real Models & GPU)
@@ -613,12 +593,12 @@ class TestProductionSystem:
         
         # Execute complex query
         query = "Analyze the technical implications and provide recommendations"
-        response = coordinator.run(query)
+        response = coordinator.process_query(query)
         
         # Verify production performance targets
-        assert coordinator.last_execution_time < 10000  # <10s total
-        assert len(response) > 100  # Substantial response
-        assert "recommendation" in response.lower()  # Contains requested content
+        assert response.processing_time < 10.0  # <10s total
+        assert len(response.content) > 100  # Substantial response
+        assert "recommendation" in response.content.lower()  # Contains requested content
     
     def test_128k_context_window(self, large_document):
         """Test handling of large context (128K tokens)."""
@@ -626,11 +606,11 @@ class TestProductionSystem:
         assert len(large_document.tokens) > 100000  # >100K tokens
         
         coordinator = MultiAgentCoordinator(settings)
-        response = coordinator.run("Summarize this large document", large_document)
+        response = coordinator.process_query("Summarize this large document", context=large_document)
         
         # Should handle large context without truncation errors
-        assert "summary" in response.lower()
-        assert len(response) > 200
+        assert "summary" in response.content.lower()
+        assert len(response.content) > 200
 ```
 
 ### Performance Testing
@@ -645,8 +625,8 @@ class TestPerformanceTargets:
         coordinator = MultiAgentCoordinator(settings)
         
         start_time = time.time()
-        decision = coordinator.route_query("Simple test query")
-        coordination_time = (time.time() - start_time) * 1000  # Convert to ms
+        response = coordinator.process_query("Simple test query")
+        coordination_time = response.optimization_metrics.get("coordination_overhead_ms", 0)
         
         assert coordination_time < 200, f"Coordination took {coordination_time}ms"
     

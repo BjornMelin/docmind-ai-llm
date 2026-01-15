@@ -272,17 +272,13 @@ class MultiAgentCoordinator:
             memory=self.memory
         )
 
-    async def arun(self, query: str, **kwargs) -> str:
-        """Execute multi-agent coordination for complex queries."""
-        config = {"configurable": {"thread_id": str(uuid4())}}
+    def process_query(self, query: str, context: Any | None = None) -> AgentResponse:
+        """Execute multi-agent coordination (synchronous public API)."""
 
-        # Route query through supervisor
-        result = await self.supervisor.ainvoke(
-            {"messages": [HumanMessage(content=query)]},
-            config=config
-        )
+        # Internal async execution logic (wrapped in sync call)
+        result = self._run_agent_workflow(query, context)
 
-        return result["messages"][-1].content
+        return self._extract_response(result, query)
 ```
 
 ### Shared Tool Functions

@@ -181,7 +181,7 @@ def collect_paths(
             continue
         collected.append(resolved)
 
-    collected.sort(key=lambda p: str(p))
+    collected.sort(key=str)
     return collected
 
 
@@ -198,12 +198,14 @@ async def load_documents(
     paths: Sequence[Path | str],
     *,
     reader: Any | None = None,
+    doc_id: str | None = None,
 ) -> list[Document]:
     """Load local files into LlamaIndex Documents (async-friendly).
 
     Args:
         paths: File paths to load.
         reader: Optional Unstructured reader override.
+        doc_id: Optional precomputed document ID (only used if paths has 1 item).
 
     Returns:
         List of LlamaIndex ``Document`` objects.
@@ -225,9 +227,16 @@ async def load_documents(
             continue
         if not path.is_file():
             continue
-        _assert_no_symlink_components(path)
+        try:
+            _assert_no_symlink_components(path)
+        except ValueError as exc:
+            logger.warning("Skipping symlinked ingestion path {}: {}", path, exc)
+            continue
 
-        doc_id_base = await asyncio.to_thread(generate_stable_id, path)
+        if doc_id and len(paths) == 1:
+            doc_id_base = doc_id
+        else:
+            doc_id_base = await asyncio.to_thread(generate_stable_id, path)
         if resolved_reader is not None:
             try:
                 loaded = await asyncio.to_thread(
@@ -297,8 +306,14 @@ async def load_documents_from_inputs(
             if not path.exists() or not path.is_file():
                 logger.warning("Skipping missing ingestion source: {}", path)
                 continue
-            _assert_no_symlink_components(path)
-            file_docs = await load_documents([path], reader=resolved_reader)
+            try:
+                _assert_no_symlink_components(path)
+            except ValueError as exc:
+                logger.warning("Skipping symlinked ingestion path {}: {}", path, exc)
+                continue
+            file_docs = await load_documents(
+                [path], reader=resolved_reader, doc_id=item.document_id
+            )
             for idx, doc in enumerate(file_docs):
                 doc.doc_id = (
                     f"{item.document_id}-{idx}"
