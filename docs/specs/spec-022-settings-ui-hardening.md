@@ -4,7 +4,7 @@ title: Settings UI Hardening — Pre-validation, Safe Provider Badge, and .env P
 version: 1.0.0
 date: 2026-01-09
 owners: ["ai-arch"]
-status: Completed
+status: Implemented
 related_requirements:
   - FR-021: Settings UI pre-validation + safe provider badge.
   - NFR-SEC-001: Default egress disabled; only local endpoints allowed unless explicitly configured.

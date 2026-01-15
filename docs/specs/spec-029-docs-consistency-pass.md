@@ -35,7 +35,7 @@ Restore documentation correctness for v1 by aligning:
 2. **Developer handbook drift**
 
    - Update `docs/developers/developer-handbook.md`:
-     - remove/replace references to placeholder `src.utils.document.process_document` and similar removed APIs
+     - remove/replace references to placeholder ingestion APIs and align with `src/processing/ingestion_api.py`
      - prefer canonical ingestion API under `src/processing/`
 
 3. **Architecture maps**

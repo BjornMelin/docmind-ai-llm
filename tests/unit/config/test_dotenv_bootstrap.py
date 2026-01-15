@@ -29,6 +29,7 @@ def test_resolve_dotenv_path_prefers_repo_root(
 def test_bootstrap_settings_loads_dotenv_once_and_mutates_singleton(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.delenv("DOCMIND_LOG_LEVEL", raising=False)
     repo_root = tmp_path / "repo"
     repo_root.mkdir()
     (repo_root / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")

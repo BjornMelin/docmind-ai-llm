@@ -58,7 +58,7 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 | **FR-021** | The system **shall** pre-validate Settings UI configuration before persisting changes and must not use unsafe HTML rendering in UI elements. | SPEC‑022/ADR‑041 | AC‑FR‑021 |
 | **FR-022** | The system **shall** persist Chat history locally across refresh/restart and provide per-session “clear/purge” actions via LangGraph `SqliteSaver` and `ArtifactRef` resolution. | SPEC‑041/ADR‑058 | AC‑FR‑022 |
 | **FR-023** | The system **shall** provide a keyword/lexical retrieval tool for exact term lookups (gated by config; disabled by default). | SPEC‑025/ADR‑044 | AC‑FR‑023 |
-| **FR-024** | The system **shall** provide a canonical programmatic ingestion API for local filesystem inputs and maintain a thin legacy facade for documentation compatibility. | SPEC‑026/ADR‑045 | AC‑FR‑024 |
+| **FR-024** | The system **shall** provide a canonical programmatic ingestion API for local filesystem inputs. | SPEC‑026/ADR‑045 | AC‑FR‑024 |
 | **FR-025** | The system **shall** support background ingestion and snapshot rebuild jobs in the Documents UI with progress reporting and best-effort cancellation. | SPEC‑033/ADR‑052 | AC‑FR‑025 |
 | **FR-026** | The system **shall** support an optional semantic response cache with strict invalidation by corpus/config/model/template/params. | SPEC‑038/ADR‑035 | AC‑FR‑026 |
 | **FR-027** | The system **shall** support manual local backups (snapshots + cache + optional uploads/analytics) with retention/rotation and documented restore steps. | SPEC‑037/ADR‑033 | AC‑FR‑027 |

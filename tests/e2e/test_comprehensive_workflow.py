@@ -483,7 +483,7 @@ def test_legacy_component_cleanup_validation():
         "src.config.settings",
         "src.agents.coordinator",
         "src.utils.core",
-        "src.utils.document",
+        "src.processing.ingestion_api",
         "src.models.schemas",
     ]
 

@@ -38,7 +38,10 @@ from src.config.dotenv import resolve_dotenv_path
 from src.models.embedding_constants import ImageBackboneName
 
 SETTINGS_MODEL_CONFIG = SettingsConfigDict(
-    env_file=None,
+    # Keep dotenv loading opt-in (callers can pass `_env_file=...` or use
+    # `bootstrap_settings`). Using a non-existent default path keeps the default
+    # behavior "no implicit dotenv" while still allowing `_env_file` overrides.
+    env_file=".env.disabled",
     env_prefix="DOCMIND_",
     env_nested_delimiter="__",
     case_sensitive=False,

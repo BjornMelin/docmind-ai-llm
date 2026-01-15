@@ -468,7 +468,7 @@ import sys
 import importlib
 
 modules = [
-    'src.utils.core', 'src.utils.document', 'src.utils.monitoring',
+    'src.utils.core', 'src.utils.monitoring', 'src.processing.ingestion_api',
     'src.agents.coordinator', 'src.agents.tool_factory', 'src.agents.tools',
     'src.config.settings'
 ]
@@ -586,7 +586,7 @@ else:
                 "src/agents/tools/synthesis.py",
                 "src/agents/tools/validation.py",
                 "src/utils/core.py",
-                "src/utils/document.py",
+                "src/processing/ingestion_api.py",
                 "src/utils/monitoring.py",
                 "src/app.py",
             ]

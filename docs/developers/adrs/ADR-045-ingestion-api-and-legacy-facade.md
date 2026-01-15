@@ -1,85 +1,92 @@
 ---
 ADR: 045
-Title: Programmatic Ingestion API + Legacy Facade Replacement for src.utils.document
-Status: Proposed
-Version: 1.0
-Date: 2026-01-09
+Title: Unified Ingestion Architecture (Greenfield)
+Status: Implemented
+Version: 2.0
+Date: 2026-01-15
 Supersedes:
 Superseded-by:
 Related: 009, 024, 030
-Tags: ingestion, api, legacy, docs
+Tags: ingestion, api, architecture, cleanup
 References:
   - https://docs.llamaindex.ai/en/stable/module_guides/loading/ingestion_pipeline/
+  - SPEC-026
 ---
 
 ## Description
 
-Replace `src/utils/document.py` placeholder stubs with a **canonical programmatic ingestion API** under `src/processing/` and keep `src.utils.document` only as a thin forwarding facade (no duplicate logic).
+Establish `src/processing/ingestion_api.py` as the **sole canonical entry point** for file loading and ingestion input normalization. Fully deprecate and **delete** `src/utils/document.py`.
 
 ## Context
 
-`src/utils/document.py` currently contains async placeholders that raise `NotImplementedError` and include multiple TODOs. These symbols are referenced by:
+The codebase currently splits ingestion responsibilities:
 
-- developer docs (`docs/developers/*`)
-- some tests that patch the symbols
+- `src/processing/ingestion_pipeline.py`: Handles LlamaIndex pipeline assembly (chunking, embedding, storage).
+- `src/utils/document.py`: Handles file loading (`UnstructuredReader`), path sanitization, and basic IO.
 
-At the same time, the actual ingestion implementation is already present and library-first; the canonical API will live in `src/processing/ingestion_api.py` and be used by `src/processing/ingestion_pipeline.py::ingest_documents_sync` and `src/ui/_ingest_adapter_impl.py`, while `src.utils.document` remains a thin forwarding facade:
+This split creates ambiguity and technical debt. `src/utils/document.py` was originally intended as a temporary home or a facade, but it has accumulated business logic (Unstructured fallback, logic for directory traversal).
 
-- `src/processing/ingestion_pipeline.py::ingest_documents_sync`
-- `src/ui/_ingest_adapter_impl.py` for Streamlit uploads
-
-Leaving placeholder stubs undermines ship readiness and documentation trust.
+To achieve a "production-ready, final-release" standard with no technical debt, we must unify the "Loader" layer.
 
 ## Decision Drivers
 
-- Zero broken public-facing examples in v1
-- One definitive ingestion architecture (no parallel implementations)
-- Avoid massive churn (update docs to preferred API, but keep compatibility path)
+- **Modularity:** Ingestion logic should reside in one cohesive package (`src/processing`).
+- **Maintainability:** Removing aliased paths prevents confusion for future developers.
+- **Security:** Centralizing input validation in one module reduces the surface area for path traversal bugs.
 
 ## Alternatives
 
-- A: Delete `src.utils.document` and update all docs/tests immediately
-- B: Replace stubs with a facade forwarding to canonical ingestion API (Selected)
-- C: Keep stubs (unacceptable)
+- **A: Keep Facade (ADR-045 v1.0)**: Move logic but keep `src/utils/document.py` as a proxy.
+  - *Pros*: Backwards compatible.
+  - *Cons*: Adds cognitive load; confusing "two ways to do one thing".
+- **B: Strict Unification (Selected)**: Delete `src/utils/document.py` entirely.
+  - *Pros*: Clean namespace; clear ownership; Greenfield best practice.
+  - *Cons*: Requires updating all call sites (accepted cost).
 
-### Decision Framework (≥9.0)
+### Decision Framework
 
-| Option                             | Complexity (40%) | Perf (30%) | Alignment (30%) |   Total |
-| ---------------------------------- | ---------------: | ---------: | --------------: | ------: |
-| **B: Canonical API + thin facade** |                9 |          9 |               9 | **9.0** |
-| A: Delete + churn                  |                6 |          9 |              10 |     8.1 |
-| C: Keep stubs                      |               10 |          0 |               0 |     4.0 |
+| Model / Option                    | Maintainability (40%) | Architecture Clarity (30%) | Backwards Compatibility (10%) | Implementation Cost (20%) | Total Score | Decision        |
+| --------------------------------- | --------------------- | -------------------------- | ----------------------------- | ------------------------- | ----------- | --------------- |
+| **Strict Unification (Selected)** | 10                    | 10                         | 0                             | 6                         | **8.2**     | **Selected**    |
+| Keep Facade                       | 5                     | 4                          | 10                            | 8                         | 5.8         | Rejected        |
 
 ## Decision
 
-1. Add/affirm a canonical programmatic ingestion API under `src/processing/` (typed functions that accept file paths/bytes and return `IngestionResult`).
+1. **create** `src/processing/ingestion_api.py`.
+    - This module will house the logic previously in `src/utils/document.py` (loading, path validation, hashing).
+    - It will serve as the "Input Layer" that feeds into `ingestion_pipeline.py`.
+2. **Refactor & Move** all logic from `src/utils/document.py` to `src/processing/ingestion_api.py`.
+3. **Delete** `src/utils/document.py`.
+    - Zero backwards compatibility placeholders.
+    - Codebase is updated atomically to use the new path.
+4. **Enforce Strict Layering**:
+    - `src/processing/ingestion_api.py` -> Loads Files -> Returns `IngestionInput` / `Document`.
+    - `src/processing/ingestion_pipeline.py` -> Consumes `Document` -> Returns `Nodes` / `IngestionResult`.
 
-2. Convert `src/utils/document.py` into:
+## Related Requirements
 
-- a thin forwarding layer to the canonical API
-- no business logic beyond argument translation
-- no TODO/NotImplemented stubs
-- emits `DeprecationWarning` to encourage migration
+### Functional Requirements
 
-1. Update developer docs to use the canonical API (not `src.utils.document`), while keeping `src.utils.document` functional for compatibility.
+- **FR-024 (Canonical Ingestion API):** Developers must have a single, safe API for loading documents from disk.
 
-## Security & Privacy
+### Non-Functional Requirements
 
-- Ingestion API must validate file paths (no traversal) and remain local-only.
-- Block symlink-based path escape: reject symlinks at the file level and in parent directory chains (per SPEC-026).
-- No network access beyond explicit model backends (already gated by settings).
+- **NFR-MAINT-003 (Zero Debt):** No placeholder shims or deprecated modules allowed in v1.
+- **NFR-SEC-001 (Offline First):** Ingestion must remain local-only; no implicit network calls.
 
 ## Consequences
 
 ### Positive Outcomes
 
-- Eliminates NotImplemented placeholders in production modules.
-- Restores documentation correctness without requiring immediate global churn.
+- **Single Source of Truth**: All "ingestion" code lives in `src/processing/`.
+- **Reduced Cognitive Load**: No need to check `utils` for core business logic.
+- **Clean Namespace**: `src.utils` is reserved for true utilities (hashing, time), not domain logic.
 
 ### Trade-offs
 
-- Keeps a compatibility facade file in the tree until docs fully migrate.
+- **Breaking Change**: Any external scripts or forks depending on `src.utils.document` will break. (Accepted per "Greenfield" mandate).
 
 ## Changelog
 
-- 1.0 (2026-01-09): Proposed for v1 ship readiness.
+- 1.0 (2026-01-09): Proposed Facade approach.
+- 2.0 (2026-01-15): Updated to Strict Unification (Delete Utils) based on deep architectural review and template compliance.

@@ -11,8 +11,8 @@ import pytest
 from llama_index.core.base.embeddings.base import BaseEmbedding
 
 from src.models.processing import IngestionConfig, IngestionInput
+from src.processing.ingestion_api import load_documents_from_inputs
 from src.processing.ingestion_pipeline import (
-    _document_from_input,
     _resolve_embedding,
     build_ingestion_pipeline,
     ingest_documents,
@@ -231,7 +231,8 @@ async def test_ingest_documents_without_embedding_warns_and_runs(
     assert any("No embedding model configured" in msg for msg in warnings)
 
 
-def test_document_from_input_falls_back_on_type_error(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_document_from_input_falls_back_on_type_error(tmp_path: Path) -> None:
     """TypeError from UnstructuredReader triggers text fallback path."""
     sample = tmp_path / "sample.txt"
     sample.write_text("Fallback content", encoding="utf-8")
@@ -241,7 +242,7 @@ def test_document_from_input_falls_back_on_type_error(tmp_path: Path) -> None:
             raise TypeError("unexpected signature")
 
     item = IngestionInput(document_id="doc-1", source_path=sample)
-    docs = _document_from_input(ExplodingReader(), item)
+    docs = await load_documents_from_inputs([item], reader=ExplodingReader())
 
     assert len(docs) == 1
     assert docs[0].doc_id == "doc-1"
@@ -275,14 +276,22 @@ def test_page_image_exports_builds_metadata(monkeypatch, tmp_path: Path) -> None
     assert exports[1].content_type == "image/jpeg"
 
 
-def test_load_documents_uses_reader(monkeypatch, tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_load_documents_uses_reader(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     from src.processing import ingestion_pipeline as module
 
     class DummyReader:
-        def load_data(self, file: str, unstructured_kwargs: dict[str, str]):  # type: ignore[no-untyped-def]
+        def load_data(  # type: ignore[no-untyped-def]
+            self, *, file: Path, unstructured_kwargs: dict[str, str]
+        ):
+            _ = unstructured_kwargs
             return [SimpleNamespace(text="doc", doc_id="doc-1", metadata={})]
 
-    monkeypatch.setattr(module, "UnstructuredReader", DummyReader)
+    from src.processing import ingestion_api as api
+
+    monkeypatch.setattr(api, "_default_unstructured_reader", lambda: DummyReader())
     monkeypatch.setattr(
         module, "_page_image_exports", lambda *args, **kwargs: ["export"]
     )
@@ -294,6 +303,6 @@ def test_load_documents_uses_reader(monkeypatch, tmp_path: Path) -> None:
         IngestionInput(document_id="doc-1", source_path=sample, encrypt_images=True)
     ]
 
-    docs, exports = module._load_documents(cfg, inputs)
+    docs, exports = await module._load_documents(cfg, inputs)
     assert docs[0].metadata["document_id"] == "doc-1"
     assert exports == ["export"]
