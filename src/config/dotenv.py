@@ -19,8 +19,11 @@ def find_repo_root(start: Path | None = None) -> Path | None:
         current = start or Path.cwd()
 
     for candidate in (current, *current.parents):
-        if (candidate / "pyproject.toml").is_file():
-            return candidate
+        try:
+            if (candidate / "pyproject.toml").is_file():
+                return candidate
+        except OSError:
+            continue
     return None
 
 

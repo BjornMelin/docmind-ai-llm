@@ -1430,8 +1430,6 @@ def get_telemetry_disabled() -> bool:
     The process environment is checked first to keep tests hermetic and to honor
     runtime env overrides without requiring a settings reload.
     """
-    import os
-
     raw = os.getenv("DOCMIND_TELEMETRY_DISABLED")
     if raw is not None:
         return _parse_env_bool(raw)
@@ -1440,8 +1438,6 @@ def get_telemetry_disabled() -> bool:
 
 def get_telemetry_sample() -> float:
     """Return effective telemetry sample rate (0.0..1.0)."""
-    import os
-
     raw = os.getenv("DOCMIND_TELEMETRY_SAMPLE")
     if raw is not None:
         try:
@@ -1455,8 +1451,6 @@ def get_telemetry_sample() -> float:
 
 def get_telemetry_rotate_bytes() -> int:
     """Return effective telemetry rotate bytes limit."""
-    import os
-
     raw = os.getenv("DOCMIND_TELEMETRY_ROTATE_BYTES")
     if raw is not None:
         try:
@@ -1500,6 +1494,13 @@ def apply_settings_in_place(current: DocMindSettings, updated: DocMindSettings) 
     object.__setattr__(
         current, "__pydantic_private__", getattr(updated, "__pydantic_private__", None)
     )
+
+
+def reset_bootstrap_state() -> None:
+    """Reset bootstrap state for testing. Not for production use."""
+    global _DOTENV_BOOTSTRAPPED, _DOTENV_PRIORITY_MODE
+    _DOTENV_BOOTSTRAPPED = False
+    _DOTENV_PRIORITY_MODE = None
 
 
 def bootstrap_settings(

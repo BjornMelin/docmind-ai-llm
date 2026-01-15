@@ -82,7 +82,7 @@ pytest → fixtures → (isolated settings instance OR in-place singleton reset)
 ```python
 # tests/conftest.py (skeleton)
 @pytest.fixture
-def app_settings():
+def app_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.chdir(tmp_path)  # avoid reading a developer .env file
     monkeypatch.setenv("DOCMIND_LLM_BACKEND", "ollama")
     return DocMindSettings()

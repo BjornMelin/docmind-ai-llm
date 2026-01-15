@@ -10,12 +10,20 @@ import pytest
 pytestmark = pytest.mark.unit
 
 
-def _restore_env(keys: list[str], snapshot: dict[str, str]) -> None:
-    for key in keys:
-        if key in snapshot:
-            os.environ[key] = snapshot[key]
-        else:
+def _restore_env(keys: list[str] | None, snapshot: dict[str, str]) -> None:
+    if keys is None:
+        # Restore full snapshot: remove keys not in snapshot, restore original values
+        current_keys = set(os.environ.keys())
+        for key in current_keys - set(snapshot.keys()):
             os.environ.pop(key, None)
+        for key, value in snapshot.items():
+            os.environ[key] = value
+    else:
+        for key in keys:
+            if key in snapshot:
+                os.environ[key] = snapshot[key]
+            else:
+                os.environ.pop(key, None)
 
 
 def _reset_settings_module(mod) -> None:  # type: ignore[no-untyped-def]
@@ -50,14 +58,6 @@ def test_dotenv_first_overrides_env_except_security_and_overlays_env(
     workdir.mkdir()
     monkeypatch.chdir(workdir)
 
-    keys = [
-        "DOCMIND_LOG_LEVEL",
-        "DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS",
-        "DOCMIND_CONFIG__DOTENV_PRIORITY",
-        "DOCMIND_CONFIG__ENV_MASK_KEYS",
-        "DOCMIND_CONFIG__ENV_OVERLAY",
-        "OPENAI_API_KEY",
-    ]
     snapshot = dict(os.environ)
 
     os.environ["DOCMIND_LOG_LEVEL"] = "ENV"
@@ -74,7 +74,7 @@ def test_dotenv_first_overrides_env_except_security_and_overlays_env(
         assert os.environ.get("OPENAI_API_KEY") == "dotenv-key"
     finally:
         _reset_settings_module(mod)
-        _restore_env(keys, snapshot)
+        _restore_env(None, snapshot)
 
 
 def test_env_first_keeps_env_over_dotenv(
@@ -97,7 +97,6 @@ def test_env_first_keeps_env_over_dotenv(
     workdir.mkdir()
     monkeypatch.chdir(workdir)
 
-    keys = ["DOCMIND_LOG_LEVEL", "DOCMIND_CONFIG__DOTENV_PRIORITY"]
     snapshot = dict(os.environ)
     os.environ["DOCMIND_LOG_LEVEL"] = "ENV"
 
@@ -109,7 +108,7 @@ def test_env_first_keeps_env_over_dotenv(
         assert mod.settings.log_level == "ENV"
     finally:
         _reset_settings_module(mod)
-        _restore_env(keys, snapshot)
+        _restore_env(None, snapshot)
 
 
 def test_invalid_overlay_path_raises(
@@ -141,4 +140,4 @@ def test_invalid_overlay_path_raises(
             mod.bootstrap_settings(force=True)
     finally:
         _reset_settings_module(mod)
-        _restore_env(["OPENAI_API_KEY", "DOCMIND_CONFIG__ENV_OVERLAY"], snapshot)
+        _restore_env(None, snapshot)
