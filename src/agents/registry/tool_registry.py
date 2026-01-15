@@ -112,9 +112,12 @@ class DefaultToolRegistry:
     def get_retrieval_tools(self) -> Sequence[Any]:
         """Return the retrieval tool callable."""
         from src.agents.tools.memory import forget_memory, recall_memories, remember
+        from src.agents.tools.ollama_web_tools import get_langchain_web_tools
         from src.agents.tools.router_tool import router_tool
 
-        return [router_tool, recall_memories, remember, forget_memory]
+        tools: list[Any] = [router_tool, recall_memories, remember, forget_memory]
+        tools.extend(get_langchain_web_tools(self.app_settings))
+        return tools
 
     def get_synthesis_tools(self) -> Sequence[Any]:
         """Return the synthesis tool callable."""
