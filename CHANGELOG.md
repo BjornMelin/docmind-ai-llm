@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [0.2.0](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.1.0...v0.2.0) (2026-01-15)
+
+
+### Features
+
+* Add deadline parameter to web search agent and dynamically adjust LLM call timeouts based on remaining time. ([aa3bd08](https://github.com/BjornMelin/docmind-ai-llm/commit/aa3bd08a1324b344c9f81f266e213b87aba9dd8f))
+* **agents:** add optional ollama cloud web tools ([e2e5b38](https://github.com/BjornMelin/docmind-ai-llm/commit/e2e5b3819d9f953adadfe1e8bee08ababb749b5f))
+* enhance Ollama web tools with robust input validation and error handling, and refine Ollama embedding dimension settings. ([45214df](https://github.com/BjornMelin/docmind-ai-llm/commit/45214df26330cf12a631331f60ff867b86654fc0))
+* Improve Ollama web tool configuration and error handling, enhance testing, and update documentation. ([6a5b63b](https://github.com/BjornMelin/docmind-ai-llm/commit/6a5b63bb92f0b133f3ad4c4908b907867c47d22c))
+* ollama native capabilities, tooling, integration, UI wiring ([0222607](https://github.com/BjornMelin/docmind-ai-llm/commit/02226076f205291a2b7296f6a5fca56e7a26a479))
+* **ollama:** add sdk client wiring and settings ([0dbfdd2](https://github.com/BjornMelin/docmind-ai-llm/commit/0dbfdd2c087251f053c48ff5653e5418c62c5c82))
+* **ui:** add advanced ollama settings and warnings ([6e75ff1](https://github.com/BjornMelin/docmind-ai-llm/commit/6e75ff1f3cbbf28a77397534f565ef5f98beb9ba))
+
+
+### Bug Fixes
+
+* **dependencies:** update ollama version to 0.6.1 ([e111c41](https://github.com/BjornMelin/docmind-ai-llm/commit/e111c4111c84b8a4de1c923e6696d3258c96a8be))
+* Ensure `_json_with_limit` correctly handles tiny `max_chars` values by returning an empty JSON string. ([33baa7b](https://github.com/BjornMelin/docmind-ai-llm/commit/33baa7b7a99640dc78ba207f3599dabd039a6bdb))
+* Parse Ollama tool arguments from JSON strings or dictionaries to ensure proper function calls. ([57483e4](https://github.com/BjornMelin/docmind-ai-llm/commit/57483e48507dffb62d9c9bc7d2d4ade4a32fdd6f))
+* **retrieval:** handle stubbed llama_index specs ([f744f7c](https://github.com/BjornMelin/docmind-ai-llm/commit/f744f7c60f65720b1c886eb24c1b353cfa49eff8))
+* **security:** harden ollama allowlist checks ([b923b59](https://github.com/BjornMelin/docmind-ai-llm/commit/b923b594c38e798d68d5d880e1672fd72fc2bc86))
+
+
+### Documentation
+
+* clarify `docker-compose.yml` variable naming guidance to exclude provider/legacy environment variables. ([7159c04](https://github.com/BjornMelin/docmind-ai-llm/commit/7159c04f2d0b8e3963770e91406d1647343315a1))
+* **ollama:** document config surface and native capabilities ([76bd6bc](https://github.com/BjornMelin/docmind-ai-llm/commit/76bd6bce111d8e06010d27bd7a08fedd2952a605))
+
 ## 0.1.0 (2026-01-14)
 
 
