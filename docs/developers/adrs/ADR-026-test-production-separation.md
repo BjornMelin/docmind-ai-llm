@@ -119,6 +119,20 @@ def reset_global_settings() -> Iterator[None]:
 @pytest.mark.unit
 def test_settings_isolation(app_settings):
     assert app_settings.llm_backend == "ollama"
+
+
+@pytest.mark.integration
+def test_ui_with_global_settings(
+    reset_global_settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test that global-singleton settings are reset between tests."""
+    import importlib
+
+    monkeypatch.setenv("DOCMIND_LLM_BACKEND", "openai")
+    settings_mod = importlib.import_module("src.config.settings")
+    settings_mod.bootstrap_settings(force=True)
+    assert settings_mod.settings.llm_backend == "openai"
+    # reset_global_settings fixture automatically resets on teardown
 ```
 
 ## Consequences
