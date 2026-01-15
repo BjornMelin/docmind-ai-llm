@@ -102,7 +102,7 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 
 - Ingestion cache: DuckDBKV; pipeline caches node+transform hashes.
 
-- LLM API: OpenAI‑compatible for vLLM/Ollama/LM Studio/llama.cpp server.
+- LLM API: OpenAI‑compatible for vLLM/Ollama/LM Studio/llama.cpp server, plus optional Ollama-native `/api/*` support for advanced capabilities (SPEC-043).
 
 - UI contracts: `st.Page` navigation, chat stream, status blocks, fragments.
 
@@ -124,7 +124,8 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 
 - Assumption: Qdrant running locally via docker or embedded (qdrant-local acceptable).
 
-- Out‑of‑scope: proprietary cloud LLMs.
+- Out‑of‑scope: general third-party proprietary cloud LLM providers.
+- In scope (optional): Ollama Cloud features (including web search/fetch) when explicitly enabled and allowlisted (SPEC-011 + SPEC-043).
 
 ## 7. Verification methods per requirement
 

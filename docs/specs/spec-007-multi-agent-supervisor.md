@@ -17,11 +17,21 @@ related_adrs: ["ADR-001","ADR-011"]
 
 Restore and integrate your **langgraph-supervisor-py** multi-agent system with the RAG pipeline and tools. Use schema-guided decoding for deterministic outputs when LLM provider supports it.
 
+## Provider Capability Notes (Structured Outputs / Tools)
+
+- vLLM may support schema-guided decoding via server-side guided JSON (see SPEC-001).
+- Ollama supports native structured outputs via `format` and optional “thinking” and tool calling metadata; when using Ollama-native APIs, follow SPEC-043 and treat these fields as optional metadata (do not assume presence or log verbatim traces).
+- Cloud web tools (web search/fetch) MUST remain opt-in and gated by security allowlists (SPEC-011 + SPEC-043).
+
 ## Libraries and Imports
+
+LangGraph v1 deprecates `langgraph.prebuilt.create_react_agent`. Use
+`langchain.agents.create_agent` (LangChain v1) for agent construction and keep
+`langgraph-supervisor` for orchestration.
 
 ```python
 from langgraph_supervisor import create_supervisor
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 from langchain_core.tools import tool
 from src.retrieval.router_factory import build_router_engine
 ```
@@ -50,3 +60,4 @@ Feature: Supervisor routing
 ## References
 
 - LangGraph supervisor official tutorials and repo.
+- SPEC-043 (Ollama native SDK integration and capability gating).

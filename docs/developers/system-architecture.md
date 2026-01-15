@@ -247,7 +247,7 @@ graph TD
 The implementation uses LangGraph's native supervisor pattern:
 
 ```python
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 from langgraph.graph import MessagesState
 from langgraph.checkpoint.memory import InMemorySaver
 
@@ -257,11 +257,11 @@ class MultiAgentCoordinator:
     def __init__(self, llm, tools_data):
         # Create specialized agents
         self.agents = {
-            "router": create_react_agent(llm, [route_query]),
-            "planner": create_react_agent(llm, [plan_query]),
-            "retrieval": create_react_agent(llm, [retrieve_documents]),
-            "synthesis": create_react_agent(llm, [synthesize_results]),
-            "validator": create_react_agent(llm, [validate_response])
+            "router": create_agent(llm, tools=[route_query]),
+            "planner": create_agent(llm, tools=[plan_query]),
+            "retrieval": create_agent(llm, tools=[retrieve_documents]),
+            "synthesis": create_agent(llm, tools=[synthesize_results]),
+            "validator": create_agent(llm, tools=[validate_response])
         }
 
         # Create supervisor graph with memory

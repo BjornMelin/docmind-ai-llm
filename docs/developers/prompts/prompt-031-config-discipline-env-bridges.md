@@ -142,7 +142,8 @@ You must keep changes minimal, library-first, and maintainable.
 #### 1) Config discipline
 
 - Source of truth is `src/config/settings.py` (Pydantic Settings v2).
-- Do not add new `os.getenv` usage outside settings.
+- Do not add new `os.getenv` usage outside `src/config/*`.
+- Do not add backward-compatible env var aliases unless explicitly required by a spec/ADR.
 - Do not weaken offline-first policy or allow remote endpoints by default.
 
 #### 2) Style, Types, and Lint

@@ -3,6 +3,7 @@
 - [requirements.md](./requirements.md)
 - [traceability.md](./traceability.md)
 - [spec-001-llm-runtime.md](./spec-001-llm-runtime.md)
+- [spec-043-ollama-native-capabilities.md](./spec-043-ollama-native-capabilities.md)
 - [spec-002-ingestion-pipeline.md](./spec-002-ingestion-pipeline.md)
 - [spec-003-embeddings.md](./spec-003-embeddings.md)
 - [spec-004-hybrid-retrieval.md](./spec-004-hybrid-retrieval.md)

@@ -81,6 +81,8 @@ Implement a ship-ready container baseline:
     - internal-only network (no `ports:` by default)
     - DocMind connects via `DOCMIND_OLLAMA_BASE_URL=http://ollama:11434`
     - extend `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST` to include `http://ollama`
+    - if Ollama Cloud web tools are enabled, allowlist `https://ollama.com` and
+      enable remote endpoints explicitly
 - Make `torch` installation reliable during container builds by prefetching the
   exact wheel with retry/resume and installing it before `uv sync --frozen`.
   Provide `TORCH_VERSION`, `TORCH_WHEEL_URL`, and optional `TORCH_WHEEL_SHA256`

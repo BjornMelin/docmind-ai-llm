@@ -196,6 +196,16 @@ async def test_latency_smoke(async_llm_client):
 - Python: `llama-index-core>=0.12`, `vllm>=0.10.1`, `torch>=2.4`, `tenacity>=8.2`.
 - Removed: Custom LLM wrappers; prefer LlamaIndex official integrations.
 
+## Addendum — Ollama Native Capabilities (ADR-059)
+
+This ADR’s “no custom wrappers” guidance remains the default. However, we now
+allow a **minimal, centralized** Ollama SDK adapter (`src/config/ollama_client.py`)
+to expose Ollama-native `/api/*` features (structured outputs, thinking, tool
+calling, logprobs, embed dimensions, and optional web tools) with explicit
+streaming semantics and offline-first gating. This is a narrow exception scoped
+to the official Ollama SDK and does **not** reintroduce broad, bespoke wrappers
+for other backends. See ADR-059 and SPEC-043.
+
 ## High-Level Architecture (Operational Detail)
 
 - vLLM launch example (one-liner):

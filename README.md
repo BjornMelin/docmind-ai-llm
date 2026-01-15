@@ -146,7 +146,7 @@ Design goals:
    - **LlamaIndex (>=0.14.12,<0.15.0)**: Retrieval, RouterQueryEngine, IngestionPipeline, PropertyGraphIndex
    - **LangGraph (>=1.0.5,<2.0.0)**: 5-agent supervisor orchestration with langgraph-supervisor library
    - **Streamlit (>=1.52.2,<2.0.0)**: Web interface framework
-   - **Ollama (0.5.3)**: Local LLM integration
+   - **Ollama (0.6.1)**: Local LLM integration
    - **Qdrant Client (>=1.15.1,<2.0.0)**: Vector database operations
    - **Unstructured (>=0.18.26,<0.19.0)**: Multi-format parsing (PDF/DOCX/PPTX/XLSX, etc.)
    - **LlamaIndex Embeddings FastEmbed (>=0.5.0,<0.6.0)**: Sparse query encoding (optional fastembed-gpu >=0.7.4,<0.8.0)
@@ -508,6 +508,16 @@ flowchart TD
 
 DocMind AI uses a unified Pydantic Settings model (`src/config/settings.py`). Environment variables use the `DOCMIND_` prefix with `__` for nested fields and are loaded from `.env` by default.
 
+### Why `DOCMIND_*` and not provider env vars?
+
+DocMind’s `DOCMIND_*` variables configure the **application** (routing, security, and provider selection) and are intentionally separate from provider/server variables such as `OLLAMA_*`, `OPENAI_*`, or `VLLM_*` that control those services directly. Keeping a single, app-scoped config surface:
+
+- avoids collisions with provider/daemon env vars on the same machine,
+- keeps security policy (remote endpoint allowlisting) centralized, and
+- ensures consistent behavior across backends.
+
+Use `DOCMIND_OLLAMA_API_KEY` for Ollama Cloud access; `OLLAMA_*` remains reserved for the Ollama server/CLI itself.
+
 ### Configuration Philosophy
 
 Configuration is centralized and strongly typed. Prefer `.env` overrides and keep runtime toggles in one place for repeatable local runs.
@@ -526,6 +536,12 @@ Key configuration options in `.env`:
 # LLM backend
 DOCMIND_LLM_BACKEND=ollama
 DOCMIND_OLLAMA_BASE_URL=http://localhost:11434
+# Optional (Ollama Cloud / web search)
+# DOCMIND_OLLAMA_API_KEY=
+# DOCMIND_OLLAMA_ENABLE_WEB_SEARCH=false
+# DOCMIND_OLLAMA_EMBED_DIMENSIONS=
+# DOCMIND_OLLAMA_ENABLE_LOGPROBS=false
+# DOCMIND_OLLAMA_TOP_LOGPROBS=0
 # DOCMIND_LLM_BACKEND=vllm
 # DOCMIND_MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8  # top-level override
 # DOCMIND_VLLM__VLLM_BASE_URL=http://localhost:8000
