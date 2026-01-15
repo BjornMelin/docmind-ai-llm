@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [0.3.0](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.2.0...v0.3.0) (2026-01-15)
+
+
+### Features
+
+* add integration test for global settings isolation using `monkeypatch` ([49f71f5](https://github.com/BjornMelin/docmind-ai-llm/commit/49f71f56a26cec9c0867d7bb3c423b32e570915d))
+* **config:** upgrade pydantic and add dotenv override modes ([82a39bf](https://github.com/BjornMelin/docmind-ai-llm/commit/82a39bf8bb00f0c283e85df2335bf95a8de18316))
+* **config:** upgrade pydantic and add dotenv override modes ([7fc5cd6](https://github.com/BjornMelin/docmind-ai-llm/commit/7fc5cd608a95e577e9ecaa83356b09722f0b8074))
+* Upgrade Pydantic to 2.12.x and adapt configuration for improved settings management and source precedence. ([91d2149](https://github.com/BjornMelin/docmind-ai-llm/commit/91d21490a62babedfbcb99f3697bc86cf3ef8b27))
+
+
+### Bug Fixes
+
+* **config:** resolve PR review comments for pydantic upgrades ([8e96c1b](https://github.com/BjornMelin/docmind-ai-llm/commit/8e96c1b4d0530a9660b8933cf950fdaf8a62f2ea))
+
+
+### Documentation
+
+* Add imports for `Path`, `pytest`, and `DocMindSettings` and remove a `type: ignore` comment in ADR-026 example code. ([c8238b4](https://github.com/BjornMelin/docmind-ai-llm/commit/c8238b43420a100891cf86c1f923aeb33f5f73ea))
+
 ## [0.2.0](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.1.0...v0.2.0) (2026-01-15)
 
 
