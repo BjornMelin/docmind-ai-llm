@@ -65,7 +65,7 @@ Each work package MUST ship with:
 | 02 | Containerization hardening (Dockerfile + compose) | ADR-042 | SPEC-023 | `docs/developers/prompts/prompt-023-containerization-hardening.md` |
 | 03 | Chat persistence + hybrid agentic memory (LangGraph SQLite) | ADR-058 | SPEC-041 | `docs/developers/prompts/implemented/prompt-041-chat-persistence-langgraph-sqlite-hybrid-memory.md` |
 | 04 | Keyword tool: sparse-only Qdrant retriever | ADR-044 | SPEC-025 | `docs/developers/prompts/prompt-025-keyword-tool-sparse-only.md` |
-| 05 | Ingestion API + legacy facade cleanup (`src.utils.document`) | ADR-045 | SPEC-026 | `docs/developers/prompts/prompt-026-ingestion-api-facade.md` |
+| 05 | Ingestion API cleanup (`src/processing/ingestion_api.py`) | ADR-045 | SPEC-026 | `docs/developers/prompts/implemented/prompt-026-ingestion-api-facade.md` |
 | 06 | Remove legacy `src/main.py` entrypoint | ADR-046 | SPEC-027 | `docs/developers/prompts/prompt-027-remove-legacy-main-entrypoint.md` |
 | 07 | Safe logging policy (remove PII redactor stub) | ADR-047 | SPEC-028 | `docs/developers/prompts/prompt-028-safe-logging-no-pii-redactor.md` |
 | 08 | Docs consistency pass (spec drift + ADR number backfill) | ADR-048 | SPEC-029 | `docs/developers/prompts/prompt-029-docs-consistency-pass.md` |

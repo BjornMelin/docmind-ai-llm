@@ -28,11 +28,6 @@ from llama_index.storage.kvstore.duckdb import DuckDBKVStore
 from loguru import logger
 from opentelemetry import trace
 
-try:
-    from llama_index.readers.file import UnstructuredReader
-except ImportError:  # pragma: no cover - optional dependency
-    UnstructuredReader = None  # type: ignore
-
 from src.config import settings as app_settings
 from src.config import setup_llamaindex
 from src.config.integrations import get_settings_embed_model
@@ -46,16 +41,15 @@ from src.models.processing import (
 )
 from src.persistence.artifacts import ArtifactRef, ArtifactStore
 from src.persistence.hashing import compute_config_hash, compute_corpus_hash
+from src.processing.ingestion_api import load_documents_from_inputs
 from src.processing.pdf_pages import save_pdf_page_images
 
 if TYPE_CHECKING:  # pragma: no cover
     from llama_index.core.base.embeddings.base import BaseEmbedding
-    from llama_index.readers.file import UnstructuredReader as ReaderType
 
     from src.retrieval.image_index import PageImageRecord
 else:
     BaseEmbedding = object
-    ReaderType = object
 
 _TRACER = trace.get_tracer("docmind.ingestion")
 
@@ -238,79 +232,6 @@ def _resolve_embedding(embedding: BaseEmbedding | None) -> BaseEmbedding | None:
     return resolved
 
 
-def _document_from_input(
-    reader: ReaderType | None, item: IngestionInput
-) -> list[Document]:
-    """Convert an ingestion input into LlamaIndex ``Document`` objects.
-
-    Args:
-        reader: Optional Unstructured reader used for rich parsing.
-        item: Normalized ingestion payload describing the source corpus item.
-
-    Returns:
-        list[Document]: Documents populated with normalized metadata.
-    """
-    if item.source_path is not None and reader is not None:
-        try:
-            source_path = Path(item.source_path)
-            docs = reader.load_data(  # type: ignore[call-arg]
-                file=source_path,
-                unstructured_kwargs={"filename": source_path.name},
-            )
-        except (
-            TypeError,
-            OSError,
-            ValueError,
-            RuntimeError,
-        ) as exc:  # pragma: no cover
-            logger.debug("UnstructuredReader failed: {}", exc)
-            safe_name = Path(item.source_path).name if item.source_path else "<bytes>"
-            logger.info(
-                "Falling back to plain-text read for {} (doc_id={}) due to "
-                "UnstructuredReader failure",
-                safe_name,
-                item.document_id,
-            )
-            text = Path(item.source_path).read_text(encoding="utf-8", errors="ignore")
-            docs = [Document(text=text, doc_id=item.document_id)]
-    elif item.source_path is not None:
-        text = Path(item.source_path).read_text(encoding="utf-8", errors="ignore")
-        docs = [Document(text=text, doc_id=item.document_id)]
-    else:
-        payload = item.payload_bytes or b""
-        text = payload.decode("utf-8", errors="ignore")
-        docs = [Document(text=text, doc_id=item.document_id)]
-
-    for doc in docs:
-        doc.doc_id = item.document_id
-        doc.metadata.update(item.metadata)
-        doc.metadata.setdefault("document_id", item.document_id)
-        page_raw = (
-            doc.metadata.get("page_number")
-            or doc.metadata.get("page")
-            or doc.metadata.get("page_no")
-            or doc.metadata.get("page_num")
-        )
-        page_no = _parse_page_number(page_raw)
-        if page_no and not doc.metadata.get("page_id"):
-            doc.metadata["page_id"] = f"{item.document_id}::page::{page_no}"
-        # Do not persist raw filesystem paths in node metadata.
-        # Keep stable identifiers (document_id, sha256, source_filename) instead.
-        src = doc.metadata.get("source")
-        if isinstance(src, str):
-            # Unstructured/LlamaIndex often set `source` to a local path/URI.
-            # Normalize to a safe basename so durable stores never see absolute paths.
-            with contextlib.suppress(Exception):
-                doc.metadata["source"] = Path(src).name
-        elif src is not None:
-            with contextlib.suppress(Exception):
-                doc.metadata.pop("source", None)
-        for k in ("source_path", "file_path", "path"):
-            with contextlib.suppress(Exception):
-                doc.metadata.pop(k, None)
-    return docs
-
-
 def _page_image_exports(
     path: Path,
     cfg: IngestionConfig,
@@ -389,7 +310,7 @@ def _page_image_exports(
     return exports
 
 
-def _load_documents(
+async def _load_documents(
     cfg: IngestionConfig, inputs: Sequence[IngestionInput]
 ) -> tuple[list[Document], list[ExportArtifact]]:
     """Load source corpus into ``Document`` instances and capture exports.
@@ -402,20 +323,32 @@ def _load_documents(
         tuple[list[Document], list[ExportArtifact]]: Parsed documents paired
         with any generated artifact exports.
     """
-    reader = UnstructuredReader() if UnstructuredReader is not None else None
-    documents: list[Document] = []
+    documents = await load_documents_from_inputs(inputs)
     exports: list[ExportArtifact] = []
+
+    for doc in documents:
+        doc_id = str(doc.metadata.get("document_id") or "")
+        page_raw = (
+            doc.metadata.get("page_number")
+            or doc.metadata.get("page")
+            or doc.metadata.get("page_no")
+            or doc.metadata.get("page_num")
+        )
+        page_no = _parse_page_number(page_raw)
+        if doc_id and page_no and not doc.metadata.get("page_id"):
+            doc.metadata["page_id"] = f"{doc_id}::page::{page_no}"
+
     for item in inputs:
-        documents.extend(_document_from_input(reader, item))
-        if item.source_path is not None:
-            exports.extend(
-                _page_image_exports(
-                    Path(item.source_path),
-                    cfg,
-                    item.encrypt_images,
-                    document_id=item.document_id,
-                )
+        if item.source_path is None:
+            continue
+        exports.extend(
+            _page_image_exports(
+                Path(item.source_path),
+                cfg,
+                item.encrypt_images,
+                document_id=item.document_id,
             )
+        )
     return documents, exports
 
 
@@ -670,7 +603,7 @@ async def ingest_documents(
     pipeline, cache_path, docstore_path = build_ingestion_pipeline(
         cfg, embedding=resolved_embedding
     )
-    documents, exports = _load_documents(cfg, inputs)
+    documents, exports = await _load_documents(cfg, inputs)
 
     start = time.perf_counter()
     with _TRACER.start_as_current_span("ingest_documents") as span:

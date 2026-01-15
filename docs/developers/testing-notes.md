@@ -16,7 +16,7 @@ consumed by the app and pages:
   - `llama_index.core.VectorStoreIndex`
   - `llama_index.core.vector_stores.SimpleVectorStore`
 - Document loading
-  - `src.utils.document.load_documents_unstructured`
+  - `src.processing.ingestion_api.load_documents`
 
 Telemetry tests that target tools implemented as LangChain `StructuredTool`
 should import the module using `importlib.import_module("src.agents.tools.router_tool")`

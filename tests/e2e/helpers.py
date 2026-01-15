@@ -214,6 +214,7 @@ def build_isolated_modules() -> dict[str, ModuleType]:
     src_pkg = ModuleType("src")
     agents_pkg = ModuleType("src.agents")
     utils_pkg = ModuleType("src.utils")
+    processing_pkg = ModuleType("src.processing")
 
     coord_mod = ModuleType("src.agents.coordinator")
     coord_mod.MultiAgentCoordinator = _StubCoordinator  # type: ignore[attr-defined]
@@ -223,13 +224,15 @@ def build_isolated_modules() -> dict[str, ModuleType]:
 
     src_pkg.agents = agents_pkg  # type: ignore[attr-defined]
     src_pkg.utils = utils_pkg  # type: ignore[attr-defined]
+    src_pkg.processing = processing_pkg  # type: ignore[attr-defined]
 
     return {
         "src": src_pkg,
         "src.agents": agents_pkg,
         "src.utils": utils_pkg,
         "src.utils.core": ModuleType("src.utils.core"),
-        "src.utils.document": ModuleType("src.utils.document"),
+        "src.processing": processing_pkg,
+        "src.processing.ingestion_api": ModuleType("src.processing.ingestion_api"),
         "src.agents.coordinator": coord_mod,
         "src.agents.tool_factory": tf_mod,
     }
@@ -269,7 +272,7 @@ def patch_async_workflow_dependencies() -> Generator[tuple[AsyncMock, Any], None
     """Patch async workflow dependencies used across E2E tests."""
     with (
         patch(
-            "src.utils.document.load_documents_unstructured",
+            "src.processing.ingestion_api.load_documents",
             new_callable=AsyncMock,
             create=True,
         ) as mock_load,
@@ -285,7 +288,7 @@ def patch_async_workflow_dependencies() -> Generator[tuple[AsyncMock, Any], None
 def patch_document_loader() -> Generator[AsyncMock, None, None]:
     """Patch the async document loader for E2E tests."""
     with patch(
-        "src.utils.document.load_documents_unstructured",
+        "src.processing.ingestion_api.load_documents",
         new_callable=AsyncMock,
         create=True,
     ) as mock_load_docs:

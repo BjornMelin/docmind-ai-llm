@@ -272,17 +272,13 @@ class MultiAgentCoordinator:
             memory=self.memory
         )
 
-    async def arun(self, query: str, **kwargs) -> str:
-        """Execute multi-agent coordination for complex queries."""
-        config = {"configurable": {"thread_id": str(uuid4())}}
+    def process_query(self, query: str, context: Any | None = None) -> AgentResponse:
+        """Execute multi-agent coordination (synchronous public API)."""
 
-        # Route query through supervisor
-        result = await self.supervisor.ainvoke(
-            {"messages": [HumanMessage(content=query)]},
-            config=config
-        )
+        # Internal async execution logic (wrapped in sync call)
+        result = self._run_agent_workflow(query, context)
 
-        return result["messages"][-1].content
+        return self._extract_response(result, query)
 ```
 
 ### Shared Tool Functions
@@ -483,13 +479,26 @@ sequenceDiagram
 # Core integration pattern
 from src.config import settings
 from src.agents.coordinator import MultiAgentCoordinator
-from src.utils.document import load_documents_unstructured
-from src.utils.embedding import create_index_async
+from pathlib import Path
+from src.models.processing import IngestionConfig, IngestionInput
+from src.processing.ingestion_pipeline import ingest_documents
+from src.processing.ingestion_api import generate_stable_id
 
 # Usage example
-documents = await load_documents_unstructured(file_paths, settings)
-index = await create_index_async(documents, settings)
-coordinator = MultiAgentCoordinator()
+cfg = IngestionConfig(
+    chunk_size=settings.processing.chunk_size,
+    chunk_overlap=settings.processing.chunk_overlap,
+)
+inputs = [
+    IngestionInput(
+        document_id=generate_stable_id(path),
+        source_path=Path(path),
+        metadata={"source_filename": Path(path).name},
+    )
+    for path in file_paths
+]
+result = await ingest_documents(cfg, inputs)
+coordinator = MultiAgentCoordinator(settings)
 response = coordinator.process_query(query)
 ```
 

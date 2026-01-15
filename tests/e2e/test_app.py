@@ -297,7 +297,7 @@ def test_app_renders_and_shows_chat(app_test) -> None:
     assert "Chat with Documents" in app_str or hasattr(app, "chat_input")
 
 
-@patch("src.utils.core.load_documents_unstructured")
+@patch("src.processing.ingestion_api.load_documents", new_callable=AsyncMock)
 def test_app_document_upload_workflow(mock_load_docs, app_test, tmp_path) -> None:
     """Validate upload and processing pipeline with boundary mocks."""
 
