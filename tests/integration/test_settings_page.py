@@ -6,6 +6,7 @@ Relies on Streamlit AppTest to run src/pages/04_settings.py in a temp cwd.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
@@ -71,6 +72,8 @@ def fixture_settings_app_test(tmp_path, monkeypatch) -> Iterator[AppTest]:
     - Runs page in a temporary working directory so Save writes to a temp .env.
     - Avoids external side effects and keeps tests deterministic.
     """
+    import sys
+
     # Ensure cwd is a temp directory for .env persistence
     monkeypatch.chdir(tmp_path)
 
@@ -79,11 +82,27 @@ def fixture_settings_app_test(tmp_path, monkeypatch) -> Iterator[AppTest]:
     original_llm = getattr(LISettings, "_llm", None)
     original_embed = getattr(LISettings, "_embed_model", None)
 
+    # Avoid slow/optional GraphRAG adapter discovery during Settings AppTest reruns.
+    # The Settings page only needs the badge health tuple; heavy adapter imports are
+    # out of scope for this integration test and can dominate runtime under coverage.
+    adapter_stub = ModuleType("src.retrieval.adapter_registry")
+
+    def get_default_adapter_health(
+        *, force_refresh: bool = False
+    ) -> tuple[bool, str, str]:
+        del force_refresh
+        return False, "unavailable", "GraphRAG disabled for Settings AppTest"
+
+    adapter_stub.get_default_adapter_health = get_default_adapter_health  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "src.retrieval.adapter_registry", adapter_stub)
+
     # Build AppTest for the Settings page file
     page_path = Path(__file__).resolve().parents[2] / "src" / "pages" / "04_settings.py"
     try:
-        # Default timeout needs to tolerate slower CI/coverage runs.
-        yield AppTest.from_file(str(page_path), default_timeout=60)
+        yield AppTest.from_file(
+            str(page_path),
+            default_timeout=int(os.environ.get("TEST_TIMEOUT", "30")),
+        )
     finally:
         LISettings.llm = original_llm
         LISettings.embed_model = original_embed
