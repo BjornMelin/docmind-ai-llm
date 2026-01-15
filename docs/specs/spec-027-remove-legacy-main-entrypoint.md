@@ -4,7 +4,7 @@ title: Remove Legacy Entrypoint (`src/main.py`)
 version: 1.0.0
 date: 2026-01-09
 owners: ["ai-arch"]
-status: Final
+status: Implemented
 related_requirements:
   - NFR-PORT-001: Single definitive architecture; no prod/local forks.
   - NFR-MAINT-003: No placeholder/dead entrypoints.
@@ -23,7 +23,7 @@ Remove the dead/legacy Python entrypoint (`src/main.py`) so that the only suppor
 ## Transition
 
 - Approver: `ai-arch`
-- Status: Final (merged removal of `src/main.py`; config + tests updated)
+- Status: Implemented (merged removal of `src/main.py`; config + tests updated)
 
 ## Technical design
 

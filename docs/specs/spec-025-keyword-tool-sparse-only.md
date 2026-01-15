@@ -4,7 +4,7 @@ title: Keyword Search Tool — Sparse-only Qdrant Retriever (text-sparse)
 version: 1.0.1
 date: 2026-01-11
 owners: ["ai-arch"]
-status: Completed
+status: Implemented
 related_requirements:
   - FR-023: Keyword/lexical tool for exact term lookups (disabled by default).
   - NFR-MAINT-001: Library-first; avoid new retrieval dependencies for v1.

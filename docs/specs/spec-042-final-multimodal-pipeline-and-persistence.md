@@ -1,9 +1,20 @@
-# SPEC-042: Final Multimodal Pipeline + Cognitive Persistence (End-to-End)
+---
+spec: SPEC-042
+title: Final Multimodal Pipeline + Cognitive Persistence (End-to-End)
+version: 1.0.0
+date: 2026-01-12
+owners: ["ai-arch"]
+status: Implemented
+related_requirements:
+  - FR-003: Canonical nodes with deterministic IDs and pdf_page_image nodes.
+  - FR-004: Embed text (BGE-M3) and images (SigLIP).
+  - FR-007: Rerank text and visual/page-image nodes.
+  - FR-022: Persist Chat history via LangGraph SqliteSaver and ArtifactRef.
+  - FR-SEC-IMG-ENC: AES-GCM encryption-at-rest for page images.
+related_adrs: ["ADR-058", "ADR-057", "ADR-037", "ADR-009", "ADR-011", "ADR-014", "ADR-047", "ADR-055"]
+notes: "Scope: Data schemas + API signatures for the shipped multimodal pipeline and persistence wiring. ADR-058 is the primary integration source of truth."
+---
 
-**Status:** Implemented  
-**Date:** 2026-01-12  
-**Related ADRs:** ADR-058 (this spec), ADR-057, ADR-037, ADR-009, ADR-011, ADR-014, ADR-047, ADR-055  
-**Scope:** Data schemas + API signatures for the shipped multimodal pipeline and persistence wiring.
 
 ## 1) Non-negotiable invariants
 

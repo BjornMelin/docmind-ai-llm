@@ -4,7 +4,7 @@ title: Prompt Template System (RichPromptTemplate, File-Based)
 version: 1.0.0
 date: 2025-09-08
 owners: ["ai-arch"]
-status: Completed
+status: Implemented
 related_requirements:
   - FR-020: File-based prompt templates with RichPromptTemplate and presets
 related_adrs: ["ADR-020","ADR-003","ADR-004","ADR-024"]

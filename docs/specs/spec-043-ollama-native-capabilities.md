@@ -4,7 +4,7 @@ title: Ollama Native SDK Integration and Optional Capabilities
 version: 1.0.0
 date: 2026-01-15
 owners: ["ai-arch"]
-status: Final
+status: Implemented
 related_requirements:
   - FR-LLM-002: The app SHALL support Ollama as a provider.
   - FR-LLM-003: Structured outputs SHALL be supported when provider allows.
