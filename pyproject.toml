@@ -37,7 +37,7 @@ dependencies = [
     "openai>=1.109.1,<2.0.0",
     "openai-whisper==20250625",          # Whisper speech-to-text (optional)
     # Local LLM Backends (CPU defaults; GPU in [gpu] extra)
-    "ollama==0.5.3",
+    "ollama==0.6.1",
     "llama-cpp-python>=0.3.16,<0.4.0",
     # Vector Databases & Clients
     "qdrant-client>=1.15.1,<2.0.0",
