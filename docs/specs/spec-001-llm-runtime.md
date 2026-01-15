@@ -25,7 +25,13 @@ Provide a single, definitive LLM runtime with **four providers** selectable in t
   - `llama_index.llms.llama_cpp.LlamaCPP` for GGUF local models.
   - `llama_index.llms.openai_like.OpenAILike` for **vLLM**/**LM Studio**/**llama.cpp server** (OpenAI-compatible endpoints).
   - `llama_index.llms.ollama.Ollama` for **Ollama**.
-- For Ollama-native `/api/*` capabilities (structured outputs via `format`, `think`, tool calling, logprobs, embed `dimensions`, and optional cloud web tools), use the official Ollama SDK helpers defined in `src/config/ollama_client.py` and follow SPEC-043.
+- For Ollama-native `/api/*` capabilities, use the official Ollama SDK helpers defined in `src/config/ollama_client.py` and follow SPEC-043. Ollama-native capabilities include:
+  - Structured outputs via the `format` parameter
+  - Thinking via the `think` parameter
+  - Tool-calling support
+  - Logprobs for token probabilities
+  - Embed `dimensions` for truncation
+  - Optional cloud web tools (web_search/web_fetch)
 - Central factory: `src/config/llm_factory.py`.
 - UI wiring: `src/pages/04_settings.py` controls provider, model, base URLs, and advanced knobs.
 - Respect environment via `src/config/settings.py` and surfacing in UI.

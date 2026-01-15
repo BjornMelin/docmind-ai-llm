@@ -3,7 +3,6 @@
 - [requirements.md](./requirements.md)
 - [traceability.md](./traceability.md)
 - [spec-001-llm-runtime.md](./spec-001-llm-runtime.md)
-- [spec-043-ollama-native-capabilities.md](./spec-043-ollama-native-capabilities.md)
 - [spec-002-ingestion-pipeline.md](./spec-002-ingestion-pipeline.md)
 - [spec-003-embeddings.md](./spec-003-embeddings.md)
 - [spec-004-hybrid-retrieval.md](./spec-004-hybrid-retrieval.md)
@@ -38,4 +37,5 @@
 - [spec-040-agent-deadline-propagation-and-router-injection.md](./spec-040-agent-deadline-propagation-and-router-injection.md)
 - [spec-041-chat-persistence-agentic-memory-langgraph-sqlite.md](./spec-041-chat-persistence-agentic-memory-langgraph-sqlite.md)
 - [spec-042-final-multimodal-pipeline-and-persistence.md](./spec-042-final-multimodal-pipeline-and-persistence.md)
+- [spec-043-ollama-native-capabilities.md](./spec-043-ollama-native-capabilities.md)
 - [superseded/](./superseded/index.md)

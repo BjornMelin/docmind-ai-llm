@@ -19,9 +19,9 @@ Restore and integrate your **langgraph-supervisor-py** multi-agent system with t
 
 ## Provider Capability Notes (Structured Outputs / Tools)
 
-- vLLM may support schema-guided decoding via server-side guided JSON (see SPEC-001).
-- Ollama supports native structured outputs via `format` and optional “thinking” and tool calling metadata; when using Ollama-native APIs, follow SPEC-043 and treat these fields as optional metadata (do not assume presence or log verbatim traces).
-- Cloud web tools (web search/fetch) MUST remain opt-in and gated by security allowlists (SPEC-011 + SPEC-043).
+- vLLM may support schema-guided decoding via server-side guided JSON (see [SPEC-001](./spec-001.md)).
+- Ollama supports native structured outputs via `format` and optional "thinking" and tool-calling metadata; when using Ollama-native APIs, follow [SPEC-043](./spec-043.md) and treat these fields as optional metadata (do not assume presence or log verbatim traces).
+- Cloud web tools (web search/fetch) MUST remain opt-in and gated by security allowlists ([SPEC-011](./spec-011.md) + [SPEC-043](./spec-043.md)).
 
 ## Libraries and Imports
 
@@ -60,4 +60,4 @@ Feature: Supervisor routing
 ## References
 
 - LangGraph supervisor official tutorials and repo.
-- SPEC-043 (Ollama native SDK integration and capability gating).
+- [SPEC-043](./spec-043.md) (Ollama native SDK integration and capability gating).

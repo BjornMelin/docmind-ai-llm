@@ -107,11 +107,11 @@ DocMind may pass `think` when a model supports it:
 
 Thinking traces MUST be treated as optional metadata and MUST NOT be logged verbatim.
 
-### Tool calling + cloud web tools
+### Tool-calling + cloud web tools
 
 When `ollama_enable_web_search` is enabled and the endpoint policy allows `https://ollama.com`:
 
-- Tools MAY include Ollama Cloud web tools (web search/fetch) via the SDK and tool calling capability.
+- Tools MAY include Ollama Cloud web tools (web search/fetch) via the SDK and tool-calling capability.
 - If disabled, the app MUST NOT inject these tools or call cloud endpoints.
 
 ## Testing Guidance
