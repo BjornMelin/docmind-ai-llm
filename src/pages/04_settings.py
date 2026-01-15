@@ -256,7 +256,7 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
         }
     )
     # Apply updated settings in-place so existing imports keep the same instance.
-    for field in settings.model_fields:
+    for field in DocMindSettings.model_fields:
         try:
             value = getattr(updated, field)
         except AttributeError:
@@ -744,6 +744,8 @@ def _render_ollama_web_search_warning(
         allow_remote: Whether remote endpoints are allowed.
         allowlist: Current endpoint allowlist.
     """
+    from urllib.parse import urlparse
+
     if not enabled:
         return
     if not allow_remote:
@@ -752,8 +754,20 @@ def _render_ollama_web_search_warning(
             "`DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS`."
         )
         return
-    normalized = {str(entry).strip().lower() for entry in allowlist if entry}
-    if not any("ollama.com" in entry for entry in normalized):
+
+    def _is_ollama_host(entry: str) -> bool:
+        """Check if entry references ollama.com or a subdomain."""
+        normalized = entry.strip().lower()
+        if not normalized:
+            return False
+        # Add scheme if missing so urlparse extracts hostname correctly
+        if "://" not in normalized:
+            normalized = f"https://{normalized}"
+        host = (urlparse(normalized).hostname or "").strip().lower()
+        return host == "ollama.com" or host.endswith(".ollama.com")
+
+    has_ollama_host = any(_is_ollama_host(str(entry)) for entry in allowlist if entry)
+    if not has_ollama_host:
         st.warning(
             "Ollama web tools require `https://ollama.com` in "
             "`DOCMIND_SECURITY__ENDPOINT_ALLOWLIST`."

@@ -135,7 +135,7 @@ def _resolve_headers(cfg: DocMindSettings) -> dict[str, str]:
     api_key = _resolve_ollama_api_key(cfg)
     host = _resolve_ollama_host(cfg)
     hostname = urlparse(_normalize_url(host)).hostname or ""
-    if api_key and hostname.endswith("ollama.com"):
+    if api_key and (hostname == "ollama.com" or hostname.endswith(".ollama.com")):
         headers["authorization"] = f"Bearer {api_key}"
     return headers
 
