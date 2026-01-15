@@ -276,6 +276,7 @@ def test_settings_allow_remote_allows_remote_urls(settings_app_test: AppTest) ->
 
 def test_settings_warns_when_ollama_allowlist_missing(
     settings_app_test: AppTest,
+    reset_settings_after_test: None,
 ) -> None:
     """Enabling Ollama web tools should warn when allowlist lacks ollama.com."""
     app = settings_app_test.run()

@@ -763,7 +763,7 @@ def _render_ollama_web_search_warning(
         # Add scheme if missing so urlparse extracts hostname correctly
         if "://" not in normalized:
             normalized = f"https://{normalized}"
-        host = (urlparse(normalized).hostname or "").strip().lower()
+        host = (urlparse(normalized).hostname or "").strip().lower().rstrip(".")
         return host == "ollama.com" or host.endswith(".ollama.com")
 
     has_ollama_host = any(_is_ollama_host(str(entry)) for entry in allowlist if entry)
