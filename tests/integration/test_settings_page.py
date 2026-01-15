@@ -89,7 +89,9 @@ def fixture_settings_app_test(tmp_path, monkeypatch) -> Iterator[AppTest]:
 
 
 def test_settings_apply_runtime_calls_initialize_integrations(
-    settings_app_test: AppTest, monkeypatch: pytest.MonkeyPatch
+    settings_app_test: AppTest,
+    monkeypatch: pytest.MonkeyPatch,
+    reset_settings_after_test: None,
 ) -> None:
     """Apply runtime should call initialize_integrations.
 
@@ -109,6 +111,9 @@ def test_settings_apply_runtime_calls_initialize_integrations(
             widget.set_value("key-apply-123").run()
 
     for widget in app.checkbox:
+        # Enable remote endpoints first (required for web search)
+        if "Allow remote endpoints" in str(widget):
+            widget.set_value(True).run()
         if "Enable Ollama web search tools" in str(widget):
             widget.set_value(True).run()
         if "Enable Ollama logprobs" in str(widget):
@@ -138,7 +143,11 @@ def test_settings_apply_runtime_calls_initialize_integrations(
     assert _settings.ollama_top_logprobs == 2
 
 
-def test_settings_save_persists_env(settings_app_test: AppTest, tmp_path: Path) -> None:
+def test_settings_save_persists_env(
+    settings_app_test: AppTest,
+    tmp_path: Path,
+    reset_settings_after_test: None,
+) -> None:
     """Saving settings should write expected keys into .env in temp cwd."""
     import sys
 
@@ -168,6 +177,9 @@ def test_settings_save_persists_env(settings_app_test: AppTest, tmp_path: Path) 
         api_key_inputs[0].set_value("key-123").run()
 
     for checkbox in app.checkbox:
+        # Enable remote endpoints first (required for web search)
+        if "Allow remote endpoints" in str(checkbox):
+            checkbox.set_value(True).run()
         if "Enable Ollama logprobs" in str(checkbox):
             checkbox.set_value(True).run()
         if "Enable Ollama web search tools" in str(checkbox):
@@ -200,7 +212,9 @@ def test_settings_save_persists_env(settings_app_test: AppTest, tmp_path: Path) 
 
 
 def test_settings_save_normalizes_lmstudio_url(
-    settings_app_test: AppTest, tmp_path: Path
+    settings_app_test: AppTest,
+    tmp_path: Path,
+    reset_settings_after_test: None,
 ) -> None:
     """LM Studio base URL should be normalized to include /v1 on Save."""
     app = settings_app_test.run()
@@ -224,6 +238,7 @@ def test_settings_save_normalizes_lmstudio_url(
 
 def test_settings_invalid_remote_url_disables_actions(
     settings_app_test: AppTest,
+    reset_settings_after_test: None,
 ) -> None:
     """Remote URLs should be blocked when allow_remote_endpoints is disabled."""
     app = settings_app_test.run()
@@ -345,20 +360,25 @@ def _apply_provider(
 
 
 @pytest.fixture
-def reset_settings_after_test() -> None:
-    """Reset global settings to defaults after test to avoid cross-test pollution."""
-    yield
-    # Cleanup: reset settings to defaults
+def reset_settings_after_test() -> Iterator[None]:
+    """Reset global settings to defaults before and after test to avoid pollution."""
     import importlib
 
-    settings_mod = importlib.import_module("src.config.settings")
-    settings_mod.settings = settings_mod.DocMindSettings()  # type: ignore[attr-defined]
+    def _reset_settings() -> None:
+        settings_mod = importlib.import_module("src.config.settings")
+        settings_mod.settings = settings_mod.DocMindSettings()  # type: ignore[attr-defined]
+
+    # Setup: ensure clean state before test
+    _reset_settings()
+    yield
+    # Teardown: reset settings after test
+    _reset_settings()
 
 
 def test_settings_toggle_providers_and_apply(
     settings_app_test: AppTest,
     monkeypatch: pytest.MonkeyPatch,
-    reset_settings_after_test,
+    reset_settings_after_test: None,
 ) -> None:
     """Toggle each provider and Apply runtime (offline)."""
     calls = _install_integrations_stub(monkeypatch)

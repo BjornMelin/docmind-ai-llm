@@ -729,6 +729,7 @@ class DocMindSettings(BaseSettings):
     ollama_embed_dimensions: int | None = Field(
         default=None,
         ge=1,
+        le=8192,
         description="Optional /api/embed dimensions truncation for supported models.",
     )
     ollama_enable_logprobs: bool = Field(
@@ -829,6 +830,7 @@ class DocMindSettings(BaseSettings):
         self._normalize_persistence_paths()
         self._validate_endpoints_security()
         self._validate_lmstudio_url()
+        self._validate_web_search_config()
         return self
 
     def _apply_alias_overrides(self) -> None:
@@ -1143,6 +1145,30 @@ class DocMindSettings(BaseSettings):
             "/v1"
         ):
             raise ValueError("LM Studio base URL must end with /v1")
+
+    def _validate_web_search_config(self) -> None:
+        """Validate Ollama web search prerequisites.
+
+        When ``ollama_enable_web_search`` is True, both ``ollama_api_key`` and
+        ``security.allow_remote_endpoints`` must be configured.
+
+        Raises:
+            ValueError: If web search is enabled without required prerequisites.
+        """
+        if not self.ollama_enable_web_search:
+            return
+
+        if self.ollama_api_key is None or not self.ollama_api_key.get_secret_value():
+            raise ValueError(
+                "ollama_enable_web_search requires ollama_api_key to be set. "
+                "Configure DOCMIND_OLLAMA_API_KEY."
+            )
+
+        if not self.security.allow_remote_endpoints:
+            raise ValueError(
+                "ollama_enable_web_search requires security.allow_remote_endpoints "
+                "to be True. Set DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true."
+            )
 
 
 # Global settings instance - primary interface for the application

@@ -60,8 +60,12 @@ def test_get_langchain_web_tools_binds_cfg(monkeypatch: pytest.MonkeyPatch) -> N
 
     monkeypatch.setattr(mod, "get_ollama_web_tools", fake_get_tools)
 
-    cfg = mod.DocMindSettings(ollama_enable_web_search=True, ollama_api_key="key-123")
-    cfg.security.allow_remote_endpoints = True
+    # Build cfg with nested security override to avoid in-place mutation
+    cfg = mod.DocMindSettings(
+        ollama_enable_web_search=True,
+        ollama_api_key="key-123",
+        security={"allow_remote_endpoints": True},
+    )
     tools = mod.get_langchain_web_tools(cfg)
 
     out = tools[0].invoke({"query": "docmind", "max_results": 1})
@@ -72,8 +76,12 @@ def test_get_langchain_web_tools_binds_cfg(monkeypatch: pytest.MonkeyPatch) -> N
 
 @pytest.mark.unit
 def test_get_langchain_web_tools_treats_blank_api_key_as_missing() -> None:
-    cfg = mod.DocMindSettings(ollama_enable_web_search=True, ollama_api_key="   ")
-    cfg.security.allow_remote_endpoints = True
+    # Build cfg with nested security override to avoid in-place mutation
+    cfg = mod.DocMindSettings(
+        ollama_enable_web_search=True,
+        ollama_api_key="   ",
+        security={"allow_remote_endpoints": True},
+    )
     assert mod.get_langchain_web_tools(cfg) == []
 
 

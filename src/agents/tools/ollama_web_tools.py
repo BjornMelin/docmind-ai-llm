@@ -25,6 +25,14 @@ _MAX_URL_CHARS = 2_000
 
 
 def _json_dumps(value: Any) -> str:
+    """Serialize a value to a JSON string with standardized settings.
+
+    Args:
+        value: The value to serialize.
+
+    Returns:
+        A JSON string.
+    """
     return json.dumps(
         value,
         default=str,
@@ -34,6 +42,15 @@ def _json_dumps(value: Any) -> str:
 
 
 def _truncate_str(value: str, max_len: int) -> str:
+    """Truncate a string to a maximum length with a suffix if needed.
+
+    Args:
+        value: The string to truncate.
+        max_len: The maximum allowed length.
+
+    Returns:
+        The truncated string, possibly with a "…[truncated]" suffix.
+    """
     if len(value) <= max_len:
         return value
     suffix = "…[truncated]"
@@ -69,6 +86,20 @@ def _shrink_jsonable(
     max_list_items: int,
     depth: int,
 ) -> Any:
+    """Recursively shrink a JSON-serializable object to meet size constraints.
+
+    This function truncates long strings and limits the number of items in lists/dicts
+    to prevent extremely large tool results that could exceed model context limits.
+
+    Args:
+        value: The JSON-serializable value to shrink.
+        max_str_len: Maximum length for string values.
+        max_list_items: Maximum number of items in lists, tuples, or sets.
+        depth: Maximum recursion depth to prevent stack overflow.
+
+    Returns:
+        A shrunk version of the input value.
+    """
     if depth <= 0:
         return "...[max depth]"
     if isinstance(value, str):
@@ -105,7 +136,18 @@ def _shrink_jsonable(
 
 
 def _json_with_limit(value: Any, *, max_chars: int) -> str:
-    """Serialize payloads as valid JSON without truncating mid-token."""
+    """Serialize payloads as valid JSON without truncating mid-token.
+
+    This function attempts to shrink the JSON payload by truncating long strings
+    or limiting list items until it fits within max_chars.
+
+    Args:
+        value: The value to serialize.
+        max_chars: The maximum number of characters allowed in the output string.
+
+    Returns:
+        A JSON string that fits within the character limit.
+    """
     jsonable = _to_jsonable(value)
     payload = _json_dumps(jsonable)
     if len(payload) <= max_chars:
@@ -172,6 +214,15 @@ def _resolve_web_tool(name: str, *, cfg: DocMindSettings) -> Callable[..., Any] 
 
 
 def _error_payload(*, msg: str, exc: Exception | None = None) -> str:
+    """Create a standardized JSON error payload for tool responses.
+
+    Args:
+        msg: The error message.
+        exc: Optional exception that triggered the error.
+
+    Returns:
+        A JSON-serialized error response string.
+    """
     reason = exc.__class__.__name__ if exc is not None else None
     detail = str(exc) if exc is not None else None
     payload: dict[str, object] = {"error": msg}
@@ -185,6 +236,16 @@ def _error_payload(*, msg: str, exc: Exception | None = None) -> str:
 def _ollama_web_search_impl(
     *, query: str, max_results: int, cfg: DocMindSettings
 ) -> str:
+    """Implementation of the Ollama web search tool.
+
+    Args:
+        query: The search query string.
+        max_results: Maximum number of results to return.
+        cfg: The DocMind settings configuration to bind tool policies.
+
+    Returns:
+        A JSON string containing search results or an error payload.
+    """
     clean_query = (query or "").strip()
     if not clean_query:
         return _error_payload(msg="Missing query")
@@ -214,13 +275,27 @@ def _ollama_web_search_impl(
 
 
 def _ollama_web_fetch_impl(*, url: str, cfg: DocMindSettings) -> str:
+    """Implementation of the Ollama web fetch tool.
+
+    Args:
+        url: The URL to fetch content from.
+        cfg: The DocMind settings configuration to bind tool policies.
+
+    Returns:
+        A JSON string containing the fetched content or an error payload.
+    """
     clean_url = (url or "").strip()
+
+    # Validate URL before attempting fetch
+    validation_error: str | None = None
     if not clean_url:
-        return _error_payload(msg="Missing url")
-    if len(clean_url) > _MAX_URL_CHARS:
-        return _error_payload(msg="URL too long")
-    if not (clean_url.startswith("http://") or clean_url.startswith("https://")):
-        return _error_payload(msg="URL must start with http:// or https://")
+        validation_error = "Missing url"
+    elif len(clean_url) > _MAX_URL_CHARS:
+        validation_error = "URL too long"
+    elif not (clean_url.startswith("http://") or clean_url.startswith("https://")):
+        validation_error = "URL must start with http:// or https://"
+    if validation_error:
+        return _error_payload(msg=validation_error)
 
     try:
         fn = _resolve_web_tool("web_fetch", cfg=cfg)
@@ -228,25 +303,31 @@ def _ollama_web_fetch_impl(*, url: str, cfg: DocMindSettings) -> str:
             return _error_payload(msg="Ollama web_fetch tool unavailable")
         result = fn(url=clean_url)
         return _json_with_limit(result, max_chars=_MAX_TOOL_RESULT_CHARS)
+    except (
+        ValueError,
+        ConnectionError,
+        otypes.RequestError,
+        otypes.ResponseError,
+        OSError,
+        RuntimeError,
+    ) as exc:
+        logger.debug("ollama_web_fetch failed: %s", exc.__class__.__name__)
+        return _error_payload(msg="Ollama web_fetch failed", exc=exc)
     except Exception as exc:  # pragma: no cover - defensive against SDK/runtime errors
-        if isinstance(
-            exc,
-            (
-                ValueError,
-                ConnectionError,
-                otypes.RequestError,
-                otypes.ResponseError,
-                OSError,
-                RuntimeError,
-            ),
-        ):
-            logger.debug("ollama_web_fetch failed: %s", exc.__class__.__name__)
-        else:
-            logger.exception("ollama_web_fetch crashed: %s", exc.__class__.__name__)
+        logger.exception("ollama_web_fetch crashed: %s", exc.__class__.__name__)
         return _error_payload(msg="Ollama web_fetch failed", exc=exc)
 
 
 def _make_langchain_web_tools(cfg: DocMindSettings) -> list[Any]:
+    """Factory function to create LangChain tool wrappers for Ollama web tools.
+
+    Args:
+        cfg: The DocMind settings configuration instance.
+
+    Returns:
+        A list of LangChain tools.
+    """
+
     @tool("ollama_web_search")
     def _ollama_web_search(query: str, max_results: int = 3) -> str:
         """Run Ollama Cloud web_search (gated by settings)."""

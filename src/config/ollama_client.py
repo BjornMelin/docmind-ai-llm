@@ -412,8 +412,10 @@ def get_ollama_web_tools(cfg: DocMindSettings = settings) -> list[Callable[..., 
     _assert_endpoint_allowed(cfg, "https://ollama.com")
     timeout_s = float(cfg.llm_request_timeout_seconds)
     headers = {"authorization": f"Bearer {api_key}"}
-    host = _resolve_ollama_host(cfg).strip() or "http://localhost:11434"
-    web_client = _cached_client(host, timeout_s, tuple(sorted(headers.items())))
+    # Web tools always connect to Ollama Cloud, not the local Ollama instance
+    web_client = _cached_client(
+        "https://ollama.com", timeout_s, tuple(sorted(headers.items()))
+    )
 
     return [web_client.web_search, web_client.web_fetch]
 

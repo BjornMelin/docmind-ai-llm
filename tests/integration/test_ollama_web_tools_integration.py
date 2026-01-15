@@ -4,17 +4,18 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-import ollama._types as otypes
 import pytest
+from ollama import ChatResponse, Message
 
 from src.agents.tools.ollama_web_tools import run_web_search_agent
 
 pytestmark = pytest.mark.integration
 
 
-def _tool_call(name: str, **kwargs) -> otypes.Message.ToolCall:
-    return otypes.Message.ToolCall(
-        function=otypes.Message.ToolCall.Function(name=name, arguments=kwargs)
+def _tool_call(name: str, **kwargs) -> Message.ToolCall:
+    """Create a tool call message."""
+    return Message.ToolCall(
+        function=Message.ToolCall.Function(name=name, arguments=kwargs)
     )
 
 
@@ -40,17 +41,17 @@ def test_run_web_search_agent_handles_tool_calls(
     def fake_get_tools(_cfg):
         return tool_list
 
-    def fake_chat(**kwargs):
+    def fake_chat(**_kwargs) -> ChatResponse:
         # First call: request web_search; second call: return final answer.
         step = len([c for c in calls if c.startswith("search:")])
         if step == 0:
-            message = otypes.Message(
+            message = Message(
                 role="assistant",
                 tool_calls=[_tool_call("web_search", query="docmind", max_results=1)],
             )
-            return otypes.ChatResponse(message=message)
-        message = otypes.Message(role="assistant", content="done")
-        return otypes.ChatResponse(message=message)
+            return ChatResponse(message=message)
+        message = Message(role="assistant", content="done")
+        return ChatResponse(message=message)
 
     monkeypatch.setattr(
         "src.agents.tools.ollama_web_tools.get_ollama_web_tools", fake_get_tools
