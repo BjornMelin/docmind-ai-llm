@@ -8,6 +8,7 @@ calling and web search in a controlled way.
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -398,6 +399,7 @@ def run_web_search_agent(
     prompt: str,
     max_steps: int = 5,
     think: bool = True,
+    deadline_s: float = 0.0,
     cfg: DocMindSettings = settings,
 ) -> str:
     """Run a minimal Ollama-native web search agent loop.
@@ -411,6 +413,8 @@ def run_web_search_agent(
         prompt: User question.
         max_steps: Safety cap to avoid infinite loops.
         think: Enable thinking mode for thinking-capable models.
+        deadline_s: Absolute deadline timestamp (seconds since epoch). When 0,
+            defaults to settings.agents.decision_timeout from "now".
         cfg: DocMind settings.
 
     Returns:
@@ -426,14 +430,27 @@ def run_web_search_agent(
     messages: list[dict[str, Any] | otypes.Message] = [
         {"role": "user", "content": prompt}
     ]
+    effective_deadline = float(deadline_s)
+    if effective_deadline == 0.0:
+        effective_deadline = time.time() + float(settings.agents.decision_timeout)
+
     for _ in range(max_steps):
+        remaining_time = max(0.0, effective_deadline - time.time())
+        per_call_timeout = min(
+            float(cfg.llm_request_timeout_seconds),
+            remaining_time,
+        )
+        per_call_timeout = max(0.1, per_call_timeout)
+        timeout_cfg = cfg.model_copy(
+            update={"llm_request_timeout_seconds": per_call_timeout}
+        )
         response = ollama_chat(
             model=model,
             messages=messages,
             tools=tools,
             stream=False,
             think=think,
-            cfg=cfg,
+            cfg=timeout_cfg,
         )
         messages.append(response.message)
 
