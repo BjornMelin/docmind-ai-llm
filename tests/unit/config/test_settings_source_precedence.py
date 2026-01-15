@@ -15,6 +15,7 @@ def test_settings_source_precedence_init_env_dotenv_default(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Precedence: init kwargs > env vars > dotenv (when opted in) > defaults."""
+    monkeypatch.delenv("DOCMIND_LOG_LEVEL", raising=False)
     monkeypatch.chdir(tmp_path)
     env_file = tmp_path / ".env"
     env_file.write_text("DOCMIND_LOG_LEVEL=DOTENV\n", encoding="utf-8")
