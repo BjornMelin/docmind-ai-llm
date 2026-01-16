@@ -1,4 +1,12 @@
-# Implementation Prompt — Config Discipline (Remove `os.getenv` Sprawl)
+---
+prompt: PROMPT-031
+title: Config Discipline (Remove `os.getenv` Sprawl)
+status: Completed
+date: 2026-01-16
+version: 1.0
+related_adrs: ["ADR-050"]
+related_specs: ["SPEC-031"]
+---
 
 Implements `ADR-050` + `SPEC-031`.
 

@@ -80,7 +80,7 @@ Legacy flags such as `DOCMIND_RETRIEVAL__DBSF_ENABLED` are removed. Use `FUSION_
 Telemetry requirements (local JSONL; PII-safe, bounded, sampled):
 
 - Emit: `retrieval.fusion_mode`, `retrieval.prefetch_dense_limit`, `retrieval.prefetch_sparse_limit`, `retrieval.fused_limit`, `retrieval.return_count`, `retrieval.latency_ms`, `retrieval.sparse_fallback`, and `dedup.*`.
-- Tuning via env: `DOCMIND_TELEMETRY_SAMPLE`, `DOCMIND_TELEMETRY_ENABLED/DISABLED` (bridge ensures sinks honor disabled).
+- Tuning via env: `DOCMIND_TELEMETRY_SAMPLE`, `DOCMIND_TELEMETRY_DISABLED`, `DOCMIND_TELEMETRY_ROTATE_BYTES`.
 
 Amendment (GraphRAG flags):
 

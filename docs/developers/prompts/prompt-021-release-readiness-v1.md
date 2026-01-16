@@ -8,6 +8,61 @@ Use this prompt to implement **every** work package defined in `docs/specs/spec-
 - Requirements: `docs/specs/requirements.md`
 - RTM: `docs/specs/traceability.md`
 
+## Current completion status (as of 2026-01-16)
+
+Use this table to avoid re-implementing already-shipped work packages. A work
+package is considered **done** when its prompt has been moved into
+`docs/developers/prompts/implemented/` and the referenced ADR/SPEC are aligned.
+
+| WP | Title | ADR | SPEC | Status | Evidence (implemented prompt) |
+| ---: | --- | --- | --- | --- | --- |
+| 01 | Settings UI hardening + safe provider badge | ADR-041 | SPEC-022 | ✅ Completed | `docs/developers/prompts/implemented/prompt-022-settings-ui-hardening.md` |
+| 02 | Containerization hardening (Dockerfile + compose) | ADR-042 | SPEC-023 | ✅ Completed | `docs/developers/prompts/implemented/prompt-023-containerization-hardening.md` |
+| 03 | Chat persistence + hybrid agentic memory (LangGraph SQLite) | ADR-058 | SPEC-041 | ✅ Completed | `docs/developers/prompts/implemented/prompt-041-chat-persistence-langgraph-sqlite-hybrid-memory.md` |
+| 04 | Keyword tool: sparse-only Qdrant retriever | ADR-044 | SPEC-025 | ✅ Completed | `docs/developers/prompts/implemented/prompt-025-keyword-tool-sparse-only.md` |
+| 05 | Ingestion API cleanup (`src/processing/ingestion_api.py`) | ADR-045 | SPEC-026 | ✅ Completed | `docs/developers/prompts/implemented/prompt-026-ingestion-api-facade.md` |
+| 06 | Remove legacy `src/main.py` entrypoint | ADR-046 | SPEC-027 | ✅ Completed | `docs/developers/prompts/implemented/prompt-027-remove-legacy-main-entrypoint.md` |
+| 07 | Safe logging policy (remove PII redactor stub) | ADR-047 | SPEC-028 | ⏳ Remaining | `docs/developers/prompts/prompt-028-safe-logging-no-pii-redactor.md` |
+| 08 | Docs consistency pass (spec drift + ADR number backfill) | ADR-048 | SPEC-029 | ⏳ Remaining | `docs/developers/prompts/prompt-029-docs-consistency-pass.md` |
+| 09 | Multimodal helper cleanup (remove TODO; clarify test-only helper) | ADR-049 | SPEC-030 | ⏳ Remaining | `docs/developers/prompts/prompt-030-multimodal-helper-cleanup.md` |
+| 10 | Config discipline: remove `os.getenv` sprawl; formalize hashing secret | ADR-050 | SPEC-031 | ✅ Completed | `docs/developers/prompts/implemented/prompt-031-config-discipline-env-bridges.md` |
+| 11 | Documents snapshot service boundary (extract rebuild/export) | ADR-051 | SPEC-032 | ⏳ Remaining | `docs/developers/prompts/prompt-032-documents-snapshot-service-boundary.md` |
+| 12 | Background ingestion & snapshot jobs (progress + cancel) | ADR-052 | SPEC-033 | ⏳ Remaining | `docs/developers/prompts/prompt-033-background-ingestion-jobs.md` |
+| 13 | Analytics page hardening (DuckDB + telemetry parsing) | ADR-053 | SPEC-034 | ✅ Completed | `docs/developers/prompts/implemented/prompt-034-analytics-page-hardening.md` |
+| 14 | Document analysis modes (auto/separate/combined) | ADR-023 | SPEC-036 | ⏳ Remaining | `docs/developers/prompts/prompt-036-document-analysis-modes.md` |
+| 15 | Local backup & retention (snapshots + cache + Qdrant) | ADR-033 | SPEC-037 | ⏳ Remaining | `docs/developers/prompts/prompt-037-local-backup-and-retention.md` |
+| 16 | Semantic response cache (Qdrant-backed, guardrailed) | ADR-035 | SPEC-038 | ⏳ Remaining | `docs/developers/prompts/prompt-038-semantic-cache-qdrant.md` |
+| 17 | Operational metadata store (SQLite WAL) | ADR-055 | SPEC-039 | ⏳ Remaining | `docs/developers/prompts/prompt-039-operational-metadata-sqlite-wal.md` |
+| 18 | Agent deadline propagation + router injection | ADR-056 | SPEC-040 | ⏳ Remaining | `docs/developers/prompts/prompt-040-agent-deadline-propagation-and-router-injection.md` |
+
+### Extra completion (non-WP, polish)
+
+- ✅ Completed: config-discipline polish prompt `docs/developers/prompts/implemented/prompt-046-config-discipline-remaining.md`
+
+## Remaining work packages (execution checklist)
+
+Run only these remaining WPs, in order, until all are completed:
+
+- [ ] WP07 — `docs/developers/prompts/prompt-028-safe-logging-no-pii-redactor.md`
+- [ ] WP08 — `docs/developers/prompts/prompt-029-docs-consistency-pass.md`
+- [ ] WP09 — `docs/developers/prompts/prompt-030-multimodal-helper-cleanup.md`
+- [ ] WP11 — `docs/developers/prompts/prompt-032-documents-snapshot-service-boundary.md`
+- [ ] WP12 — `docs/developers/prompts/prompt-033-background-ingestion-jobs.md`
+- [ ] WP14 — `docs/developers/prompts/prompt-036-document-analysis-modes.md`
+- [ ] WP15 — `docs/developers/prompts/prompt-037-local-backup-and-retention.md`
+- [ ] WP16 — `docs/developers/prompts/prompt-038-semantic-cache-qdrant.md`
+- [ ] WP17 — `docs/developers/prompts/prompt-039-operational-metadata-sqlite-wal.md`
+- [ ] WP18 — `docs/developers/prompts/prompt-040-agent-deadline-propagation-and-router-injection.md`
+
+### Marking a WP complete (required)
+
+When a WP is finished and its quality gates pass:
+
+1. Move its prompt to `docs/developers/prompts/implemented/` and add implemented frontmatter (see other implemented prompts).
+2. Update the WP row in this file’s “Current completion status” table (set to ✅ Completed and point to the implemented prompt path).
+3. Update RTM: `docs/specs/traceability.md` (Status → Implemented, with code+tests pointers).
+4. If the WP owns an ADR or SPEC, update their metadata status to reflect reality (e.g., ADR `Status: Implemented`, SPEC `status: Implemented`).
+
 ## Official docs (research during implementation)
 
 - <https://docs.streamlit.io/develop/concepts/multipage-apps/overview> — Streamlit multipage fundamentals and routing patterns.
@@ -131,7 +186,7 @@ All changes must remain minimal, library-first, and maintainable.
 
 **Definition of Done (DoD):**
 
-- All work package prompts in `docs/developers/prompts/README.md` are completed in order, each passing its quality gates.
+- All work packages in `docs/specs/spec-021-release-readiness-v1.md` are completed and their prompts are moved to `docs/developers/prompts/implemented/`, each passing its quality gates.
 - No TODO/FIXME/XXX placeholders remain in `src/` (except explicitly allowed in tests or archived docs).
 - `docs/specs/traceability.md` reflects all shipped changes (status updated to Implemented).
 - Dockerfile + compose run successfully and respect Python 3.11 + `DOCMIND_*` env contract.
@@ -224,10 +279,10 @@ You MUST produce a plan and keep exactly one step “in_progress” at a time. U
 0. [ ] Read `docs/specs/spec-021-release-readiness-v1.md` + `docs/specs/traceability.md` and restate DoD in your plan.
 
 1. [ ] Load `docs/specs/spec-021-release-readiness-v1.md` and enumerate all work packages.
-2. [ ] Execute prompts in `docs/developers/prompts/README.md` order, one at a time.
+2. [ ] Execute only the **remaining** work packages (not already present under `docs/developers/prompts/implemented/`), one at a time.
 3. [ ] After each package: run its scoped tests + full quality gates when required.
 4. [ ] Update `docs/specs/traceability.md` statuses to Implemented for shipped changes.
-5. [ ] Run final full quality gates and produce a release readiness report.
+5. [ ] When all WPs are complete: update SPEC-021 status to Implemented and produce a release readiness report.
 
 Commands you will run at minimum:
 

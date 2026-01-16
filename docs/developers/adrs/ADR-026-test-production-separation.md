@@ -101,9 +101,7 @@ def reset_global_settings() -> Iterator[None]:
 
     def _reset_in_place() -> None:
         settings_mod = importlib.import_module("src.config.settings")
-        current = settings_mod.settings
-        fresh = settings_mod.DocMindSettings(_env_file=None)
-        settings_mod.apply_settings_in_place(current, fresh)
+        settings_mod.settings.__init__(_env_file=None)
 
     _reset_in_place()
     yield

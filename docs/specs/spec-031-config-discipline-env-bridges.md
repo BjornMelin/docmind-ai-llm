@@ -4,7 +4,7 @@ title: Configuration Discipline (Settings-only; No `os.getenv` Sprawl)
 version: 1.0.0
 date: 2026-01-10
 owners: ["ai-arch"]
-status: Draft
+status: Implemented
 related_requirements:
   - NFR-MAINT-001: Library-first; no bespoke config layers.
   - NFR-MAINT-002: Quality gates (ruff/pyright) must pass (ruff enforces pylint-equivalent rules).
@@ -34,16 +34,25 @@ In `src/config/settings.py`:
    - `DOCMIND_TELEMETRY_ROTATE_BYTES`
    - plus a configurable path defaulting to `./logs/telemetry.jsonl`
 
-   Compatibility note:
-   - These env vars are *flat* (not nested `__` keys). Prefer either top-level
-     `telemetry_*` fields (e.g., `telemetry_disabled`) or explicit aliases so
-     we do not introduce a parallel `DOCMIND_TELEMETRY__*` namespace.
+   Implementation note:
+   - These env vars are *flat* (not nested `__` keys) and are the canonical
+     operator contract. Because the settings schema is nested,
+     `DOCMIND_TELEMETRY__*` env vars may also exist as a derived/advanced surface
+     (e.g., `DOCMIND_TELEMETRY__JSONL_PATH`). When both flat and nested are
+     provided, the flat `DOCMIND_TELEMETRY_*` values take precedence to preserve
+     compatibility.
 
 2. Add `ImageEncryptionConfig` mapping existing env variables:
 
    - `DOCMIND_IMG_AES_KEY_BASE64`
    - `DOCMIND_IMG_KID`
    - `DOCMIND_IMG_DELETE_PLAINTEXT`
+
+   Compatibility note:
+   - The canonical operator contract is the flat `DOCMIND_IMG_*` env vars. Since
+     the schema is nested (`settings.image_encryption.*`), derived nested env
+     vars may also exist (e.g., `DOCMIND_IMAGE_ENCRYPTION__KID`). When both are
+     provided, `DOCMIND_IMG_*` takes precedence.
 
 3. Add optional `environment: str | None` at top-level settings (maps `DOCMIND_ENVIRONMENT`) for OTEL resource tags.
 
@@ -56,7 +65,7 @@ In `src/config/settings.py`:
 
 ### Consumer refactors
 
-Replace `os.getenv` reads with `settings.*` lookups in:
+Replace direct env reads with `settings.*` lookups in:
 
 - `src/utils/telemetry.py`
 - `src/telemetry/opentelemetry.py`
@@ -88,10 +97,10 @@ Replace `os.getenv` reads with `settings.*` lookups in:
 
 ## RTM updates (docs/specs/traceability.md)
 
-Add a planned row:
+Record implementation in RTM:
 
-- NFR-MAINT-003: “Config discipline (settings-only; remove env sprawl)”
-  - Code: settings + telemetry/security modules
-  - Tests: new unit tests for mapping
+- `NFR-MAINT-003.2`: “Config discipline (settings-only; remove env sprawl)”
+  - Code: `src/config/settings.py`, `src/utils/telemetry.py`, `src/utils/security.py`
+  - Tests: `tests/unit/config/test_telemetry_image_mappings.py`
   - Verification: test
-  - Status: Planned → Implemented
+  - Status: Implemented

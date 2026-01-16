@@ -52,6 +52,7 @@ DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=false
 DOCMIND_TELEMETRY_SAMPLE=1.0            # 0.0..1.0; 1.0 logs all
 DOCMIND_TELEMETRY_DISABLED=false        # true to disable telemetry
 DOCMIND_TELEMETRY_ROTATE_BYTES=0        # rotate at N bytes (0 disables)
+DOCMIND_TELEMETRY__JSONL_PATH=./logs/telemetry.jsonl  # advanced: override path
 
 # Hybrid fusion mode toggle (boolean convenience)
 DOCMIND_RETRIEVAL__DBSF_ENABLED=false   # when true, force DBSF

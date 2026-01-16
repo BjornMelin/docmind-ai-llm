@@ -1,4 +1,12 @@
-# Implementation Prompt — Config Discipline (Remaining Polish)
+---
+prompt: PROMPT-046
+title: Config Discipline (Remaining Polish)
+status: Completed
+date: 2026-01-16
+version: 1.0
+related_adrs: ["ADR-050"]
+related_specs: ["SPEC-031"]
+---
 
 Implements remaining `ADR-050` + `SPEC-031` (post-85% baseline).
 
@@ -16,15 +24,15 @@ Implements remaining `ADR-050` + `SPEC-031` (post-85% baseline).
 
 ## Tooling
 
-- `rg &quot;os\\.getenv\\\\(&quot; src/config/settings.py` (confirm purge).
+- `rg "os\\.getenv\\(" src/config/settings.py` (confirm purge).
 - `pytest tests/unit/config/` (add mappings).
 - `zen.secaudit` post-changes.
 - `zen.codereview` final.
 
 ### Parallel Preflight
 
-- `rg &quot;telemetry_disabled|rotate_bytes|sample&quot; src/config/settings.py`
-- `rg &quot;img_aes_key_base64|img_kid|img_delete_plaintext&quot; src/config/settings.py`
+- `rg "telemetry_disabled|rotate_bytes|sample" src/config/settings.py`
+- `rg "img_aes_key_base64|img_kid|img_delete_plaintext" src/config/settings.py`
 - Read: `src/config/settings.py`, `tests/unit/config/`
 
 ## IMPLEMENTATION EXECUTOR TEMPLATE
@@ -65,16 +73,16 @@ Autonomous agent for DocMind AI LLM repo. Implement end-to-end: code/tests/docs.
 
 ### STEP-BY-STEP PLAN
 
-1. [ ] Nest configs in settings.py; migrate flat fields.
-2. [ ] Purge os.getenv(telemetry vars); use Pydantic.
-3. [ ] New tests/unit/config/test_telemetry_image_mappings.py (env overrides, validators).
-4. [ ] Docs: ADR Accepted, SPEC Implemented, RTM row.
-5. [ ] Gates: `ruff/pyright/pytest`.
+1. [x] Nest configs in settings.py; migrate flat fields.
+2. [x] Purge os.getenv(telemetry vars); use Pydantic.
+3. [x] New tests/unit/config/test_telemetry_image_mappings.py (env overrides, validators).
+4. [x] Docs: ADR Accepted, SPEC Implemented, RTM row.
+5. [x] Gates: `ruff/pyright/pytest`.
 
 Commands:
 
 ```bash
-uv run ruff format . &amp;&amp; uv run ruff check . --fix &amp;&amp; uv run pyright &amp;&amp; uv run python scripts/run_tests.py
+uv run ruff format . && uv run ruff check . --fix && uv run pyright && uv run python scripts/run_tests.py
 ```
 
 ### ANTI-PATTERN KILL LIST
@@ -94,14 +102,14 @@ uv run ruff format . &amp;&amp; uv run ruff check . --fix &amp;&amp; uv run pyri
 
 | Req | Status | Proof |
 | ---- | -------- | ------- |
-| Packaging | | uv sync clean |
-| Formatting | | ruff format |
-| Lint | | ruff check |
-| Types | | pyright |
-| Tests | | pytest config + new |
-| Docs | | ADR/SPEC/RTM |
-| Security | | no secrets/egress |
-| Debt | | zero TODO |
-| Perf | | fast load |
+| Packaging | Done | `uv run ...` (build ok) |
+| Formatting | Done | `uv run ruff format .` |
+| Lint | Done | `uv run ruff check . --fix` (0 remaining) |
+| Types | Done | `uv run pyright --threads 4` (0 errors) |
+| Tests | Done | `uv run python scripts/run_tests.py` (1254 passed) |
+| Docs | Done | ADR-050 Accepted; SPEC-031 Implemented; RTM updated |
+| Security | Done | No secrets logged; no implicit egress |
+| Debt | Done | No `TODO\|FIXME\|XXX` introduced |
+| Perf | Done | No import-time IO added |
 
 **EXECUTE UNTIL COMPLETE.**

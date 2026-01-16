@@ -22,7 +22,8 @@ Prior to this change, `src/pages/03_analytics.py`:
 
 - opens a DuckDB connection without closing it
 - uses `__import__("pandas")` dynamically
-- reads `./logs/telemetry.jsonl` via hardcoded path and reads the file twice
+- reads `./logs/telemetry.jsonl` via hardcoded path and reads the file twice (now
+  uses `get_telemetry_jsonl_path()`)
 - loads the entire telemetry file into memory
 
 This risks file handle leaks, unnecessary memory use, and drift from the telemetry emitter path.
@@ -59,7 +60,7 @@ We will:
 3. Add a small telemetry parsing helper that:
    - streams JSONL lines (no full-file `.read_text().splitlines()` for large files)
    - applies both `max_bytes` and `max_lines` caps (stop parsing and log a warning on cap)
-4. Use a canonical telemetry path shared with the emitter by exporting a public constant/getter from `src/utils/telemetry.py` (e.g., `TELEMETRY_JSONL_PATH`).
+4. Use a canonical telemetry path shared with the emitter by calling `get_telemetry_jsonl_path()` from `src/utils/telemetry.py`.
 5. Use a canonical analytics DuckDB path constant/getter from `src/utils/telemetry.py` (default `data/analytics/analytics.duckdb`).
 
 ## Security & Privacy

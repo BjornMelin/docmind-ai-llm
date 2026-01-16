@@ -118,13 +118,17 @@ Metric recording is fail-open: `record_graph_export_metric(...)` is a no-op unle
 
 ### Local JSONL (`src/utils/telemetry.py`)
 
-DocMind emits local JSONL events to `logs/telemetry.jsonl` via `log_jsonl(...)`.
+DocMind emits local JSONL events to the path returned by
+`get_telemetry_jsonl_path()` (default: `./logs/telemetry.jsonl`) via
+`log_jsonl(...)`.
 
 Controls (sourced from settings; can be set via env vars or `.env` per Pydantic Settings precedence; see SPEC-031):
 
 - `DOCMIND_TELEMETRY_DISABLED` → disables event writes
 - `DOCMIND_TELEMETRY_SAMPLE=0.0..1.0` → sampling rate
 - `DOCMIND_TELEMETRY_ROTATE_BYTES=<int>` → size-based rotation (`.1` suffix)
+- Advanced (derived from settings schema): `DOCMIND_TELEMETRY__JSONL_PATH=<path>`
+  overrides the JSONL destination path.
 
 Canonical event keys used by requirements/tests:
 
