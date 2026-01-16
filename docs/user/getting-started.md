@@ -34,7 +34,7 @@ By the end of this guide, you'll have:
 - **GPU**: RTX 4090 (16GB+ VRAM)
 - **Storage**: 100GB+ NVMe SSD
 
-> **Hardware Check**: Run `nvidia-smi` and `python --version` to verify GPU and Python availability.
+> **Hardware Check**: Run `nvidia-smi` (if you have NVIDIA) and `uv run python --version` to verify GPU and Python availability.
 
 ## Step 1: Installation (5 minutes)
 
@@ -48,8 +48,15 @@ cd docmind-ai-llm
 # Install Python dependencies
 uv sync
 
-# Install spaCy language model (required for document processing)
+# (Recommended) Install a spaCy language model for NLP enrichment (entities/sentences).
+# The app will run without a model (blank fallback), but entity extraction will be limited.
 uv run python -m spacy download en_core_web_sm
+
+# Optional: disable enrichment (CPU-only and fastest ingestion)
+# DOCMIND_SPACY__ENABLED=false
+
+# Optional: device selection (cpu|cuda|apple|auto)
+# DOCMIND_SPACY__DEVICE=auto
 ```
 
 ### Install Ollama (Local AI Backend)
@@ -93,8 +100,11 @@ uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strat
 **Verify GPU setup:**
 
 ```bash
-python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}')"
+uv run python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}')"
 ```
+
+> **spaCy GPU note**: spaCy acceleration is configured via `SPACY_DEVICE=auto|cuda` and
+> installed via `uv sync --extra gpu`. See `docs/developers/gpu-setup.md`.
 
 ## Step 2: Configuration (2 minutes)
 
@@ -250,7 +260,7 @@ DocMind AI uses specialized AI agents that coordinate automatically:
 
 - **Supported Formats**: PDF, DOCX, TXT, XLSX, CSV, JSON, XML, MD, RTF, MSG, PPTX, ODT, EPUB, and code files
 - **Processing**: Unstructured.io hi-res parsing extracts text, tables, and images
-- **Intelligence**: spaCy NLP for entity extraction and relationship mapping
+- **NLP enrichment (optional)**: spaCy sentence segmentation + entity extraction during ingestion
 - **Search**: BGE-M3 unified embeddings with hybrid dense + sparse retrieval
 
 ### Privacy and Local Operation

@@ -124,7 +124,7 @@ graph TD
     subgraph "Data Indexing & Storage"
         E --> F["Embeddings<br/>Dense: BGE‑M3<br/>Sparse: FastEmbed BM42/BM25 + IDF<br/>Multimodal: SigLIP (default) or CLIP"]
         F --> G["Vector Store<br/>Qdrant"]
-        E --> H["Knowledge Graph<br/>PropertyGraphIndex (spaCy; path_depth=1)"]
+        E --> H["Knowledge Graph<br/>PropertyGraphIndex (LlamaIndex; path_depth=1)"]
     end
 
     subgraph "Query & Multi-Agent System"
@@ -188,7 +188,10 @@ graph TD
 - **Unified Embeddings**: BAAI/bge‑m3 (1024D dense + sparse unified)
 - **Multimodal**: SigLIP (default) or CLIP ViT‑B/32
 - **Reranking**: BAAI/bge-reranker-v2-m3
-- **NER Model**: en_core_web_sm (spaCy)
+- **NLP Enrichment Model**: Configurable via `DOCMIND_SPACY__MODEL` (defaults to `en_core_web_sm`).
+  - The system falls back to `spacy.blank("en")` on CPU paths if the requested model is missing.
+  - Explicit GPU/device requests fail fast with `SpacyModelLoadError` if components are unavailable.
+  - The `spacy.blank("en")` fallback provides basic segmentation without pretrained NER (see FR-11).
 
 ### Configuration Approach
 

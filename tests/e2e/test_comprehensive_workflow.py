@@ -48,8 +48,6 @@ def setup_comprehensive_dependencies(monkeypatch):
         "transformers",
         "sentence_transformers",
         "FlagEmbedding",
-        "spacy",
-        "thinc",
         "unstructured",
         "nltk",
         "chromadb",

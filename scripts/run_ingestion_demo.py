@@ -7,6 +7,7 @@ prints a summary of the resulting manifest and nodes.
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 from src.models.processing import IngestionConfig, IngestionInput
@@ -15,7 +16,7 @@ from src.processing.ingestion_pipeline import ingest_documents_sync
 
 def main() -> None:
     """Run the ingestion pipeline against a synthetic payload."""
-    cache_dir = Path("/tmp/docmind-ingestion-demo")
+    cache_dir = Path(tempfile.gettempdir()) / "docmind-ingestion-demo"
     cache_dir.mkdir(parents=True, exist_ok=True)
     config = IngestionConfig(cache_dir=cache_dir)
     payload = IngestionInput(

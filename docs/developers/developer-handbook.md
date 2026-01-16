@@ -152,43 +152,27 @@ class MultiAgentCoordinator:
 ### Document Processing Pattern
 
 ```python
-async def process_document_pipeline(
-    file_path: Path, 
-    settings: DocMindSettings
-) -> ProcessedDocument:
-    """Complete document processing pipeline."""
-    
-    # 1. Parse document with error handling
-    try:
-        raw_content = await parse_document_unstructured(file_path)
-    except Exception as e:
-        logger.error(f"Failed to parse {file_path}: {e}")
-        raise DocumentProcessingError(f"Parse failed: {e}")
-    
-    # 2. NLP processing with spaCy
-    nlp_doc = await process_with_spacy(raw_content)
-    
-    # 3. Intelligent chunking
-    chunks = create_chunks(
-        nlp_doc, 
-        chunk_size=settings.processing.chunk_size,
-        chunk_overlap=settings.processing.chunk_overlap
-    )
-    
-    # 4. Generate embeddings
-    embeddings = await generate_embeddings_batch(
-        chunks, 
-        settings.embedding
-    )
-    
-    # 5. Store in vector database
-    await store_in_qdrant(chunks, embeddings, settings.qdrant)
-    
-    return ProcessedDocument(
-        file_path=file_path,
-        chunks=len(chunks),
-        embedding_dim=len(embeddings[0]) if embeddings else 0
-    )
+"""
+DocMind uses a library-first ingestion pipeline (`src/processing/ingestion_pipeline.py`)
+based on LlamaIndex `IngestionPipeline`.
+
+Optional NLP enrichment (sentences + entities) is centralized under `src/nlp/` and
+wired into ingestion as a transform (`src/processing/nlp_enrichment.py`).
+
+See: docs/specs/spec-015-nlp-enrichment-spacy.md
+"""
+
+from src.config import settings
+from src.nlp.spacy_service import SpacyNlpService
+
+if settings.spacy.enabled:
+    service = SpacyNlpService(settings.spacy)
+    enrichment = service.enrich_texts(["Hello world. Second sentence."])[0]
+
+    print([s.text for s in enrichment.sentences])
+    print([(e.label, e.text) for e in enrichment.entities])
+else:
+    print("spaCy enrichment is disabled in settings.")
 ```
 
 ### Error Handling Patterns

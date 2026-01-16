@@ -65,6 +65,37 @@ Notes:
   server-side hybrid tool that executes Qdrant Query API `prefetch` + `Fusion.RRF` (DBSF optional).
   Precedence: an explicit function argument to the router factory always overrides the setting.
 
+## NLP Enrichment (spaCy)
+
+DocMind can optionally enrich ingested text chunks with:
+
+- sentence spans (start/end offsets)
+- entity spans (label + text + offsets)
+
+Install a model (recommended for best results):
+
+```bash
+uv run python -m spacy download en_core_web_sm
+```
+
+Common knobs:
+
+```bash
+# Enable/disable enrichment
+DOCMIND_SPACY__ENABLED=true
+
+# Device preference: cpu|cuda|apple|auto
+DOCMIND_SPACY__DEVICE=auto
+DOCMIND_SPACY__GPU_ID=0
+```
+
+GPU installs:
+
+- NVIDIA CUDA (Linux/Windows): `uv sync --extra gpu`
+- Apple Silicon (macOS arm64): `uv sync --extra apple`
+
+Details: `docs/specs/spec-015-nlp-enrichment-spacy.md` and `docs/developers/gpu-setup.md`.
+
 ## DSPy Optimization (Optional)
 
 ```bash

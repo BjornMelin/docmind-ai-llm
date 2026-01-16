@@ -204,7 +204,7 @@ async def test_ingest_documents_without_embedding_warns_and_runs(
         async def arun(self, documents):  # type: ignore[no-untyped-def]
             return await _fake_arun(documents)
 
-    def _fake_build(cfg, embedding):  # type: ignore[no-untyped-def]
+    def _fake_build(cfg, embedding, *, nlp_service=None):  # type: ignore[no-untyped-def]
         call_state["embedding"] = embedding
         pipeline = _Pipeline()
         return pipeline, tmp_path / "cache.duckdb", tmp_path / "docstore.json"

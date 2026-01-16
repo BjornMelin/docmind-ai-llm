@@ -29,6 +29,7 @@ def test_ingest_files_empty_returns_zero_and_no_pg(monkeypatch) -> None:
     assert out.get("pg_index") is None
     assert out.get("vector_index") is None
     assert out.get("manifest") is None
+    assert out.get("nlp_preview") is None
 
 
 class _DummyFile:

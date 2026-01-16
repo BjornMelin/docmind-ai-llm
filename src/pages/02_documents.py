@@ -7,7 +7,7 @@ import hashlib
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import streamlit as st
 from loguru import logger
@@ -29,6 +29,19 @@ from src.telemetry.opentelemetry import (
 from src.ui.artifacts import render_artifact_image
 from src.ui.ingest_adapter import ingest_files
 from src.utils.storage import create_vector_store
+
+if TYPE_CHECKING:
+    from src.nlp.spacy_service import SpacyNlpService
+
+
+@st.cache_resource(show_spinner=False)
+def _get_spacy_service(cache_version: int, cfg_dump: dict[str, Any]) -> SpacyNlpService:
+    from src.nlp.settings import SpacyNlpSettings
+    from src.nlp.spacy_service import SpacyNlpService
+
+    _ = cache_version  # cache bust
+    cfg = SpacyNlpSettings.model_validate(cfg_dump)
+    return SpacyNlpService(cfg)
 
 
 def main() -> None:  # pragma: no cover - Streamlit page
@@ -87,10 +100,19 @@ def _handle_ingest_submission(
         return
     with st.status("Ingesting…", expanded=True) as status:
         try:
+            nlp_service = None
+            try:
+                cfg_dump = settings.spacy.model_dump()  # type: ignore[attr-defined]
+                nlp_service = _get_spacy_service(settings.cache_version, cfg_dump)
+            except Exception:
+                logger.opt(exception=True).error("Failed to initialize SpacyNlpService")
+                nlp_service = None
+
             result = ingest_files(
                 files,
                 enable_graphrag=use_graphrag,
                 encrypt_images=encrypt_images,
+                nlp_service=nlp_service,
             )
             _render_ingest_results(result, use_graphrag)
             resolved_vector_index = st.session_state.get("vector_index") or result.get(
@@ -120,6 +142,7 @@ def _render_ingest_results(result: dict[str, Any], use_graphrag: bool) -> None:
     """Render ingestion results and hydrate session state indices."""
     count = int(result.get("count", 0))
     st.write(f"Ingested {count} documents.")
+    _render_nlp_preview(result.get("nlp_preview") or {}, result.get("metadata") or {})
     _render_image_exports(result.get("exports") or [])
 
     vector_index = result.get("vector_index")
@@ -143,6 +166,39 @@ def _render_ingest_results(result: dict[str, Any], use_graphrag: bool) -> None:
         st.info("Router engine is ready for Chat.")
     if pg_index is not None:
         st.info("GraphRAG index is available.")
+
+
+def _render_nlp_preview(preview: dict[str, Any], meta: dict[str, Any]) -> None:
+    enabled = bool(meta.get("nlp.enabled", False))
+    if not enabled:
+        st.caption("NLP enrichment: disabled")
+        return
+    enriched = int(meta.get("nlp.enriched_nodes", 0) or 0)
+    entity_count = int(meta.get("nlp.entity_count", 0) or 0)
+    with st.expander("NLP enrichment (spaCy)", expanded=False):
+        st.write(f"Enriched nodes: {enriched}")
+        st.write(f"Entities extracted: {entity_count}")
+
+        ents = preview.get("entities")
+        if isinstance(ents, list) and ents:
+            st.subheader("Sample entities")
+            for ent in ents[:20]:
+                if not isinstance(ent, dict):
+                    continue
+                label = ent.get("label")
+                text = ent.get("text")
+                if isinstance(label, str) and isinstance(text, str):
+                    st.write(f"- {label}: {text}")
+
+        sents = preview.get("sentences")
+        if isinstance(sents, list) and sents:
+            st.subheader("Sample sentences")
+            for sent in sents[:10]:
+                if not isinstance(sent, dict):
+                    continue
+                text = sent.get("text")
+                if isinstance(text, str) and text.strip():
+                    st.write(f"- {text}")
 
 
 def _set_multimodal_retriever() -> None:

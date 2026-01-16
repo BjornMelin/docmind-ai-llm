@@ -34,6 +34,7 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 | **FR-001** | The system **shall** ingest documents using Unstructured with `strategy=auto` and apply OCR fallback when needed. | ADR‑002 | AC‑FR‑001 |
 | **FR-002** | The system **shall** build a LlamaIndex `IngestionPipeline` with per-node+transform caching (DuckDBKV). | ADR‑010 | AC‑FR‑002 |
 | **FR-003** | The system **shall** create canonical nodes with deterministic IDs and include `pdf_page_image` nodes for pages. | ADR‑002 | AC‑FR‑003 |
+| **FR-036** | The system **shall** optionally enrich ingested text nodes with sentence spans and entity spans using the centralized spaCy NLP subsystem, controlled by settings and supporting cross-platform device selection (`cpu\|cuda\|apple\|auto`). | SPEC‑015/ADR‑061 | AC‑FR‑036 |
 | **FR-004** | The system **shall** embed text with BGE‑M3 and images with SigLIP by default (OpenCLIP MAY be selected explicitly). | ADR‑002 | AC‑FR‑004 |
 | **FR-005** | The system **shall** persist vectors in Qdrant with named vectors `text-dense` and `text-sparse` and perform server‑side hybrid queries via the Query API. Default fusion **SHALL** be RRF; DBSF MAY be enabled experimentally via environment when supported by Qdrant. The sparse index **SHALL** prefer FastEmbed BM42 with IDF modifier; fallback to BM25 when BM42 is unavailable. During hybrid queries, the system **shall** emit telemetry fields: `retrieval.fusion_mode`, `retrieval.prefetch_*_limit`, `retrieval.fused_limit`, `retrieval.return_count`, `retrieval.latency_ms`, `retrieval.sparse_fallback`, and `dedup.*`. | SPEC‑004/ADR‑005/006 | AC‑FR‑005 |
 | **FR-006** | The system **shall not** implement client-side fusion as default; all hybrid fusion **SHALL** occur server‑side in Qdrant. | SPEC‑004 | AC‑FR‑006 |
@@ -146,6 +147,19 @@ Scenario: PDF with images ingests with page images
   Given a PDF with tables and figures
   When I ingest with strategy=auto
   Then nodes shall include at least one "pdf_page_image" node
+```
+
+### AC‑FR‑036
+
+```gherkin
+Scenario: NLP enrichment produces a stable schema
+  Given NLP enrichment is enabled
+  When I enrich a sample text during ingestion
+  Then each enriched node SHALL include node.metadata["docmind_nlp"] with:
+    | provider   | "spacy" |
+    | sentences  | list of {start_char, end_char, text} |
+    | entities   | list of {label, text, start_char, end_char} |
+  And the schema SHALL remain valid even if entity outputs differ by model/version
 ```
 
 ### AC‑FR‑012

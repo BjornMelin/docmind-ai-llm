@@ -18,7 +18,7 @@ related_adrs: ["ADR-002","ADR-003","ADR-030","ADR-031","ADR-058"]
 Provide a **final-release, library-first** ingestion pipeline that:
 
 1. Loads documents via **LlamaIndex** primitives (UnstructuredReader when installed; safe plaintext fallback).
-2. Chunks text via `TokenTextSplitter` and optionally enriches nodes via `TitleExtractor`.
+2. Chunks text via `TokenTextSplitter` and optionally enriches nodes via NLP enrichment (spaCy) and `TitleExtractor`.
 3. Uses `IngestionCache` (DuckDB KV) for deterministic reuse.
 4. Exports **PDF page images** (WebP/JPEG, optional `*.enc` encryption).
 5. Wires multimodal exports into the final-release multimodal stack:
@@ -72,8 +72,9 @@ Key modules:
 Pipeline transforms (in order):
 
 1. `TokenTextSplitter(chunk_size, chunk_overlap, separator="\n")`
-2. Optional: `TitleExtractor(show_progress=False)` (best-effort; skip on failure)
-3. Optional: embedding transform (resolved from settings when not injected)
+2. Optional: spaCy NLP enrichment (sentences + entities) via `SpacyNlpEnrichmentTransform` (see `docs/specs/spec-015-nlp-enrichment-spacy.md`)
+3. Optional: `TitleExtractor(show_progress=False)` (best-effort; skip on failure)
+4. Optional: embedding transform (resolved from settings when not injected)
 
 ### Caching / docstore
 

@@ -55,8 +55,9 @@ tests/
 │   ├── cache/                   # Ingestion cache
 │   ├── config/                  # Settings + runtime mapping
 │   ├── containers/              # Container wiring
-│   ├── core/                    # Exceptions, invariants, spaCy manager
+│   ├── core/                    # Exceptions, invariants
 │   ├── integrations/            # Cross-cutting adapters (e.g., DSPy)
+│   ├── nlp/                     # NLP subsystem (spaCy service + enrichment transform)
 │   ├── models/                  # Pydantic models
 │   │   └── embeddings/          # Text/image/unified embedder suites
 │   ├── processing/              # Unstructured + LlamaIndex pipeline

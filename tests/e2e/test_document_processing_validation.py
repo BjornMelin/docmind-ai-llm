@@ -46,8 +46,6 @@ def setup_document_processing_dependencies(monkeypatch):
 
     # Mock heavy external dependencies
     heavy_dependencies = [
-        "spacy",
-        "thinc",
         "unstructured",
         "nltk",
         "transformers",

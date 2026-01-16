@@ -47,6 +47,7 @@ from src.processing.pdf_pages import save_pdf_page_images
 if TYPE_CHECKING:  # pragma: no cover
     from llama_index.core.base.embeddings.base import BaseEmbedding
 
+    from src.nlp.spacy_service import SpacyNlpService
     from src.retrieval.image_index import PageImageRecord
 else:
     BaseEmbedding = object
@@ -151,12 +152,14 @@ def build_ingestion_pipeline(
     cfg: IngestionConfig,
     *,
     embedding: BaseEmbedding | None,
+    nlp_service: SpacyNlpService | None = None,
 ) -> tuple[IngestionPipeline, Path, Path | None]:
     """Construct an :class:`IngestionPipeline` configured with local persistence.
 
     Args:
         cfg: Ingestion options controlling chunking, caching, and persistence.
         embedding: Optional embedding component injected into the pipeline.
+        nlp_service: Optional spaCy service used for NLP enrichment.
 
     Returns:
         tuple[IngestionPipeline, Path, Path | None]: Pipeline instance, cache
@@ -174,6 +177,20 @@ def build_ingestion_pipeline(
             separator="\n",
         ),
     ]
+
+    # Optional NLP enrichment (spaCy) runs after chunking and before embeddings.
+    try:
+        from src.nlp.spacy_service import SpacyNlpService
+        from src.processing.nlp_enrichment import SpacyNlpEnrichmentTransform
+
+        spacy_cfg = getattr(app_settings, "spacy", None)
+        if spacy_cfg is not None and bool(getattr(spacy_cfg, "enabled", False)):
+            service = nlp_service or SpacyNlpService(spacy_cfg)
+            transformations.append(
+                SpacyNlpEnrichmentTransform(cfg=spacy_cfg, service=service)
+            )
+    except Exception as exc:  # pragma: no cover - fail open
+        logger.debug("spaCy enrichment unavailable: {}", type(exc).__name__)
 
     # Title extraction remains optional; failures simply skip the transform.
     try:
@@ -581,6 +598,7 @@ async def ingest_documents(
     inputs: Sequence[IngestionInput],
     *,
     embedding: BaseEmbedding | None = None,
+    nlp_service: SpacyNlpService | None = None,
 ) -> IngestionResult:
     """Run the configured ingestion pipeline and normalize the result payload.
 
@@ -588,6 +606,7 @@ async def ingest_documents(
         cfg: Ingestion configuration specifying chunking and persistence.
         inputs: Normalized ingestion inputs to process.
         embedding: Optional embedding instance overriding global Settings.embed_model.
+        nlp_service: Optional spaCy service used for NLP enrichment.
 
     Returns:
         IngestionResult: Structured ingestion output including nodes, manifest
@@ -601,7 +620,7 @@ async def ingest_documents(
         )
 
     pipeline, cache_path, docstore_path = build_ingestion_pipeline(
-        cfg, embedding=resolved_embedding
+        cfg, embedding=resolved_embedding, nlp_service=nlp_service
     )
     documents, exports = await _load_documents(cfg, inputs)
 
@@ -642,6 +661,28 @@ async def ingest_documents(
         "artifact_gc_deleted": int(artifact_gc_deleted),
     }
 
+    nlp_enabled = bool(getattr(getattr(app_settings, "spacy", None), "enabled", False))
+    if nlp_enabled:
+        enriched_nodes = 0
+        entity_count = 0
+        for node in nodes:
+            meta = getattr(node, "metadata", None) or {}
+            payload = meta.get("docmind_nlp")
+            if isinstance(payload, dict):
+                enriched_nodes += 1
+                ents = payload.get("entities")
+                if isinstance(ents, list):
+                    entity_count += len(ents)
+        metadata.update(
+            {
+                "nlp.enabled": True,
+                "nlp.enriched_nodes": int(enriched_nodes),
+                "nlp.entity_count": int(entity_count),
+            }
+        )
+    else:
+        metadata["nlp.enabled"] = False
+
     return IngestionResult(
         nodes=list(nodes),
         documents=documents,
@@ -657,6 +698,7 @@ def ingest_documents_sync(
     inputs: Sequence[IngestionInput],
     *,
     embedding: BaseEmbedding | None = None,
+    nlp_service: SpacyNlpService | None = None,
 ) -> IngestionResult:
     """Run :func:`ingest_documents` synchronously via ``asyncio.run``.
 
@@ -664,6 +706,7 @@ def ingest_documents_sync(
         cfg: Ingestion configuration specifying chunking and persistence.
         inputs: Normalized ingestion inputs to process.
         embedding: Optional embedding instance overriding global Settings.embed_model.
+        nlp_service: Optional spaCy service used for NLP enrichment.
 
     Returns:
         IngestionResult: Structured ingestion output from the async pipeline.
@@ -671,7 +714,9 @@ def ingest_documents_sync(
     try:
         asyncio.get_running_loop()
     except RuntimeError:  # No running loop, safe to create one
-        return asyncio.run(ingest_documents(cfg, inputs, embedding=embedding))
+        return asyncio.run(
+            ingest_documents(cfg, inputs, embedding=embedding, nlp_service=nlp_service)
+        )
     raise RuntimeError(
         "ingest_documents_sync cannot be called while an event loop is running; "
         "await ingest_documents(...) instead"

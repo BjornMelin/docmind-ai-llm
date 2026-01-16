@@ -94,8 +94,10 @@ DocMind AI is architected with a strict **local-first** mandate (ADR-058):
 | **Multi-Agent System**  | 5-agent coordination for complex queries                 | LangGraph Supervisor           | <200ms coordination  |
 | **LLM Backend**         | Language model inference with 128K context               | vLLM FlashInfer + Qwen3-4B-FP8 | 120-180 tok/s decode |
 | **Vector Storage**      | Hybrid dense/sparse search with RRF fusion               | Qdrant                         | <100ms retrieval     |
-| **Document Processing** | Hi-res parsing with NLP pipeline                         | Unstructured + spaCy           | <2s per document     |
+| **Document Processing** | Hi-res parsing with NLP enrichment (optional)            | Unstructured + spaCy           | <2s per document*    |
 | **Performance Layer**   | FP8 quantization, parallel execution, CUDA optimization  | PyTorch 2.7.0 + CUDA 12.8      | 12–14 GB VRAM usage  |
+
+*Processing time may vary based on whether optional spaCy NLP enrichment is enabled.
 
 ## Unified Configuration Architecture
 
@@ -330,9 +332,10 @@ def retrieve_documents(
 graph LR
     A[Raw Document] --> B[Unstructured Parser]
     B --> C[Content Extraction]
-    C --> D[spaCy NLP Pipeline]
-    D --> E[Text Chunking]
-    E --> F[BGE-M3 Embeddings]
+    C --> D[Text Chunking]
+    D -.-> E[spaCy NLP Enrichment (optional)]
+    E -.-> F
+    D --> F[BGE-M3 Embeddings]
     F --> G[Vector Storage]
 
     H[Metadata Extraction] --> G
@@ -342,7 +345,7 @@ graph LR
     E --> I
 
     style B fill:#ff9999
-    style D fill:#99ccff
+    style E fill:#99ccff,stroke-dasharray: 5 5
     style F fill:#ffcc99
     style G fill:#ccffcc
 ```
@@ -350,7 +353,7 @@ graph LR
 **Key Features:**
 
 - **Hi-res Parsing**: Unstructured.io for PDF, DOCX, HTML, Markdown
-- **NLP Pipeline**: spaCy for entity recognition and linguistic analysis
+- **NLP enrichment (optional)**: spaCy sentence segmentation + entity extraction during ingestion (see SPEC-015)
 - **Intelligent Chunking**: Context-aware chunking with overlap optimization
 - **Unified Embeddings**: BGE-M3 dense + sparse embeddings (1024D + sparse)
 - **Caching Layer**: IngestionCache (DuckDBKVStore) for processed documents
@@ -442,7 +445,7 @@ sequenceDiagram
     participant U as User
     participant UI as Streamlit UI
     participant DP as Document Processor
-    participant NLP as spaCy Pipeline
+    participant NLP as spaCy Enrichment
     participant EMB as BGE-M3 Embedder
     participant VS as Qdrant Vector Store
     participant CACHE as IngestionCache
@@ -451,10 +454,11 @@ sequenceDiagram
     UI->>DP: Process Document
 
     DP->>DP: Parse with Unstructured
-    DP->>NLP: NLP Analysis
-    NLP->>DP: Linguistic Features
-
     DP->>DP: Intelligent Chunking
+    opt NLP Enrichment Enabled
+        DP->>NLP: Extract Sentences + Entities
+        NLP->>DP: Sentences + Entities (metadata)
+    end
     DP->>CACHE: Cache Processed Chunks
 
     DP->>EMB: Generate Embeddings
@@ -535,6 +539,7 @@ The following JSON block is used by `scripts/verify_structural_parity.py` to ens
     "core",
     "eval",
     "models",
+    "nlp",
     "pages",
     "persistence",
     "processing",
