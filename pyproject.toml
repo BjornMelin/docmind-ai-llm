@@ -32,7 +32,7 @@ dependencies = [
     "spacy==3.8.11",                     # NLP pipeline (pinned for reproducibility)
     "typer==0.21.1",                     # spaCy CLI stability (ADR-061) – prevent typer/typer-slim import conflicts with GPU extras
     # ML/LLM Fundamentals
-    "torch==2.7.1",                      # PyTorch runtime (vLLM 0.10.x compat)
+    "torch==2.8.0",                      # PyTorch runtime (vLLM 0.10.x compat)
     "transformers>=4.55.0,<4.58.0",      # HF model interfaces (vLLM 0.10.x + ColPali compat)
     "tiktoken==0.11.0",
     "openai>=1.109.1,<2.0.0",
