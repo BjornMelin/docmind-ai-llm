@@ -46,6 +46,7 @@ from src.config.settings_utils import (
     parse_endpoint_allowlist_hosts,
 )
 from src.models.embedding_constants import ImageBackboneName
+from src.nlp.settings import SpacyNlpSettings
 
 SETTINGS_MODEL_CONFIG = SettingsConfigDict(
     # Keep dotenv loading opt-in (callers can pass `_env_file=...` or use
@@ -849,7 +850,6 @@ class MonitoringConfig(BaseModel):
 
     # Cache and Timeout Settings
     cache_expiry_seconds: int = Field(default=3600, ge=300, le=86400)
-    spacy_download_timeout: int = Field(default=300, ge=60, le=600)
     default_agent_timeout: float = Field(default=3.0, ge=0.5, le=30)
     default_entity_confidence: float = Field(default=0.8, ge=0, le=1)
 
@@ -1054,6 +1054,7 @@ class DocMindSettings(BaseSettings):
     # Nested Configuration Models
     vllm: VLLMConfig = Field(default_factory=VLLMConfig)
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig)
+    spacy: SpacyNlpSettings = Field(default_factory=SpacyNlpSettings)
     agents: AgentConfig = Field(default_factory=AgentConfig)
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
@@ -1474,7 +1475,30 @@ class DocMindSettings(BaseSettings):
             )
 
 
+_SPACY_ENV_BRIDGE: dict[str, str] = {
+    "SPACY_ENABLED": "DOCMIND_SPACY__ENABLED",
+    "SPACY_MODEL": "DOCMIND_SPACY__MODEL",
+    "SPACY_DEVICE": "DOCMIND_SPACY__DEVICE",
+    "SPACY_GPU_ID": "DOCMIND_SPACY__GPU_ID",
+    "SPACY_DISABLE_PIPES": "DOCMIND_SPACY__DISABLE_PIPES",
+    "SPACY_BATCH_SIZE": "DOCMIND_SPACY__BATCH_SIZE",
+    "SPACY_N_PROCESS": "DOCMIND_SPACY__N_PROCESS",
+}
+
+
+def _apply_spacy_env_bridge() -> None:
+    """Bridge flat `SPACY_*` env vars into `DOCMIND_SPACY__*`.
+
+    This keeps the app aligned with DocMind's nested settings while supporting
+    the required "SPACY_*" knobs for operators.
+    """
+    for src, dest in _SPACY_ENV_BRIDGE.items():
+        if dest not in os.environ and src in os.environ:
+            os.environ[dest] = os.environ[src]
+
+
 # Global settings instance - primary interface for the application
+_apply_spacy_env_bridge()
 settings = DocMindSettings(_env_file=None)  # type: ignore[arg-type]
 
 _DOTENV_BOOTSTRAPPED = False
@@ -1626,6 +1650,7 @@ def bootstrap_settings(
     # Optional: remove selected global env vars so third-party libs won't pick them up.
     _apply_env_mask(opts.env_mask_keys)
 
+    _apply_spacy_env_bridge()
     updated = DocMindSettings(_env_file=dotenv_path)  # type: ignore[arg-type]
     apply_settings_in_place(settings, updated)
 
@@ -1653,6 +1678,7 @@ __all__ = [
     "ProcessingConfig",
     "RetrievalConfig",
     "SemanticCacheConfig",
+    "SpacyNlpSettings",
     "UIConfig",
     "VLLMConfig",
     "apply_settings_in_place",

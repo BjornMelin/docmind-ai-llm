@@ -8,7 +8,7 @@ import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from llama_index.core import StorageContext, VectorStoreIndex
 
@@ -25,7 +25,15 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     PropertyGraphIndex = None  # type: ignore
 
+if TYPE_CHECKING:  # pragma: no cover
+    from src.nlp.spacy_service import SpacyNlpService
+else:
+    SpacyNlpService = object  # type: ignore
+
 _LOG = logging.getLogger(__name__)
+
+_NLP_PREVIEW_MAX_ENTITIES = 50
+_NLP_PREVIEW_MAX_SENTENCES = 25
 
 
 def ingest_files(
@@ -33,6 +41,7 @@ def ingest_files(
     *,
     enable_graphrag: bool = False,
     encrypt_images: bool | None = None,
+    nlp_service: SpacyNlpService | None = None,
 ) -> dict[str, Any]:
     """Ingest uploaded files using the canonical pipeline.
 
@@ -40,6 +49,7 @@ def ingest_files(
         files: Uploaded file-like objects (e.g., ``streamlit.UploadedFile``).
         enable_graphrag: When ``True``, attempts to build a PropertyGraphIndex.
         encrypt_images: Optional override for page-image encryption.
+        nlp_service: Optional spaCy service used for NLP enrichment.
 
     Returns:
         Mapping containing ingestion metadata and constructed indices.
@@ -82,7 +92,7 @@ def ingest_files(
         )
 
     cfg = _build_ingestion_config(encrypt_images)
-    result = ingest_documents_sync(cfg, saved_inputs)
+    result = ingest_documents_sync(cfg, saved_inputs, nlp_service=nlp_service)
 
     embed_model_after = get_settings_embed_model()
     if embed_model_after is None:
@@ -108,6 +118,8 @@ def ingest_files(
         dumped.pop("path", None)
         exports.append(dumped)
 
+    nlp_preview = _build_nlp_preview(result.nodes)
+
     return {
         "count": len(saved_inputs),
         "vector_index": vector_index,
@@ -115,6 +127,8 @@ def ingest_files(
         "manifest": result.manifest.model_dump(),
         "exports": exports,
         "duration_ms": result.duration_ms,
+        "metadata": dict(result.metadata or {}),
+        "nlp_preview": nlp_preview,
         "documents": result.documents,
     }
 
@@ -227,6 +241,74 @@ def _read_bytes(file_obj: Any) -> bytes:
     if not isinstance(data, (bytes, bytearray)):
         data = bytes(data)
     return bytes(data)
+
+
+def _build_nlp_preview(nodes: list[Any]) -> dict[str, Any]:
+    """Build a small, UI-safe NLP preview from enriched node metadata."""
+    entities: list[dict[str, Any]] = []
+    sentences: list[dict[str, Any]] = []
+
+    for node in nodes:
+        meta = getattr(node, "metadata", None) or {}
+        payload = meta.get("docmind_nlp")
+        if not isinstance(payload, dict):
+            continue
+
+        payload_entities = payload.get("entities")
+        if (
+            isinstance(payload_entities, list)
+            and len(entities) < _NLP_PREVIEW_MAX_ENTITIES
+        ):
+            for ent in payload_entities:
+                if not isinstance(ent, dict):
+                    continue
+                label = ent.get("label")
+                text = ent.get("text")
+                if not isinstance(label, str) or not isinstance(text, str):
+                    continue
+                entities.append(
+                    {
+                        "label": label,
+                        "text": text,
+                        "start_char": ent.get("start_char"),
+                        "end_char": ent.get("end_char"),
+                    }
+                )
+                if len(entities) >= _NLP_PREVIEW_MAX_ENTITIES:
+                    break
+
+        payload_sentences = payload.get("sentences")
+        if (
+            isinstance(payload_sentences, list)
+            and len(sentences) < _NLP_PREVIEW_MAX_SENTENCES
+        ):
+            for sent in payload_sentences:
+                if not isinstance(sent, dict):
+                    continue
+                text = sent.get("text")
+                if not isinstance(text, str):
+                    continue
+                sentences.append(
+                    {
+                        "text": text,
+                        "start_char": sent.get("start_char"),
+                        "end_char": sent.get("end_char"),
+                    }
+                )
+                if len(sentences) >= _NLP_PREVIEW_MAX_SENTENCES:
+                    break
+
+        if (
+            len(entities) >= _NLP_PREVIEW_MAX_ENTITIES
+            and len(sentences) >= _NLP_PREVIEW_MAX_SENTENCES
+        ):
+            break
+
+    return {
+        "enabled": bool(entities or sentences),
+        "entities": entities,
+        "sentences": sentences,
+    }
 
 
 __all__ = ["ingest_files", "save_uploaded_file"]

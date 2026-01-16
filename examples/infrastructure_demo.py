@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""Demo of lightweight system/GPU info and optimized spaCy management.
+"""Demo of lightweight system/GPU info and the centralized spaCy NLP subsystem.
 
 This example demonstrates:
 1. Simple system info via psutil (no heavy deps)
 2. Optional GPU stats via torch.cuda if available
-3. spaCy 3.8+ memory_zone() optimization
+3. Centralized spaCy loading + device selection (cpu|cuda|apple|auto)
 """
 
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.core.spacy_manager import get_spacy_manager
+from src.nlp.settings import SpacyNlpSettings
+from src.nlp.spacy_service import SpacyModelLoadError, SpacyNlpService
 from src.utils.monitoring import get_system_info
 
 try:
@@ -54,35 +56,48 @@ def demo_system_and_gpu():
 
 
 def demo_spacy_optimization():
-    """Demonstrate spaCy 3.8+ native optimizations."""
-    print("\n=== spaCy Optimization Demo ===")
+    """Demonstrate centralized spaCy device selection + enrichment."""
+    print("\n=== spaCy NLP Demo ===")
 
-    manager = get_spacy_manager()
+    cfg = SpacyNlpSettings.model_validate(
+        {
+            "enabled": True,
+            "model": os.getenv("SPACY_MODEL", "en_core_web_sm"),
+            "device": os.getenv("SPACY_DEVICE", "auto"),
+            "gpu_id": int(os.getenv("SPACY_GPU_ID", "0")),
+            "disable_pipes": os.getenv("SPACY_DISABLE_PIPES", ""),
+        }
+    )
+    service = SpacyNlpService(cfg)
     test_texts = [
         "This is the first document to process.",
         "Here's another example sentence for NLP analysis.",
-        "Memory zone optimization reduces memory usage by 40%.",
-        "Native spaCy APIs provide better performance and reliability.",
+        "DocMind centralizes spaCy usage for maintainability.",
+        "Device selection happens before model loading.",
     ]
 
-    print(f"Processing {len(test_texts)} texts with memory optimization...")
+    print(f"Processing {len(test_texts)} texts...")
 
     try:
-        # Use memory_zone() for 40% memory improvement
-        with manager.memory_optimized_processing("en_core_web_sm") as nlp:
-            docs = list(nlp.pipe(test_texts))
+        out = service.enrich_texts(test_texts)
 
-            print("\nProcessed documents:")
-            for i, doc in enumerate(docs, 1):
-                print(f"  {i}. Tokens: {len(doc)}, Entities: {len(doc.ents)}")
+        print("\nProcessed documents:")
+        for i, enrichment in enumerate(out, 1):
+            print(
+                f"  {i}. Sentences: {len(enrichment.sentences)}, "
+                f"Entities: {len(enrichment.entities)}"
+            )
 
-        print(
-            "Memory zone automatically cleaned up - no manual memory management needed!"
-        )
+        if out and out[0].entities:
+            ent0 = out[0].entities[0]
+            print(f"\nSample entity: {ent0.label} -> {ent0.text}")
     except Exception as e:
-        print(f"spaCy model not available: {e}")
-        print("To install: uv run python -m spacy download en_core_web_sm")
-        print("✓ spaCy manager infrastructure is working correctly")
+        if isinstance(e, SpacyModelLoadError):
+            print(f"spaCy GPU activation failed: {e}")
+            print("Tip: set SPACY_DEVICE=auto or install the correct GPU extras.")
+            return
+        print(f"spaCy processing error: {e}")
+        print("Tip: install a model: uv run python -m spacy download en_core_web_sm")
 
 
 def main():
@@ -95,8 +110,8 @@ def main():
 
     print("\n" + "=" * 50)
     print("✓ System + optional GPU info: minimal")
-    print("✓ spaCy 3.8+ optimizations: concise")
-    print("✓ Memory zone() integration: 40% improvement")
+    print("✓ spaCy enrichment: sentences + entities")
+    print("✓ Device selection: cpu|cuda|apple|auto")
     print("✓ No extra dependencies added")
     print("✓ KISS, DRY, YAGNI principles followed")
 
