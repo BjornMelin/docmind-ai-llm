@@ -83,6 +83,7 @@ def test_rotation_rename_error_is_debug_logged(monkeypatch, tmp_path):
     tp = _P(str(tmp_path / "telemetry.jsonl"))
     monkeypatch.setattr(settings.telemetry, "rotate_bytes", 1)
     monkeypatch.setattr(settings.telemetry, "sample", 1.0)
+    monkeypatch.setattr(settings.telemetry, "disabled", False)
     monkeypatch.setattr(t, "get_telemetry_jsonl_path", lambda: tp, raising=False)
 
     calls: list[str] = []
