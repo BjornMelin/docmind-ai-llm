@@ -373,6 +373,7 @@ def reset_settings_after_test() -> Iterator[None]:
                 f"{type(current)!r}; expected DocMindSettings"
             )
         current.__init__(_env_file=None)  # type: ignore[arg-type]
+        # Clear bootstrap globals so later tests don't inherit dotenv state.
         settings_mod.reset_bootstrap_state()
 
     # Setup: ensure clean state before test

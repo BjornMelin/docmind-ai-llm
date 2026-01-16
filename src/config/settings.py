@@ -99,6 +99,9 @@ def _get_dotenv_priority_mode() -> DotenvPriorityMode:
     Returns:
         The effective dotenv priority mode.
     """
+    # Intentional direct env read for bootstrap configuration. This runs
+    # before Pydantic settings are constructed and is a narrow exception to
+    # the general "no direct os.getenv/os.environ sprawl" policy.
     raw = os.environ.get(f"{_CONFIG_ENV_PREFIX}DOTENV_PRIORITY")
     if raw:
         value = raw.strip().lower()
@@ -352,6 +355,8 @@ class ImageEncryptionConfig(BaseModel):
     def _validate_aes_key_base64(cls, v: object) -> str | None:
         if v is None:
             return None
+        if isinstance(v, SecretStr):
+            v = v.get_secret_value()
         raw = str(v).strip()
         if not raw:
             return None
@@ -1150,7 +1155,11 @@ class DocMindSettings(BaseSettings):
             "telemetry_disabled": (self.telemetry, "disabled", bool),
             "telemetry_sample": (self.telemetry, "sample", float),
             "telemetry_rotate_bytes": (self.telemetry, "rotate_bytes", int),
-            "img_aes_key_base64": (self.image_encryption, "aes_key_base64", str),
+            "img_aes_key_base64": (
+                self.image_encryption,
+                "aes_key_base64",
+                lambda x: x,
+            ),
             "img_kid": (self.image_encryption, "kid", str),
             "img_delete_plaintext": (self.image_encryption, "delete_plaintext", bool),
         }
@@ -1158,6 +1167,8 @@ class DocMindSettings(BaseSettings):
             value = getattr(self, field, None)
             if value is None:
                 continue
+            if isinstance(value, SecretStr):
+                value = value.get_secret_value()
             setattr(target, attr, caster(value))
 
     def _map_hybrid_to_retrieval(self) -> None:

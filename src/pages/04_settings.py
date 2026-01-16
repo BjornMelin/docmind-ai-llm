@@ -256,6 +256,9 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
         }
     )
     # Apply updated settings in-place so existing imports keep the same instance.
+    # NOTE: For our singleton Pydantic settings object, re-calling __init__ with
+    # new data is the canonical pattern for in-place reload after removing
+    # apply_settings_in_place(), and is intentional here.
     settings.__init__(**updated.model_dump(mode="python"))
 
     model_label = validated.model or validated.vllm.model

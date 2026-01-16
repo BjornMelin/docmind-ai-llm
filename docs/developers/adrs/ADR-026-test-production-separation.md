@@ -102,6 +102,7 @@ def reset_global_settings() -> Iterator[None]:
     def _reset_in_place() -> None:
         settings_mod = importlib.import_module("src.config.settings")
         settings_mod.settings.__init__(_env_file=None)
+        settings_mod.reset_bootstrap_state()
 
     _reset_in_place()
     yield

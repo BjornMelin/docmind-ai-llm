@@ -1,7 +1,11 @@
 """Telemetry disable flag test."""
 
+import pytest
+
 from src.config.settings import settings
 from src.utils import telemetry
+
+pytestmark = pytest.mark.unit
 
 
 def test_telemetry_disabled_env(tmp_path):
