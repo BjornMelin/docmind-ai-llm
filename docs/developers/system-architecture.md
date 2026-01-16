@@ -534,6 +534,7 @@ The following JSON block is used by `scripts/verify_structural_parity.py` to ens
     "core",
     "eval",
     "models",
+    "nlp",
     "pages",
     "persistence",
     "processing",
