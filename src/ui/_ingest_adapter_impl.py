@@ -121,7 +121,8 @@ def ingest_files(
         dumped.pop("path", None)
         exports.append(dumped)
 
-    nlp_preview = _build_nlp_preview(result.nodes)
+    nlp_enabled = result.metadata.get("nlp.enabled", False)
+    nlp_preview = _build_nlp_preview(result.nodes) if nlp_enabled else None
 
     return {
         "count": len(saved_inputs),
