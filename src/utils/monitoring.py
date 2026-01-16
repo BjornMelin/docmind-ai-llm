@@ -161,8 +161,16 @@ def log_error_with_context(
     if kwargs:
         error_context.update(kwargs)
 
-    log_jsonl({"error_logged": True, **error_context})
-    logger.error("Operation failed {}", error_context)
+    safe_context = {
+        key: (
+            build_pii_log_entry(str(value), key_id=f"{operation}:{key}").redacted
+            if isinstance(value, str)
+            else value
+        )
+        for key, value in error_context.items()
+    }
+    log_jsonl({"error_logged": True, **safe_context})
+    logger.error("Operation failed {}", safe_context)
 
 
 def _record_otel_performance(operation: str, duration_ms: float) -> None:

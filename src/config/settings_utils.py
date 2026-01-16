@@ -147,7 +147,15 @@ def parse_endpoint_allowlist_hosts(allowlist: list[str]) -> set[str]:
             if parsed is not None and (host := getattr(parsed, "host", None)):
                 allowed.add(normalize_endpoint_host(str(host)))
                 continue
-        allowed.add(normalize_endpoint_host(e.split("/")[0].split(":")[0]))
+        host_port = e.split("/")[0]
+        if host_port.startswith("["):
+            bracket_end = host_port.find("]")
+            host = host_port[: bracket_end + 1] if bracket_end != -1 else host_port
+        elif host_port.count(":") >= 2:
+            host = host_port
+        else:
+            host = host_port.split(":")[0]
+        allowed.add(normalize_endpoint_host(host))
     return {h for h in allowed if h}
 
 

@@ -37,6 +37,7 @@ jobs:
             echo "Failed to resolve release PR branch." >&2
             exit 1
           fi
+          echo "Resolved release PR branch: $branch"
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
       - name: Checkout release PR branch
         if: ${{ steps.release.outputs.prs_created == 'true' }}
