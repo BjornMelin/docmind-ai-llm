@@ -11,7 +11,9 @@ from src.utils import telemetry
 pytestmark = pytest.mark.unit
 
 
-def test_canonical_keys_present(tmp_path: Path) -> None:
+def test_canonical_keys_present(
+    tmp_path: Path, reset_settings_after_test: None
+) -> None:
     out = tmp_path / "telemetry.jsonl"
     settings.telemetry.jsonl_path = out
     settings.telemetry.disabled = False
@@ -65,7 +67,9 @@ def test_canonical_keys_present(tmp_path: Path) -> None:
         assert isinstance(e.get("rerank.processed_batches", 0), int)
 
 
-def test_log_jsonl_writes_event(tmp_path: Path) -> None:
+def test_log_jsonl_writes_event(
+    tmp_path: Path, reset_settings_after_test: None
+) -> None:
     """Test that log_jsonl writes event data to JSONL file."""
     out = tmp_path / "telemetry.jsonl"
     settings.telemetry.jsonl_path = out
