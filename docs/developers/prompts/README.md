@@ -14,7 +14,8 @@ Each prompt is self-contained and embeds DocMind’s “Implementation Executor 
 ## Prompts (recommended order)
 
 1. `docs/developers/prompts/prompt-021-release-readiness-v1.md`
-2. `docs/developers/prompts/prompt-031-config-discipline-env-bridges.md`
+2. `docs/developers/prompts/prompt-031-config-discipline-env-bridges.md` (baseline)
+   2.1. `docs/developers/prompts/prompt-031-config-discipline-remaining.md` (Polish)
 3. `docs/developers/prompts/prompt-040-agent-deadline-propagation-and-router-injection.md`
 4. `docs/developers/prompts/prompt-032-documents-snapshot-service-boundary.md`
 5. `docs/developers/prompts/prompt-039-operational-metadata-sqlite-wal.md`
