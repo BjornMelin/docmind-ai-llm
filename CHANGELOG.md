@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [0.6.0](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.5.0...v0.6.0) (2026-01-16)
+
+
+### Features
+
+* **config:** finalize config discipline ([785d0a3](https://github.com/BjornMelin/docmind-ai-llm/commit/785d0a32511d9cf4319592774da998ca6baeee80))
+* **config:** finalize settings reload and telemetry/image config ([5482b78](https://github.com/BjornMelin/docmind-ai-llm/commit/5482b786b8e1171f220d6aa0d2c14c5a3274a258))
+* refactor configuration settings for telemetry and image encryption, and update related tests and documentation ([ddcd13b](https://github.com/BjornMelin/docmind-ai-llm/commit/ddcd13b2e3d59b8a414dfe40b1452b37893f4a86))
+
+
+### Bug Fixes
+
+* resolve PR review comments ([84b7c3c](https://github.com/BjornMelin/docmind-ai-llm/commit/84b7c3c532be232390d6dd1475fa15c2d9bd8b6b))
+* **tests:** ensure telemetry enabled in rotation error test ([0d1334c](https://github.com/BjornMelin/docmind-ai-llm/commit/0d1334ca9c53410b618705a309f9f69194713e37))
+* **tests:** isolate telemetry settings ([fffa901](https://github.com/BjornMelin/docmind-ai-llm/commit/fffa901213340bf426cc2d34c2a8ebf867eabfc7))
+
+
+### Documentation
+
+* add new prompt for Config Discipline (Remaining Polish) and update prompt order in README. ([b99825a](https://github.com/BjornMelin/docmind-ai-llm/commit/b99825a72bbbac862db65313edf3879872ab907a))
+
 ## [0.5.0](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.4.0...v0.5.0) (2026-01-16)
 
 
