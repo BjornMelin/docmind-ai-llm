@@ -27,7 +27,13 @@ from src.config import settings
 from src.utils.log_safety import build_pii_log_entry
 from src.utils.telemetry import log_jsonl
 
-_OTEL_INSTRUMENTS: dict[str, Any] = {"duration_ms": None, "count": None}
+_OTEL_INSTRUMENTS: dict[str, Any] = {
+    "meter": None,
+    "duration_ms": None,
+    "count": None,
+}
+_WARNED_DEPRECATED_RECORD_OPERATION = False
+_WARNED_DEPRECATED_GET_MONITOR = False
 warnings.filterwarnings("once", category=DeprecationWarning, module=__name__)
 
 
@@ -175,7 +181,9 @@ def _record_otel_performance(operation: str, duration_ms: float) -> None:
     except Exception:
         return
 
-    meter = metrics.get_meter(__name__)
+    if _OTEL_INSTRUMENTS["meter"] is None:
+        _OTEL_INSTRUMENTS["meter"] = metrics.get_meter(__name__)
+    meter = _OTEL_INSTRUMENTS["meter"]
     if _OTEL_INSTRUMENTS["count"] is None:
         _OTEL_INSTRUMENTS["count"] = meter.create_counter(
             "docmind.operation.count",
@@ -419,14 +427,17 @@ class SimplePerformanceMonitor:
         }
         record.update(metrics)
 
-        warnings.warn(
-            (
-                "SimplePerformanceMonitor is deprecated; prefer OTEL metrics and "
-                "JSONL telemetry."
-            ),
-            DeprecationWarning,
-            stacklevel=2,
-        )
+        global _WARNED_DEPRECATED_RECORD_OPERATION
+        if not _WARNED_DEPRECATED_RECORD_OPERATION:
+            warnings.warn(
+                (
+                    "SimplePerformanceMonitor is deprecated; prefer OTEL metrics and "
+                    "JSONL telemetry."
+                ),
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            _WARNED_DEPRECATED_RECORD_OPERATION = True
         self.metrics.append(record)
         log_performance(**record)
 
@@ -477,12 +488,15 @@ def get_performance_monitor() -> SimplePerformanceMonitor:
     Returns:
         SimplePerformanceMonitor instance
     """
-    warnings.warn(
-        (
-            "get_performance_monitor is deprecated; prefer OTEL metrics and JSONL "
-            "telemetry."
-        ),
-        DeprecationWarning,
-        stacklevel=2,
-    )
+    global _WARNED_DEPRECATED_GET_MONITOR
+    if not _WARNED_DEPRECATED_GET_MONITOR:
+        warnings.warn(
+            (
+                "get_performance_monitor is deprecated; prefer OTEL metrics and JSONL "
+                "telemetry."
+            ),
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        _WARNED_DEPRECATED_GET_MONITOR = True
     return _performance_monitor

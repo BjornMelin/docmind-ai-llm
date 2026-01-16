@@ -16,6 +16,7 @@ from loguru import logger
 from pydantic import AnyHttpUrl, TypeAdapter
 
 _ANY_HTTP_URL_ADAPTER = TypeAdapter(AnyHttpUrl)
+_DNS_FAILURE_WARNED: set[str] = set()
 
 
 def parse_any_http_url(value: str) -> AnyHttpUrl:
@@ -189,11 +190,13 @@ def resolve_endpoint_host_ips(
             except ValueError:
                 continue
     except OSError as exc:
-        logger.warning(
-            "endpoint DNS resolution failed: host={host} err={err}",
-            host=normalized,
-            err=exc,
-        )
+        if normalized not in _DNS_FAILURE_WARNED:
+            logger.warning(
+                "endpoint DNS resolution failed: host={host} err={err}",
+                host=normalized,
+                err=exc,
+            )
+            _DNS_FAILURE_WARNED.add(normalized)
     return ips
 
 
@@ -263,6 +266,15 @@ def endpoint_url_allowed(url: object | None, *, allowed_hosts: set[str]) -> bool
                                 if ip_is_blocked_for_endpoints(ip):
                                     allowed = False
                                     break
+                        elif host not in _DNS_FAILURE_WARNED:
+                            logger.warning(
+                                (
+                                    "allowlisted endpoint host did not resolve; "
+                                    "host={host}"
+                                ),
+                                host=host,
+                            )
+                            _DNS_FAILURE_WARNED.add(host)
     return allowed
 
 
