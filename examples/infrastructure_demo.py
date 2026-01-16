@@ -59,12 +59,19 @@ def demo_spacy_optimization():
     """Demonstrate centralized spaCy device selection + enrichment."""
     print("\n=== spaCy NLP Demo ===")
 
+    gpu_id_str = os.getenv("SPACY_GPU_ID", "0")
+    try:
+        gpu_id = int(gpu_id_str)
+    except ValueError:
+        # Avoid crashing before validation; fallback to 0
+        gpu_id = 0
+
     cfg = SpacyNlpSettings.model_validate(
         {
             "enabled": True,
             "model": os.getenv("SPACY_MODEL", "en_core_web_sm"),
             "device": os.getenv("SPACY_DEVICE", "auto"),
-            "gpu_id": int(os.getenv("SPACY_GPU_ID", "0")),
+            "gpu_id": gpu_id,
             "disable_pipes": os.getenv("SPACY_DISABLE_PIPES", ""),
         }
     )
@@ -91,11 +98,10 @@ def demo_spacy_optimization():
         if out and out[0].entities:
             ent0 = out[0].entities[0]
             print(f"\nSample entity: {ent0.label} -> {ent0.text}")
+    except SpacyModelLoadError as e:
+        print(f"spaCy GPU activation failed: {e}")
+        print("Tip: set SPACY_DEVICE=auto or install the correct GPU extras.")
     except Exception as e:
-        if isinstance(e, SpacyModelLoadError):
-            print(f"spaCy GPU activation failed: {e}")
-            print("Tip: set SPACY_DEVICE=auto or install the correct GPU extras.")
-            return
         print(f"spaCy processing error: {e}")
         print("Tip: install a model: uv run python -m spacy download en_core_web_sm")
 

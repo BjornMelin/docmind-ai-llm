@@ -136,4 +136,4 @@ export SPACY_DEVICE=apple   # or auto
 - `max_characters` prevents pathological large-node processing.
 - Model caching:
   - Streamlit caches the service with `st.cache_resource`
-  - the underlying pipeline load uses a process-local `lru_cache`
+  - the underlying pipeline load uses a process-local `lru_cache`.

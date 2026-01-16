@@ -9,6 +9,8 @@ from src.nlp.settings import SpacyDevice, SpacyNlpSettings
 from src.nlp.spacy_service import SpacyModelLoadError, SpacyNlpService
 from src.processing.nlp_enrichment import SpacyNlpEnrichmentTransform
 
+pytestmark = [pytest.mark.unit, pytest.mark.requires_gpu]
+
 
 def _clear_spacy_cache() -> None:
     from src.nlp import spacy_service as module

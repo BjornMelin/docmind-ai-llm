@@ -165,11 +165,14 @@ See: docs/specs/spec-015-nlp-enrichment-spacy.md
 from src.config import settings
 from src.nlp.spacy_service import SpacyNlpService
 
-service = SpacyNlpService(settings.spacy)
-enrichment = service.enrich_texts(["Hello world. Second sentence."])[0]
+if settings.spacy.enabled:
+    service = SpacyNlpService(settings.spacy)
+    enrichment = service.enrich_texts(["Hello world. Second sentence."])[0]
 
-print([s.text for s in enrichment.sentences])
-print([(e.label, e.text) for e in enrichment.entities])
+    print([s.text for s in enrichment.sentences])
+    print([(e.label, e.text) for e in enrichment.entities])
+else:
+    print("spaCy enrichment is disabled in settings.")
 ```
 
 ### Error Handling Patterns

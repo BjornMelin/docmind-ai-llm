@@ -269,7 +269,7 @@ SPACY_BATCH_SIZE=32
 SPACY_N_PROCESS=1
 ```
 
-Device selection MUST occur before any `spacy.load()` call to avoid device allocation hazards. See spaCy top-level API docs for `prefer_gpu()` / `require_gpu()` / `require_cpu()`. citeturn0search3
+Device selection MUST occur before any `spacy.load()` call to avoid device allocation hazards. See spaCy top-level API docs for `prefer_gpu()` / `require_gpu()` / `require_cpu()`.
 
 ### 5. Security & Guardrails
 

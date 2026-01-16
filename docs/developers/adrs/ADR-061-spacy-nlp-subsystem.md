@@ -93,7 +93,7 @@ flowchart LR
   F --> G["Streamlit Documents page preview"]
 ```
 
-## Dependency & Packaging Notes (CUDA vs Apple)
+## Dependency & Packaging Notes (CUDA vs. Apple)
 
 We keep `spacy==3.8.11` pinned in base dependencies for reproducibility.
 

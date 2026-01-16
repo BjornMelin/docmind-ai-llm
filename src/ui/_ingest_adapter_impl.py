@@ -65,6 +65,9 @@ def ingest_files(
             "manifest": None,
             "exports": [],
             "duration_ms": 0.0,
+            "metadata": {},
+            "nlp_preview": {"enabled": False, "entities": [], "sentences": []},
+            "documents": [],
         }
 
     if embed_model_before is None:

@@ -94,8 +94,10 @@ DocMind AI is architected with a strict **local-first** mandate (ADR-058):
 | **Multi-Agent System**  | 5-agent coordination for complex queries                 | LangGraph Supervisor           | <200ms coordination  |
 | **LLM Backend**         | Language model inference with 128K context               | vLLM FlashInfer + Qwen3-4B-FP8 | 120-180 tok/s decode |
 | **Vector Storage**      | Hybrid dense/sparse search with RRF fusion               | Qdrant                         | <100ms retrieval     |
-| **Document Processing** | Hi-res parsing with NLP enrichment (optional)            | Unstructured + spaCy           | <2s per document     |
+| **Document Processing** | Hi-res parsing with NLP enrichment (optional)            | Unstructured + spaCy           | <2s per document*    |
 | **Performance Layer**   | FP8 quantization, parallel execution, CUDA optimization  | PyTorch 2.7.0 + CUDA 12.8      | 12–14 GB VRAM usage  |
+
+*Processing time may vary based on whether optional spaCy NLP enrichment is enabled.
 
 ## Unified Configuration Architecture
 
@@ -331,8 +333,9 @@ graph LR
     A[Raw Document] --> B[Unstructured Parser]
     B --> C[Content Extraction]
     C --> D[Text Chunking]
-    D --> E[spaCy NLP Enrichment (optional)]
-    E --> F[BGE-M3 Embeddings]
+    D -.-> E[spaCy NLP Enrichment (optional)]
+    E -.-> F
+    D --> F[BGE-M3 Embeddings]
     F --> G[Vector Storage]
 
     H[Metadata Extraction] --> G
@@ -342,7 +345,7 @@ graph LR
     E --> I
 
     style B fill:#ff9999
-    style E fill:#99ccff
+    style E fill:#99ccff,stroke-dasharray: 5 5
     style F fill:#ffcc99
     style G fill:#ccffcc
 ```
@@ -452,8 +455,10 @@ sequenceDiagram
 
     DP->>DP: Parse with Unstructured
     DP->>DP: Intelligent Chunking
-    DP->>NLP: NLP Enrichment (optional)
-    NLP->>DP: Sentences + Entities (metadata)
+    opt NLP Enrichment Enabled
+        DP->>NLP: Extract Sentences + Entities
+        NLP->>DP: Sentences + Entities (metadata)
+    end
     DP->>CACHE: Cache Processed Chunks
 
     DP->>EMB: Generate Embeddings

@@ -101,6 +101,7 @@ def _handle_ingest_submission(
                 cfg_dump = settings.spacy.model_dump()  # type: ignore[attr-defined]
                 nlp_service = _get_spacy_service(settings.cache_version, cfg_dump)
             except Exception:
+                logger.opt(exception=True).error("Failed to initialize SpacyNlpService")
                 nlp_service = None
 
             result = ingest_files(

@@ -36,6 +36,15 @@ uv run python -m spacy download en_core_web_sm
 
 ### Runtime selection (spaCy / CUDA)
 
+Canonical variables (recommended):
+
+```bash
+export DOCMIND_SPACY__DEVICE=auto   # cpu|cuda|apple|auto
+export DOCMIND_SPACY__GPU_ID=0
+```
+
+Shorthand aliases (supported for backwards-compatibility via `_SPACY_ENV_BRIDGE`):
+
 ```bash
 export SPACY_DEVICE=auto   # or cuda
 export SPACY_GPU_ID=0

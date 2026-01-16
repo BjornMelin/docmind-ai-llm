@@ -188,7 +188,7 @@ graph TD
 - **Unified Embeddings**: BAAI/bge‑m3 (1024D dense + sparse unified)
 - **Multimodal**: SigLIP (default) or CLIP ViT‑B/32
 - **Reranking**: BAAI/bge-reranker-v2-m3
-- **NLP enrichment model**: configurable (`DOCMIND_SPACY__MODEL`), default `en_core_web_sm` (spaCy). If not installed, the app falls back to `spacy.blank("en")` (limited entities).
+- **NLP enrichment model**: Configurable via `DOCMIND_SPACY__MODEL` (defaults to `en_core_web_sm`). If the requested model is not installed, the system falls back to `spacy.blank("en")` on CPU paths. However, if an explicit GPU device (CUDA/Apple) is requested but the model or runtime is unavailable, the system fails fast with `SpacyModelLoadError` rather than falling back. The `spacy.blank("en")` fallback provides basic sentence segmentation and tokenization but lacks pretrained NER or statistical components. (See FR-11 for optional NLP enrichment requirements).
 
 ### Configuration Approach
 

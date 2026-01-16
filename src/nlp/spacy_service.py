@@ -146,11 +146,13 @@ def _load_nlp_cached(cache_key: SpacyCacheKey) -> Language:
     disable = list({p.strip() for p in cfg.disable_pipes if p.strip()})
     try:
         nlp = spacy.load(cfg.model, disable=disable)
-    except OSError as exc:
+    except (OSError, ValueError, ImportError, Exception) as exc:
         logger.info(
-            "spaCy model unavailable ({}); falling back to blank('en')", cfg.model
+            "spaCy model load failed ({}) [{}]: falling back to blank('en')",
+            cfg.model,
+            type(exc).__name__,
         )
-        logger.debug("spaCy load error type: {}", type(exc).__name__)
+        logger.debug("spaCy load error detail: {}", str(exc))
         nlp = spacy.blank("en")
 
     _ensure_sentence_component(nlp)

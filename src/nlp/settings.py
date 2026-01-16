@@ -22,6 +22,11 @@ class SpacyDevice(StrEnum):
     APPLE = "apple"
 
 
+SpacyCacheKey: TypeAlias = tuple[
+    bool, str, str, int, tuple[str, ...], int, int, int
+]  # (enabled, model, device, gpu_id, disable_pipes, batch_size, n_process, max_chars)
+
+
 class SpacyNlpSettings(BaseModel):
     """Configuration for the centralized spaCy NLP runtime."""
 
@@ -99,11 +104,6 @@ class SpacyNlpSettings(BaseModel):
         if isinstance(parsed, (list, tuple, set)):
             return [str(item).strip() for item in parsed if str(item).strip()]
         return result
-
-
-SpacyCacheKey: TypeAlias = tuple[
-    bool, str, str, int, tuple[str, ...], int, int, int
-]  # (enabled, model, device, gpu_id, disable_pipes, batch_size, n_process, max_chars)
 
 
 __all__ = ["SpacyCacheKey", "SpacyDevice", "SpacyNlpSettings"]
