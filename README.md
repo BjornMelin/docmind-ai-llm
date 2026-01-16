@@ -2,14 +2,14 @@
 
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)
-![LlamaIndex](https://img.shields.io/badge/🦙_LlamaIndex-000000?style=for-the-badge)
+![LlamaIndex](https://img.shields.io/badge/LlamaIndex-7C3AED?style=for-the-badge)
 ![LangGraph](https://img.shields.io/badge/🔗_LangGraph-4A90E2?style=for-the-badge)
+![Qdrant](https://img.shields.io/badge/Qdrant-DC244C?style=for-the-badge&logo=qdrant&logoColor=white)
+![spaCy](https://img.shields.io/badge/spaCy-09A3D5?style=for-the-badge&logo=spacy&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
-![Ollama](https://img.shields.io/badge/🦙_Ollama-000000?style=for-the-badge)
+![Ollama](https://img.shields.io/badge/Ollama-000000?style=for-the-badge)
 
-[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
-[![GitHub](https://img.shields.io/badge/GitHub-BjornMelin-181717?logo=github)](https://github.com/BjornMelin)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Bjorn%20Melin-0077B5?logo=linkedin)](https://www.linkedin.com/in/bjorn-melin/)
+[![MIT License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](https://choosealicense.com/licenses/mit/)
 
 **DocMind AI** provides local document analysis with zero cloud dependency. It combines hybrid retrieval (dense + sparse), optional knowledge graph extraction (GraphRAG), and a 5-agent coordinator to analyze PDFs, Office docs, HTML/Markdown, and image-rich PDFs. Built on LlamaIndex pipelines with LangGraph supervisor orchestration, the default vLLM profile targets Qwen/Qwen3-4B-Instruct-2507-FP8 (128 K context window) and runs entirely on your hardware with optional GPU acceleration.
 
@@ -37,7 +37,7 @@ Design goals:
 - **Offline-first design:** Runs fully offline once models are present; remote endpoints must be explicitly enabled.
 - **GPU acceleration:** Optional vLLM + FlashInfer stack (gpu extra) for fast local inference.
 - **Robust retries and logging:** Tenacity-backed retries for LLM calls and structured logging via Loguru.
-- **Observability and operations:** Optional OTLP tracing/metrics plus JSONL telemetry; Docker and docker-compose included for local deployments.
+- **Observability and operations:** Optional OTLP tracing/metrics plus JSONL telemetry; Docker and Compose included for local deployments.
 
 ## Table of Contents
 
@@ -66,6 +66,7 @@ Design goals:
     - [Multi-Agent Coordination](#multi-agent-coordination)
     - [Performance Optimizations](#performance-optimizations)
   - [Configuration](#configuration)
+    - [Why `DOCMIND_*` and not provider env vars?](#why-docmind_-and-not-provider-env-vars)
     - [Configuration Philosophy](#configuration-philosophy)
     - [Environment Variables](#environment-variables)
     - [Enable DSPy Optimization (optional)](#enable-dspy-optimization-optional)
@@ -128,7 +129,7 @@ Design goals:
    uv sync
    ```
 
-   _Need OTLP exporters and cross-platform snapshot locking?_ Install the optional observability extras as well:
+   _Need LlamaIndex OpenTelemetry instrumentation?_ Install the optional observability extras as well:
 
    ```bash
    uv sync --extra observability
@@ -144,7 +145,7 @@ Design goals:
    **Key Dependencies Included:**
 
    - **LlamaIndex (>=0.14.12,<0.15.0)**: Retrieval, RouterQueryEngine, IngestionPipeline, PropertyGraphIndex
-   - **LangGraph (>=1.0.5,<2.0.0)**: 5-agent supervisor orchestration with langgraph-supervisor library
+   - **LangGraph (==1.0.5)**: 5-agent supervisor orchestration with langgraph-supervisor library
    - **Streamlit (>=1.52.2,<2.0.0)**: Web interface framework
    - **Ollama (0.6.1)**: Local LLM integration
    - **Qdrant Client (>=1.15.1,<2.0.0)**: Vector database operations
@@ -152,11 +153,11 @@ Design goals:
    - **LlamaIndex Embeddings FastEmbed (>=0.5.0,<0.6.0)**: Sparse query encoding (optional fastembed-gpu >=0.7.4,<0.8.0)
    - **Tenacity (>=9.1.2,<10.0.0)**: Retry strategies with exponential backoff
    - **Loguru (>=0.7.3,<1.0.0)**: Structured logging
-   - **Pydantic (2.11.7)**: Data validation and settings.
+   - **Pydantic (2.12.5)**: Data validation and settings.
 
 3. **Install spaCy language model:**
 
-   spaCy is bundled for optional NLP/GraphRAG workflows. Install a language model if you plan to use spaCy-based extraction:
+   spaCy is bundled for optional **NLP enrichment** (sentence segmentation + entity extraction during ingestion). Install a language model if you plan to use enrichment:
 
    ```bash
    # Install the small English model (recommended, ~15MB)
@@ -168,6 +169,25 @@ Design goals:
    ```
 
    **Note:** spaCy models are downloaded and cached locally. The app does not auto-download models; install them explicitly for offline use.
+
+   Optional configuration (defaults shown):
+
+   ```bash
+   # Enable/disable enrichment
+   DOCMIND_SPACY__ENABLED=true
+   # Pipeline name or path (blank fallback when missing)
+   DOCMIND_SPACY__MODEL=en_core_web_sm
+   # cpu|cuda|apple|auto (auto prefers CUDA, then Apple, else CPU)
+   DOCMIND_SPACY__DEVICE=auto
+   DOCMIND_SPACY__GPU_ID=0
+   ```
+
+   Cross-platform acceleration:
+
+   - NVIDIA CUDA (Linux/Windows): `uv sync --extra gpu` and set `DOCMIND_SPACY__DEVICE=auto|cuda`
+   - Apple Silicon (macOS arm64): `uv sync --extra apple` and set `DOCMIND_SPACY__DEVICE=auto|apple`
+
+   See `docs/specs/spec-015-nlp-enrichment-spacy.md` and `docs/developers/gpu-setup.md`.
 
 4. **Set up environment configuration:**
 
@@ -219,27 +239,12 @@ Design goals:
 
 5. **(Optional) Install GPU support for RTX 4090 with vLLM FlashInfer:**
 
-   **RECOMMENDED: vLLM FlashInfer Stack** for Qwen3-4B-Instruct-2507-FP8 with 128 K context:
+   Install the repo’s GPU extras (includes vLLM 0.10.x + FlashInfer, and uses the CUDA wheel index for PyTorch):
 
    ```bash
-   # Phase 1: Verify CUDA installation
-   nvcc --version  # Should show CUDA 12.8+
-   nvidia-smi     # Verify RTX 4090 detection
-
-   # Phase 2: Install PyTorch 2.7.1 with CUDA 12.8 (recommended for this repo)
-   uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 \
-       --extra-index-url https://download.pytorch.org/whl/cu128
-
-   # Phase 3: Install vLLM 0.10.x + FlashInfer (this repo pins vLLM <0.11)
-   uv pip install "vllm>=0.10.1,<0.11.0" \
-       --extra-index-url https://download.pytorch.org/whl/cu128
-   uv pip install "flashinfer-python>=0.5.3,<0.6.0"
-
-   # Phase 4: Install remaining GPU dependencies
+   nvidia-smi
    uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
-
-   # Phase 5: Verify installation
-   uv run python -c "import vllm; import torch; print(f'vLLM: {vllm.__version__}, PyTorch: {torch.__version__}')"
+   uv run python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
    ```
 
    **Hardware Guidance:**
@@ -253,24 +258,14 @@ Design goals:
    - vLLM uses FP8 KV cache by default (`DOCMIND_VLLM__KV_CACHE_DTYPE=fp8_e5m2`).
    - Measure performance on your hardware with `uv run python scripts/performance_monitor.py`.
 
-   **Fallback Installation** (if FlashInfer fails):
-
-   ```bash
-   # Fallback: vLLM CUDA-only installation with PyTorch 2.7.1
-   uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 \
-       --extra-index-url https://download.pytorch.org/whl/cu128
-   uv pip install vllm --extra-index-url https://download.pytorch.org/whl/cu128
-   uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
-   ```
-
-   See [GPU Setup Guide](docs/developers/hardware_policy.md) for detailed configuration and troubleshooting.
+   See [GPU Setup Guide](docs/developers/gpu-setup.md) (installation) and [Hardware Policy](docs/developers/hardware_policy.md) (hardware/VRAM guidance).
 
 ### Running the App
 
 **Locally:**
 
 ```bash
-streamlit run src/app.py
+uv run streamlit run src/app.py
 ```
 
 To honor `DOCMIND_UI__STREAMLIT_PORT`, use:
@@ -282,7 +277,7 @@ To honor `DOCMIND_UI__STREAMLIT_PORT`, use:
 **With Docker:**
 
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 Access the app at `http://localhost:8501`.
@@ -430,7 +425,7 @@ for path in paths:
         IngestionInput(
             document_id=f"doc-{digest[:16]}",
             source_path=path,
-            metadata={"source_path": str(path)},
+            metadata={"source": path.name},
         )
     )
 
@@ -443,7 +438,7 @@ print(f"Processed {len(result.nodes)} nodes from {len(inputs)} files")
 ```mermaid
 flowchart TD
     A[Documents page<br/>Upload files] --> B[Ingestion pipeline<br/>UnstructuredReader or text fallback]
-    B --> C[TokenTextSplitter + TitleExtractor<br/>LlamaIndex IngestionPipeline]
+    B --> C[TokenTextSplitter + spaCy enrichment (optional) + TitleExtractor<br/>LlamaIndex IngestionPipeline]
     C --> D[Nodes + metadata]
     D --> E[VectorStoreIndex<br/>Qdrant named vectors]
     C --> F[PDF page image exports<br/>PyMuPDF, optional AES-GCM]
@@ -464,6 +459,7 @@ flowchart TD
 
 - **Parsing:** Uses LlamaIndex `UnstructuredReader` when available; falls back to plain-text for unsupported inputs.
 - **Chunking:** `TokenTextSplitter` with configurable `chunk_size`/`chunk_overlap`; `TitleExtractor` is optional.
+- **NLP enrichment (optional):** spaCy sentence segmentation + entity extraction during ingestion; outputs are stored as safe node metadata (`docmind_nlp`). See `docs/specs/spec-015-nlp-enrichment-spacy.md`.
 - **Caching:** DuckDB KV ingestion cache with optional docstore persistence.
 - **PDF page images:** PyMuPDF renders page images; optional AES-GCM encryption and `.enc` handling.
 - **Observability:** OpenTelemetry spans are recorded when observability is enabled.
@@ -507,7 +503,7 @@ flowchart TD
 
 ## Configuration
 
-DocMind AI uses a unified Pydantic Settings model (`src/config/settings.py`). Environment variables use the `DOCMIND_` prefix with `__` for nested fields and are loaded from `.env` by default.
+DocMind AI uses a unified Pydantic Settings model (`src/config/settings.py`). Environment variables use the `DOCMIND_` prefix with `__` for nested fields. The Streamlit entrypoint calls `bootstrap_settings()` to load `.env` (no import-time `.env` IO).
 
 ### Why `DOCMIND_*` and not provider env vars?
 
@@ -707,7 +703,7 @@ export TRANSFORMERS_OFFLINE=1
 
 ### Model Requirements
 
-Model sizing depends on your hardware and chosen backend. See `docs/developers/hardware_policy.md` for device and VRAM guidance.
+Model sizing depends on your hardware and chosen backend. See [Hardware Policy](docs/developers/hardware_policy.md) for device and VRAM guidance.
 
 ## Troubleshooting
 
@@ -716,7 +712,6 @@ Model sizing depends on your hardware and chosen backend. See `docs/developers/h
 #### 1. Ollama Connection Errors
 
 ```bash
-
 # Check if Ollama is running
 curl http://localhost:11434/api/version
 
@@ -727,7 +722,6 @@ ollama serve
 #### 2. GPU Not Detected
 
 ```bash
-
 # Install GPU dependencies
 uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 
@@ -739,7 +733,6 @@ uv run python -c "import torch; print(torch.cuda.is_available())"
 #### 3. Model Download Issues
 
 ```bash
-
 # Pull models manually
 ollama pull qwen3-4b-instruct-2507  # For 128 K context
 ollama pull qwen2:7b  # Alternative
@@ -759,9 +752,11 @@ ollama list  # Verify installation
 #### 5. Document Processing Errors
 
 ```bash
+# Smoke test ingestion (no external services)
+uv run python scripts/run_ingestion_demo.py
 
-# Check supported formats
-# See Unstructured's supported formats; convert unsupported files to PDF first
+# If a specific file fails in the UI, reproduce via a targeted ingest:
+uv run python -c "from pathlib import Path; from src.models.processing import IngestionConfig, IngestionInput; from src.processing.ingestion_pipeline import ingest_documents_sync; p=Path('path/to/problem-file.pdf'); r=ingest_documents_sync(IngestionConfig(cache_dir=Path('./cache/ingestion-debug')), [IngestionInput(document_id='debug', source_path=p, metadata={'source': p.name})]); print(f'nodes={len(r.nodes)} exports={len(r.exports)}')"
 ```
 
 #### 6. vLLM FlashInfer Installation Issues
@@ -866,8 +861,9 @@ Contributions are welcome! Please follow these steps:
 
    ```bash
    # Lint & format
-   ruff format . && ruff check . --fix
-   uv run pylint --fail-under=9.5 src/ tests/ scripts/
+   uv run ruff format .
+   uv run ruff check . --fix
+   uv run pyright --threads 4
 
    # Fast tiered validation (unit + integration)
    uv run python scripts/run_tests.py --fast
