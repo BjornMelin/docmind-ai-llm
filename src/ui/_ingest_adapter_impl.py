@@ -66,7 +66,7 @@ def ingest_files(
             "exports": [],
             "duration_ms": 0.0,
             "metadata": {},
-            "nlp_preview": {"enabled": False, "entities": [], "sentences": []},
+            "nlp_preview": None,
             "documents": [],
         }
 
@@ -247,7 +247,7 @@ def _read_bytes(file_obj: Any) -> bytes:
     return bytes(data)
 
 
-def _build_nlp_preview(nodes: list[Any]) -> dict[str, Any]:
+def _build_nlp_preview(nodes: list[Any]) -> dict[str, Any] | None:
     """Build a small, UI-safe NLP preview from enriched node metadata."""
     entities: list[dict[str, Any]] = []
     sentences: list[dict[str, Any]] = []
@@ -308,8 +308,11 @@ def _build_nlp_preview(nodes: list[Any]) -> dict[str, Any]:
         ):
             break
 
+    if not entities and not sentences:
+        return None
+
     return {
-        "enabled": bool(entities or sentences),
+        "enabled": True,
         "entities": entities,
         "sentences": sentences,
     }
