@@ -1009,40 +1009,17 @@ for step in result.agent_trace:
 
 ### Agent Performance Monitoring
 
-**Real-time Performance Tracking:**
-
 ```python
-from src.agents.monitoring import AgentPerformanceMonitor
+from src.utils.monitoring import async_performance_timer, logger
 
-# Initialize performance monitoring
-performance_monitor = AgentPerformanceMonitor()
 
-# Get real-time agent metrics
-agent_metrics = performance_monitor.get_agent_metrics()
-
-print(f"Agent Performance Report:")
-for agent_name, metrics in agent_metrics.items():
-    print(f"\n  {agent_name}:")
-    print(f"    Status: {metrics['status']}")
-    print(f"    Uptime: {metrics['uptime']:.1f}s")
-    print(f"    Avg Response Time: {metrics['avg_response_time']:.3f}s")
-    print(f"    Success Rate: {metrics['success_rate']:.1%}")
-    print(f"    Total Requests: {metrics['total_requests']}")
-    print(f"    Cache Hit Rate: {metrics['cache_hit_rate']:.1%}")
-    print(f"    Resource Usage: {metrics['resource_usage']}")
-    
-    if metrics['recent_errors']:
-        print(f"    Recent Errors: {len(metrics['recent_errors'])}")
-        for error in metrics['recent_errors'][-3:]:  # Last 3 errors
-            print(f"      - {error['type']}: {error['message'][:50]}...")
-
-# Agent coordination statistics
-coordination_stats = performance_monitor.get_coordination_metrics()
-print(f"\nCoordination Statistics:")
-print(f"  Parallel Execution Efficiency: {coordination_stats['parallel_efficiency']:.1%}")
-print(f"  Average Coordination Time: {coordination_stats['avg_coordination_time']:.3f}s")
-print(f"  Agent Handoff Success Rate: {coordination_stats['handoff_success_rate']:.1%}")
-print(f"  Resource Contention Events: {coordination_stats['resource_contentions']}")
+async def run_coordinator(query: str) -> str:
+    """Run an agent/coordinator operation with JSONL + optional OTEL timing."""
+    async with async_performance_timer("agent_coordination") as metrics:
+        result = await coordinator.run(query)
+        metrics["result_length"] = len(result)
+        logger.info("Coordinator completed")
+        return result
 ```
 
 ## Error Handling and Recovery

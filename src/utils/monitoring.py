@@ -1,4 +1,4 @@
-"""Simple monitoring and logging utilities for DocMind AI.
+"""Monitoring helpers bridging JSONL telemetry and optional OpenTelemetry.
 
 This module provides essential performance monitoring and logging capabilities
 with a focus on simplicity and core functionality. Removes complex patterns
@@ -6,7 +6,8 @@ and dataclasses in favor of simple functions and context managers.
 
 Key features:
 - Basic performance timing with context managers
-- Simple structured logging functions
+- Structured JSONL telemetry emission
+- Optional OTEL metric recording (when enabled)
 - Memory usage tracking
 - Essential metrics collection
 - Performance reporting
@@ -14,6 +15,7 @@ Key features:
 
 import sys
 import time
+import warnings
 from collections.abc import AsyncGenerator, Callable, Generator
 from contextlib import asynccontextmanager, contextmanager
 from typing import Any
@@ -22,11 +24,24 @@ import psutil
 from loguru import logger
 
 from src.config import settings
+from src.utils.log_safety import build_pii_log_entry
+from src.utils.telemetry import log_jsonl
+
+_OTEL_INSTRUMENTS: dict[str, Any] = {"duration_ms": None, "count": None}
 
 
 def _make_otel_log_patcher(
     enabled: bool,
 ) -> Callable[[Any], None]:
+    """Create a Loguru patcher that injects OTEL trace/span IDs.
+
+    Args:
+        enabled: When False, inject empty fields but do not attempt OTEL lookups.
+
+    Returns:
+        A Loguru patcher function.
+    """
+
     def _patch(record: Any) -> None:
         if not isinstance(record, dict):
             return
@@ -57,11 +72,11 @@ def _make_otel_log_patcher(
 
 
 def setup_logging(log_level: str = "INFO", log_file: str | None = None) -> None:
-    """Setup basic logging configuration with Loguru.
+    """Configure Loguru sinks and OTEL trace correlation fields.
 
     Args:
-        log_level: Logging level (DEBUG, INFO, WARNING, ERROR)
-        log_file: Optional log file path for file output
+        log_level: Logging level (e.g., "DEBUG", "INFO", "WARNING", "ERROR").
+        log_file: Optional log file path for file output.
     """
     # Remove default handler
     logger.remove()
@@ -126,10 +141,12 @@ def log_error_with_context(
         context: Optional context dictionary
         **kwargs: Additional context as keyword arguments
     """
+    redaction = build_pii_log_entry(str(error), key_id=operation or "exception")
     error_context = {
         "operation": operation,
         "error_type": type(error).__name__,
-        "error_message": str(error),
+        "error_redacted": redaction.redacted,
+        "error_fingerprint": redaction.fingerprint,
     }
 
     if context:
@@ -137,8 +154,41 @@ def log_error_with_context(
     if kwargs:
         error_context.update(kwargs)
 
-    # Emit context as part of message for test observability
+    log_jsonl({"error_logged": True, **error_context})
     logger.error("Operation failed {}", error_context)
+
+
+def _record_otel_performance(operation: str, duration_ms: float) -> None:
+    """Record basic OTEL metrics for an operation when metrics are configured.
+
+    Args:
+        operation: Operation name.
+        duration_ms: Duration in milliseconds.
+    """
+    try:
+        from src.telemetry.opentelemetry import get_meter_provider
+
+        if get_meter_provider() is None:
+            return
+        from opentelemetry import metrics
+    except Exception:
+        return
+
+    meter = metrics.get_meter(__name__)
+    if _OTEL_INSTRUMENTS["count"] is None:
+        _OTEL_INSTRUMENTS["count"] = meter.create_counter(
+            "docmind.operation.count",
+            description="Number of recorded operations",
+        )
+    if _OTEL_INSTRUMENTS["duration_ms"] is None:
+        _OTEL_INSTRUMENTS["duration_ms"] = meter.create_histogram(
+            "docmind.operation.duration",
+            description="Recorded operation duration in milliseconds",
+            unit="ms",
+        )
+    attrs = {"operation": operation}
+    _OTEL_INSTRUMENTS["count"].add(1, attributes=attrs)
+    _OTEL_INSTRUMENTS["duration_ms"].record(float(duration_ms), attributes=attrs)
 
 
 def log_performance(
@@ -162,8 +212,11 @@ def log_performance(
     if metrics:
         perf_data.update(metrics)
 
-    # Emit metrics dict in message for test observability
-    logger.info("Performance metrics {}", perf_data)
+    log_jsonl({"performance_logged": True, **perf_data})
+    _record_otel_performance(
+        operation=operation, duration_ms=float(perf_data["duration_ms"])
+    )
+    logger.debug("Performance metrics {}", perf_data)
 
 
 @contextmanager
@@ -199,7 +252,9 @@ def performance_timer(
         yield metrics
         success = True
     except Exception as exc:
-        metrics["error"] = str(exc)
+        redaction = build_pii_log_entry(str(exc), key_id=operation or "exception")
+        metrics["error_redacted"] = redaction.redacted
+        metrics["error_fingerprint"] = redaction.fingerprint
         raise
     finally:
         end_time = time.perf_counter()
@@ -257,7 +312,9 @@ async def async_performance_timer(
         yield metrics
         success = True
     except Exception as exc:
-        metrics["error"] = str(exc)
+        redaction = build_pii_log_entry(str(exc), key_id=operation or "exception")
+        metrics["error_redacted"] = redaction.redacted
+        metrics["error_fingerprint"] = redaction.fingerprint
         raise
     finally:
         end_time = time.perf_counter()
@@ -329,7 +386,10 @@ def get_system_info() -> dict[str, Any]:
 
 
 class SimplePerformanceMonitor:
-    """Simple performance monitor for tracking operations."""
+    """Deprecated: in-memory performance monitor for tracking operations.
+
+    Prefer OTEL metrics (src.telemetry.opentelemetry) and JSONL telemetry events.
+    """
 
     def __init__(self) -> None:
         """Initialize the performance monitor with empty metrics list."""
@@ -358,6 +418,14 @@ class SimplePerformanceMonitor:
         }
         record.update(metrics)
 
+        warnings.warn(
+            (
+                "SimplePerformanceMonitor is deprecated; prefer OTEL metrics and JSONL "
+                "telemetry."
+            ),
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.metrics.append(record)
         log_performance(**record)
 
@@ -408,4 +476,12 @@ def get_performance_monitor() -> SimplePerformanceMonitor:
     Returns:
         SimplePerformanceMonitor instance
     """
+    warnings.warn(
+        (
+            "get_performance_monitor is deprecated; prefer OTEL metrics and JSONL "
+            "telemetry."
+        ),
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return _performance_monitor

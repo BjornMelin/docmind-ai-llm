@@ -125,10 +125,10 @@ def test_log_performance_supports_empty_metrics(
 ) -> None:
     calls: list[dict] = []
 
-    def fake_info(_msg: str, payload: dict):  # type: ignore[no-untyped-def]
+    def fake_debug(_msg: str, payload: dict):  # type: ignore[no-untyped-def]
         calls.append(payload)
 
-    monkeypatch.setattr(mon.logger, "info", fake_info, raising=True)
+    monkeypatch.setattr(mon.logger, "debug", fake_debug, raising=True)
     mon.log_performance("op", 0.01)
     assert calls
     assert calls[0]["operation"] == "op"

@@ -25,7 +25,8 @@ def test_performance_timer_failure_path_logs_error() -> None:
     # last call should include success=False and error
     _, kwargs = log_perf.call_args
     assert kwargs.get("success") is False
-    assert "error" in kwargs
+    assert "error_redacted" in kwargs
+    assert "error_fingerprint" in kwargs
 
 
 @pytest.mark.unit
@@ -44,7 +45,8 @@ async def test_async_performance_timer_failure_path_logs_error() -> None:
         assert log_perf.called
     _, kwargs = log_perf.call_args
     assert kwargs.get("success") is False
-    assert "error" in kwargs
+    assert "error_redacted" in kwargs
+    assert "error_fingerprint" in kwargs
 
 
 @pytest.mark.unit

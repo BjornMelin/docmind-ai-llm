@@ -51,6 +51,7 @@ def get_request_id() -> str | None:
 
 
 def _ensure_dir(path: Path) -> None:
+    """Ensure `path.parent` exists, suppressing filesystem errors."""
     with contextlib.suppress(Exception):
         path.parent.mkdir(parents=True, exist_ok=True)
 

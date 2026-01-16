@@ -33,18 +33,18 @@ def test_log_error_with_context_binds_fields(monkeypatch: pytest.MonkeyPatch) ->
 
 @pytest.mark.unit
 def test_log_performance_binds_fields(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test that log_performance binds operation and metrics fields to info logs."""
+    """Test that log_performance binds operation and metrics fields to logs."""
     calls: list[tuple[str, tuple, dict]] = []
 
-    def fake_info(
+    def fake_debug(
         msg: str, *args: object, **kwargs: object
     ) -> None:  # pragma: no cover - trivial
         calls.append((msg, args, kwargs))
 
-    monkeypatch.setattr(mon.logger, "info", fake_info, raising=True)
+    monkeypatch.setattr(mon.logger, "debug", fake_debug, raising=True)
 
     log_performance("op2", 0.123, rows=5)
-    assert calls, "logger.info was not called"
+    assert calls, "logger.debug was not called"
     msg, args, _ = calls[0]
     assert "Performance metrics" in msg
     assert any("op2" in str(a) for a in args)
