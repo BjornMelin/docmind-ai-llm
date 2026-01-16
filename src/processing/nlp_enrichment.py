@@ -34,7 +34,7 @@ class SpacyNlpEnrichmentTransform(TransformComponent):
         texts = [n.get_content(metadata_mode=MetadataMode.NONE) for n in nodes]
         enrichments = self.service.enrich_texts(texts)
 
-        for node, enrichment in zip(nodes, enrichments, strict=False):
+        for node, enrichment in zip(nodes, enrichments, strict=True):
             meta = node.metadata or {}
             meta[self.metadata_key] = enrichment.model_dump()
             node.metadata = meta

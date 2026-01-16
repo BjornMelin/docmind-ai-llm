@@ -21,7 +21,7 @@ dependencies = [
     "tenacity>=9.1.2,<10.0.0",
     "pydantic==2.12.5",
     "pydantic-settings==2.12.0",
-    "cryptography>=46.0.0",                 # Image encryption at rest (ADR-058)
+    "cryptography>=46.0.0",              # Image encryption at rest (ADR-058)
     # UI / App Framework
     "streamlit>=1.52.2,<2.0.0",
     # Document Processing & NLP
@@ -30,7 +30,7 @@ dependencies = [
     "pillow>=11.0.0,<12.0.0",            # Image handling
     "pyarrow>=21.0.0,<22.0.0",           # Columnar data interchange
     "spacy==3.8.11",                     # NLP pipeline (pinned for reproducibility)
-    "typer==0.21.1",                     # spaCy CLI import stability (see ADR-061)
+    "typer==0.21.1",                     # spaCy CLI stability (ADR-061) – prevent typer/typer-slim import conflicts with GPU extras
     # ML/LLM Fundamentals
     "torch==2.7.1",                      # PyTorch runtime (vLLM 0.10.x compat)
     "transformers>=4.55.0,<4.58.0",      # HF model interfaces (vLLM 0.10.x + ColPali compat)
