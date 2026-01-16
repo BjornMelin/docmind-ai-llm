@@ -16,6 +16,7 @@
 - [spec-012-observability.md](./spec-012-observability.md)
 - [spec-013-packaging-model-download.md](./spec-013-packaging-model-download.md)
 - [spec-014-index-persistence-snapshots.md](./spec-014-index-persistence-snapshots.md)
+- [spec-015-nlp-enrichment-spacy.md](./spec-015-nlp-enrichment-spacy.md)
 - [spec-020-prompt-template-system.md](./spec-020-prompt-template-system.md)
 - [spec-021-release-readiness-v1.md](./spec-021-release-readiness-v1.md)
 - [spec-022-settings-ui-hardening.md](./spec-022-settings-ui-hardening.md)

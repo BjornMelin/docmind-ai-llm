@@ -240,6 +240,37 @@ During `startup_init()`, specific settings are propagated back to `os.environ`. 
 | `DOCMIND_RETRIEVAL__TEXT_RERANK_TIMEOUT_MS` | int     | `250`     | Hard deadline for text reranking stage.                        |
 | `DOCMIND_RETRIEVAL__TOTAL_RERANK_BUDGET_MS` | int     | `800`     | Global budget across all reranker stages.                      |
 
+### NLP Enrichment (spaCy)
+
+DocMind supports optional NLP enrichment during ingestion using spaCy (sentences + entities).
+This is centralized under `src/nlp/` and wired into ingestion as a transform (see SPEC-015 and ADR-061).
+
+Canonical settings (preferred):
+
+```bash
+DOCMIND_SPACY__ENABLED=true
+DOCMIND_SPACY__MODEL=en_core_web_sm
+DOCMIND_SPACY__DEVICE=auto          # cpu|cuda|apple|auto
+DOCMIND_SPACY__GPU_ID=0
+DOCMIND_SPACY__DISABLE_PIPES='["parser"]'  # JSON array (CSV also supported)
+DOCMIND_SPACY__BATCH_SIZE=32
+DOCMIND_SPACY__N_PROCESS=1
+```
+
+Operator-friendly aliases (supported; bridged at startup):
+
+```bash
+SPACY_ENABLED=true
+SPACY_MODEL=en_core_web_sm
+SPACY_DEVICE=auto
+SPACY_GPU_ID=0
+SPACY_DISABLE_PIPES=parser,lemmatizer
+SPACY_BATCH_SIZE=32
+SPACY_N_PROCESS=1
+```
+
+Device selection MUST occur before any `spacy.load()` call to avoid device allocation hazards. See spaCy top-level API docs for `prefer_gpu()` / `require_gpu()` / `require_cpu()`. citeturn0search3
+
 ### 5. Security & Guardrails
 
 |Variable|Type|Default|Description|

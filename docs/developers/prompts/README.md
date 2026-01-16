@@ -38,6 +38,7 @@ Each prompt is self-contained and embeds DocMind’s “Implementation Executor 
 - `docs/developers/prompts/implemented/prompt-042-multimodal-ingestion.md`
 - `docs/developers/prompts/implemented/prompt-043-hybrid-retrieval-logic.md`
 - `docs/developers/prompts/implemented/prompt-044-ui-and-persistence.md`
+- `docs/developers/prompts/implemented/prompt-045-nlp-enrichment-spacy.md`
 
 ## Superseded prompts (do not implement)
 

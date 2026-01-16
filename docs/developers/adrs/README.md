@@ -59,6 +59,8 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
 
 ## Document Processing
 
+- **[ADR-061 — Centralized spaCy NLP Subsystem (Runtime Selection + Ingestion Enrichment)](ADR-061-spacy-nlp-subsystem.md)**<br>
+  Scope: Typed spaCy runtime, cross-platform device selection, ingestion-time enrichment, UI preview
 - **[ADR-009 — Document Processing Pipeline (Superseded by ADR-058)](superseded/ADR-009-document-processing-pipeline.md)**<br>
   Scope: Historical (superseded by ADR-058)
 

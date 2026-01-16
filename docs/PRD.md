@@ -124,7 +124,7 @@ graph TD
     subgraph "Data Indexing & Storage"
         E --> F["Embeddings<br/>Dense: BGE‑M3<br/>Sparse: FastEmbed BM42/BM25 + IDF<br/>Multimodal: SigLIP (default) or CLIP"]
         F --> G["Vector Store<br/>Qdrant"]
-        E --> H["Knowledge Graph<br/>PropertyGraphIndex (spaCy; path_depth=1)"]
+        E --> H["Knowledge Graph<br/>PropertyGraphIndex (LlamaIndex; path_depth=1)"]
     end
 
     subgraph "Query & Multi-Agent System"
@@ -188,7 +188,7 @@ graph TD
 - **Unified Embeddings**: BAAI/bge‑m3 (1024D dense + sparse unified)
 - **Multimodal**: SigLIP (default) or CLIP ViT‑B/32
 - **Reranking**: BAAI/bge-reranker-v2-m3
-- **NER Model**: en_core_web_sm (spaCy)
+- **NLP enrichment model**: configurable (`DOCMIND_SPACY__MODEL`), default `en_core_web_sm` (spaCy). If not installed, the app falls back to `spacy.blank("en")` (limited entities).
 
 ### Configuration Approach
 
