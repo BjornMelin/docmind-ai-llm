@@ -28,6 +28,7 @@ from src.utils.log_safety import build_pii_log_entry
 from src.utils.telemetry import log_jsonl
 
 _OTEL_INSTRUMENTS: dict[str, Any] = {"duration_ms": None, "count": None}
+warnings.filterwarnings("once", category=DeprecationWarning, module=__name__)
 
 
 def _make_otel_log_patcher(
@@ -420,8 +421,8 @@ class SimplePerformanceMonitor:
 
         warnings.warn(
             (
-                "SimplePerformanceMonitor is deprecated; prefer OTEL metrics and JSONL "
-                "telemetry."
+                "SimplePerformanceMonitor is deprecated; prefer OTEL metrics and "
+                "JSONL telemetry."
             ),
             DeprecationWarning,
             stacklevel=2,

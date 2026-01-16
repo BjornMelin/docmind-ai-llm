@@ -189,7 +189,7 @@ def resolve_endpoint_host_ips(
             except ValueError:
                 continue
     except OSError as exc:
-        logger.debug(
+        logger.warning(
             "endpoint DNS resolution failed: host={host} err={err}",
             host=normalized,
             err=exc,
@@ -208,7 +208,8 @@ def ip_is_blocked_for_endpoints(
     Returns:
         True when `ip` is in a sensitive range that commonly enables SSRF impact:
         private RFC1918, link-local, multicast, reserved, or unspecified ranges.
-        Loopback is handled separately.
+        Loopback is handled separately by the caller (note: Python's `is_private`
+        includes loopback, so skipping loopback before this check is essential).
     """
     return bool(
         ip.is_private
@@ -229,7 +230,9 @@ def endpoint_url_allowed(url: object | None, *, allowed_hosts: set[str]) -> bool
     - Reject if any resolved IP is in blocked ranges (private/link-local/etc).
 
     Args:
-        url: URL-like input to validate.
+        url: URL-like input to validate. `None` or empty values are treated as
+            allowed to support optional endpoints; enforce non-empty URLs in
+            callers if required.
         allowed_hosts: Canonical allowlisted host set.
 
     Returns:
