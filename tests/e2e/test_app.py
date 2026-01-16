@@ -61,18 +61,6 @@ def _mock_heavy_ml(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _mock_spacy(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Mock spaCy and thinc to avoid heavy imports."""
-    mock_spacy = MagicMock()
-    mock_spacy.cli.download = MagicMock()
-    mock_spacy.load = MagicMock()
-    mock_spacy.util.is_package = MagicMock(return_value=True)
-    monkeypatch.setitem(sys.modules, "spacy", mock_spacy)
-    monkeypatch.setitem(sys.modules, "spacy.cli", mock_spacy.cli)
-    monkeypatch.setitem(sys.modules, "spacy.util", mock_spacy.util)
-    monkeypatch.setitem(sys.modules, "thinc", MagicMock())
-
-
 def _mock_flag_embedding(monkeypatch: pytest.MonkeyPatch) -> None:
     """Mock FlagEmbedding to prevent heavy imports."""
     mock_flag = MagicMock()
@@ -192,7 +180,6 @@ def setup_external_dependencies(monkeypatch):
     """
     install_mock_torch(monkeypatch, include_cuda_props=True)
     _mock_heavy_ml(monkeypatch)
-    _mock_spacy(monkeypatch)
     _mock_flag_embedding(monkeypatch)
     install_mock_ollama(monkeypatch)
     install_dependency_injector(monkeypatch)
