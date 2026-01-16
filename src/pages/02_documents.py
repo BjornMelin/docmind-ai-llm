@@ -7,14 +7,12 @@ import hashlib
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import streamlit as st
 from loguru import logger
 
 from src.config import settings
-from src.nlp.settings import SpacyNlpSettings
-from src.nlp.spacy_service import SpacyNlpService
 from src.persistence.artifacts import ArtifactRef, ArtifactStore
 from src.persistence.snapshot import SnapshotLockTimeout, load_manifest
 from src.persistence.snapshot_utils import timestamped_export_path
@@ -32,9 +30,15 @@ from src.ui.artifacts import render_artifact_image
 from src.ui.ingest_adapter import ingest_files
 from src.utils.storage import create_vector_store
 
+if TYPE_CHECKING:
+    from src.nlp.spacy_service import SpacyNlpService
+
 
 @st.cache_resource(show_spinner=False)
 def _get_spacy_service(cache_version: int, cfg_dump: dict[str, Any]) -> SpacyNlpService:
+    from src.nlp.settings import SpacyNlpSettings
+    from src.nlp.spacy_service import SpacyNlpService
+
     _ = cache_version  # cache bust
     cfg = SpacyNlpSettings.model_validate(cfg_dump)
     return SpacyNlpService(cfg)
