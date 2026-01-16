@@ -29,7 +29,8 @@ dependencies = [
     "pymupdf==1.26.4",                   # PDF rendering/text extraction
     "pillow>=11.0.0,<12.0.0",            # Image handling
     "pyarrow>=21.0.0,<22.0.0",           # Columnar data interchange
-    "spacy>=3.8.7,<4.0.0",               # NLP pipeline
+    "spacy==3.8.11",                     # NLP pipeline (pinned for reproducibility)
+    "typer==0.21.1",                     # spaCy CLI import stability (see ADR-061)
     # ML/LLM Fundamentals
     "torch==2.7.1",                      # PyTorch runtime (vLLM 0.10.x compat)
     "transformers>=4.55.0,<4.58.0",      # HF model interfaces (vLLM 0.10.x + ColPali compat)
@@ -88,6 +89,8 @@ dependencies = [
 [project.optional-dependencies]
 gpu = [
     "fastembed-gpu>=0.7.4,<0.8.0",        # GPU-accelerated embeddings
+    # spaCy GPU acceleration via CuPy (CUDA 12.x)
+    "cupy-cuda12x>=13.0.0; sys_platform != 'darwin'",
     # vLLM pinned to 0.10.x to stay on the Torch 2.7.x line (vLLM 0.11.x moves
     # to Torch 2.8; newer vLLM versions move further).
     "vllm>=0.10.1,<0.11.0",
@@ -96,6 +99,10 @@ gpu = [
     # Build tools for GPU libraries
     "ninja>=1.11.1",                      # Build acceleration
     "cmake>=3.26.4",                      # Required for CUDA builds
+]
+apple = [
+    # spaCy Apple Silicon acceleration (thinc-apple-ops)
+    "spacy[apple]; sys_platform == 'darwin' and platform_machine == 'arm64'",
 ]
 llama = [
     "llama-index-core>=0.14.12,<0.15.0",
