@@ -150,7 +150,7 @@ You must keep changes minimal, library-first, and maintainable.
 - Container runs as non-root user.
 - `.dockerignore` exists and excludes `.env` and large dev artifacts.
 - `docker-compose.yml` uses canonical `DOCMIND_*` variables (no provider/legacy env var names).
-- `docker-compose.yml` provides a `gpu` profile that runs **Ollama** with GPU access on an internal network (no host port publish by default), and DocMind connects via `DOCMIND_OLLAMA_BASE_URL=http://ollama:11434` with `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST` including `http://ollama`.
+- `docker-compose.yml` provides a `gpu` profile that runs **Ollama** with GPU access on an internal network (no host port publish by default). Note: since `ollama` resolves to a private RFC1918 address on the compose network, DocMind must either set `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true` for this deployment or use a strict localhost architecture (shared network namespace) so DocMind connects to `http://localhost:11434` with remote endpoints still disabled.
 - `docker-compose.prod.yml` provides `read_only: true` and `tmpfs` for `/tmp`.
 - `docs/specs/traceability.md` includes NFR-PORT-003 row (Planned → Implemented).
 

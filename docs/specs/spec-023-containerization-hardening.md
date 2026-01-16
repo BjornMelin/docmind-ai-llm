@@ -82,12 +82,17 @@ Recommended env wiring in the `docmind` service:
 
 - `DOCMIND_LLM_BACKEND=ollama`
 - `DOCMIND_OLLAMA_BASE_URL=http://ollama:11434`
-- keep remote endpoints blocked:
-  - `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` (default)
-  - extend allowlist to include `ollama`:
-    - `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST=["http://localhost","http://127.0.0.1","http://ollama"]`
-  - if `DOCMIND_OLLAMA_ENABLE_WEB_SEARCH=true`, add `https://ollama.com` to the
-    allowlist and explicitly enable remote endpoints
+- **Important**: `ollama` resolves to a private RFC1918 address inside the compose
+  network. When `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false`, DocMind rejects
+  hosts that resolve to private/link-local ranges (SSRF/DNS-rebinding hardening),
+  even if the hostname is allowlisted. Choose one:
+  - **Option A (simple, explicit)**: allow remote endpoints:
+    - `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true`
+  - **Option B (strict, localhost)**: run DocMind in the same network namespace as
+    the `ollama` service and connect via loopback (`DOCMIND_OLLAMA_BASE_URL=http://localhost:11434`).
+    This keeps remote endpoints disabled while still allowing the sidecar.
+  - If `DOCMIND_OLLAMA_ENABLE_WEB_SEARCH=true`, add `https://ollama.com` to the
+    allowlist and enable remote endpoints explicitly.
 
 Power users can still run vLLM/LM Studio externally and point DocMind at them (with allowlist rules), but compose does not bundle them.
 

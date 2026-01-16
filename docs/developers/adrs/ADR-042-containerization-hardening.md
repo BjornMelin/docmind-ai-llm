@@ -80,7 +80,12 @@ Implement a ship-ready container baseline:
   - include a `gpu` profile that starts **Ollama** with GPU access when available:
     - internal-only network (no `ports:` by default)
     - DocMind connects via `DOCMIND_OLLAMA_BASE_URL=http://ollama:11434`
-    - extend `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST` to include `http://ollama`
+    - Note: `ollama` resolves to a private RFC1918 address on the compose network. When
+      `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false`, DocMind rejects hostnames that
+      resolve to private/link-local ranges (SSRF/DNS-rebinding hardening). For this
+      deployment either set `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true` or use a
+      strict localhost architecture (shared network namespace) so DocMind connects via
+      `http://localhost`.
     - if `DOCMIND_OLLAMA_ENABLE_WEB_SEARCH=true`, add `https://ollama.com` to
       `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST` and enable remote endpoints explicitly
 - Make `torch` installation reliable during container builds by prefetching the

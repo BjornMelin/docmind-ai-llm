@@ -9,6 +9,8 @@ services:
     environment:
       DOCMIND_LLM_BACKEND: ollama
       DOCMIND_OLLAMA_BASE_URL: http://ollama:11434
+      # Compose service hostnames resolve to private RFC1918 addresses; allow explicitly.
+      DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS: "true"
       DOCMIND_SECURITY__ENDPOINT_ALLOWLIST: '["http://localhost","http://127.0.0.1","https://localhost","https://127.0.0.1","http://ollama"]'
       DOCMIND_DATABASE__QDRANT_URL: http://qdrant:6333
     volumes:
