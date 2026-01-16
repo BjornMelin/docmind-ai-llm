@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [0.5.0](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.4.0...v0.5.0) (2026-01-16)
+
+
+### Features
+
+* Implement `SPACY_MAX_CHARACTERS` and refine spaCy NLP subsystem configuration, device selection, and model loading robustness. ([743a852](https://github.com/BjornMelin/docmind-ai-llm/commit/743a85276763ed9760f8c4fc2cd34489abf2e025))
+* **nlp:** implement centralized spaCy NLP service and enrichments ([3dee2d2](https://github.com/BjornMelin/docmind-ai-llm/commit/3dee2d2c818e3c685725761d0451b123c82506a6))
+* **nlp:** implement spaCy NLP enrichment for document ingestion ([004e7ca](https://github.com/BjornMelin/docmind-ai-llm/commit/004e7ca1be2cd9c95086901caa0e04f8feebcdab))
+* Refine NLP processing by making preview generation conditional, clarifying model fallback documentation, and removing GPU requirement from Spacy unit tests. ([47f7a09](https://github.com/BjornMelin/docmind-ai-llm/commit/47f7a09f7fd4c7f90dc110045e9bf80bb86218ba))
+* spacy unified nlp service ([550c756](https://github.com/BjornMelin/docmind-ai-llm/commit/550c75625b504d9f0fed75131cb68fb78986f650))
+
+
+### Bug Fixes
+
+* address PR review comments for PR [#73](https://github.com/BjornMelin/docmind-ai-llm/issues/73) ([d0c65b3](https://github.com/BjornMelin/docmind-ai-llm/commit/d0c65b310252cb24d532b27776a329329d0fecf8))
+
+
+### Dependencies
+
+* Update project dependencies and metadata configuration. ([b56e8b3](https://github.com/BjornMelin/docmind-ai-llm/commit/b56e8b372085a7374985d0c257202791c2af4ea1))
+
+
+### Documentation
+
+* Add "nlp" to the list of core modules in the system architecture documentation. ([72db105](https://github.com/BjornMelin/docmind-ai-llm/commit/72db105d3358dc6ee535d8ac260ce2f6171fde56))
+* update README with spaCy enrichment details, simplified vLLM installation, and minor dependency/metadata adjustments. ([2d07dc4](https://github.com/BjornMelin/docmind-ai-llm/commit/2d07dc4cef4dd36629aa8b38a17bc53ecc9cac4f))
+
 ## [0.4.0](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.3.0...v0.4.0) (2026-01-16)
 
 
