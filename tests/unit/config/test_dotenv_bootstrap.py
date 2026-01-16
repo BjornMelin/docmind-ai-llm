@@ -49,7 +49,6 @@ def test_bootstrap_settings_loads_dotenv_once_and_mutates_singleton(
         settings_mod.bootstrap_settings(force=True)
         assert current.log_level == "DOTENV"
     finally:
-        fresh = settings_mod.DocMindSettings(_env_file=None)  # type: ignore[arg-type]
-        settings_mod.apply_settings_in_place(current, fresh)
+        current.__init__(_env_file=None)  # type: ignore[arg-type]
         settings_mod.reset_bootstrap_state()
         assert current.log_level == before

@@ -209,7 +209,6 @@ def test_startup_init_creates_directories(monkeypatch, tmp_path):
         cache_dir=tmp_path / "cache",
         log_file=tmp_path / "logs" / "app.log",
         database=SimpleNamespace(sqlite_db_path=tmp_path / "db" / "doc.db"),
-        telemetry_enabled=False,
         observability=SimpleNamespace(enabled=False, endpoint=None, sampling_ratio=1.0),
         llm_backend="vllm",
         backend_base_url_normalized="http://localhost",
@@ -226,7 +225,6 @@ def test_startup_init_creates_directories(monkeypatch, tmp_path):
 
     assert (tmp_path / "data").exists()
     assert (tmp_path / "cache").exists()
-    assert os.environ["DOCMIND_TELEMETRY_DISABLED"] == "true"
     tracer.assert_called_once_with(cfg)
     metrics.assert_called_once_with(cfg)
 

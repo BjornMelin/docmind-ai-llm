@@ -2,12 +2,15 @@
 
 import json
 
+from src.config.settings import settings
 from src.utils import telemetry
 
 
-def test_canonical_keys_present(tmp_path, monkeypatch):
+def test_canonical_keys_present(tmp_path):
     out = tmp_path / "telemetry.jsonl"
-    monkeypatch.setattr(telemetry, "_TELEM_PATH", out, raising=False)
+    settings.telemetry.jsonl_path = out
+    settings.telemetry.disabled = False
+    settings.telemetry.sample = 1.0
     telemetry.log_jsonl(
         {
             "retrieval.fusion_mode": "rrf",
@@ -57,10 +60,12 @@ def test_canonical_keys_present(tmp_path, monkeypatch):
         assert isinstance(e.get("rerank.processed_batches", 0), int)
 
 
-def test_log_jsonl_writes_event(tmp_path, monkeypatch):
+def test_log_jsonl_writes_event(tmp_path):
     """Test that log_jsonl writes event data to JSONL file."""
     out = tmp_path / "telemetry.jsonl"
-    monkeypatch.setattr(telemetry, "_TELEM_PATH", out, raising=False)
+    settings.telemetry.jsonl_path = out
+    settings.telemetry.disabled = False
+    settings.telemetry.sample = 1.0
     telemetry.log_jsonl({"retrieval.fusion_mode": "rrf", "retrieval.latency_ms": 12})
     assert out.exists()
     data = [json.loads(line) for line in out.read_text().splitlines() if line.strip()]

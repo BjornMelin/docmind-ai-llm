@@ -17,7 +17,7 @@ def test_encrypt_file_passthrough_without_key(monkeypatch):
     Args:
         monkeypatch: Pytest fixture for manipulating environment variables.
     """
-    monkeypatch.setattr(settings.image, "img_aes_key_base64", None)
+    monkeypatch.setattr(settings.image_encryption, "aes_key_base64", None)
     with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
         f.write(b"abc")
         path = f.name
@@ -47,7 +47,9 @@ def test_encrypt_file_with_key_round_trip(monkeypatch, keylen):
 
     key = _os.urandom(keylen)
     monkeypatch.setattr(
-        settings.image, "img_aes_key_base64", base64.b64encode(key).decode("ascii")
+        settings.image_encryption,
+        "aes_key_base64",
+        base64.b64encode(key).decode("ascii"),
     )
 
     with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as f:
@@ -75,9 +77,9 @@ def test_encrypt_file_with_kid_aad(monkeypatch, tmp_path):
 
     key = b"x" * 32
     monkeypatch.setattr(
-        settings.image, "img_aes_key_base64", base64.b64encode(key).decode()
+        settings.image_encryption, "aes_key_base64", base64.b64encode(key).decode()
     )
-    monkeypatch.setattr(settings.image, "img_kid", "kid-123")
+    monkeypatch.setattr(settings.image_encryption, "kid", "kid-123")
 
     p = tmp_path / "x.bin"
     p.write_bytes(b"abc")
@@ -90,7 +92,7 @@ def test_encrypt_file_with_kid_aad(monkeypatch, tmp_path):
         assert f.read() == b"abc"
 
     # Change KID to simulate AAD mismatch
-    monkeypatch.setattr(settings.image, "img_kid", "other")
+    monkeypatch.setattr(settings.image_encryption, "kid", "other")
     dec2 = decrypt_file(enc)
     assert dec2 == enc
 
@@ -107,9 +109,11 @@ def test_encrypt_file_delete_plaintext(monkeypatch, tmp_path):
 
     key = _os.urandom(32)
     monkeypatch.setattr(
-        settings.image, "img_aes_key_base64", base64.b64encode(key).decode("ascii")
+        settings.image_encryption,
+        "aes_key_base64",
+        base64.b64encode(key).decode("ascii"),
     )
-    monkeypatch.setattr(settings.image, "img_delete_plaintext", True)
+    monkeypatch.setattr(settings.image_encryption, "delete_plaintext", True)
 
     p = tmp_path / "img.webp"
     p.write_bytes(b"imgdata")

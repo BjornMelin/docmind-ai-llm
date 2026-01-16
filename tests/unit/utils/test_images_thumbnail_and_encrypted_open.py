@@ -16,9 +16,11 @@ def _set_test_aes_key(monkeypatch: pytest.MonkeyPatch) -> None:
     # 32 bytes key (AES-256) encoded as base64.
     key = b"k" * 32
     monkeypatch.setattr(
-        settings.image, "img_aes_key_base64", base64.b64encode(key).decode("ascii")
+        settings.image_encryption,
+        "aes_key_base64",
+        base64.b64encode(key).decode("ascii"),
     )
-    monkeypatch.setattr(settings.image, "img_kid", "test")
+    monkeypatch.setattr(settings.image_encryption, "kid", "test")
 
 
 def test_ensure_thumbnail_plain_and_encrypted(
