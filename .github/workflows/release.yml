@@ -14,9 +14,64 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
-      - uses: googleapis/release-please-action@v4
+      - id: release
+        uses: googleapis/release-please-action@v4.4.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           release-type: python
           package-name: docmind-ai-llm
           bump-minor-pre-major: true
+      - name: Checkout repository
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Resolve release PR branch
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        id: release-pr-branch
+        env:
+          PR_JSON: ${{ steps.release.outputs.pr }}
+        run: |
+          branch="$(echo "$PR_JSON" | jq -r '.headBranchName // .headBranch // .headRefName // empty')"
+          if [ -z "$branch" ]; then
+            echo "Failed to resolve release PR branch." >&2
+            exit 1
+          fi
+          echo "Resolved release PR branch: $branch"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+      - name: Checkout release PR branch
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        run: |
+          git fetch origin "${{ steps.release-pr-branch.outputs.branch }}"
+          git checkout "${{ steps.release-pr-branch.outputs.branch }}"
+      - name: Set up uv
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.11"
+          enable-cache: true
+          cache-python: true
+      - name: Check uv.lock status
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        id: uv-lock-check
+        run: |
+          if uv lock --check; then
+            echo "outdated=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "outdated=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Update uv.lock
+        if: ${{ steps.release.outputs.prs_created == 'true' && steps.uv-lock-check.outputs.outdated == 'true' }}
+        run: uv lock
+      - name: Commit uv.lock if changed
+        if: ${{ steps.release.outputs.prs_created == 'true' && steps.uv-lock-check.outputs.outdated == 'true' }}
+        run: |
+          if git diff --quiet -- uv.lock; then
+            echo "uv.lock unchanged."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add uv.lock
+          git commit -m "chore: update uv.lock for release"
+          git push origin "HEAD:${{ steps.release-pr-branch.outputs.branch }}"

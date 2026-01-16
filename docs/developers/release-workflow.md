@@ -25,6 +25,7 @@ The workflow is defined in [`.github/workflows/release.yml`](../../.github/workf
     - When commits are merged to `main`, `release-please` analyzes them.
     - It creates or updates a special "Release PR".
     - This PR contains the updated `CHANGELOG.md` and the version bump in `pyproject.toml`.
+    - If `uv.lock` is out of date (`uv lock --check`), the workflow regenerates and commits `uv.lock` on the release PR branch.
 
 3. **Publishing**:
     - When a maintainer **merges** the Release PR, `release-please`:

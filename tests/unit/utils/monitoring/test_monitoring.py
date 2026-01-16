@@ -204,7 +204,7 @@ class TestModernizedMonitoringPatterns:
 
         with performance_timer("test_operation") as metrics:
             metrics["custom_metric"] = 42
-        logging_boundary["logger"].info.assert_called()
+        logging_boundary["logger"].debug.assert_called()
 
     @pytest.mark.asyncio
     async def test_async_performance_timer_success(
@@ -220,4 +220,4 @@ class TestModernizedMonitoringPatterns:
         async with async_performance_timer("async_operation") as metrics:
             metrics["async_metric"] = "ok"
             await asyncio.sleep(0.001)
-        logging_boundary["logger"].info.assert_called()
+        logging_boundary["logger"].debug.assert_called()

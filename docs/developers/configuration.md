@@ -242,12 +242,12 @@ During `startup_init()`, specific settings are propagated back to `os.environ`. 
 
 ### 5. Security & Guardrails
 
-| Variable                                   | Type    | Default                  | Description                                                      |
-| :----------------------------------------- | :------ | :----------------------- | :--------------------------------------------------------------- |
-| `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS` | boolean | `false`                  | If `false`, blocks any base URL outside the allowlist.           |
-| `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST`     | list    | `[localhost, 127.0.0.1]` | Permitted remote hostnames.                                      |
-| `DOCMIND_SECURITY__TRUST_REMOTE_CODE`      | boolean | `false`                  | Controls `trust_remote_code` for library imports.                |
-| `DOCMIND_HASHING__HMAC_SECRET`             | secret  | `[hidden]`               | **Critical**: Secret key for PII redacting and log fingerprints. |
+|Variable|Type|Default|Description|
+|---|---|---|---|
+|`DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS`|boolean|`false`|If `false`, enforce strict endpoint checks (loopback allowed; non-loopback must be allowlisted and resolve to public IPs). If `true`, private/internal endpoints are permitted (use when Docker service hostnames or RFC1918 addresses are required).|
+|`DOCMIND_SECURITY__ENDPOINT_ALLOWLIST`|list|`[localhost, 127.0.0.1]`|Allowed hosts (or URLs) when strict checks are active (`ALLOW_REMOTE_ENDPOINTS=false`).|
+|`DOCMIND_SECURITY__TRUST_REMOTE_CODE`|boolean|`false`|Controls `trust_remote_code` for library imports.|
+|`DOCMIND_HASHING__HMAC_SECRET`|secret|`[hidden]`|**Critical**: Secret key for PII redacting and log fingerprints.|
 
 ### 6. Observability & Telemetry
 
@@ -378,11 +378,11 @@ print(f"Resolved DB Path: {settings.database.sqlite_db_path}")
 
 ### Common Errors
 
-| Error Message                                        | Cause                  | Resolution                                           |
-| :--------------------------------------------------- | :--------------------- | :--------------------------------------------------- |
-| `ValueError: ... must be at least 32 bytes`          | Weak secret key.       | Provide a longer random string.                      |
-| `ValueError: Remote endpoints are disabled.`         | Restricted URL used.   | Set `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true`. |
-| `ValueError: chunk_overlap cannot exceed chunk_size` | Invalid overlap ratio. | Adjust overlap/size ratio in processing config.      |
+|Error Message|Cause|Resolution|
+|---|---|---|
+|`ValueError: … must be at least 32 bytes`|Weak secret key.|Provide a longer random string.|
+|`ValueError: Remote endpoints are disabled.`|Non-loopback base URL is not allowlisted, cannot be DNS-resolved, or resolves to private/link-local/reserved ranges.|Use `localhost`, allowlist a public host, or set `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true` for private/internal endpoints (e.g., Docker service hostnames).|
+|`ValueError: chunk_overlap cannot exceed chunk_size`|Invalid overlap ratio.|Adjust overlap/size ratio in processing config.|
 
 ---
 

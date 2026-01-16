@@ -903,34 +903,22 @@ DOCMIND_NEW_FEATURE__TIMEOUT=2.5            # Float parameter
 ### Performance Monitoring
 
 ```python
-# Add performance monitoring to new features
-import time
-from src.utils.monitoring import performance_monitor, logger
+# Add performance monitoring to new features (JSONL + optional OTEL)
+from pathlib import Path
 
-@performance_monitor("document_processing")
+from src.utils.monitoring import async_performance_timer, logger
+
+
 async def process_document_with_monitoring(file_path: Path) -> ProcessedDocument:
-    """Document processing with built-in performance monitoring."""
-    start_time = time.time()
-    
-    try:
+    """Document processing with built-in performance telemetry."""
+    async with async_performance_timer(
+        "document_processing",
+        file_size_bytes=file_path.stat().st_size,
+    ) as metrics:
         result = await process_document_pipeline(file_path)
-        
-        # Log performance metrics
-        processing_time = time.time() - start_time
-        logger.info(f"Document processed in {processing_time:.2f}s", extra={
-            "file_size": file_path.stat().st_size,
-            "chunks_created": result.chunks,
-            "processing_time": processing_time
-        })
-        
+        metrics["chunks_created"] = result.chunks
+        logger.bind(file_path=file_path.name).info("Document processed")
         return result
-        
-    except Exception as e:
-        logger.error(f"Document processing failed: {e}", extra={
-            "file_path": str(file_path),
-            "error_type": type(e).__name__
-        })
-        raise
 ```
 
 ### Dependency Management
@@ -1239,49 +1227,34 @@ For document-processing cache, use LlamaIndex IngestionCache with DuckDBKVStore 
 ### Comprehensive Debugging Setup
 
 ```python
-# Advanced logging configuration
-import logging
-import structlog
-from src.utils.monitoring import setup_structured_logging
+# Logging configuration (Loguru + JSONL telemetry)
+from src.config import settings
+from src.utils.monitoring import async_performance_timer, logger, setup_logging
 
-# Configure structured logging
-setup_structured_logging(
-    level=logging.DEBUG if settings.debug else logging.INFO,
-    include_context=True,
-    include_performance=True
-)
-
-logger = structlog.get_logger(__name__)
+setup_logging(log_level="DEBUG" if settings.debug else "INFO")
 
 # Usage in agent code
 async def debug_agent_execution(self, query: str) -> str:
     """Execute with comprehensive debugging."""
     
-    logger.info("Starting agent execution", 
-                query_length=len(query),
-                agent_timeout=self.settings.agents.decision_timeout)
+    logger.bind(
+        query_length=len(query),
+        agent_timeout=self.settings.agents.decision_timeout,
+    ).info("Starting agent execution")
     
     try:
-        with logger.bind(operation="agent_coordination"):
-            start_time = time.time()
-            
-            # Execute with timing
+        async with async_performance_timer("agent_coordination") as metrics:
             result = await self._execute_coordination(query)
-            
-            execution_time = time.time() - start_time
-            
-            logger.info("Agent execution completed",
-                       execution_time_ms=execution_time * 1000,
-                       result_length=len(result),
-                       agents_used=self._get_agents_used())
-            
+            metrics["result_length"] = len(result)
+            metrics["agents_used"] = self._get_agents_used()
+            logger.info("Agent execution completed")
             return result
             
     except Exception as e:
-        logger.error("Agent execution failed",
-                    error=str(e),
-                    error_type=type(e).__name__,
-                    query_preview=query[:100])
+        logger.bind(
+            error_type=type(e).__name__,
+            query_preview=query[:100],
+        ).exception("Agent execution failed")
         raise
 ```
 

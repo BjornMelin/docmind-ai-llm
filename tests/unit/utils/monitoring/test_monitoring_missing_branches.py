@@ -8,6 +8,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 from src.utils import monitoring as mon
+from src.utils.log_safety import build_pii_log_entry
 
 pytestmark = pytest.mark.unit
 
@@ -117,7 +118,7 @@ def test_log_error_with_context_accepts_kwargs(monkeypatch: pytest.MonkeyPatch) 
     payload = seen[0]
     assert isinstance(payload, dict)
     assert payload["operation"] == "op"
-    assert payload["user"] == "u1"
+    assert payload["user"] == build_pii_log_entry("u1", key_id="op:user").redacted
 
 
 def test_log_performance_supports_empty_metrics(
@@ -125,10 +126,10 @@ def test_log_performance_supports_empty_metrics(
 ) -> None:
     calls: list[dict] = []
 
-    def fake_info(_msg: str, payload: dict):  # type: ignore[no-untyped-def]
+    def fake_debug(_msg: str, payload: dict):  # type: ignore[no-untyped-def]
         calls.append(payload)
 
-    monkeypatch.setattr(mon.logger, "info", fake_info, raising=True)
+    monkeypatch.setattr(mon.logger, "debug", fake_debug, raising=True)
     mon.log_performance("op", 0.01)
     assert calls
     assert calls[0]["operation"] == "op"

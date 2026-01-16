@@ -417,28 +417,32 @@ def _render_model_section() -> tuple[str, int, int, bool]:
 
 
 def _render_provider_urls() -> tuple[str, str, str, str]:
-    """Render provider URL inputs and return values."""
+    """Render provider URL inputs.
+
+    Returns:
+        Tuple of `(ollama_url, vllm_url, lmstudio_url, llamacpp_url)` as strings.
+    """
     st.subheader("Provider URLs")
     col1, col2 = st.columns(2)
     with col1:
         ollama_url = st.text_input(
             "Ollama base URL",
-            value=settings.ollama_base_url,
+            value=str(settings.ollama_base_url).rstrip("/"),
         )
         vllm_url = st.text_input(
             "vLLM base URL",
-            value=(settings.vllm_base_url or settings.vllm.vllm_base_url),
+            value=str(settings.vllm_base_url or settings.vllm.vllm_base_url),
             help="OpenAI-compatible server or native. /v1 optional",
         )
     with col2:
         lmstudio_url = st.text_input(
             "LM Studio base URL",
-            value=settings.lmstudio_base_url,
+            value=str(settings.lmstudio_base_url),
             help="OpenAI-compatible; normalized to end with /v1",
         )
         llamacpp_url = st.text_input(
             "llama.cpp server URL (optional)",
-            value=(settings.llamacpp_base_url or ""),
+            value=str(settings.llamacpp_base_url) if settings.llamacpp_base_url else "",
             placeholder="http://localhost:8080/v1",
         )
     return ollama_url, vllm_url, lmstudio_url, llamacpp_url
@@ -739,7 +743,7 @@ def _render_ollama_web_search_warning(
         allow_remote: Whether remote endpoints are allowed.
         allowlist: Current endpoint allowlist.
     """
-    from urllib.parse import urlparse
+    from src.config.settings_utils import normalize_endpoint_host, parse_any_http_url
 
     if not enabled:
         return
@@ -752,13 +756,15 @@ def _render_ollama_web_search_warning(
 
     def _is_ollama_host(entry: str) -> bool:
         """Check if entry references ollama.com or a subdomain."""
-        normalized = entry.strip().lower()
-        if not normalized:
+        raw = entry.strip()
+        if not raw:
             return False
-        # Add scheme if missing so urlparse extracts hostname correctly
-        if "://" not in normalized:
-            normalized = f"https://{normalized}"
-        host = (urlparse(normalized).hostname or "").strip().lower().rstrip(".")
+        candidate = raw if "://" in raw else f"https://{raw}"
+        try:
+            parsed = parse_any_http_url(candidate)
+            host = normalize_endpoint_host(str(parsed.host))
+        except Exception:
+            host = normalize_endpoint_host(raw.split("/")[0].split(":")[0])
         return host == "ollama.com" or host.endswith(".ollama.com")
 
     has_ollama_host = any(_is_ollama_host(str(entry)) for entry in allowlist if entry)
@@ -793,7 +799,11 @@ def _render_actions(validated: DocMindSettings | None, ui_errors: list[str]) -> 
 
 
 def _persist_env_from_validated(validated: DocMindSettings) -> None:
-    """Persist validated settings to the .env file."""
+    """Persist validated settings to the `.env` file.
+
+    Args:
+        validated: Validated settings instance to serialize.
+    """
     context_window_value = (
         validated.context_window
         if validated.context_window is not None
@@ -809,7 +819,7 @@ def _persist_env_from_validated(validated: DocMindSettings) -> None:
         "DOCMIND_ENABLE_GPU_ACCELERATION": (
             "true" if validated.enable_gpu_acceleration else "false"
         ),
-        "DOCMIND_OLLAMA_BASE_URL": validated.ollama_base_url,
+        "DOCMIND_OLLAMA_BASE_URL": str(validated.ollama_base_url).rstrip("/"),
         "DOCMIND_OLLAMA_API_KEY": (
             validated.ollama_api_key.get_secret_value()
             if validated.ollama_api_key is not None
@@ -827,9 +837,13 @@ def _persist_env_from_validated(validated: DocMindSettings) -> None:
             "true" if validated.ollama_enable_logprobs else "false"
         ),
         "DOCMIND_OLLAMA_TOP_LOGPROBS": str(int(validated.ollama_top_logprobs)),
-        "DOCMIND_VLLM_BASE_URL": (validated.vllm_base_url or ""),
-        "DOCMIND_LMSTUDIO_BASE_URL": validated.lmstudio_base_url,
-        "DOCMIND_LLAMACPP_BASE_URL": (validated.llamacpp_base_url or ""),
+        "DOCMIND_VLLM_BASE_URL": (
+            str(validated.vllm_base_url) if validated.vllm_base_url else ""
+        ),
+        "DOCMIND_LMSTUDIO_BASE_URL": str(validated.lmstudio_base_url),
+        "DOCMIND_LLAMACPP_BASE_URL": (
+            str(validated.llamacpp_base_url) if validated.llamacpp_base_url else ""
+        ),
         "DOCMIND_VLLM__LLAMACPP_MODEL_PATH": str(validated.vllm.llamacpp_model_path),
         "DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS": (
             "true" if validated.security.allow_remote_endpoints else "false"

@@ -16,7 +16,7 @@ def test_openai_like_env_mapping(monkeypatch):
 
     cfg = DocMindSettings()
     assert cfg.openai.api_key == "key-123"
-    assert cfg.openai.base_url.endswith("/v1")
+    assert str(cfg.openai.base_url).endswith("/v1")
     assert cfg.llm_request_timeout_seconds == 222
-    assert cfg.lmstudio_base_url.endswith("/v1")
-    assert cfg.vllm.vllm_base_url == "http://127.0.0.1:8000"
+    assert str(cfg.lmstudio_base_url).endswith("/v1")
+    assert str(cfg.vllm.vllm_base_url).rstrip("/") == "http://127.0.0.1:8000"

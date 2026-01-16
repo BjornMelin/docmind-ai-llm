@@ -22,10 +22,11 @@ def test_performance_timer_failure_path_logs_error() -> None:
         with pytest.raises(RuntimeError):
             _run_and_fail()
         assert log_perf.called
-    # last call should include success=False and error
+    # last call should include success=False and error_redacted/error_fingerprint
     _, kwargs = log_perf.call_args
     assert kwargs.get("success") is False
-    assert "error" in kwargs
+    assert "error_redacted" in kwargs
+    assert "error_fingerprint" in kwargs
 
 
 @pytest.mark.unit
@@ -44,7 +45,8 @@ async def test_async_performance_timer_failure_path_logs_error() -> None:
         assert log_perf.called
     _, kwargs = log_perf.call_args
     assert kwargs.get("success") is False
-    assert "error" in kwargs
+    assert "error_redacted" in kwargs
+    assert "error_fingerprint" in kwargs
 
 
 @pytest.mark.unit
@@ -52,13 +54,21 @@ def test_get_memory_usage_handles_errors(monkeypatch: pytest.MonkeyPatch) -> Non
     """get_memory_usage returns zeroed metrics when psutil fails."""
 
     class _ExplodingProcess:  # pragma: no cover - simple stub
-        def memory_info(self):
+        """Stub process raising on memory access."""
+
+        def memory_info(self) -> None:
+            """Raise for memory_info access."""
             raise OSError("denied")
 
-        def memory_percent(self):
+        def memory_percent(self) -> None:
+            """Raise for memory_percent access."""
             raise OSError("denied")
 
-    monkeypatch.setattr(mon.psutil, "Process", lambda: _ExplodingProcess())
+    def _make_process() -> _ExplodingProcess:
+        """Create exploding process stub."""
+        return _ExplodingProcess()
+
+    monkeypatch.setattr(mon.psutil, "Process", _make_process)
 
     metrics = mon.get_memory_usage()
 
@@ -79,7 +89,7 @@ def test_get_system_info_handles_errors(monkeypatch: pytest.MonkeyPatch) -> None
 
     info = mon.get_system_info()
 
-    assert info == {}
+    assert not info
 
 
 @pytest.mark.unit
@@ -89,8 +99,19 @@ def test_performance_timer_handles_psutil_errors(
     """performance_timer should not crash when psutil.Process fails."""
 
     class _ExplodingProcess:  # pragma: no cover - simple stub
+        """Stub that raises in constructor."""
+
+        __slots__ = ()
+        __module__ = "tests.unit.utils.monitoring.test_monitoring_additional"
+
         def __init__(self) -> None:
             raise OSError("access denied")
+
+        def __repr__(self) -> str:
+            return "_ExplodingProcess()"
+
+        def __str__(self) -> str:
+            return self.__repr__()
 
     monkeypatch.setattr(mon.psutil, "Process", _ExplodingProcess)
 

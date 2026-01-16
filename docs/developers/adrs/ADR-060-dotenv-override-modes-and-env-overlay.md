@@ -62,12 +62,12 @@ Weights:
 - Performance (30%)
 - Ecosystem Alignment (30%)
 
-| Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total |
-| -----: | ---------------: | ---------: | --------------: | ----: |
-| 1      |              8.5 |       10.0 |             9.0 |  9.05 |
-| 2      |              6.5 |        9.5 |             6.5 |  7.55 |
-| **3**  |            **8.8** |     **9.8** |           **9.4** | **9.35** |
-| 4      |              3.0 |        8.0 |             3.0 |  4.70 |
+|Option|Complexity (40%)|Perf (30%)|Alignment (30%)|Total|
+|-----:|--------------:|--------:|-------------:|----:|
+|1|8.5|10.0|9.0|9.05|
+|2|6.5|9.5|6.5|7.55|
+|**3**|**8.8**|**9.8**|**9.4**|**9.35**|
+|4|3.0|8.0|3.0|4.70|
 
 Selected: **Option 3**.
 
@@ -112,4 +112,3 @@ Constraints:
 
 - Opt-in complexity: additional knobs exist, but are strictly gated and
   documented as “local-dev only”.
-

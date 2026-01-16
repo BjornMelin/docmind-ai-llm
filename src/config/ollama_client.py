@@ -24,6 +24,11 @@ from ollama import (
 from pydantic import BaseModel
 
 from src.config.settings import DocMindSettings, settings
+from src.config.settings_utils import (
+    endpoint_url_allowed,
+    ensure_http_scheme,
+    parse_endpoint_allowlist_hosts,
+)
 
 _TModel = TypeVar("_TModel", bound=BaseModel)
 
@@ -59,26 +64,12 @@ def _assert_endpoint_allowed(cfg: DocMindSettings, base_url: str) -> None:
     if cfg.security.allow_remote_endpoints:
         return
 
-    parsed = urlparse(_normalize_url(base_url))
-    if not parsed.scheme or not parsed.netloc:
+    normalized = ensure_http_scheme(base_url)
+    if not normalized:
         raise ValueError("Invalid Ollama host URL")
 
-    host = (parsed.hostname or "").strip().lower().rstrip(".")
-    if host in {"localhost", "127.0.0.1", "::1"}:
-        return
-
-    allowed_hosts: set[str] = set()
-    for entry in cfg.security.endpoint_allowlist:
-        e = (entry or "").strip()
-        if not e:
-            continue
-        ep = urlparse(_normalize_url(e))
-        entry_host = (ep.hostname or e.split("/")[0].split(":")[0]).strip().lower()
-        entry_host = entry_host.rstrip(".")
-        if entry_host:
-            allowed_hosts.add(entry_host)
-
-    if host not in allowed_hosts:
+    allowed_hosts = parse_endpoint_allowlist_hosts(cfg.security.endpoint_allowlist)
+    if not endpoint_url_allowed(normalized, allowed_hosts=allowed_hosts):
         raise ValueError(
             "Remote endpoints are disabled. Set allow_remote_endpoints=True "
             "or add the host to security.endpoint_allowlist."
@@ -94,7 +85,7 @@ def _resolve_ollama_host(cfg: DocMindSettings) -> str:
     Returns:
         The configured Ollama host URL.
     """
-    return str(cfg.ollama_base_url or "").strip()
+    return str(cfg.ollama_base_url or "").strip().rstrip("/")
 
 
 def _resolve_ollama_api_key(cfg: DocMindSettings) -> str | None:
