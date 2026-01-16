@@ -56,14 +56,21 @@ The system MAY encrypt page images at rest using AES‑GCM when enabled.
 - Default posture MUST be offline‑first; remote endpoints disabled unless explicitly allowlisted.
 - LM Studio endpoints MUST end with `/v1`.
 - Add tests to reject non‑allowlisted URLs when policy is strict.
+- When remote endpoints are disabled, allowlisted hostnames MUST resolve to public IPs.
+  Hosts that resolve to private/link-local/reserved ranges are rejected (defense-in-depth
+  against SSRF and DNS rebinding). If you intentionally need private/internal endpoints
+  (e.g., Docker service hostnames), set `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true`
+  or use an architecture that keeps the endpoint on loopback (e.g., shared network
+  namespace so the app connects to `http://localhost`).
 
 ## Ollama Cloud & Web Tools (Optional)
 
-- Ollama Cloud access (including `web_search` / `web_fetch`) is a **remote endpoint** and MUST remain disabled unless explicitly enabled and allowlisted.
+- Ollama Cloud access (including `web_search` / `web_fetch`) is a **remote endpoint** and MUST remain disabled unless explicitly enabled.
 - Enabling web tools requires:
   - `DOCMIND_OLLAMA_ENABLE_WEB_SEARCH=true`
   - An API key via `DOCMIND_OLLAMA_API_KEY`
-  - Remote endpoints enabled/allowlisted (`DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true` and allowlist includes `https://ollama.com`)
+  - Remote endpoints enabled (`DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true`)
+  - For defense-in-depth, also include `https://ollama.com` in `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST` (note: allowlist enforcement applies when `ALLOW_REMOTE_ENDPOINTS=false`)
 - Secrets (API keys) MUST NOT be logged.
 
 ## Secrets Redaction & Telemetry

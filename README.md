@@ -299,7 +299,8 @@ block is ignored on older Compose versions and in swarm mode.
 - Set model, context window, timeout, and GPU acceleration toggle.
 - Model IDs are backend-specific (Ollama tags vs OpenAI-compatible model names).
 - OpenAI-compatible base URLs are normalized to include `/v1` (LM Studio enforces `/v1`).
-- Remote endpoints are blocked unless `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true`.
+- When `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` (default), loopback hosts are always allowed, but non-loopback hosts must be allowlisted via `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST` and must DNS-resolve to public IPs (private/link-local/reserved ranges are rejected).
+- Set `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true` to opt out (required for private/internal endpoints like Docker service hostnames).
 
 ### Ingest Documents and Build Snapshots (Documents page)
 
@@ -648,7 +649,7 @@ maxUploadSize = 200
 - `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` to disable network egress (after predownload).
 - `DOCMIND_RETRIEVAL__FUSION_MODE=rrf|dbsf` to control Qdrant fusion.
 - `DOCMIND_RETRIEVAL__USE_RERANKING=true|false` (canonical env override).
-- LLM endpoints are constrained by `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS` and `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST`.
+- LLM base URLs are validated when `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false`: loopback is always allowed; allowlisted non-loopback hosts are DNS-resolved and rejected if they map to private/link-local/reserved ranges.
 
 ## Offline Operation
 

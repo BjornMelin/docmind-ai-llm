@@ -64,9 +64,9 @@ Implement a "proposed settings" pattern in `src/pages/04_settings.py`:
      }
      ```
 
-   - Call `DocMindSettings.model_validate(candidate)` (or a helper) to ensure:
+     - Call `DocMindSettings.model_validate(candidate)` (or a helper) to ensure:
      - types/ranges are correct
-     - OpenAI-compatible base URLs are normalized to a single `/v1` segment (see `src/config/settings.py::ensure_v1`)
+     - OpenAI-compatible base URLs are normalized to a single `/v1` segment (see `src/config/settings_utils.py::ensure_v1`)
      - security policy validation passes (allowlist + localhost-only posture when `allow_remote_endpoints=false`)
 3. Only after validation succeeds:
    - update the global `settings` singleton (in-memory)

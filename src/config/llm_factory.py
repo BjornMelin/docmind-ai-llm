@@ -52,7 +52,7 @@ def build_llm(settings: DocMindSettings) -> Any:
         from llama_index.llms.ollama import Ollama  # type: ignore
 
         return Ollama(
-            base_url=settings.ollama_base_url,
+            base_url=str(settings.ollama_base_url).rstrip("/"),
             model=model_name,
             request_timeout=timeout_s,
             context_window=context_window,

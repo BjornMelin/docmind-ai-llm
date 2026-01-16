@@ -55,7 +55,8 @@ Canonical settings (Pydantic Settings, prefix `DOCMIND_`):
 Remote endpoint policy (canonical):
 
 - `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` by default.
-- `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST` MUST include `https://ollama.com` when enabling Ollama Cloud features.
+- Enabling Ollama Cloud features (web tools) requires `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true`.
+- For defense-in-depth, also include `https://ollama.com` in `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST` (note: allowlist enforcement applies when `ALLOW_REMOTE_ENDPOINTS=false`).
 
 ### Config surface decision
 

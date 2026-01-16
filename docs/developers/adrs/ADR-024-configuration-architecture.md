@@ -59,7 +59,7 @@ Amendment (OpenAI‑compatible servers & Local‑First):
   - `DOCMIND_OPENAI__BASE_URL` — e.g. `http://localhost:1234/v1` (LM Studio), `http://localhost:8000/v1` (vLLM), `http://localhost:8080/v1` (llama.cpp server)
   - `DOCMIND_OPENAI__API_KEY` — placeholder string (local‑first; not required by servers but some clients expect a non‑empty token)
 - OpenAI cloud (optional): `DOCMIND_OPENAI__BASE_URL=https://api.openai.com/v1`, `DOCMIND_OPENAI__API_KEY=sk‑…`; requires enabling remote endpoints (see Security Policy below).
-- Security Policy: `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` by default; only loopback hosts are allowed when disabled. To use remote endpoints (e.g., OpenAI cloud), set `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true` or add the host to `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST`.
+- Security Policy: `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` by default; loopback hosts are always allowed. Non-loopback hosts must be allowlisted and must resolve to public IPs (private/link-local/reserved ranges are rejected as SSRF/DNS-rebinding hardening). To use private/internal endpoints, set `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true` or adopt a loopback-only architecture.
 
 Factory Resolution (library‑first):
 
@@ -408,6 +408,8 @@ DOCMIND_LLM_STREAMING_ENABLED=true
 DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false
 # Add https://ollama.com to the allowlist before enabling cloud access.
 # DOCMIND_SECURITY__ENDPOINT_ALLOWLIST=["http://localhost","http://127.0.0.1","https://ollama.com"]
+# Note: when `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false`, allowlisted hosts are DNS-resolved
+# and rejected if they map to private/link-local/reserved ranges (SSRF/DNS-rebinding hardening).
 
 # Embeddings (ADR-002)
 DOCMIND_EMBEDDING__MODEL_NAME=BAAI/bge-m3
@@ -544,6 +546,6 @@ def test_env_mapping(monkeypatch):
 
 ## Offline Defaults & Allowlist
 
-- The application MUST default to offline‑first behavior; remote endpoints are disabled unless explicitly allowlisted.
+- The application MUST default to offline‑first behavior; remote endpoints are disabled unless explicitly allowlisted, and allowlisted hostnames are still rejected if they resolve to private/link-local/reserved IP ranges.
 - LM Studio endpoints MUST terminate with `/v1` and be validated in Settings.
 - Provide a centralized allowlist mechanism in configuration; tests MUST cover rejection of non‑allowlisted URLs when policy is strict.

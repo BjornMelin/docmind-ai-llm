@@ -16,10 +16,10 @@ from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
-from urllib.parse import urlparse
 
 from loguru import logger
 from pydantic import (
+    AnyHttpUrl,
     BaseModel,
     ConfigDict,
     Field,
@@ -35,6 +35,16 @@ from pydantic_settings import (
 )
 
 from src.config.dotenv import resolve_dotenv_path
+from src.config.settings_utils import (
+    DEFAULT_LMSTUDIO_BASE_URL,
+    DEFAULT_OLLAMA_BASE_URL,
+    DEFAULT_OPENAI_BASE_URL,
+    DEFAULT_VLLM_BASE_URL,
+    endpoint_url_allowed,
+    ensure_http_scheme,
+    ensure_v1,
+    parse_endpoint_allowlist_hosts,
+)
 from src.models.embedding_constants import ImageBackboneName
 
 SETTINGS_MODEL_CONFIG = SettingsConfigDict(
@@ -59,7 +69,15 @@ _VALID_ENV_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
-    """Return a merged mapping where `override` wins."""
+    """Deep-merge two dictionaries where `override` wins.
+
+    Args:
+        base: Base dictionary.
+        override: Override dictionary. Values in this mapping take precedence.
+
+    Returns:
+        A new merged dictionary.
+    """
     merged: dict[str, Any] = dict(base)
     for key, value in override.items():
         if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
@@ -70,6 +88,16 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
 
 def _get_dotenv_priority_mode() -> DotenvPriorityMode:
+    """Return the effective dotenv priority mode.
+
+    Precedence:
+    1) `DOCMIND_CONFIG__DOTENV_PRIORITY` from process env
+    2) `_DOTENV_PRIORITY_MODE` (used by tests)
+    3) `"env_first"` default
+
+    Returns:
+        The effective dotenv priority mode.
+    """
     raw = os.getenv(f"{_CONFIG_ENV_PREFIX}DOTENV_PRIORITY")
     if raw:
         value = raw.strip().lower()
@@ -81,17 +109,41 @@ def _get_dotenv_priority_mode() -> DotenvPriorityMode:
 
 
 def _parse_csv(value: str | None) -> list[str]:
+    """Parse a comma-separated string into trimmed, non-empty items.
+
+    Args:
+        value: Raw comma-separated string.
+
+    Returns:
+        List of trimmed, non-empty items.
+    """
     if not value:
         return []
     return [part.strip() for part in value.split(",") if part.strip()]
 
 
 def _validate_env_key_name(key: str) -> None:
+    """Validate env var key names for bootstrap toggles.
+
+    Args:
+        key: Environment variable name to validate.
+
+    Raises:
+        ValueError: If `key` is not `[A-Z][A-Z0-9_]*`.
+    """
     if not key or _VALID_ENV_KEY_RE.fullmatch(key) is None:
         raise ValueError("Invalid env var key; expected [A-Z][A-Z0-9_]*")
 
 
 def _validate_env_value_no_controls(value: str) -> None:
+    """Reject env var values containing ASCII control characters.
+
+    Args:
+        value: Environment variable value.
+
+    Raises:
+        ValueError: If `value` contains ASCII control characters.
+    """
     if re.search(r"[\x00-\x1f\x7f]", value):
         raise ValueError("Env var value contains control characters")
 
@@ -104,7 +156,17 @@ class _BootstrapOptions:
 
 
 def _read_bootstrap_options(dotenv_path: Path) -> _BootstrapOptions:
-    """Read DOCMIND_CONFIG__* toggles from env (preferred) or repo `.env` (fallback)."""
+    """Read DOCMIND_CONFIG__* bootstrap toggles from env and/or `.env`.
+
+    Args:
+        dotenv_path: Path to the repo dotenv file.
+
+    Returns:
+        Parsed bootstrap options.
+
+    Raises:
+        ValueError: For malformed toggle values (invalid keys, bad overlay specs).
+    """
     dotenv_kv: dict[str, str | None] = {}
     try:
         from dotenv import dotenv_values as _dotenv_values
@@ -162,12 +224,28 @@ def _read_bootstrap_options(dotenv_path: Path) -> _BootstrapOptions:
 
 
 def _apply_env_mask(keys: list[str]) -> None:
+    """Delete selected env vars from `os.environ` (best-effort).
+
+    Args:
+        keys: Environment variable names to delete.
+    """
     for key in keys:
         with suppress(KeyError):
             del os.environ[key]
 
 
 def _apply_env_overlay(overlays: list[tuple[str, str]]) -> None:
+    """Materialize overlays from loaded settings into `os.environ`.
+
+    Each overlay is `(ENV_KEY, settings.path)`. Values are extracted from the
+    already-loaded `settings` instance.
+
+    Args:
+        overlays: Overlay specs.
+
+    Raises:
+        ValueError: If a referenced settings path is unknown.
+    """
     for key, path in overlays:
         current: Any = settings
         for part in path.split("."):
@@ -209,13 +287,19 @@ class VLLMConfig(BaseModel):
     max_num_seqs: int = Field(default=16, ge=1, le=64)
     max_num_batched_tokens: int = Field(default=8192, ge=1024, le=16384)
 
-    vllm_base_url: str = Field(
-        default="http://localhost:8000", description="vLLM server endpoint"
+    vllm_base_url: AnyHttpUrl = Field(
+        default=DEFAULT_VLLM_BASE_URL, description="vLLM server endpoint"
     )
     llamacpp_model_path: Path = Field(
         default=Path("./models/qwen3.gguf"),
         description="Path to GGUF model for llama.cpp backend",
     )
+
+    @field_validator("vllm_base_url", mode="before")
+    @classmethod
+    def _norm_vllm_base_url(cls, v: object) -> str:
+        candidate = ensure_http_scheme(v) or ""
+        return candidate
 
 
 class SemanticCacheConfig(BaseModel):
@@ -232,20 +316,6 @@ class SemanticCacheConfig(BaseModel):
     allow_semantic_for_templates: list[str] | None = Field(default=None)
 
 
-def ensure_v1(url: str | None) -> str | None:
-    """Normalize OpenAI-compatible base URLs to include a single /v1 segment."""
-    if not url:
-        return url
-    try:
-        parsed = urlparse(url.rstrip("/"))
-        path = parsed.path or ""
-        if not path.endswith("/v1"):
-            path = f"{path}/v1"
-        return parsed._replace(path=path).geturl()
-    except (ValueError, AttributeError, TypeError):
-        return url
-
-
 class OpenAIConfig(BaseModel):
     """Settings for OpenAI-compatible servers.
 
@@ -253,16 +323,18 @@ class OpenAIConfig(BaseModel):
     Ensures idempotent normalization of base URLs to include a single "/v1".
     """
 
-    base_url: str = Field(default="http://localhost:1234/v1")
+    base_url: AnyHttpUrl = Field(default=DEFAULT_OPENAI_BASE_URL)
     api_key: str | None = Field(default=None, description="Optional API key")
 
     @field_validator("base_url", mode="before")
     @classmethod
-    def _ensure_v1_on_base(cls, v: str) -> str:
-        return ensure_v1((v or "").strip()) or ""
+    def _ensure_v1_on_base(cls, v: object) -> str:
+        candidate = ensure_http_scheme(v) or ""
+        normalized = ensure_v1(candidate) or candidate
+        return normalized
 
 
-_DEFAULT_OPENAI_BASE_URL = OpenAIConfig().base_url
+_DEFAULT_OPENAI_BASE_URL = DEFAULT_OPENAI_BASE_URL
 
 
 class ImageConfig(BaseModel):
@@ -860,9 +932,6 @@ class DocMindSettings(BaseSettings):
             "Global context window cap. If set, overrides nested vllm.context_window"
         ),
     )
-    ollama_base_url: str = Field(
-        default="http://localhost:11434",
-    )
     ollama_api_key: SecretStr | None = Field(
         default=None,
         description=(
@@ -896,11 +965,14 @@ class DocMindSettings(BaseSettings):
             "enabled (0-20)."
         ),
     )
-    lmstudio_base_url: str = Field(default="http://localhost:1234/v1")
-    vllm_base_url: str | None = Field(
+    ollama_base_url: AnyHttpUrl = Field(
+        default=DEFAULT_OLLAMA_BASE_URL,
+    )
+    lmstudio_base_url: AnyHttpUrl = Field(default=DEFAULT_LMSTUDIO_BASE_URL)
+    vllm_base_url: AnyHttpUrl | None = Field(
         default=None, description="vLLM server endpoint (OpenAI or native)"
     )
-    llamacpp_base_url: str | None = Field(
+    llamacpp_base_url: AnyHttpUrl | None = Field(
         default=None, description="Optional llama.cpp server (OpenAI-compatible)"
     )
     enable_gpu_acceleration: bool = Field(default=True)
@@ -1137,18 +1209,31 @@ class DocMindSettings(BaseSettings):
 
     @field_validator("lmstudio_base_url", mode="before")
     @classmethod
-    def _norm_lmstudio(cls, v: str) -> str:
-        return ensure_v1(v) or v
+    def _norm_lmstudio(cls, v: object) -> str:
+        candidate = ensure_http_scheme(v) or ""
+        return ensure_v1(candidate) or candidate
 
     @field_validator("llamacpp_base_url", mode="before")
     @classmethod
-    def _norm_llamacpp(cls, v: str | None) -> str | None:
-        return ensure_v1(v)
+    def _norm_llamacpp(cls, v: object | None) -> str | None:
+        if v is None:
+            return None
+        candidate = ensure_http_scheme(v) or ""
+        return ensure_v1(candidate) or candidate or None
 
     @field_validator("vllm_base_url", mode="before")
     @classmethod
-    def _norm_vllm(cls, v: str | None) -> str | None:
-        return ensure_v1(v)
+    def _norm_vllm(cls, v: object | None) -> str | None:
+        if v is None:
+            return None
+        candidate = ensure_http_scheme(v) or ""
+        return ensure_v1(candidate) or candidate or None
+
+    @field_validator("ollama_base_url", mode="before")
+    @classmethod
+    def _norm_ollama(cls, v: object) -> str:
+        candidate = ensure_http_scheme(v) or ""
+        return candidate
 
     @computed_field
     @property
@@ -1172,7 +1257,7 @@ class DocMindSettings(BaseSettings):
             else None
         )
         if self.llm_backend == "ollama":
-            return self.ollama_base_url
+            return str(self.ollama_base_url).rstrip("/")
         if self.llm_backend == "lmstudio":
             # Prefer explicit OpenAI group only when customized
             return ensure_v1(openai_base_url or self.lmstudio_base_url)
@@ -1320,8 +1405,12 @@ class DocMindSettings(BaseSettings):
     def _validate_endpoints_security(self) -> None:
         """Validate endpoint URLs against security policy.
 
-        When ``allow_remote_endpoints`` is False, only localhost/127.0.0.1
-        URLs are permitted. Users may extend ``endpoint_allowlist``.
+        When ``allow_remote_endpoints`` is False:
+        - Loopback hosts are always allowed.
+        - Non-loopback hosts must be explicitly allowlisted.
+        - Allowlisted hostnames are DNS-resolved and rejected if they map to
+          private/link-local/reserved ranges (defense-in-depth against SSRF and
+          DNS rebinding).
 
         Raises:
             ValueError: If any configured base URL is not allowed while
@@ -1330,40 +1419,7 @@ class DocMindSettings(BaseSettings):
         if self.security.allow_remote_endpoints:
             return
 
-        def _normalize_host(host: str) -> str:
-            return (host or "").strip().lower().rstrip(".")
-
-        def _is_allowed(url: str | None) -> bool:
-            if not url:
-                return True
-            try:
-                parsed = urlparse(url)
-                # If malformed, treat as not allowed (defensive)
-                if not parsed.scheme or not parsed.netloc:
-                    return False
-
-                host = _normalize_host(parsed.hostname or "")
-                # Always accept explicit loopback hosts
-                if host in {"localhost", "127.0.0.1", "::1"}:
-                    return True
-
-                # Build a set of allowed hostnames from the allowlist entries
-                allowed_hosts: set[str] = set()
-                for entry in self.security.endpoint_allowlist:
-                    e = (entry or "").strip()
-                    if not e:
-                        continue
-                    ep = urlparse(e)
-                    if ep.hostname:
-                        entry_host = _normalize_host(ep.hostname)
-                    else:
-                        # Fallback: if an entry is just a hostname
-                        entry_host = _normalize_host(e.split("/")[0].split(":")[0])
-                    allowed_hosts.add(entry_host)
-
-                return host in allowed_hosts
-            except (ValueError, TypeError):  # pragma: no cover - defensive
-                return False
+        allowed_hosts = parse_endpoint_allowlist_hosts(self.security.endpoint_allowlist)
 
         raw_urls = {
             self.ollama_base_url,
@@ -1374,7 +1430,8 @@ class DocMindSettings(BaseSettings):
             self.llamacpp_base_url,
         }
         for url in raw_urls:
-            if not _is_allowed(ensure_v1(url)):
+            normalized = ensure_v1(url) if url is not None else None
+            if not endpoint_url_allowed(normalized, allowed_hosts=allowed_hosts):
                 raise ValueError(
                     "Remote endpoints are disabled. Set allow_remote_endpoints=True "
                     "or use localhost URLs."
@@ -1387,9 +1444,9 @@ class DocMindSettings(BaseSettings):
             ValueError: If ``lmstudio_base_url`` is set and does not end with
             ``/v1`` as required by the API.
         """
-        if self.lmstudio_base_url and not self.lmstudio_base_url.rstrip("/").endswith(
-            "/v1"
-        ):
+        if self.lmstudio_base_url and not str(self.lmstudio_base_url).rstrip(
+            "/"
+        ).endswith("/v1"):
             raise ValueError("LM Studio base URL must end with /v1")
 
     def _validate_web_search_config(self) -> None:
@@ -1424,6 +1481,14 @@ _DOTENV_BOOTSTRAPPED = False
 
 
 def _parse_env_bool(value: str) -> bool:
+    """Parse a loose boolean env var string.
+
+    Args:
+        value: Raw env var string.
+
+    Returns:
+        True for common truthy values: `1`, `true`, `yes`, `on` (case-insensitive).
+    """
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
@@ -1432,6 +1497,9 @@ def get_telemetry_disabled() -> bool:
 
     The process environment is checked first to keep tests hermetic and to honor
     runtime env overrides without requiring a settings reload.
+
+    Returns:
+        True if telemetry is disabled for this process.
     """
     raw = os.getenv("DOCMIND_TELEMETRY_DISABLED")
     if raw is not None:
@@ -1440,7 +1508,11 @@ def get_telemetry_disabled() -> bool:
 
 
 def get_telemetry_sample() -> float:
-    """Return effective telemetry sample rate (0.0..1.0)."""
+    """Return effective telemetry sample rate.
+
+    Returns:
+        Sampling rate in the inclusive range `[0.0, 1.0]`.
+    """
     raw = os.getenv("DOCMIND_TELEMETRY_SAMPLE")
     if raw is not None:
         try:
@@ -1453,7 +1525,12 @@ def get_telemetry_sample() -> float:
 
 
 def get_telemetry_rotate_bytes() -> int:
-    """Return effective telemetry rotate bytes limit."""
+    """Return effective telemetry rotate-bytes limit.
+
+    Returns:
+        Maximum file size in bytes before rotating telemetry logs. `0` disables
+        rotation.
+    """
     raw = os.getenv("DOCMIND_TELEMETRY_ROTATE_BYTES")
     if raw is not None:
         try:
@@ -1471,6 +1548,13 @@ def apply_settings_in_place(current: DocMindSettings, updated: DocMindSettings) 
     Many modules follow the recommended import pattern `from src.config import settings`
     which captures the singleton instance at import time. Rebinding would create
     stale references, so we mutate the existing instance.
+
+    Args:
+        current: Current singleton instance to mutate.
+        updated: New settings instance to copy values from.
+
+    Raises:
+        TypeError: If either argument is not a `DocMindSettings` instance.
     """
     if not isinstance(current, DocMindSettings) or not isinstance(
         updated, DocMindSettings
@@ -1500,7 +1584,7 @@ def apply_settings_in_place(current: DocMindSettings, updated: DocMindSettings) 
 
 
 def reset_bootstrap_state() -> None:
-    """Reset bootstrap state for testing. Not for production use."""
+    """Reset dotenv/bootstrap global state (tests only)."""
     global _DOTENV_BOOTSTRAPPED, _DOTENV_PRIORITY_MODE
     _DOTENV_BOOTSTRAPPED = False
     _DOTENV_PRIORITY_MODE = None
@@ -1513,6 +1597,10 @@ def bootstrap_settings(
 
     This is an explicit startup step (no import-time dotenv IO). It is safe to call
     multiple times; subsequent calls are no-ops unless `force=True`.
+
+    Args:
+        env_file: Optional dotenv path override.
+        force: When True, reload even if already bootstrapped.
 
     Returns:
         The dotenv path used when loading occurred, otherwise None.

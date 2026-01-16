@@ -29,16 +29,17 @@ def provider_badge(
     model = cfg.model or (getattr(vllm_cfg, "model", None) if vllm_cfg else None)
     base_url: str | None = None
     if provider == "ollama":
-        base_url = cfg.ollama_base_url
+        base_url = str(cfg.ollama_base_url).rstrip("/")
     elif provider == "lmstudio":
-        base_url = cfg.lmstudio_base_url
+        base_url = str(cfg.lmstudio_base_url)
     elif provider == "vllm":
-        base_url = cfg.vllm_base_url or (
+        candidate = cfg.vllm_base_url or (
             getattr(vllm_cfg, "vllm_base_url", None) if vllm_cfg else None
         )
+        base_url = str(candidate) if candidate else None
     elif provider == "llamacpp":
         if cfg.llamacpp_base_url:
-            base_url = cfg.llamacpp_base_url
+            base_url = str(cfg.llamacpp_base_url)
         else:
             base_url = (
                 str(getattr(vllm_cfg, "llamacpp_model_path", "")) if vllm_cfg else None

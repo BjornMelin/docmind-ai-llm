@@ -26,7 +26,7 @@ def test_build_llm_openai_like_and_ollama(backend):
             out = build_llm(cfg)
             assert out is inst
             _, kwargs = p.call_args
-            assert kwargs["base_url"] == cfg.ollama_base_url
+            assert kwargs["base_url"] == str(cfg.ollama_base_url).rstrip("/")
             assert kwargs["model"] == cfg.vllm.model
             assert float(kwargs["request_timeout"]) == float(
                 cfg.llm_request_timeout_seconds
@@ -139,7 +139,7 @@ def test_lmstudio_url_normalized_to_include_v1(
 ) -> None:
     """LM Studio base URL is normalized to include a single /v1 segment."""
     settings = DocMindSettings(llm_backend="lmstudio", lmstudio_base_url=input_url)
-    assert settings.lmstudio_base_url.rstrip("/") == expected_url
+    assert str(settings.lmstudio_base_url).rstrip("/") == expected_url
 
 
 def test_llamacpp_local_uses_gpu_layers_and_context(

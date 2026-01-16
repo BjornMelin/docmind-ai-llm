@@ -12,7 +12,8 @@ from __future__ import annotations
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
-from src.config.settings import DocMindSettings, ensure_v1
+from src.config.settings import DocMindSettings
+from src.config.settings_utils import ensure_v1
 
 
 def build_chat_model(cfg: DocMindSettings) -> ChatOpenAI:
@@ -21,6 +22,15 @@ def build_chat_model(cfg: DocMindSettings) -> ChatOpenAI:
     Note: This uses the OpenAI-compatible API surface (``ChatOpenAI``) so it can
     target local servers (vLLM/LM Studio/llama.cpp server) via ``base_url``.
     For Ollama, we assume an OpenAI-compatible endpoint is available at ``/v1``.
+
+    Args:
+        cfg: Loaded application settings.
+
+    Returns:
+        A configured `ChatOpenAI` runnable.
+
+    Raises:
+        ValueError: If no model name or base URL is configured.
     """
     model_name = cfg.model or cfg.vllm.model
     if not model_name:

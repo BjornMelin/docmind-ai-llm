@@ -247,7 +247,7 @@ def test_unified_configuration_architecture():
 
             # Validate key configuration attributes
             assert settings.vllm.model == "qwen3-4b-instruct-2507:latest"
-            assert settings.ollama_base_url == "http://localhost:11434"
+            assert str(settings.ollama_base_url).rstrip("/") == "http://localhost:11434"
             assert settings.debug is False
 
             # Validate presence of representative attributes

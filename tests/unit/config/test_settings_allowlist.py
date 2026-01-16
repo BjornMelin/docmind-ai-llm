@@ -1,6 +1,9 @@
 """Tests for DocMindSettings endpoint allowlist validation."""
 
+from __future__ import annotations
+
 import pytest
+from pydantic import ValidationError
 
 from src.config.settings import DocMindSettings
 
@@ -42,8 +45,15 @@ def test_disallow_spoofed_localhost_prefix():
         _ = _mk(vllm_base_url="https://localhost.attacker.tld/v1")
 
 
-def test_allow_explicit_allowlisted_host():
+def test_allow_explicit_allowlisted_host(monkeypatch):  # type: ignore[no-untyped-def]
     """Exact host in allowlist should be accepted."""
+    import socket
+
+    def _fake_getaddrinfo(host, *args, **kwargs):  # type: ignore[no-untyped-def]
+        assert str(host) == "api.example.com"
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo)
     s = _mk(
         security={
             "allow_remote_endpoints": False,
@@ -75,7 +85,7 @@ def test_disallow_similar_but_unlisted_host():
 
 def test_malformed_url_rejected():
     """Malformed URLs should be rejected."""
-    with pytest.raises(Exception, match="Remote endpoints are disabled"):
+    with pytest.raises(ValidationError):
         _ = _mk(vllm_base_url="not a url")
 
 

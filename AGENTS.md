@@ -44,7 +44,7 @@ and docs under `docs/specs/` + `docs/developers/adrs/`.
 
 - No `TODO|FIXME|XXX` under `src tests docs scripts tools`.
 - CI expects `ruff format --check` and clean `ruff check` (CI runs `ruff check --fix --exit-non-zero-on-fix`).
-- Offline-first default: no implicit egress; remote endpoints stay gated by allowlist policy.
+- Offline-first default: no implicit egress. Base URL validation is strict by default and includes DNS resolution of allowlisted non-loopback hosts as SSRF/DNS-rebinding hardening.
 - Streamlit: no `unsafe_allow_html=True` for untrusted content.
 - Logging/telemetry: metadata-only; never log secrets or raw prompt/doc/model output (use `src/utils/log_safety.py`).
 
@@ -71,6 +71,7 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 ## Configuration
 
 - Source of truth: `src/config/settings.py` (Pydantic Settings v2).
+- Settings helpers (URL parsing/normalization + endpoint allowlist policy) live in `src/config/settings_utils.py` to keep `settings.py` focused on typed models and validators.
 - Env: prefix `DOCMIND_`, nested `__`.
 - Prefer `from src.config import settings` (exports the settings object).
 - No `os.getenv`/`os.environ` outside `src/config/*` (env bridges live there).
@@ -87,7 +88,10 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
 ## Security policy
 
-- Remote endpoints blocked unless `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true` or host is in `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST`.
+- When `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` (default):
+  - Loopback hosts are always allowed.
+  - Non-loopback hosts must be in `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST` **and** must DNS-resolve to public IPs (private/link-local/reserved ranges are rejected; fail-closed when DNS resolution fails).
+  - Use `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true` for private/internal endpoints (e.g., Docker service hostnames), or use a loopback-only architecture (`http://localhost:...`).
 - Analytics page is gated by `DOCMIND_ANALYTICS_ENABLED=true` and reads `data/analytics/analytics.duckdb`.
 
 ## Containerization (CI-enforced)
