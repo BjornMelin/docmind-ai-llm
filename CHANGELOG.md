@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [0.4.0](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.3.0...v0.4.0) (2026-01-16)
+
+
+### Features
+
+* Implement programmatic ingestion API and remove legacy document utilities. ([857350c](https://github.com/BjornMelin/docmind-ai-llm/commit/857350c9adcbf7751d6eeee4cd703ace58c0beba))
+* **monitoring:** emit JSONL performance telemetry ([b8aaeed](https://github.com/BjornMelin/docmind-ai-llm/commit/b8aaeed71d327839013d2108f5db6c74e71b95ac))
+* **security:** harden endpoint policy and base URL parsing ([f360552](https://github.com/BjornMelin/docmind-ai-llm/commit/f3605520f7c8176c8312147d0d04ec6e59d6a6ec))
+
+
+### Bug Fixes
+
+* address review comments for security hardening ([dcb782c](https://github.com/BjornMelin/docmind-ai-llm/commit/dcb782c27b6f37625b5db738c4eee178c2545776))
+* Harden security endpoint validation and refine monitoring telemetry. ([30d14cb](https://github.com/BjornMelin/docmind-ai-llm/commit/30d14cb573a99e3c1978ff8311a7d51533ba70c8))
+* **monitoring:** enhance error logging context to improve PII handling ([113fd33](https://github.com/BjornMelin/docmind-ai-llm/commit/113fd3365c97db023b64e1a1ed160dbf8ed3dc83))
+* **release:** enhance release workflow to regenerate and commit uv.lock if outdated ([9af1d96](https://github.com/BjornMelin/docmind-ai-llm/commit/9af1d96839a0a4238ff412fad4354afbc04d5da5))
+* security telemetry hardening ([31635dc](https://github.com/BjornMelin/docmind-ai-llm/commit/31635dc15cde7ab55ed18c3e892afce63daba434))
+* **telemetry:** address review feedback ([54907a8](https://github.com/BjornMelin/docmind-ai-llm/commit/54907a879da35009a8a6de6b8603d40bde250fa7))
+
+
+### Documentation
+
+* standardize Markdown table formatting and refine endpoint description. ([8ddd435](https://github.com/BjornMelin/docmind-ai-llm/commit/8ddd43538911b855a26bcd4795055e471432c609))
+
 ## [0.3.0](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.2.0...v0.3.0) (2026-01-15)
 
 
