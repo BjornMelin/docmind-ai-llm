@@ -1,7 +1,9 @@
 """Lightweight JSONL telemetry emitter.
 
-Writes events to logs/telemetry.jsonl to keep observability local-first.
-Use get_analytics_duckdb_path() for settings-aware analytics DB paths.
+Writes events to `settings.telemetry.jsonl_path` (default `./logs/telemetry.jsonl`)
+to keep observability local-first. Use `get_telemetry_jsonl_path()` for the
+effective path, and `get_analytics_duckdb_path()` for settings-aware analytics DB
+paths.
 """
 
 from __future__ import annotations
@@ -18,16 +20,7 @@ from typing import Any
 
 from loguru import logger
 
-from src.config.settings import (
-    get_telemetry_disabled,
-    get_telemetry_rotate_bytes,
-    get_telemetry_sample,
-    settings,
-)
-
-TELEMETRY_JSONL_PATH = Path("./logs/telemetry.jsonl")
-# Public constant for consumers that need the canonical telemetry path.
-_TELEM_PATH = TELEMETRY_JSONL_PATH
+from src.config.settings import settings
 
 # Internal default path; prefer get_analytics_duckdb_path() for settings-aware use.
 _ANALYTICS_DUCKDB_PATH = Path("data/analytics/analytics.duckdb")
@@ -58,7 +51,7 @@ def _ensure_dir(path: Path) -> None:
 
 def _maybe_rotate(path: Path) -> None:
     """Rotate file if it exceeds the configured size limit (size-based)."""
-    limit = get_telemetry_rotate_bytes()
+    limit = int(settings.telemetry.rotate_bytes)
     if limit <= 0:
         return
     try:
@@ -132,10 +125,9 @@ def log_jsonl(event: dict[str, Any]) -> None:
     Args:
         event: Flat key-value telemetry dictionary.
     """
-    # avoid network/file egress if disabled
-    if get_telemetry_disabled():
+    if settings.telemetry.disabled:
         return
-    rate = get_telemetry_sample()
+    rate = float(settings.telemetry.sample)
     if rate < 1.0 and random.random() >= rate:  # noqa: S311
         return
 
@@ -147,15 +139,16 @@ def log_jsonl(event: dict[str, Any]) -> None:
     with contextlib.suppress(LookupError):
         if rid := _REQUEST_ID.get():
             rec.setdefault("request_id", rid)
-    _ensure_dir(_TELEM_PATH)
-    _maybe_rotate(_TELEM_PATH)
-    with _TELEM_PATH.open("a", encoding="utf-8") as f:
+    path = get_telemetry_jsonl_path()
+    _ensure_dir(path)
+    _maybe_rotate(path)
+    with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
 def get_telemetry_jsonl_path() -> Path:
     """Return the canonical local telemetry JSONL path."""
-    return TELEMETRY_JSONL_PATH
+    return settings.telemetry.jsonl_path
 
 
 def get_analytics_duckdb_path(
@@ -319,7 +312,6 @@ def parse_telemetry_jsonl_counts(
 
 
 __all__ = [
-    "TELEMETRY_JSONL_PATH",
     "TelemetryEventCounts",
     "get_analytics_duckdb_path",
     "get_request_id",

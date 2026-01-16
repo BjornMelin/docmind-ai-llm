@@ -24,7 +24,7 @@ def _build_canonicalization_config() -> CanonicalizationConfig:
     cfg = settings.hashing
     return CanonicalizationConfig(
         version=cfg.canonicalization_version,
-        hmac_secret=cfg.hmac_secret.encode("utf-8"),
+        hmac_secret=cfg.hmac_secret.get_secret_value().encode("utf-8"),
         hmac_secret_version=cfg.hmac_secret_version,
         metadata_keys=cfg.metadata_keys,
     )

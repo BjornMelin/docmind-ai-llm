@@ -33,12 +33,14 @@ def redact_pii(text: str) -> str:
 
 
 def _get_key() -> bytes | None:
-    b64 = (settings.image.img_aes_key_base64 or "").strip()
+    if settings.image_encryption.aes_key_base64 is None:
+        return None
+    b64 = settings.image_encryption.aes_key_base64.get_secret_value().strip()
     if not b64:
         return None
     try:
-        raw = base64.b64decode(b64)
-        if len(raw) not in (16, 24, 32):
+        raw = base64.b64decode(b64, validate=True)
+        if len(raw) != 32:
             return None
         return raw
     except (binascii.Error, ValueError):
@@ -47,7 +49,7 @@ def _get_key() -> bytes | None:
 
 def get_image_kid() -> str | None:
     """Return the configured image key id (kid) for AES-GCM metadata, if any."""
-    kid = (settings.image.img_kid or "").strip()
+    kid = (settings.image_encryption.kid or "").strip()
     return kid or None
 
 
@@ -73,7 +75,7 @@ def encrypt_file(path: str) -> str:
         out_path = p.with_suffix(p.suffix + ".enc")
         out_path.write_bytes(nonce + ct)
         # Optionally delete plaintext after successful encryption
-        if settings.image.img_delete_plaintext:
+        if settings.image_encryption.delete_plaintext:
             with contextlib.suppress(Exception):
                 p.unlink()
         # Do not delete plaintext automatically to allow caller control
