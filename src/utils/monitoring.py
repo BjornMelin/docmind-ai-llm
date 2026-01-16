@@ -161,14 +161,16 @@ def log_error_with_context(
     if kwargs:
         error_context.update(kwargs)
 
-    safe_context = {
-        key: (
-            build_pii_log_entry(str(value), key_id=f"{operation}:{key}").redacted
-            if isinstance(value, str)
-            else value
-        )
-        for key, value in error_context.items()
-    }
+    safe_keys = {"operation", "error_type", "error_redacted", "error_fingerprint"}
+    op_key = operation or "exception"
+    safe_context = {}
+    for key, value in error_context.items():
+        if key in safe_keys or not isinstance(value, str):
+            safe_context[key] = value
+            continue
+        safe_context[key] = build_pii_log_entry(
+            str(value), key_id=f"{op_key}:{key}"
+        ).redacted
     log_jsonl({"error_logged": True, **safe_context})
     logger.error("Operation failed {}", safe_context)
 

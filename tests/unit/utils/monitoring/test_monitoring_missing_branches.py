@@ -8,6 +8,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 from src.utils import monitoring as mon
+from src.utils.log_safety import build_pii_log_entry
 
 pytestmark = pytest.mark.unit
 
@@ -117,7 +118,7 @@ def test_log_error_with_context_accepts_kwargs(monkeypatch: pytest.MonkeyPatch) 
     payload = seen[0]
     assert isinstance(payload, dict)
     assert payload["operation"] == "op"
-    assert payload["user"] == "u1"
+    assert payload["user"] == build_pii_log_entry("u1", key_id="op:user").redacted
 
 
 def test_log_performance_supports_empty_metrics(
