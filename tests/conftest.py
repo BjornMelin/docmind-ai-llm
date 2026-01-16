@@ -91,20 +91,14 @@ def _reset_telemetry_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.config.settings import settings as app_settings
     from src.utils import telemetry as telem
 
-    monkeypatch.setattr(
-        telem, "_TELEM_PATH", Path("./logs/telemetry.jsonl"), raising=False
-    )
     telem.set_request_id(None)
-    monkeypatch.delenv("DOCMIND_TELEMETRY_DISABLED", raising=False)
-    monkeypatch.delenv("DOCMIND_TELEMETRY_SAMPLE", raising=False)
-    monkeypatch.delenv("DOCMIND_TELEMETRY_ROTATE_BYTES", raising=False)
 
     # Keep telemetry tests deterministic even if a developer `.env` exists.
     with suppress(AttributeError):
-        app_settings.telemetry_enabled = True
-        app_settings.telemetry_disabled = False
-        app_settings.telemetry_sample = 1.0
-        app_settings.telemetry_rotate_bytes = 0
+        app_settings.telemetry.disabled = False
+        app_settings.telemetry.sample = 1.0
+        app_settings.telemetry.rotate_bytes = 0
+        app_settings.telemetry.jsonl_path = Path("./logs/telemetry.jsonl")
 
 
 @pytest.fixture(autouse=True)

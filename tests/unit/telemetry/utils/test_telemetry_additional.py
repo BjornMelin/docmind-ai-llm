@@ -5,28 +5,36 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 
-def test_disabled_env_no_write(monkeypatch, tmp_path):
+pytestmark = pytest.mark.unit
+
+
+def test_disabled_env_no_write(tmp_path, monkeypatch):
+    from src.config.settings import settings
     from src.utils import telemetry as t
 
     tp = tmp_path / "telemetry.jsonl"
-    monkeypatch.setattr(t, "_TELEM_PATH", tp)
-    monkeypatch.setenv("DOCMIND_TELEMETRY_DISABLED", "true")
+    monkeypatch.setattr(settings.telemetry, "jsonl_path", tp)
+    monkeypatch.setattr(settings.telemetry, "disabled", True)
     t.log_jsonl({"k": 1})
     assert not tp.exists()
 
 
-def test_sampling_skips_when_rate_zero(monkeypatch, tmp_path):
+def test_sampling_skips_when_rate_zero(tmp_path, monkeypatch):
+    from src.config.settings import settings
     from src.utils import telemetry as t
 
     tp = tmp_path / "telemetry.jsonl"
-    monkeypatch.setattr(t, "_TELEM_PATH", tp)
-    monkeypatch.setenv("DOCMIND_TELEMETRY_SAMPLE", "0.0")
+    monkeypatch.setattr(settings.telemetry, "jsonl_path", tp)
+    monkeypatch.setattr(settings.telemetry, "disabled", False)
+    monkeypatch.setattr(settings.telemetry, "sample", 0.0)
     t.log_jsonl({"k": 2})
     assert not tp.exists()
 
 
-def test_rotation_and_write(monkeypatch, tmp_path):
+def test_rotation_and_write(tmp_path, monkeypatch):
+    from src.config.settings import settings
     from src.utils import telemetry as t
 
     tp = tmp_path / "telemetry.jsonl"
@@ -34,11 +42,10 @@ def test_rotation_and_write(monkeypatch, tmp_path):
     tp.parent.mkdir(parents=True, exist_ok=True)
     tp.write_bytes(b"x" * 10)
     # Set low rotate threshold
-    monkeypatch.setenv("DOCMIND_TELEMETRY_ROTATE_BYTES", "4")
-    monkeypatch.setattr(t, "_TELEM_PATH", tp)
-    # Ensure enabled and full sample
-    monkeypatch.delenv("DOCMIND_TELEMETRY_DISABLED", raising=False)
-    monkeypatch.setenv("DOCMIND_TELEMETRY_SAMPLE", "1.0")
+    monkeypatch.setattr(settings.telemetry, "jsonl_path", tp)
+    monkeypatch.setattr(settings.telemetry, "rotate_bytes", 4)
+    monkeypatch.setattr(settings.telemetry, "disabled", False)
+    monkeypatch.setattr(settings.telemetry, "sample", 1.0)
 
     t.log_jsonl({"k": 3})
     # Rotated file exists
@@ -51,6 +58,7 @@ def test_rotation_and_write(monkeypatch, tmp_path):
 
 
 def test_rotation_rename_error_is_debug_logged(monkeypatch, tmp_path):
+    from src.config.settings import settings
     from src.utils import telemetry as t
 
     class _Stat:
@@ -73,9 +81,10 @@ def test_rotation_rename_error_is_debug_logged(monkeypatch, tmp_path):
             raise OSError("nope")
 
     tp = _P(str(tmp_path / "telemetry.jsonl"))
-    monkeypatch.setattr(t, "_TELEM_PATH", tp)
-    monkeypatch.setenv("DOCMIND_TELEMETRY_ROTATE_BYTES", "1")
-    monkeypatch.setenv("DOCMIND_TELEMETRY_SAMPLE", "1.0")
+    monkeypatch.setattr(settings.telemetry, "rotate_bytes", 1)
+    monkeypatch.setattr(settings.telemetry, "sample", 1.0)
+    monkeypatch.setattr(settings.telemetry, "disabled", False)
+    monkeypatch.setattr(t, "get_telemetry_jsonl_path", lambda: tp, raising=False)
 
     calls: list[str] = []
 

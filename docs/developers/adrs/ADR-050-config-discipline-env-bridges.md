@@ -1,7 +1,7 @@
 ---
 ADR: 050
 Title: Configuration Discipline — Eliminate `os.getenv` Sprawl and Formalize Local Secrets
-Status: Proposed
+Status: Implemented
 Version: 1.1
 Date: 2026-01-10
 Supersedes:
@@ -73,6 +73,18 @@ Re-scored:
 1. Refactor modules to read from `settings` instead of `os.getenv`.
 
 2. Fix the `ADR-XXX` marker and validator error message for `HashingConfig.hmac_secret` and explicitly use it for keyed fingerprints (ADR-047).
+
+### Env contract (canonical vs derived)
+
+To keep configuration ergonomic without adding bespoke wrappers:
+
+- Canonical operator env vars (stable contract):
+  - `DOCMIND_TELEMETRY_DISABLED|SAMPLE|ROTATE_BYTES`
+  - `DOCMIND_IMG_AES_KEY_BASE64|IMG_KID|IMG_DELETE_PLAINTEXT`
+- Derived/advanced env vars may also exist due to nested settings schema and
+  `env_nested_delimiter="__"` (e.g., `DOCMIND_TELEMETRY__JSONL_PATH`).
+- Precedence rule when both are present: the canonical flat env vars win (e.g.,
+  `DOCMIND_TELEMETRY_DISABLED` overrides `DOCMIND_TELEMETRY__DISABLED`).
 
 ## Security & Privacy
 

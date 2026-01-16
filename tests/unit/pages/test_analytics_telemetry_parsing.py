@@ -71,7 +71,9 @@ def test_parse_telemetry_jsonl_counts_uses_canonical_path_by_default(
 ) -> None:
     p = tmp_path / "telemetry.jsonl"
     _write_jsonl(p, ['{"router_selected": true, "route": "semantic_search"}'])
-    monkeypatch.setattr(telemetry_module, "TELEMETRY_JSONL_PATH", p, raising=False)
+    monkeypatch.setattr(
+        telemetry_module.settings.telemetry, "jsonl_path", p, raising=False
+    )
 
     counts = parse_telemetry_jsonl_counts(None, max_lines=10, max_bytes=1024)
 

@@ -21,9 +21,9 @@ def test_encrypt_decrypt_roundtrip(tmp_path, monkeypatch):
     import base64
 
     monkeypatch.setattr(
-        settings.image, "img_aes_key_base64", base64.b64encode(key).decode()
+        settings.image_encryption, "aes_key_base64", base64.b64encode(key).decode()
     )
-    monkeypatch.setattr(settings.image, "img_kid", "kid-1")
+    monkeypatch.setattr(settings.image_encryption, "kid", "kid-1")
 
     p = Path(tmp_path) / "x.bin"
     src = os.urandom(128)

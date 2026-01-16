@@ -13,6 +13,7 @@ import asyncio as _asyncio
 import base64
 import io
 import time as _time
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock, patch
@@ -194,6 +195,28 @@ def no_sleep(request):
             patch.object(_asyncio, "sleep", _async_sleep_noop),
         ):
             yield
+
+
+@pytest.fixture
+def reset_settings_after_test() -> Iterator[None]:
+    """Reset global settings before and after test to avoid pollution."""
+    import importlib
+
+    def _reset_settings() -> None:
+        settings_mod = importlib.import_module("src.config.settings")
+        current = settings_mod.settings
+        if not isinstance(current, settings_mod.DocMindSettings):  # type: ignore[attr-defined]
+            raise TypeError(
+                "src.config.settings.settings was unexpectedly replaced with a "
+                f"{type(current)!r}; expected DocMindSettings"
+            )
+        current.__init__(_env_file=None)  # type: ignore[arg-type]
+        # Clear bootstrap globals so later tests don't inherit dotenv state.
+        settings_mod.reset_bootstrap_state()
+
+    _reset_settings()
+    yield
+    _reset_settings()
 
 
 @pytest.fixture

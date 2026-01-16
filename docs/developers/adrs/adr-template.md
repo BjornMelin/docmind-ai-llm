@@ -1,7 +1,7 @@
 ---
 ADR: <zero-padded number>
 Title: <concise decision>
-Status: <Proposed|Accepted|Deprecated|Superseded>
+Status: <Proposed|Accepted|Implemented|Deprecated|Superseded>
 Version: <X.Y>
 Date: <YYYY-MM-DD>
 Supersedes: <ADR-IDs>

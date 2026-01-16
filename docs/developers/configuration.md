@@ -282,12 +282,15 @@ Device selection MUST occur before any `spacy.load()` call to avoid device alloc
 
 ### 6. Observability & Telemetry
 
-| Variable                                | Type    | Default         | Description                                               |
-| :-------------------------------------- | :------ | :-------------- | :-------------------------------------------------------- |
-| `DOCMIND_OBSERVABILITY__ENABLED`        | boolean | `false`         | Enables OpenTelemetry exporters.                          |
-| `DOCMIND_OBSERVABILITY__PROTOCOL`       | enum    | `http/protobuf` | `grpc` or `http/protobuf`.                                |
-| `DOCMIND_OBSERVABILITY__SAMPLING_RATIO` | float   | `1.0`           | Trace sampling (0.0 to 1.0).                              |
-| `DOCMIND_TELEMETRY_DISABLED`            | boolean | `false`         | **Bridge Variable**: Disables local JSONL telemetry sink. |
+| Variable                                | Type    | Default                  | Description                                                  |
+| :-------------------------------------- | :------ | :----------------------- | :----------------------------------------------------------- |
+| `DOCMIND_OBSERVABILITY__ENABLED`        | boolean | `false`                  | Enables OpenTelemetry exporters.                             |
+| `DOCMIND_OBSERVABILITY__PROTOCOL`       | enum    | `http/protobuf`          | `grpc` or `http/protobuf`.                                   |
+| `DOCMIND_OBSERVABILITY__SAMPLING_RATIO` | float   | `1.0`                    | Trace sampling (0.0 to 1.0).                                 |
+| `DOCMIND_TELEMETRY_DISABLED`            | boolean | `false`                  | Disables local JSONL telemetry sink.                         |
+| `DOCMIND_TELEMETRY_SAMPLE`              | float   | `1.0`                    | Sampling rate for local JSONL events (0.0 to 1.0).           |
+| `DOCMIND_TELEMETRY_ROTATE_BYTES`        | int     | `0`                      | Rotate telemetry log when file reaches N bytes (0 disables). |
+| `DOCMIND_TELEMETRY__JSONL_PATH`         | path    | `./logs/telemetry.jsonl` | Advanced: override JSONL destination path.                   |
 
 ### 7. Embedding & Vision
 
@@ -313,9 +316,9 @@ Device selection MUST occur before any `spacy.load()` call to avoid device alloc
 
 | Variable                              | Type    | Default | Description                                                 |
 | :------------------------------------ | :------ | :------ | :---------------------------------------------------------- |
-| `DOCMIND_IMAGE__IMG_AES_KEY_BASE64`   | secret  | `None`  | AES-256 key (32 bytes) in base64 for page image encryption. |
-| `DOCMIND_IMAGE__IMG_KID`              | string  | `None`  | Key identifier for rotating encryption keys.                |
-| `DOCMIND_IMAGE__IMG_DELETE_PLAINTEXT` | boolean | `false` | Delete original images after successful encryption.         |
+| `DOCMIND_IMG_AES_KEY_BASE64`          | secret  | `None`  | AES-256 key (32 bytes) in base64 for page image encryption. |
+| `DOCMIND_IMG_KID`                     | string  | `None`  | Key identifier for rotating encryption keys.                |
+| `DOCMIND_IMG_DELETE_PLAINTEXT`        | boolean | `false` | Delete original images after successful encryption.         |
 
 ### 10. Database & Persistence
 

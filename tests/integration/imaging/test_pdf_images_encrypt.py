@@ -3,6 +3,7 @@ import os
 import tempfile
 
 import pytest
+from pydantic import SecretStr
 
 
 def _skip_if_no_pymupdf():
@@ -30,7 +31,9 @@ def test_pdf_page_images_encrypted(monkeypatch):
     # Enable encryption
     key = os.urandom(32)
     monkeypatch.setattr(
-        settings.image, "img_aes_key_base64", base64.b64encode(key).decode("ascii")
+        settings.image_encryption,
+        "aes_key_base64",
+        SecretStr(base64.b64encode(key).decode("ascii")),
     )
     settings.processing.encrypt_page_images = True
 

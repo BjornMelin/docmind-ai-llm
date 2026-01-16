@@ -99,7 +99,10 @@ def _get_dotenv_priority_mode() -> DotenvPriorityMode:
     Returns:
         The effective dotenv priority mode.
     """
-    raw = os.getenv(f"{_CONFIG_ENV_PREFIX}DOTENV_PRIORITY")
+    # Intentional direct env read for bootstrap configuration. This runs
+    # before Pydantic settings are constructed and is a narrow exception to
+    # the general "no direct os.getenv/os.environ sprawl" policy.
+    raw = os.environ.get(f"{_CONFIG_ENV_PREFIX}DOTENV_PRIORITY")
     if raw:
         value = raw.strip().lower()
         if value in {"env_first", "dotenv_first"}:
@@ -338,27 +341,45 @@ class OpenAIConfig(BaseModel):
 _DEFAULT_OPENAI_BASE_URL = DEFAULT_OPENAI_BASE_URL
 
 
-class ImageConfig(BaseModel):
-    """Image processing and security settings."""
+class ImageEncryptionConfig(BaseModel):
+    """AES-GCM image encryption settings (AES-256 key; optional)."""
 
     model_config = ConfigDict(validate_assignment=True)
 
-    img_aes_key_base64: str | None = Field(default=None)
-    img_kid: str | None = Field(default=None)
-    img_delete_plaintext: bool = Field(default=False)
+    aes_key_base64: SecretStr | None = Field(default=None, repr=False)
+    kid: str | None = Field(default=None)
+    delete_plaintext: bool = Field(default=False)
 
-    @field_validator("img_aes_key_base64", mode="before")
+    @field_validator("aes_key_base64", mode="before")
     @classmethod
-    def _validate_img_aes_key_base64(cls, v: str | None) -> str | None:
+    def _validate_aes_key_base64(cls, v: object) -> str | None:
         if v is None:
             return None
+        if isinstance(v, SecretStr):
+            v = v.get_secret_value()
+        raw = str(v).strip()
+        if not raw:
+            return None
         try:
-            decoded = base64.b64decode(v, validate=True)
+            decoded = base64.b64decode(raw, validate=True)
         except Exception as exc:
-            raise ValueError("img_aes_key_base64 must be valid base64") from exc
+            raise ValueError("DOCMIND_IMG_AES_KEY_BASE64 must be valid base64") from exc
         if len(decoded) != 32:
-            raise ValueError("img_aes_key_base64 must decode to 32 bytes (AES-256)")
-        return v
+            raise ValueError(
+                "DOCMIND_IMG_AES_KEY_BASE64 must decode to 32 bytes (AES-256)"
+            )
+        return raw
+
+
+class TelemetryConfig(BaseModel):
+    """Local-first JSONL telemetry controls (ADR-032)."""
+
+    model_config = ConfigDict(validate_assignment=True)
+
+    disabled: bool = Field(default=False)
+    sample: float = Field(default=1.0, ge=0.0, le=1.0)
+    rotate_bytes: int = Field(default=0, ge=0)
+    jsonl_path: Path = Field(default=Path("./logs/telemetry.jsonl"))
 
 
 class SecurityConfig(BaseModel):
@@ -720,8 +741,8 @@ class HashingConfig(BaseModel):
     """Deterministic hashing and canonicalisation configuration."""
 
     canonicalization_version: str = Field(default="1")
-    hmac_secret: str = Field(
-        default="docmind-dev-secret-please-override-0123456789",
+    hmac_secret: SecretStr = Field(
+        default=SecretStr("docmind-dev-secret-please-override-0123456789"),
         repr=False,
         description=(
             "Shared secret for HMAC canonical hashes. Override via environment "
@@ -741,8 +762,8 @@ class HashingConfig(BaseModel):
 
     @field_validator("hmac_secret")
     @classmethod
-    def _validate_hmac_secret(cls, value: str) -> str:
-        if len(value.encode("utf-8")) < 32:
+    def _validate_hmac_secret(cls, value: SecretStr) -> SecretStr:
+        if len(value.get_secret_value().encode("utf-8")) < 32:
             raise ValueError(
                 "DOCMIND_HASHING__HMAC_SECRET must be at least 32 bytes "
                 "for HMAC strength"
@@ -985,35 +1006,9 @@ class DocMindSettings(BaseSettings):
             "used for telemetry/resource tagging (DOCMIND_ENVIRONMENT)."
         ),
     )
-    telemetry_enabled: bool = Field(
-        default=True,
-        description=(
-            "Convenience enable/disable toggle for local JSONL telemetry sink "
-            "(DOCMIND_TELEMETRY_ENABLED)."
-        ),
-    )
-    telemetry_disabled: bool = Field(
-        default=False,
-        description=(
-            "Disable local JSONL telemetry sink regardless of telemetry_enabled "
-            "(DOCMIND_TELEMETRY_DISABLED)."
-        ),
-    )
-    telemetry_sample: float = Field(
-        default=1.0,
-        ge=0.0,
-        le=1.0,
-        description=(
-            "Sampling rate for local JSONL telemetry events (DOCMIND_TELEMETRY_SAMPLE)."
-        ),
-    )
-    telemetry_rotate_bytes: int = Field(
-        default=0,
-        ge=0,
-        description=(
-            "Rotate local telemetry JSONL file at this size in bytes (0 disables) "
-            "(DOCMIND_TELEMETRY_ROTATE_BYTES)."
-        ),
+    telemetry: TelemetryConfig = Field(
+        default_factory=TelemetryConfig,
+        description="Local JSONL telemetry configuration.",
     )
 
     # Feature flags
@@ -1069,7 +1064,9 @@ class DocMindSettings(BaseSettings):
     graphrag_cfg: GraphRAGConfig = Field(default_factory=GraphRAGConfig)
     snapshots: SnapshotConfig = Field(default_factory=SnapshotConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
-    image: ImageConfig = Field(default_factory=ImageConfig)
+    image_encryption: ImageEncryptionConfig = Field(
+        default_factory=ImageEncryptionConfig
+    )
     hybrid: HybridConfig = Field(default_factory=HybridConfig)
 
     # Alias fields mapped to nested configs for ergonomic top-level
@@ -1081,15 +1078,18 @@ class DocMindSettings(BaseSettings):
     # Top-level LLM context window cap (ADR-004/024)
     llm_context_window_max: int = Field(default=131072, ge=8192, le=200000)
 
-    # Image encryption aliases (ADR-031 bridge)
-    img_aes_key_base64: str | None = Field(default=None)
-    img_kid: str | None = Field(default=None)
-    img_delete_plaintext: bool | None = Field(default=None)
+    # Flat env bridges (SPEC-031): keep existing flat env vars without
+    # introducing new nested namespaces.
+    telemetry_disabled: bool | None = Field(default=None, exclude=True)
+    telemetry_sample: float | None = Field(default=None, exclude=True)
+    telemetry_rotate_bytes: int | None = Field(default=None, exclude=True)
+    img_aes_key_base64: str | None = Field(default=None, repr=False, exclude=True)
+    img_kid: str | None = Field(default=None, exclude=True)
+    img_delete_plaintext: bool | None = Field(default=None, exclude=True)
 
     @model_validator(mode="after")
     def _apply_aliases_and_validate(self) -> "DocMindSettings":
         self._apply_alias_overrides()
-        self._apply_telemetry_bridge()
         self._map_hybrid_to_retrieval()
         self._normalize_persistence_paths()
         self._validate_endpoints_security()
@@ -1143,15 +1143,6 @@ class DocMindSettings(BaseSettings):
             file_secret_settings,
         )
 
-    def _apply_telemetry_bridge(self) -> None:
-        """Apply telemetry enabled/disabled bridge semantics.
-
-        ``telemetry_disabled`` is the hard kill switch. ``telemetry_enabled`` is a
-        convenience toggle for callers/docs that prefer an enable flag.
-        """
-        if not self.telemetry_enabled:
-            self.telemetry_disabled = True
-
     def _apply_alias_overrides(self) -> None:
         alias_targets: dict[str, tuple[object, str, Callable[[Any], Any]]] = {
             "model": (self.vllm, "model", str),
@@ -1160,16 +1151,25 @@ class DocMindSettings(BaseSettings):
             "chunk_size": (self.processing, "chunk_size", int),
             "chunk_overlap": (self.processing, "chunk_overlap", int),
             "enable_multi_agent": (self.agents, "enable_multi_agent", bool),
-            "img_aes_key_base64": (self.image, "img_aes_key_base64", str),
-            "img_kid": (self.image, "img_kid", str),
-            "img_delete_plaintext": (self.image, "img_delete_plaintext", bool),
+            # Flat env vars bridged into nested configs.
+            "telemetry_disabled": (self.telemetry, "disabled", bool),
+            "telemetry_sample": (self.telemetry, "sample", float),
+            "telemetry_rotate_bytes": (self.telemetry, "rotate_bytes", int),
+            "img_aes_key_base64": (
+                self.image_encryption,
+                "aes_key_base64",
+                lambda x: x,
+            ),
+            "img_kid": (self.image_encryption, "kid", str),
+            "img_delete_plaintext": (self.image_encryption, "delete_plaintext", bool),
         }
         for field, (target, attr, caster) in alias_targets.items():
             value = getattr(self, field, None)
             if value is None:
                 continue
-            with suppress(AttributeError, TypeError, ValueError):
-                setattr(target, attr, caster(value))
+            if isinstance(value, SecretStr):
+                value = value.get_secret_value()
+            setattr(target, attr, caster(value))
 
     def _map_hybrid_to_retrieval(self) -> None:
         try:
@@ -1505,109 +1505,6 @@ settings = DocMindSettings(_env_file=None)  # type: ignore[arg-type]
 _DOTENV_BOOTSTRAPPED = False
 
 
-def _parse_env_bool(value: str) -> bool:
-    """Parse a loose boolean env var string.
-
-    Args:
-        value: Raw env var string.
-
-    Returns:
-        True for common truthy values: `1`, `true`, `yes`, `on` (case-insensitive).
-    """
-    return str(value).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def get_telemetry_disabled() -> bool:
-    """Return effective telemetry disabled flag.
-
-    The process environment is checked first to keep tests hermetic and to honor
-    runtime env overrides without requiring a settings reload.
-
-    Returns:
-        True if telemetry is disabled for this process.
-    """
-    raw = os.getenv("DOCMIND_TELEMETRY_DISABLED")
-    if raw is not None:
-        return _parse_env_bool(raw)
-    return bool(getattr(settings, "telemetry_disabled", False))
-
-
-def get_telemetry_sample() -> float:
-    """Return effective telemetry sample rate.
-
-    Returns:
-        Sampling rate in the inclusive range `[0.0, 1.0]`.
-    """
-    raw = os.getenv("DOCMIND_TELEMETRY_SAMPLE")
-    if raw is not None:
-        try:
-            value = float(raw)
-        except (TypeError, ValueError):
-            value = 1.0
-    else:
-        value = float(getattr(settings, "telemetry_sample", 1.0))
-    return max(0.0, min(1.0, value))
-
-
-def get_telemetry_rotate_bytes() -> int:
-    """Return effective telemetry rotate-bytes limit.
-
-    Returns:
-        Maximum file size in bytes before rotating telemetry logs. `0` disables
-        rotation.
-    """
-    raw = os.getenv("DOCMIND_TELEMETRY_ROTATE_BYTES")
-    if raw is not None:
-        try:
-            value = int(raw)
-        except (TypeError, ValueError):
-            value = 0
-    else:
-        value = int(getattr(settings, "telemetry_rotate_bytes", 0))
-    return max(0, value)
-
-
-def apply_settings_in_place(current: DocMindSettings, updated: DocMindSettings) -> None:
-    """Update an existing settings singleton in-place (do not rebind).
-
-    Many modules follow the recommended import pattern `from src.config import settings`
-    which captures the singleton instance at import time. Rebinding would create
-    stale references, so we mutate the existing instance.
-
-    Args:
-        current: Current singleton instance to mutate.
-        updated: New settings instance to copy values from.
-
-    Raises:
-        TypeError: If either argument is not a `DocMindSettings` instance.
-    """
-    if not isinstance(current, DocMindSettings) or not isinstance(
-        updated, DocMindSettings
-    ):
-        raise TypeError("apply_settings_in_place expects DocMindSettings instances")
-
-    field_names = set(DocMindSettings.model_fields)
-    current_dict = cast(dict[str, Any], current.__dict__)
-    for key in list(current_dict):
-        if key not in field_names:
-            del current_dict[key]
-
-    for field in DocMindSettings.model_fields:
-        object.__setattr__(current, field, getattr(updated, field))
-
-    object.__setattr__(
-        current,
-        "__pydantic_fields_set__",
-        set(getattr(updated, "__pydantic_fields_set__", set())),
-    )
-    object.__setattr__(
-        current, "__pydantic_extra__", getattr(updated, "__pydantic_extra__", None)
-    )
-    object.__setattr__(
-        current, "__pydantic_private__", getattr(updated, "__pydantic_private__", None)
-    )
-
-
 def reset_bootstrap_state() -> None:
     """Reset dotenv/bootstrap global state (tests only)."""
     global _DOTENV_BOOTSTRAPPED, _DOTENV_PRIORITY_MODE
@@ -1652,8 +1549,7 @@ def bootstrap_settings(
     _apply_env_mask(opts.env_mask_keys)
 
     _apply_spacy_env_bridge()
-    updated = DocMindSettings(_env_file=dotenv_path)  # type: ignore[arg-type]
-    apply_settings_in_place(settings, updated)
+    settings.__init__(_env_file=dotenv_path)  # type: ignore[arg-type]
 
     # Optional: overlay allowlisted env vars from validated settings values.
     _apply_env_overlay(opts.env_overlays)
@@ -1675,17 +1571,15 @@ __all__ = [
     "DocMindSettings",
     "EmbeddingConfig",
     "GraphRAGConfig",
+    "ImageEncryptionConfig",
     "MonitoringConfig",
     "ProcessingConfig",
     "RetrievalConfig",
     "SemanticCacheConfig",
     "SpacyNlpSettings",
+    "TelemetryConfig",
     "UIConfig",
     "VLLMConfig",
-    "apply_settings_in_place",
     "bootstrap_settings",
-    "get_telemetry_disabled",
-    "get_telemetry_rotate_bytes",
-    "get_telemetry_sample",
     "settings",
 ]

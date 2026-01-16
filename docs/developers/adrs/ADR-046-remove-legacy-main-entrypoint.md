@@ -1,7 +1,7 @@
 ---
 ADR: 046
 Title: Remove Legacy `src/main.py` Entrypoint
-Status: Accepted
+Status: Implemented
 Version: 1.0
 Date: 2026-01-09
 Supersedes:

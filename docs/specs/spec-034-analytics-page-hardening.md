@@ -57,7 +57,7 @@ Recourse: when a cap is hit, stop reading additional lines/bytes, log a warning,
 
 ### Canonical telemetry path
 
-Use the same path as the telemetry emitter by referencing a shared public constant or getter (e.g., `TELEMETRY_JSONL_PATH` or `get_telemetry_jsonl_path()` in `src/utils/telemetry.py`) from the Analytics page. Add a test that asserts the analytics helper reads from the same path.
+Use the same path as the telemetry emitter by referencing `get_telemetry_jsonl_path()` in `src/utils/telemetry.py` from the Analytics page. Add a test that asserts the analytics helper reads from the same canonical path.
 
 ### Canonical analytics DuckDB path
 

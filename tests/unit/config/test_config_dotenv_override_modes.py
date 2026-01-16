@@ -27,8 +27,7 @@ def _restore_env(keys: list[str] | None, snapshot: dict[str, str]) -> None:
 
 
 def _reset_settings_module(mod) -> None:  # type: ignore[no-untyped-def]
-    fresh = mod.DocMindSettings(_env_file=None)  # type: ignore[arg-type]
-    mod.apply_settings_in_place(mod.settings, fresh)
+    mod.settings.__init__(_env_file=None)  # type: ignore[arg-type]
     mod.reset_bootstrap_state()
 
 

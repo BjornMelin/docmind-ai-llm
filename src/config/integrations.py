@@ -138,12 +138,6 @@ def startup_init(cfg: "DocMindSettings" = settings) -> None:
                     exc,
                 )
 
-        # Telemetry env bridge (honor disable across env-based consumers).
-        if bool(getattr(cfg, "telemetry_disabled", False)) or not bool(
-            getattr(cfg, "telemetry_enabled", True)
-        ):
-            os.environ["DOCMIND_TELEMETRY_DISABLED"] = "true"
-
         # Observability: log config highlights
         try:
             logger.info(

@@ -16,7 +16,7 @@ import streamlit as st
 from pydantic import ValidationError
 
 from src.config.env_persistence import persist_env
-from src.config.settings import DocMindSettings, apply_settings_in_place, settings
+from src.config.settings import DocMindSettings, settings
 from src.retrieval import adapter_registry
 from src.ui.components.provider_badge import provider_badge
 from src.utils.telemetry import log_jsonl
@@ -256,7 +256,10 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
         }
     )
     # Apply updated settings in-place so existing imports keep the same instance.
-    apply_settings_in_place(settings, updated)
+    # NOTE: For our singleton Pydantic settings object, re-calling __init__ with
+    # new data is the canonical pattern for in-place reload after removing
+    # apply_settings_in_place(), and is intentional here.
+    settings.__init__(**updated.model_dump(mode="python"))
 
     model_label = validated.model or validated.vllm.model
     try:

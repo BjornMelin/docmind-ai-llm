@@ -7,19 +7,21 @@ import pytest
 pytestmark = pytest.mark.unit
 
 
-def test_log_jsonl_sampling_and_disable(monkeypatch, tmp_path):
+def test_log_jsonl_sampling_and_disable(tmp_path):
+    from src.config.settings import settings
     from src.utils import telemetry as t
 
     # Redirect path
-    monkeypatch.setattr(t, "_TELEM_PATH", Path(tmp_path) / "t.jsonl")
+    p = Path(tmp_path) / "t.jsonl"
+    settings.telemetry.jsonl_path = p
 
     # Disable entirely
-    monkeypatch.setenv("DOCMIND_TELEMETRY_DISABLED", "true")
+    settings.telemetry.disabled = True
     t.log_jsonl({"a": 1})
-    assert not t._TELEM_PATH.exists()
+    assert not p.exists()
 
     # Enable with sampling 1.0; should write
-    monkeypatch.setenv("DOCMIND_TELEMETRY_DISABLED", "false")
-    monkeypatch.setenv("DOCMIND_TELEMETRY_SAMPLE", "1.0")
+    settings.telemetry.disabled = False
+    settings.telemetry.sample = 1.0
     t.log_jsonl({"b": 2})
-    assert t._TELEM_PATH.exists()
+    assert p.exists()
