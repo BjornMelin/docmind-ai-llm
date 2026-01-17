@@ -43,9 +43,9 @@ jobs:
       - name: Sync environment (matrix aware)
         run: |
           if [ "${{ matrix.profile }}" = "llama" ]; then
-            uv sync --group test --extra observability --extra graph --group quality --frozen
+            uv sync --group test --extra observability --extra graph --extra eval --group quality --frozen
           else
-            uv sync --group test --extra observability --group quality --frozen
+            uv sync --group test --extra observability --extra eval --group quality --frozen
           fi
 
       - name: Quality Gate - Ruff (format+lint)
