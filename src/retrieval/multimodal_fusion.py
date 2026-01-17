@@ -21,7 +21,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import TYPE_CHECKING, Any
 
 from llama_index.core.schema import NodeWithScore, QueryBundle
 from loguru import logger
@@ -30,6 +30,7 @@ from qdrant_client import QdrantClient
 from src.config import settings
 from src.retrieval.hybrid import HybridParams, ServerHybridRetriever
 from src.retrieval.rrf import rrf_merge
+from src.utils.log_safety import build_pii_log_entry
 from src.utils.qdrant_utils import nodes_from_query_result
 from src.utils.siglip_adapter import SiglipEmbedding
 from src.utils.storage import get_client_config
@@ -39,9 +40,9 @@ if TYPE_CHECKING:
     import numpy as np
     from PIL import Image
 
-    ImageInput: TypeAlias = Image.Image | np.ndarray | bytes | str
+    type ImageInput = Image.Image | np.ndarray | bytes | str
 else:
-    ImageInput: TypeAlias = Any
+    type ImageInput = Any
 
 
 @dataclass(frozen=True)
@@ -111,7 +112,14 @@ class ImageSiglipRetriever:
                             dim=len(vec_list),
                         )
                     except Exception as exc:  # pragma: no cover - best effort
-                        logger.warning("SigLIP collection check failed: {}", exc)
+                        redaction = build_pii_log_entry(
+                            str(exc), key_id="multimodal_fusion.collection_check"
+                        )
+                        logger.warning(
+                            "SigLIP collection check failed (error_type={}, error={})",
+                            type(exc).__name__,
+                            redaction.redacted,
+                        )
                     self._collection_checked = True
 
         try:
@@ -126,7 +134,14 @@ class ImageSiglipRetriever:
                 timeout=timeout_s,
             )
         except Exception as exc:  # pragma: no cover - fail open
-            logger.debug("Image query_points failed: {}", exc)
+            redaction = build_pii_log_entry(
+                str(exc), key_id="multimodal_fusion.query_points"
+            )
+            logger.debug(
+                "Image query_points failed (error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
             return []
 
         nodes = nodes_from_query_result(
@@ -144,7 +159,14 @@ class ImageSiglipRetriever:
         try:
             vec = self._embedder.get_text_embedding(qtext)
         except Exception as exc:  # pragma: no cover - fail open
-            logger.debug("SigLIP text embedding failed: {}", exc)
+            redaction = build_pii_log_entry(
+                str(exc), key_id="multimodal_fusion.text_embedding"
+            )
+            logger.debug(
+                "SigLIP text embedding failed (error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
             return []
         return self._query_vec(vec)
 
@@ -155,7 +177,14 @@ class ImageSiglipRetriever:
         try:
             vec = self._embedder.get_image_embedding(image)
         except Exception as exc:  # pragma: no cover - fail open
-            logger.debug("SigLIP image embedding failed: {}", exc)
+            redaction = build_pii_log_entry(
+                str(exc), key_id="multimodal_fusion.image_embedding"
+            )
+            logger.debug(
+                "SigLIP image embedding failed (error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
             return []
         return self._query_vec(vec, top_k=top_k)
 

@@ -22,6 +22,7 @@ from qdrant_client import models as qmodels
 from src.config.integrations import get_settings_embed_model
 from src.retrieval.sparse_query import encode_to_qdrant as _encode_sparse_query
 from src.utils.exceptions import IMPORT_EXCEPTIONS
+from src.utils.log_safety import build_pii_log_entry
 from src.utils.qdrant_exceptions import QDRANT_SCHEMA_EXCEPTIONS
 from src.utils.qdrant_utils import (
     QDRANT_PAYLOAD_FIELDS,
@@ -83,7 +84,12 @@ class ServerHybridRetriever:
         except (
             QDRANT_SCHEMA_EXCEPTIONS
         ) as exc:  # pragma: no cover - defensive best-effort
-            logger.debug("Hybrid schema ensure skipped: %s", exc)
+            redaction = build_pii_log_entry(str(exc), key_id="hybrid.schema.ensure")
+            logger.debug(
+                "Hybrid schema ensure skipped (error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
 
     def close(self) -> None:
         """Close underlying client (best-effort)."""
@@ -266,7 +272,12 @@ class ServerHybridRetriever:
                 }
             )
         except (OSError, ValueError, RuntimeError) as exc:
-            logger.debug("Telemetry emit skipped: %s", exc)
+            redaction = build_pii_log_entry(str(exc), key_id="hybrid.telemetry.emit")
+            logger.debug(
+                "Telemetry emit skipped (error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
 
     def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:
         """Execute server-side hybrid retrieval.
@@ -305,7 +316,12 @@ class ServerHybridRetriever:
             result = self._query_qdrant(prefetch, fused_fetch_k)
         # Network/remote path: treat common connectivity or query errors as empty result
         except QDRANT_SCHEMA_EXCEPTIONS as exc:  # pragma: no cover
-            logger.warning("Qdrant hybrid query failed: {}", exc)
+            redaction = build_pii_log_entry(str(exc), key_id="hybrid.qdrant.query")
+            logger.warning(
+                "Qdrant hybrid query failed (error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
             # Dense-only fallback via vector index is not available here; return empty
             return []
 

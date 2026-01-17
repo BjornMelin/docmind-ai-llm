@@ -66,7 +66,10 @@ def ensure_default_adapter() -> None:
     try:
         factory = build_llama_index_factory()
     except MissingLlamaIndexError as exc:
-        logger.debug("Skipping LlamaIndex adapter registration: {}", exc)
+        logger.debug(
+            "Skipping LlamaIndex adapter registration (error_type={})",
+            type(exc).__name__,
+        )
         return
     register_adapter(factory)
 
