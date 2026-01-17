@@ -540,8 +540,15 @@ def supervisor_stream_shim() -> Mock:
     """
 
     class _Compiled:
-        def stream(self, initial_state, config=None, stream_mode: str | None = None):
-            del config, stream_mode
+        def stream(
+            self,
+            initial_state,
+            config=None,
+            context=None,
+            stream_mode: str | None = None,
+            **_kwargs,
+        ):
+            del config, context, stream_mode, _kwargs
             # Copy initial state and append a deterministic assistant message
             messages = list(initial_state.get("messages", []))
             messages.append(SimpleNamespace(content="Shim: processed successfully"))
@@ -551,7 +558,8 @@ def supervisor_stream_shim() -> Mock:
             yield final
 
     class _Graph:
-        def compile(self, checkpointer=None):
+        def compile(self, checkpointer=None, store=None, **_kwargs):
+            del checkpointer, store, _kwargs
             return _Compiled()
 
     return _Graph()
