@@ -128,9 +128,18 @@ def test_persist_vector_index_failure_records_error(tmp_path: Path) -> None:
 
     log_path = workspace / "errors.jsonl"
     assert log_path.exists()
-    contents = log_path.read_text(encoding="utf-8")
-    assert "persist_vector" in contents
-    assert "boom" in contents
+    entries = [
+        json.loads(line)
+        for line in log_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert entries
+    assert any(entry.get("stage") == "persist_vector" for entry in entries)
+    assert any(entry.get("error_type") == "RuntimeError" for entry in entries)
+    assert any(
+        str(entry.get("error", "")).startswith("[redacted:") for entry in entries
+    )
+    assert "boom" not in log_path.read_text(encoding="utf-8")
 
 
 def test_persist_graph_store_failure_records_error(tmp_path: Path) -> None:
@@ -148,9 +157,18 @@ def test_persist_graph_store_failure_records_error(tmp_path: Path) -> None:
 
     log_path = workspace / "errors.jsonl"
     assert log_path.exists()
-    data = log_path.read_text(encoding="utf-8")
-    assert "persist_graph" in data
-    assert "graph-broke" in data
+    entries = [
+        json.loads(line)
+        for line in log_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert entries
+    assert any(entry.get("stage") == "persist_graph" for entry in entries)
+    assert any(entry.get("error_type") == "RuntimeError" for entry in entries)
+    assert any(
+        str(entry.get("error", "")).startswith("[redacted:") for entry in entries
+    )
+    assert "graph-broke" not in log_path.read_text(encoding="utf-8")
 
 
 def test_snapshot_manager_includes_graph_exports(tmp_path: Path) -> None:

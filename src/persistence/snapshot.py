@@ -37,6 +37,7 @@ from src.persistence.snapshot_writer import (
 from src.persistence.snapshot_writer import (
     write_manifest as _writer_write_manifest,
 )
+from src.utils.log_safety import build_pii_log_entry
 
 try:  # pragma: no cover - optional monitoring dependencies
     from src.utils.monitoring import log_performance
@@ -144,7 +145,7 @@ def _emit_snapshot_log(
     """Emit a structured log entry for snapshot operations."""
     logger.bind(
         snapshot_stage=stage, status=status, snapshot_id=snapshot_id, **extras
-    ).info("snapshot.%s", stage)
+    ).info("snapshot.{}", stage)
 
 
 def _append_error_record(base_dir: Path, payload: dict[str, Any]) -> None:
@@ -213,9 +214,14 @@ def begin_snapshot(base_dir: Path | None = None) -> Path:
         try:
             _release_active_lock()
         except SnapshotLockError as release_error:  # pragma: no cover - defensive
+            redaction = build_pii_log_entry(
+                str(release_error), key_id="snapshot.release_lock"
+            )
             logger.warning(
-                "Failed to release snapshot lock after workspace error: %s",
-                release_error,
+                "Failed to release snapshot lock after workspace error "
+                "(error_type={}, error={})",
+                type(release_error).__name__,
+                redaction.redacted,
             )
         raise
     return workspace.root
@@ -253,11 +259,13 @@ def write_manifest(tmp_dir: Path, manifest_meta: dict[str, Any]) -> None:
             RuntimeError,
             ValueError,
         ) as exc:  # pragma: no cover - defensive
+            redaction = build_pii_log_entry(str(exc), key_id="snapshot.write_manifest")
             _emit_snapshot_log(
                 "write_manifest",
                 status="failure",
                 snapshot_id=snapshot_id,
-                error=str(exc),
+                error=redaction.redacted,
+                error_type=type(exc).__name__,
                 error_code="manifest_write_failed",
                 retryable=False,
             )
@@ -266,7 +274,8 @@ def write_manifest(tmp_dir: Path, manifest_meta: dict[str, Any]) -> None:
                 {
                     "stage": "write_manifest",
                     "snapshot_id": snapshot_id,
-                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "error": redaction.redacted,
                     "error_code": "manifest_write_failed",
                 },
             )
@@ -338,7 +347,7 @@ def finalize_snapshot(tmp_dir: Path, *, base_dir: Path | None = None) -> Path:
                 duration_seconds=duration,
             )
             _pulse_lock()
-            logger.info("Snapshot finalized at %s", destination)
+            logger.info("Snapshot finalized at {}", destination.name)
             return destination
         except (
             OSError,
@@ -347,17 +356,20 @@ def finalize_snapshot(tmp_dir: Path, *, base_dir: Path | None = None) -> Path:
             ValueError,
         ) as exc:  # pragma: no cover - defensive
             duration = time.perf_counter() - start
+            redaction = build_pii_log_entry(str(exc), key_id="snapshot.finalize")
             log_performance(
                 operation="snapshot_finalize",
                 success=False,
                 duration_seconds=duration,
-                error=str(exc),
+                error_type=type(exc).__name__,
+                error=redaction.redacted,
             )
             _emit_snapshot_log(
                 "finalize",
                 status="failure",
                 snapshot_id=version_name,
-                error=str(exc),
+                error=redaction.redacted,
+                error_type=type(exc).__name__,
                 error_code="snapshot_finalize_failed",
                 retryable=False,
             )
@@ -366,7 +378,8 @@ def finalize_snapshot(tmp_dir: Path, *, base_dir: Path | None = None) -> Path:
                 {
                     "stage": "finalize",
                     "snapshot_id": version_name,
-                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "error": redaction.redacted,
                     "error_code": "snapshot_finalize_failed",
                 },
             )
@@ -425,11 +438,13 @@ def persist_vector_index(index: Any, out_dir: Path) -> None:
                 persist_dir=str(out_dir)
             )
         except Exception as exc:
+            redaction = build_pii_log_entry(str(exc), key_id="snapshot.persist_vector")
             _emit_snapshot_log(
                 "persist_vector",
                 status="failure",
                 snapshot_id=snapshot_id,
-                error=str(exc),
+                error=redaction.redacted,
+                error_type=type(exc).__name__,
                 error_code="vector_persist_failed",
                 retryable=False,
             )
@@ -438,13 +453,12 @@ def persist_vector_index(index: Any, out_dir: Path) -> None:
                 {
                     "stage": "persist_vector",
                     "snapshot_id": snapshot_id,
-                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "error": redaction.redacted,
                     "error_code": "vector_persist_failed",
                 },
             )
-            raise SnapshotPersistenceError(
-                f"Persist vector index failed: {exc}"
-            ) from exc
+            raise SnapshotPersistenceError("Persist vector index failed") from exc
         _emit_snapshot_log("persist_vector", status="success", snapshot_id=snapshot_id)
         _pulse_lock()
 
@@ -462,11 +476,13 @@ def persist_graph_store(store: Any, out_dir: Path) -> None:
             except TypeError:
                 store.persist(str(out_dir))
         except Exception as exc:
+            redaction = build_pii_log_entry(str(exc), key_id="snapshot.persist_graph")
             _emit_snapshot_log(
                 "persist_graph",
                 status="failure",
                 snapshot_id=snapshot_id,
-                error=str(exc),
+                error=redaction.redacted,
+                error_type=type(exc).__name__,
                 error_code="graph_persist_failed",
                 retryable=False,
             )
@@ -475,13 +491,12 @@ def persist_graph_store(store: Any, out_dir: Path) -> None:
                 {
                     "stage": "persist_graph",
                     "snapshot_id": snapshot_id,
-                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "error": redaction.redacted,
                     "error_code": "graph_persist_failed",
                 },
             )
-            raise SnapshotPersistenceError(
-                f"Persist graph store failed: {exc}"
-            ) from exc
+            raise SnapshotPersistenceError("Persist graph store failed") from exc
         _emit_snapshot_log("persist_graph", status="success", snapshot_id=snapshot_id)
         _pulse_lock()
 
@@ -508,7 +523,13 @@ def load_vector_index(snapshot_dir: Path | None = None) -> Any | None:
         ValueError,
         AttributeError,
     ) as exc:  # pragma: no cover
-        logger.debug("Unable to load vector index from %s: %s", vec_dir, exc)
+        redaction = build_pii_log_entry(str(exc), key_id="snapshot.load_vector")
+        logger.debug(
+            "Unable to load vector index (dir={} error_type={} error={})",
+            vec_dir.name,
+            type(exc).__name__,
+            redaction.redacted,
+        )
         return None
 
 
@@ -535,7 +556,13 @@ def load_property_graph_index(snapshot_dir: Path | None = None) -> Any | None:
         ValueError,
         AttributeError,
     ) as exc:  # pragma: no cover
-        logger.debug("Unable to load property graph index from %s: %s", graph_dir, exc)
+        redaction = build_pii_log_entry(str(exc), key_id="snapshot.load_graph")
+        logger.debug(
+            "Unable to load property graph index (dir={} error_type={} error={})",
+            graph_dir.name,
+            type(exc).__name__,
+            redaction.redacted,
+        )
         return None
 
 
@@ -567,7 +594,7 @@ def recover_snapshots(base_dir: Path | None = None) -> None:
     for candidate in paths.base_dir.glob("_tmp-*"):
         if candidate.is_dir():
             shutil.rmtree(candidate, ignore_errors=True)
-            logger.debug("Removed stale workspace %s", candidate)
+            logger.debug("Removed stale workspace {}", candidate.name)
 
     for stale_lock in paths.base_dir.glob(".lock.stale-*"):
         with suppress(FileNotFoundError):
@@ -586,7 +613,7 @@ def recover_snapshots(base_dir: Path | None = None) -> None:
                     current_target = candidate
 
     if current_target is not None:
-        logger.debug("CURRENT pointer verified for %s", current_target)
+        logger.debug("CURRENT pointer verified for {}", current_target.name)
         return
 
     versions = sorted(
@@ -601,7 +628,7 @@ def recover_snapshots(base_dir: Path | None = None) -> None:
 
     latest = versions[-1].name
     _write_current_pointer(paths, latest)
-    logger.info("Recovered CURRENT pointer -> %s", latest)
+    logger.info("Recovered CURRENT pointer -> {}", latest)
 
 
 def _hash_file(path: Path) -> str:

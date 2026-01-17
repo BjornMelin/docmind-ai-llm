@@ -199,13 +199,21 @@ def _export_graphs(
                 duration_ms=(time.perf_counter() - start_json) * 1000.0,
             )
         except Exception as exc:
-            logger.opt(exception=exc).warning("Graph JSONL export failed (snapshot)")
+            from src.utils.log_safety import build_pii_log_entry
+
+            redaction = build_pii_log_entry(str(exc), key_id="snapshot.graph_jsonl")
+            logger.warning(
+                "Graph JSONL export failed (snapshot) (error_type={} error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
             log_export_event(
                 {
                     "export_performed": False,
                     "export_type": "graph_jsonl",
                     "context": "snapshot",
-                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "error": redaction.redacted,
                 }
             )
 
@@ -225,13 +233,21 @@ def _export_graphs(
                 duration_ms=(time.perf_counter() - start_parquet) * 1000.0,
             )
         except Exception as exc:
-            logger.opt(exception=exc).warning("Graph Parquet export failed (snapshot)")
+            from src.utils.log_safety import build_pii_log_entry
+
+            redaction = build_pii_log_entry(str(exc), key_id="snapshot.graph_parquet")
+            logger.warning(
+                "Graph Parquet export failed (snapshot) (error_type={} error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
             log_export_event(
                 {
                     "export_performed": False,
                     "export_type": "graph_parquet",
                     "context": "snapshot",
-                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "error": redaction.redacted,
                 }
             )
 
@@ -370,20 +386,34 @@ def _collect_corpus_paths(settings_obj: Any) -> tuple[list[Path], Path]:
         with manifest_file.open("w") as f:
             json.dump({"files": [str(p) for p in corpus_paths]}, f)
     except OSError as e:
-        # Log permission errors at warning level with full details
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(e), key_id="snapshot.corpus_manifest_cache")
+        path_name = manifest_file.name
         if e.errno in (errno.EACCES, errno.EPERM):
-            logger.opt(exception=e).warning(
-                "Permission denied writing corpus manifest at {}",
-                manifest_file,
+            logger.warning(
+                "Permission denied writing corpus manifest at {} "
+                "(error_type={} error={})",
+                path_name,
+                type(e).__name__,
+                redaction.redacted,
             )
         else:
-            logger.opt(exception=e).debug(
-                "Failed to cache corpus manifest at {}",
-                manifest_file,
+            logger.debug(
+                "Failed to cache corpus manifest at {} (error_type={} error={})",
+                path_name,
+                type(e).__name__,
+                redaction.redacted,
             )
     except Exception as e:
-        logger.opt(exception=e).debug(
-            "Failed to cache corpus manifest at {}", manifest_file
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(e), key_id="snapshot.corpus_manifest_cache")
+        logger.debug(
+            "Failed to cache corpus manifest at {} (error_type={} error={})",
+            manifest_file.name,
+            type(e).__name__,
+            redaction.redacted,
         )
 
     return corpus_paths, uploads_dir
