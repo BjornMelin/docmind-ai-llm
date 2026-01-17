@@ -62,7 +62,7 @@ graph TD
 3. **Run the app**. The settings will auto-load:
 
    ```bash
-   streamlit run src/app.py
+   uv run streamlit run app.py
    ```
 
 ---
@@ -111,7 +111,7 @@ This means `.env` does **not** override already-exported environment variables.
 Dotenv policy:
 
 - The process-global `src.config.settings.settings` singleton does **not** read `.env` at import time.
-- The Streamlit entrypoint (`src/app.py`) calls `bootstrap_settings()` once at startup to opt into loading `.env`.
+- The Streamlit entrypoint (`app.py` → `src/app.py`) calls `bootstrap_settings()` once at startup to opt into loading `.env`.
 
 ### Advanced: Dotenv Override Modes and Env Masking
 

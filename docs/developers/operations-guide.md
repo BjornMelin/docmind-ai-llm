@@ -20,7 +20,7 @@ DocMind AI is a pure Python project managed by `uv`.
 uv sync --frozen
 
 # 2. Run the application
-uv run streamlit run src/app.py
+uv run streamlit run app.py
 ```
 
 ---

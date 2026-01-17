@@ -62,7 +62,7 @@ We adopt Streamlit’s programmatic multipage pattern with native components and
 
 ```mermaid
 graph TD
-  A["src/app.py"] --> B["Navigation (st.Page/st.navigation)"]
+  A["app.py (imports src/app.py)"] --> B["Navigation (st.Page/st.navigation)"]
   B --> C["Chat"]
   B --> D["Documents"]
   B --> E["Analytics"]
@@ -112,13 +112,13 @@ graph TD
 
 ### Architecture Overview
 
-- Programmatic pages defined in `src/app.py` using `st.Page` and `st.navigation`
+- Programmatic pages defined in `src/app.py` (launched via `app.py`) using `st.Page` and `st.navigation`
 - Native session state for cross‑page context; no custom state manager
 - Native caching for data/resources; avoid bespoke caches
 
 ### Implementation Details
 
-In `src/app.py`:
+In `src/app.py` (launched via `app.py`):
 
 ```python
 import streamlit as st

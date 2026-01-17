@@ -94,7 +94,7 @@ uv run python ${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architec
 
 **Long-running UI validation (use native capabilities):**
 
-- If you start `streamlit run src/app.py`, keep it running and use `functions.write_stdin` to fetch logs instead of restarting.
+- If you start `uv run streamlit run app.py`, keep it running and use `functions.write_stdin` to fetch logs instead of restarting.
 - If you capture UI screenshots during verification, attach them with `functions.view_image`.
 - For user-critical E2E smoke, use the skill’s Playwright flow:
   - `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/scripts/mcp/run_playwright_mcp_e2e.py`

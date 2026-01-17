@@ -71,7 +71,7 @@ Skill references to consult (as needed):
 
 **Long-running verification (use native capabilities):**
 
-- If you run `streamlit run src/app.py`, keep it alive and use `functions.write_stdin` to fetch logs and avoid rerunning startup.
+- If you run `uv run streamlit run app.py`, keep it alive and use `functions.write_stdin` to fetch logs and avoid rerunning startup.
 - Attach screenshots of progress/cancel states with `functions.view_image` if verification is visual.
 - Optional E2E smoke: use the skill’s Playwright script referenced above.
 

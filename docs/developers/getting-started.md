@@ -40,7 +40,7 @@ docker compose up -d qdrant
 cp .env.example .env
 
 # 5. Run application
-streamlit run src/app.py
+uv run streamlit run app.py
 ```
 
 ### Validate Setup
@@ -216,7 +216,7 @@ uv run python scripts/performance_monitor.py --collection-only --report
 
 ```bash
 # Start development server
-streamlit run src/app.py
+uv run streamlit run app.py
 
 # Application will be available at http://localhost:8501
 ```

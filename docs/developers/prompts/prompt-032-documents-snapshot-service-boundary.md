@@ -72,7 +72,7 @@ Skill references to consult (as needed):
 
 **Long-running UI validation (use native capabilities):**
 
-- If you run `streamlit run src/app.py`, keep it running and use `functions.write_stdin` to fetch logs.
+- If you run `uv run streamlit run app.py`, keep it running and use `functions.write_stdin` to fetch logs.
 - Attach screenshots of the Documents page state changes with `functions.view_image` if verification is visual.
 - Optional E2E smoke (skill script): `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/scripts/mcp/run_playwright_mcp_e2e.py`
 

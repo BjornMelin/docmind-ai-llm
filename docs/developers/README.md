@@ -81,7 +81,7 @@ Following the **Divio Documentation System** for optimal developer experience:
 
 ```bash
 # Setup (detailed in Getting Started guide)
-uv sync && streamlit run src/app.py
+uv sync && uv run streamlit run app.py
 
 # Testing (see Testing Guide)
 uv run python scripts/run_tests.py                # Full test suite

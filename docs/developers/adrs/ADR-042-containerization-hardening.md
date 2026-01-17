@@ -27,8 +27,9 @@ Replace the current broken/inconsistent Docker artifacts with a **Python 3.13.11
 ## Context
 
 The repository currently ships `Dockerfile` and `docker-compose.yml`, but they may drift from repo constraints:
+
 - Docker CMD is invalid (shell string inside JSON form)
-- entrypoint path does not match Streamlit entry (`src/app.py`)
+- entrypoint path does not match Streamlit entry (`app.py`)
 - `docker-compose.yml` uses non-canonical env variable names (not `DOCMIND_*`)
 - `.dockerignore` is missing, increasing secret leak risk
 
@@ -70,7 +71,7 @@ Implement a ship-ready container baseline:
   - multi-stage build with `uv sync --frozen`
   - `UV_PYTHON_DOWNLOADS=never` to force uv to use container Python
   - non-root runtime user
-  - correct Streamlit entrypoint: `streamlit run src/app.py --server.address=0.0.0.0 --server.port=8501`
+  - correct Streamlit entrypoint: `streamlit run app.py --server.address=0.0.0.0 --server.port=8501`
 - Update `docker-compose.yml`:
   - use canonical `DOCMIND_*` env names
   - do not hardcode secrets

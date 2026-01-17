@@ -360,25 +360,35 @@ class OpenAIConfig(BaseModel):
         candidate = ensure_http_scheme(v) or ""
         return candidate
 
-    @field_validator("default_headers", mode="before")
+    @field_validator("default_headers", mode="after")
     @classmethod
     def _normalize_default_headers(
-        cls, v: object
-    ) -> dict[str, str] | None:  # pragma: no cover - defensive
+        cls, v: dict[str, str] | None
+    ) -> dict[str, str] | None:
         if v is None:
             return None
-        if isinstance(v, dict):
-            out: dict[str, str] = {}
-            for raw_k, raw_val in v.items():
-                k = str(raw_k).strip()
-                if not k:
-                    continue
-                val = str(raw_val).strip()
-                if not val:
-                    continue
-                out[k] = val
-            return out or None
-        return v  # type: ignore[return-value]
+        out: dict[str, str] = {}
+        for raw_k, raw_val in v.items():
+            k = str(raw_k).strip()
+            if not k:
+                continue
+            val = str(raw_val).strip()
+            if not val:
+                continue
+            if (
+                re.search(r"[\x00-\x1f\x7f]", k)
+                or re.search(r"[\x00-\x1f\x7f]", val)
+                or "\n" in k
+                or "\r" in k
+                or "\n" in val
+                or "\r" in val
+            ):
+                raise ValueError(
+                    "DOCMIND_OPENAI__DEFAULT_HEADERS may not contain control "
+                    "characters or newlines"
+                )
+            out[k] = val
+        return out or None
 
 
 _DEFAULT_OPENAI_BASE_URL = DEFAULT_OPENAI_BASE_URL

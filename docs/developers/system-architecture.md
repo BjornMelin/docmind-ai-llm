@@ -535,6 +535,7 @@ The following JSON block is used by `scripts/verify_structural_parity.py` to ens
   "version": "2.0.0",
   "canonical_src": [
     "agents",
+    "analysis",
     "config",
     "core",
     "eval",

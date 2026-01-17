@@ -88,5 +88,5 @@ chat_msgs = format_messages(tpl.id, ctx)
 
 ## UI visibility
 
-- The Streamlit app (`src/app.py`) lists templates by `name` and uses `id` to render prompts.
+- The Streamlit app module (`src/app.py`, launched via `app.py`) lists templates by `name` and uses `id` to render prompts.
 - If the template is not visible in the UI, ensure it has valid front matter and a body, and restart the app.

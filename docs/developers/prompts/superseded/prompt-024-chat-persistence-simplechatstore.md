@@ -70,7 +70,7 @@ rg -n "st\\.session_state\\.|st\\.chat_" src/pages/01_chat.py
 
 **Long-running UI validation (use native capabilities):**
 
-- If you run `streamlit run src/app.py`, keep the process alive; use `functions.write_stdin` to pull logs.
+- If you run `uv run streamlit run app.py`, keep the process alive; use `functions.write_stdin` to pull logs.
 - If you capture screenshots during manual verification, attach them with `functions.view_image`.
 - For E2E smoke, use the skill’s Playwright flow:
   - `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/scripts/mcp/run_playwright_mcp_e2e.py`
@@ -216,7 +216,7 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Tests**       |        | AppTest proves persistence; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | ADR/SPEC/RTM updated                                                                                           |
 | **Security**    |        | path validation under `settings.data_dir`; no content logs                                                     |
-| **Tech Debt**   |        | zero work-marker placeholders introduced                                                                        |
+| **Tech Debt**   |        | zero work-marker placeholders introduced                                                                       |
 | **Performance** |        | no new import-time heavy work; IO done lazily                                                                  |
 
 **EXECUTE UNTIL COMPLETE.**

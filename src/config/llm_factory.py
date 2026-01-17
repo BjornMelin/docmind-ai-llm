@@ -14,8 +14,8 @@ Backends:
 
 Notes:
 - All OpenAI-compatible servers (LM Studio, vLLM OpenAI-compatible, llama.cpp server)
-  must use base URLs that include a single "/v1". Normalization is applied centrally
-  via settings.backend_base_url_normalized.
+  are normalized to include a single "/v1" by default. Disable normalization via
+  ``settings.openai.require_v1`` only for endpoints rooted at "/" (e.g., LiteLLM Proxy).
 - LlamaCPP GPU offload must be passed through ``model_kwargs={"n_gpu_layers": ...}``.
 """
 

@@ -139,13 +139,13 @@ You must keep changes minimal, library-first, and maintainable.
 
 ### FEATURE CONTEXT (FILLED)
 
-**Primary Task:** Fix Dockerfile + docker-compose so containers run correctly and match repo constraints (Python 3.13.11 baseline, `DOCMIND_*` env vars, Streamlit entrypoint `src/app.py`).
+**Primary Task:** Fix Dockerfile + docker-compose so containers run correctly and match repo constraints (Python 3.13.11 baseline, `DOCMIND_*` env vars, Streamlit entrypoint `app.py`).
 
 **Why now:** Current Docker artifacts are not runnable and violate Python constraint (`>=3.13,<3.14`), blocking any “ship-ready” claim.
 
 **Definition of Done (DoD):**
 
-- `Dockerfile` uses Python 3.13.11 and launches `streamlit run src/app.py` correctly.
+- `Dockerfile` uses Python 3.13.11 and launches `streamlit run app.py` correctly.
 - Docker CMD/ENTRYPOINT is valid (no shell in JSON array bug).
 - Container runs as non-root user.
 - `.dockerignore` exists and excludes `.env` and large dev artifacts.

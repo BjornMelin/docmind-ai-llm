@@ -18,7 +18,7 @@ Make Docker artifacts **runnable, reproducible, and secure-by-default** for DocM
 
 - Python 3.13.11 in container (matches repo primary)
 - dependency install via `uv sync --frozen` using `uv.lock`
-- Streamlit entrypoint runs `src/app.py`
+- Streamlit entrypoint runs `app.py` (imports `src/app.py`)
 - non-root runtime
 - `.dockerignore` prevents secret leakage and bloated builds
 - compose uses `DOCMIND_*` env names
@@ -56,7 +56,7 @@ Use a multi-stage Dockerfile:
    - set `WORKDIR /app`
    - expose port 8501
    - run Streamlit:
-     - `streamlit run src/app.py --server.address=0.0.0.0 --server.port=8501`
+     - `streamlit run app.py --server.address=0.0.0.0 --server.port=8501`
 
 ### docker-compose.yml
 

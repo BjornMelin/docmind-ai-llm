@@ -14,7 +14,7 @@ References:
 
 ## Description
 
-Delete the legacy `src/main.py` entrypoint and standardize on the supported Streamlit entrypoint (`streamlit run src/app.py`) plus repo scripts.
+Delete the legacy `src/main.py` entrypoint and standardize on the supported Streamlit entrypoint (`uv run streamlit run app.py`) plus repo scripts.
 
 ## Context
 
@@ -57,7 +57,7 @@ We will:
 3. Ensure the canonical run path remains:
 
 ```bash
-streamlit run src/app.py
+uv run streamlit run app.py
 ```
 
 ## Consequences
@@ -71,5 +71,5 @@ streamlit run src/app.py
 ### Trade-offs
 
 - None for supported app usage; any custom users relying on `python src/main.py` must migrate (explicitly unsupported for v1).
-- Migration guidance must be documented in v1 release notes: “`python src/main.py` removed; use `streamlit run src/app.py` instead.”
+- Migration guidance must be documented in v1 release notes: “`python src/main.py` removed; use `uv run streamlit run app.py` instead.”
 - Downstream projects should search for hardcoded `src/main.py` references and update CI/deployment scripts.

@@ -90,7 +90,7 @@ For a full list of configuration knobs, see:
 ## Step 4: Run DocMind
 
 ```bash
-streamlit run src/app.py
+uv run streamlit run app.py
 ```
 
 ## Quick diagnostics
