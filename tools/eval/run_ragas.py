@@ -19,7 +19,7 @@ from __future__ import annotations
 import argparse
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
@@ -182,24 +182,49 @@ def main() -> None:
     if evaluate is None:
         raise ImportError("ragas not loaded")
 
+    metrics_raw = [faithfulness, answer_relevancy, context_recall, context_precision]
+    metrics = [m for m in metrics_raw if m is not None]
+    if len(metrics) != len(metrics_raw):
+        raise ImportError(
+            "ragas metrics not loaded; install optional eval extras and retry"
+        )
+
     # Use ragas_mode to toggle minimal runtime behavior
     show_progress = args.ragas_mode == "online_smoke"
     batch_size = 8 if args.ragas_mode == "online_smoke" else None
     result = evaluate(
         data,
-        metrics=[faithfulness, answer_relevancy, context_recall, context_precision],
+        metrics=cast(list[Any], metrics),
         show_progress=show_progress,
         batch_size=batch_size,
     )
+
+    scores: dict[str, Any] = {}
+    if isinstance(result, dict):
+        scores = result
+    else:
+        candidate = getattr(result, "scores", None)
+        if isinstance(candidate, dict):
+            scores = candidate
+
+    required = [
+        "faithfulness",
+        "answer_relevancy",
+        "context_recall",
+        "context_precision",
+    ]
+    missing = [name for name in required if name not in scores]
+    if missing:
+        raise RuntimeError(f"ragas result missing metrics: {', '.join(missing)}")
 
     out = {
         "schema_version": SCHEMA_VERSION,
         "ts": datetime.now(UTC).isoformat(),
         "dataset": Path(args.dataset_csv).name,
-        "faithfulness": _as_float(result["faithfulness"]),
-        "answer_relevancy": _as_float(result["answer_relevancy"]),
-        "context_recall": _as_float(result["context_recall"]),
-        "context_precision": _as_float(result["context_precision"]),
+        "faithfulness": _as_float(scores.get("faithfulness")),
+        "answer_relevancy": _as_float(scores.get("answer_relevancy")),
+        "context_recall": _as_float(scores.get("context_recall")),
+        "context_precision": _as_float(scores.get("context_precision")),
         "sample_count": len(data),
     }
     out_dir = Path(args.results_dir)
