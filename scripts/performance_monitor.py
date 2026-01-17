@@ -887,9 +887,19 @@ def main() -> int:
         if args.save:
             _handle_save(monitor)
         exit_code = max(exit_code, _print_warnings_and_failures(monitor))
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        logger.exception("Unexpected error during performance monitoring")
-        print(f"ERROR: Unexpected error: {e}")
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="scripts.performance_monitor")
+        logger.error(
+            "Unexpected error during performance monitoring (error_type=%s error=%s)",
+            type(exc).__name__,
+            redaction.redacted,
+        )
+        print(
+            "ERROR: Unexpected error during performance monitoring "
+            f"(error_type={type(exc).__name__} error={redaction.redacted})"
+        )
         exit_code = 2
 
     return exit_code
