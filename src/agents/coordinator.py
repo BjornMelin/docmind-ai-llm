@@ -873,9 +873,9 @@ class MultiAgentCoordinator:
             if self.compiled_graph is None:
                 raise RuntimeError("Agent graph is not compiled")
 
-            # Ensure an event loop exists
+            # Ensure an event loop exists (avoid asyncio.get_event_loop deprecations).
             try:
-                asyncio.get_event_loop()
+                asyncio.get_event_loop_policy().get_event_loop()
             except RuntimeError:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
