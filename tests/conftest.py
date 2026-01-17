@@ -77,6 +77,25 @@ def _streamlit_disable_repl_detection() -> Generator[None]:
 
 
 @pytest.fixture(autouse=True)
+def _reset_docmind_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep tests deterministic even when a developer `.env` exists.
+
+    Pytest runs in the developer's working tree. Some environments or tools may
+    populate `os.environ` with `DOCMIND_*` keys. Resetting the settings singleton
+    and clearing DocMind-specific env vars prevents cross-test contamination and
+    avoids surprising failures in config tests.
+    """
+    for key in list(os.environ.keys()):
+        if key.upper().startswith("DOCMIND_"):
+            monkeypatch.delenv(key, raising=False)
+
+    from src.config.settings import reset_bootstrap_state, settings as app_settings
+
+    app_settings.__init__(_env_file=None)  # type: ignore[arg-type]
+    reset_bootstrap_state()
+
+
+@pytest.fixture(autouse=True)
 def _reset_otel_providers() -> None:
     """Ensure OpenTelemetry providers reset between tests."""
     from src.telemetry import opentelemetry as otel_module
@@ -86,7 +105,10 @@ def _reset_otel_providers() -> None:
 
 
 @pytest.fixture(autouse=True)
-def _reset_telemetry_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+def _reset_telemetry_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+    _reset_docmind_settings: None,
+) -> None:
     """Reset telemetry globals and environment overrides between tests."""
     from src.config.settings import settings as app_settings
     from src.utils import telemetry as telem
