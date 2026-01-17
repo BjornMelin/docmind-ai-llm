@@ -150,7 +150,7 @@ async def test_async_timer_logs(monkeypatch):
     result = await _do_work()
     assert result == "done"
     assert calls
-    assert calls[0][0] == "%s completed in %.2fs"
+    assert calls[0][0] == "{} completed in {:.2f}s"
 
 
 @pytest.mark.unit
