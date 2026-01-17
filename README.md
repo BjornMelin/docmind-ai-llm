@@ -267,7 +267,7 @@ Design goals:
 **Locally:**
 
 ```bash
-uv run streamlit run src/app.py
+uv run streamlit run app.py
 ```
 
 To honor `DOCMIND_UI__STREAMLIT_PORT`, use:

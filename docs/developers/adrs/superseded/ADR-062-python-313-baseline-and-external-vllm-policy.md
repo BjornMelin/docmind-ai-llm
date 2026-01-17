@@ -1,11 +1,11 @@
 ---
 ADR: 062
 Title: Python 3.13.11 Baseline (3.11–3.13 Supported) and External vLLM Policy
-Status: Implemented
+Status: Superseded
 Version: 1.0
 Date: 2026-01-16
 Supersedes:
-Superseded-by:
+Superseded-by: ADR-064
 Related: 004, 024, 042
 Tags: python, packaging, tooling, compatibility, llm
 References:

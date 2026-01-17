@@ -7,7 +7,8 @@ and docs under `docs/specs/` + `docs/developers/adrs/`.
 
 ## Layout
 
-- `src/app.py`: Streamlit entrypoint
+- `app.py`: Streamlit entrypoint
+- `src/app.py`: Streamlit app module (imported by `app.py`)
 - `src/pages/`: UI pages (chat/documents/analytics/settings)
 - `src/config/`: settings + integration wiring
 - `src/processing/`: ingestion, OCR, PDF page exports
@@ -22,7 +23,7 @@ and docs under `docs/specs/` + `docs/developers/adrs/`.
 ## Quick Commands (uv)
 
 - Setup: `uv sync && cp .env.example .env`
-- Run: `streamlit run src/app.py` (or `./scripts/run_app.sh`)
+- Run: `uv run streamlit run app.py` (or `./scripts/run_app.sh`)
 - Env: prefer `uv run ...` (uses the project env, typically `.venv`).
 - Verify (batch): after a batch of edits, run lint/type on touched paths + focused tests.
   - Lint (all): `uv run ruff format . && uv run ruff check . --fix`
@@ -48,6 +49,29 @@ and docs under `docs/specs/` + `docs/developers/adrs/`.
 - Streamlit: no `unsafe_allow_html=True` for untrusted content.
 - Logging/telemetry: metadata-only; never log secrets or raw prompt/doc/model output (use `src/utils/log_safety.py`).
 
+## Compaction + continuity worklogs
+
+This repo uses a lightweight, compaction-resilient log so we can resume work without re-researching or re-deciding.
+
+After any material research, decisions, or implementation:
+
+1. Update `docs/developers/worklogs/CONTEXT.md` with:
+   - current status + next steps
+   - research notes (primary links)
+   - key decisions + rationale
+   - important quirks/constraints (no secrets)
+2. If you call any `mcp__zen__*` tool that returns a `continuation_id`, record it in:
+   - `docs/developers/worklogs/continuations.json`
+3. For normative changes (architecture/policy): add or update an ADR under `docs/developers/adrs/`.
+4. For behavior changes: update the owning spec under `docs/specs/` and keep `docs/specs/traceability.md` aligned.
+
+Timing rule: write ADRs/spec updates **immediately when finalized** (do not batch them at the end of a long session) to avoid losing decision context during auto-compaction.
+
+When resuming after compaction:
+
+1. Read `docs/developers/worklogs/CONTEXT.md` first.
+2. Read `docs/developers/worklogs/continuations.json` and reuse any stored `continuation_id` values when continuing `mcp__zen__*` threads.
+
 ## Optional extras
 
 - `uv sync --extra gpu` (fastembed-gpu, CuPy CUDA wheels)
@@ -60,7 +84,7 @@ and docs under `docs/specs/` + `docs/developers/adrs/`.
 
 Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
-- Python: `>=3.11,<3.14` (primary dev/runtime: Python 3.13.11)
+- Python: `>=3.13,<3.14` (primary dev/runtime: Python 3.13.11)
 - Keep these coupled:
   - Torch 2.8.x ↔ Transformers `<5.0` (vLLM is external-only via OpenAI-compatible HTTP)
   - DuckDB `<1.4.0` (LlamaIndex integrations cap it)
