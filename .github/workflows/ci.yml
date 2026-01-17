@@ -21,6 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        python-version: ["3.11", "3.12", "3.13.11"]
         profile: [base, llama]
     env:
       HF_HUB_OFFLINE: '1'
@@ -32,7 +33,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
 
       - name: Install uv (with cache)
         uses: astral-sh/setup-uv@v6
@@ -104,7 +105,7 @@ jobs:
     permissions:
       contents: read
     env:
-      EXPECTED_PYTHON_VERSION: '3.11'
+      EXPECTED_PYTHON_VERSION: '3.13.11'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -112,7 +113,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.13.11'
 
       - name: Install ripgrep
         run: |
