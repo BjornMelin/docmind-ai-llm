@@ -108,7 +108,7 @@ Design goals:
 
 - One supported LLM backend running locally: [Ollama](https://ollama.com/) (default), vLLM OpenAI-compatible server, LM Studio, or a llama.cpp server.
 
-- Python 3.13.11 recommended (supported: 3.11–3.13; see `pyproject.toml`)
+- Python 3.13.11 (see `pyproject.toml`)
 
 - (Optional) Docker and Docker Compose for containerized deployment.
 
@@ -229,9 +229,11 @@ Design goals:
    #   HF_HUB_OFFLINE=1
    #   TRANSFORMERS_OFFLINE=1
 
-   # Optional - OpenAI Cloud (breaks strict offline):
+   # Optional - OpenAI-compatible cloud / gateway (breaks strict offline):
+   #   DOCMIND_LLM_BACKEND=openai_compatible
    #   DOCMIND_OPENAI__BASE_URL=https://api.openai.com/v1
    #   DOCMIND_OPENAI__API_KEY=sk-...
+   #   DOCMIND_OPENAI__API_MODE=responses
    #   DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true
    ```
 
