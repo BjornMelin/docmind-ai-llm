@@ -11,6 +11,8 @@ import pytest
 
 from src.utils import log_safety, security
 
+pytestmark = pytest.mark.unit
+
 
 def test_log_safety_redaction_is_deterministic() -> None:
     """log_safety redaction should be stable and include a fingerprint."""

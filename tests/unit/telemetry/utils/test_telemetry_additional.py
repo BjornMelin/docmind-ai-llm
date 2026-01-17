@@ -61,7 +61,6 @@ def test_rotation_rename_error_is_debug_logged(monkeypatch, tmp_path):
     from src.utils import telemetry as t
 
     tp = tmp_path / "telemetry.jsonl"
-    tp.parent.mkdir(parents=True, exist_ok=True)
     tp.write_bytes(b"x" * 10)
     monkeypatch.setattr(settings.telemetry, "jsonl_path", tp)
     monkeypatch.setattr(settings.telemetry, "rotate_bytes", 1)

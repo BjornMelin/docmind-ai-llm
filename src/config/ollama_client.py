@@ -443,6 +443,9 @@ def ollama_chat_structured[TModel: BaseModel](
 
     Returns:
         Validated Pydantic model instance.
+
+    Raises:
+        ValueError: If structured output response is empty.
     """
     response = ollama_chat(
         model=model,

@@ -19,6 +19,15 @@ pytestmark = pytest.mark.integration
 def test_coordinator_semantic_cache_hit_short_circuits(
     monkeypatch, tmp_path: Path
 ) -> None:
+    """Verify semantic cache hits bypass workflow execution.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+        tmp_path: Temporary directory for test artifacts.
+
+    Returns:
+        None.
+    """
     # Configure settings for deterministic, in-memory cache.
     uploads_dir = tmp_path / "uploads"
     uploads_dir.mkdir(parents=True, exist_ok=True)

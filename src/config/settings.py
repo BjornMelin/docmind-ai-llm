@@ -375,14 +375,7 @@ class OpenAIConfig(BaseModel):
             val = str(raw_val).strip()
             if not val:
                 continue
-            if (
-                re.search(r"[\x00-\x1f\x7f]", k)
-                or re.search(r"[\x00-\x1f\x7f]", val)
-                or "\n" in k
-                or "\r" in k
-                or "\n" in val
-                or "\r" in val
-            ):
+            if re.search(r"[\x00-\x1f\x7f]", k) or re.search(r"[\x00-\x1f\x7f]", val):
                 raise ValueError(
                     "DOCMIND_OPENAI__DEFAULT_HEADERS may not contain control "
                     "characters or newlines"
@@ -830,6 +823,11 @@ class DatabaseConfig(BaseModel):
     # Vector Database
     vector_store_type: str = Field(default="qdrant")
     qdrant_url: str = Field(default="http://localhost:6333")
+    qdrant_api_key: SecretStr | None = Field(
+        default=None,
+        repr=False,
+        description="Optional API key for authenticated Qdrant endpoints.",
+    )
     qdrant_collection: str = Field(default="docmind_docs")
     qdrant_image_collection: str = Field(default="docmind_images")
     qdrant_timeout: int = Field(default=60, ge=10, le=300)

@@ -109,7 +109,19 @@ class JobManager:
         owner_id: str,
         fn: Callable[[threading.Event, Callable[[ProgressEvent], None]], Any],
     ) -> str:
-        """Submit a job to the internal executor and return a job id."""
+        """Submit a job to the internal executor and return a job id.
+
+        Args:
+            owner_id: Owner identifier for authorization checks.
+            fn: Worker callable invoked with (cancel_event, report_progress).
+
+        Returns:
+            Job identifier string.
+
+        Raises:
+            ValueError: When owner_id is empty.
+            RuntimeError: When the JobManager is shut down.
+        """
         if not owner_id:
             raise ValueError("owner_id is required")
         with self._lock:
@@ -133,7 +145,15 @@ class JobManager:
             return job_id
 
     def cancel(self, job_id: str, *, owner_id: str) -> bool:
-        """Request best-effort cancellation for a job."""
+        """Request best-effort cancellation for a job.
+
+        Args:
+            job_id: Job identifier to cancel.
+            owner_id: Owner identifier for authorization checks.
+
+        Returns:
+            True when the cancellation request was accepted.
+        """
         with self._lock:
             self._cleanup_expired_locked()
             state = self._jobs.get(job_id)
@@ -150,7 +170,15 @@ class JobManager:
             return True
 
     def get(self, job_id: str, *, owner_id: str) -> JobState | None:
-        """Return the job state (or None when missing/unauthorized)."""
+        """Return the job state (or None when missing/unauthorized).
+
+        Args:
+            job_id: Job identifier to fetch.
+            owner_id: Owner identifier for authorization checks.
+
+        Returns:
+            JobState when available; otherwise None.
+        """
         with self._lock:
             self._cleanup_expired_locked()
             state = self._jobs.get(job_id)
@@ -162,7 +190,16 @@ class JobManager:
     def drain_progress(
         self, job_id: str, *, owner_id: str, max_events: int = 100
     ) -> list[ProgressEvent]:
-        """Drain progress events for a job without blocking."""
+        """Drain progress events for a job without blocking.
+
+        Args:
+            job_id: Job identifier to poll.
+            owner_id: Owner identifier for authorization checks.
+            max_events: Maximum number of events to drain.
+
+        Returns:
+            List of progress events in queue order.
+        """
         state = self.get(job_id, owner_id=owner_id)
         if state is None:
             return []
@@ -177,7 +214,16 @@ class JobManager:
     def wait_for_completion(
         self, job_id: str, *, owner_id: str, timeout_sec: float = 10.0
     ) -> JobStatus | None:
-        """Block until a job completes (primarily for unit tests)."""
+        """Block until a job completes (primarily for unit tests).
+
+        Args:
+            job_id: Job identifier to await.
+            owner_id: Owner identifier for authorization checks.
+            timeout_sec: Maximum seconds to wait.
+
+        Returns:
+            Final job status or None when missing/unauthorized/timeout.
+        """
         with self._lock:
             state = self._jobs.get(job_id)
             fut = self._futures.get(job_id)
@@ -194,7 +240,11 @@ class JobManager:
             return st_state.status
 
     def shutdown(self) -> None:
-        """Best-effort shutdown of the executor and in-flight jobs."""
+        """Best-effort shutdown of the executor and in-flight jobs.
+
+        Returns:
+            None.
+        """
         with self._lock:
             if self._closed:
                 return
@@ -291,7 +341,14 @@ class JobManager:
 
 @st.cache_resource(show_spinner=False)
 def get_job_manager(cache_version: int) -> JobManager:
-    """Return a process-wide JobManager instance (cached by Streamlit)."""
+    """Return a process-wide JobManager instance (cached by Streamlit).
+
+    Args:
+        cache_version: Cache-busting integer for Streamlit resource caching.
+
+    Returns:
+        Cached JobManager instance.
+    """
     _ = cache_version  # cache bust
     manager = JobManager()
     atexit.register(manager.shutdown)
@@ -299,7 +356,11 @@ def get_job_manager(cache_version: int) -> JobManager:
 
 
 def get_or_create_owner_id() -> str:
-    """Return a stable owner id for the current Streamlit session."""
+    """Return a stable owner id for the current Streamlit session.
+
+    Returns:
+        Owner identifier string.
+    """
     key = "docmind_owner_id"
     current = st.session_state.get(key)
     if isinstance(current, str) and current:

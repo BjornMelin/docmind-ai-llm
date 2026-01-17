@@ -680,8 +680,6 @@ class DocMindSqliteStore(BaseStore):
                     item_id=item_id, ns_cols=ns_cols, embedding=embedding
                 )
             except ValueError as exc:  # pragma: no cover - fail-open
-                from src.utils.log_safety import build_pii_log_entry
-
                 redaction = build_pii_log_entry(
                     str(exc), key_id="memory_store.embed_dim"
                 )
@@ -691,8 +689,6 @@ class DocMindSqliteStore(BaseStore):
                     redaction.redacted,
                 )
             except Exception as exc:  # pragma: no cover - fail-open
-                from src.utils.log_safety import build_pii_log_entry
-
                 redaction = build_pii_log_entry(
                     str(exc), key_id="memory_store.embed_update"
                 )

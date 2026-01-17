@@ -1287,7 +1287,8 @@ def memory_profile_processing():
 # GPU diagnostics
 def diagnose_gpu_setup():
     """Comprehensive GPU setup diagnostics."""
-    
+    import os
+
     print("=== GPU DIAGNOSTICS ===")
     
     # CUDA availability

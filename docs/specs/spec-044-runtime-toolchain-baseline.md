@@ -16,7 +16,7 @@ related_adrs: ["ADR-064", "ADR-014", "ADR-024", "ADR-042"]
 
 Define a single, enforceable baseline for:
 
-- supported Python versions (primary vs supported range)
+- supported Python versions (primary vs. supported range)
 - toolchain targeting (Ruff/Pyright)
 - deterministic dependency resolution across extras/groups
 - container and CI Python baselines

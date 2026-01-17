@@ -330,11 +330,16 @@ def get_client_config() -> dict[str, Any]:
     timeout_s = float(settings.database.qdrant_timeout)
     if settings.agents.enable_deadline_propagation:
         timeout_s = min(timeout_s, float(settings.agents.decision_timeout))
-    return {
+    config: dict[str, Any] = {
         "url": settings.database.qdrant_url,
         "timeout": timeout_s,
         "prefer_grpc": True,
     }
+    if settings.database.qdrant_api_key is not None:
+        api_key = settings.database.qdrant_api_key.get_secret_value().strip()
+        if api_key:
+            config["api_key"] = api_key
+    return config
 
 
 @contextmanager

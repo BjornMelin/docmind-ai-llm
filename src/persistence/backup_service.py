@@ -22,7 +22,7 @@ from loguru import logger
 from qdrant_client.http import models as qmodels
 
 from src.config.settings import DocMindSettings, settings
-from src.utils.log_safety import build_pii_log_entry
+from src.utils.log_safety import build_pii_log_entry, safe_url_for_log
 from src.utils.telemetry import log_jsonl
 
 
@@ -143,6 +143,7 @@ def prune_backups(backup_root: Path, *, keep_last: int) -> list[Path]:
 def _download_qdrant_snapshot(
     *,
     qdrant_url: str,
+    api_key: str | None,
     collection: str,
     snapshot_name: str,
     dest_file: Path,
@@ -153,7 +154,8 @@ def _download_qdrant_snapshot(
         f"{base}/collections/{urllib.parse.quote(collection)}/snapshots/"
         f"{urllib.parse.quote(snapshot_name)}"
     )
-    req = urllib.request.Request(url, method="GET")  # noqa: S310
+    headers = {"api-key": api_key} if api_key else {}
+    req = urllib.request.Request(url, method="GET", headers=headers)  # noqa: S310
     with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310
         _safe_mkdir(dest_file.parent)
         with dest_file.open("wb") as f:
@@ -184,6 +186,13 @@ def _create_qdrant_snapshots(
     qdrant_url = str(cfg.database.qdrant_url).strip()
     timeout_s = int(cfg.database.qdrant_timeout)
     bytes_written = 0
+    api_key = (
+        cfg.database.qdrant_api_key.get_secret_value()
+        if cfg.database.qdrant_api_key is not None
+        else None
+    )
+    if api_key is not None:
+        api_key = api_key.strip() or None
     snapshots: list[QdrantSnapshotFile] = []
 
     with create_sync_client() as client:
@@ -203,6 +212,7 @@ def _create_qdrant_snapshots(
             dest_file = dest_dir / "qdrant" / collection / filename
             bytes_written += _download_qdrant_snapshot(
                 qdrant_url=qdrant_url,
+                api_key=api_key,
                 collection=collection,
                 snapshot_name=str(desc.name),
                 dest_file=dest_file,
@@ -284,6 +294,7 @@ def _populate_backup_workspace(
     include_uploads: bool,
     include_analytics: bool,
     include_logs: bool,
+    include_env: bool,
     qdrant_snapshot: bool,
 ) -> tuple[int, list[str], list[str], list[QdrantSnapshotFile]]:
     """Copy configured artifacts into a backup workspace and write its manifest.
@@ -294,6 +305,7 @@ def _populate_backup_workspace(
         include_uploads: Include `data_dir/uploads/` when present.
         include_analytics: Include analytics DuckDB database when present.
         include_logs: Include `logs/` directory when present.
+        include_env: Include `.env` file when present (contains secrets).
         qdrant_snapshot: Attempt to snapshot Qdrant collections (best-effort).
 
     Returns:
@@ -306,7 +318,7 @@ def _populate_backup_workspace(
     qdrant_files: list[QdrantSnapshotFile] = []
 
     # Cache DB (DuckDB KV store)
-    cache_db = (cfg.cache_dir / cfg.cache.filename).resolve()
+    cache_db = cfg.cache_dir / cfg.cache.filename
     bytes_written += _include_file(
         source=cache_db,
         dest=tmp_dir / "cache" / cache_db.name,
@@ -317,7 +329,7 @@ def _populate_backup_workspace(
     )
 
     # Snapshots + manifests
-    storage_dir = (cfg.data_dir / "storage").resolve()
+    storage_dir = cfg.data_dir / "storage"
     bytes_written += _include_tree(
         source=storage_dir,
         dest=tmp_dir / "data" / "storage",
@@ -328,7 +340,7 @@ def _populate_backup_workspace(
     )
 
     # Chat DB (small but user-relevant)
-    chat_db = (cfg.data_dir / "chat.db").resolve()
+    chat_db = cfg.data_dir / "chat.db"
     bytes_written += _include_file(
         source=chat_db,
         dest=tmp_dir / "data" / chat_db.name,
@@ -340,7 +352,7 @@ def _populate_backup_workspace(
 
     # Optional: uploads
     if include_uploads:
-        uploads_dir = (cfg.data_dir / "uploads").resolve()
+        uploads_dir = cfg.data_dir / "uploads"
         bytes_written += _include_tree(
             source=uploads_dir,
             dest=tmp_dir / "data" / "uploads",
@@ -357,7 +369,7 @@ def _populate_backup_workspace(
             if cfg.analytics_db_path is not None
             else (cfg.data_dir / "analytics" / "analytics.duckdb")
         )
-        analytics_path = Path(analytics_path).resolve()
+        analytics_path = Path(analytics_path)
         bytes_written += _include_file(
             source=analytics_path,
             dest=tmp_dir / "data" / "analytics" / analytics_path.name,
@@ -369,7 +381,7 @@ def _populate_backup_workspace(
 
     # Optional: logs
     if include_logs:
-        logs_dir = Path("./logs").resolve()
+        logs_dir = Path("./logs")
         bytes_written += _include_tree(
             source=logs_dir,
             dest=tmp_dir / "logs",
@@ -379,16 +391,17 @@ def _populate_backup_workspace(
             warn_missing=False,
         )
 
-    # Optional: .env (recommended; contains secrets)
-    env_path = Path("./.env").resolve()
-    bytes_written += _include_file(
-        source=env_path,
-        dest=tmp_dir / ".env",
-        label="env",
-        included=included,
-        warnings=warnings,
-        warn_missing=False,
-    )
+    # Optional: .env (contains secrets)
+    if include_env:
+        env_path = Path("./.env")
+        bytes_written += _include_file(
+            source=env_path,
+            dest=tmp_dir / ".env",
+            label="env",
+            included=included,
+            warnings=warnings,
+            warn_missing=False,
+        )
 
     # Optional: Qdrant snapshots (best-effort)
     if qdrant_snapshot:
@@ -408,7 +421,7 @@ def _populate_backup_workspace(
         "included": included,
         "bytes_written": int(bytes_written),
         "qdrant": {
-            "url": str(cfg.database.qdrant_url),
+            "url": safe_url_for_log(str(cfg.database.qdrant_url)),
             "collections": [q.__dict__ for q in qdrant_files],
         },
         "warnings": warnings,
@@ -424,6 +437,7 @@ def create_backup(
     include_uploads: bool = False,
     include_analytics: bool = False,
     include_logs: bool = False,
+    include_env: bool = False,
     keep_last: int | None = None,
     qdrant_snapshot: bool = True,
     cfg: DocMindSettings | None = None,
@@ -436,6 +450,7 @@ def create_backup(
         include_uploads: Include `data_dir/uploads/`.
         include_analytics: Include the analytics DuckDB database (if present).
         include_logs: Include `logs/` (best effort).
+        include_env: Include `.env` (contains secrets).
         keep_last: Backups to retain; defaults to settings.backup_keep_last.
         qdrant_snapshot: Attempt Qdrant collection snapshots (best-effort).
         cfg: Optional settings override.
@@ -467,6 +482,7 @@ def create_backup(
         include_uploads=include_uploads,
         include_analytics=include_analytics,
         include_logs=include_logs,
+        include_env=include_env,
         qdrant_snapshot=qdrant_snapshot,
     )
 

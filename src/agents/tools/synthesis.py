@@ -117,7 +117,10 @@ def synthesize_results(
     except (RuntimeError, ValueError, AttributeError) as exc:
         from src.utils.log_safety import build_pii_log_entry
 
-        redaction = build_pii_log_entry(str(exc), key_id="agents.tools.synthesis")
+        redaction = build_pii_log_entry(
+            str(exc),
+            key_id="agents.tools.synthesis",
+        )
         logger.error(
             "Result synthesis failed (error_type={} error={})",
             type(exc).__name__,

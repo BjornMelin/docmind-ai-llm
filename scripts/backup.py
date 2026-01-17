@@ -40,6 +40,11 @@ def _build_parser() -> argparse.ArgumentParser:
     create.add_argument("--include-analytics", action="store_true")
     create.add_argument("--include-logs", action="store_true")
     create.add_argument(
+        "--include-env",
+        action="store_true",
+        help="Include the .env file (contains secrets).",
+    )
+    create.add_argument(
         "--keep-last",
         type=int,
         default=None,
@@ -82,6 +87,7 @@ def _cmd_create(args: argparse.Namespace) -> int:
         include_uploads=bool(args.include_uploads),
         include_analytics=bool(args.include_analytics),
         include_logs=bool(args.include_logs),
+        include_env=bool(args.include_env),
         keep_last=args.keep_last,
         qdrant_snapshot=not bool(args.no_qdrant_snapshot),
         cfg=settings,
@@ -97,7 +103,9 @@ def _cmd_create(args: argparse.Namespace) -> int:
     }
 
     if args.json:
-        sys.stdout.write(f"{json.dumps(payload, indent=2, sort_keys=True)}\n")
+        sys.stdout.write(
+            f"{json.dumps(payload, indent=2, sort_keys=True, default=str)}\n"
+        )
         return 0
 
     logger.info("Backup created: {}", result.backup_dir)

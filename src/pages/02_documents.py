@@ -6,6 +6,7 @@ import contextlib
 import hashlib
 import threading
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -37,6 +38,9 @@ from src.ui.background_jobs import (
 )
 from src.ui.ingest_adapter import ingest_inputs, save_uploaded_file
 from src.utils.storage import create_vector_store
+
+ProgressReporter = Callable[[ProgressEvent], None]
+
 
 if TYPE_CHECKING:
     from src.nlp.spacy_service import SpacyNlpService
@@ -167,8 +171,8 @@ def _handle_ingest_submission(
         job_manager = get_job_manager(settings.cache_version)
 
         def _work(
-            cancel_event: threading.Event, report: Any
-        ) -> dict[str, Any]:  # Any=callable typed by JobManager
+            cancel_event: threading.Event, report: ProgressReporter
+        ) -> dict[str, Any]:
             return _run_ingest_job(
                 saved_inputs,
                 use_graphrag=use_graphrag,
@@ -203,7 +207,7 @@ def _run_ingest_job(
     encrypt_images: bool,
     nlp_service: SpacyNlpService | None,
     cancel_event: threading.Event,
-    report_progress: Any,
+    report_progress: ProgressReporter,
 ) -> dict[str, Any]:
     """Worker entrypoint for ingestion + snapshot rebuild (no Streamlit APIs).
 

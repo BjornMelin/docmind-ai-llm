@@ -6,8 +6,18 @@ import pytest
 
 from src.persistence.backup_service import prune_backups
 
+pytestmark = pytest.mark.unit
+
 
 def test_prune_backups_keeps_most_recent(tmp_path: Path) -> None:
+    """Remove older backups while keeping the newest entries.
+
+    Args:
+        tmp_path: Temporary directory for test artifacts.
+
+    Returns:
+        None.
+    """
     root = tmp_path / "backups"
     root.mkdir()
 
@@ -30,6 +40,14 @@ def test_prune_backups_keeps_most_recent(tmp_path: Path) -> None:
 
 
 def test_prune_backups_rejects_invalid_keep_last(tmp_path: Path) -> None:
+    """Reject keep_last values below the minimum of 1.
+
+    Args:
+        tmp_path: Temporary directory for test artifacts.
+
+    Returns:
+        None.
+    """
     root = tmp_path / "backups"
     root.mkdir()
 

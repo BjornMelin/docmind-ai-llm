@@ -11,6 +11,14 @@ pytestmark = pytest.mark.unit
 
 
 def test_deadline_ts_seeded_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Seed deadline_ts when deadline propagation is enabled.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+
+    Returns:
+        None.
+    """
     monkeypatch.setattr(settings.agents, "enable_deadline_propagation", True)
     monkeypatch.setattr("src.agents.coordinator.time.monotonic", lambda: 100.0)
 
@@ -20,7 +28,15 @@ def test_deadline_ts_seeded_when_enabled(monkeypatch: pytest.MonkeyPatch) -> Non
     assert state.get("deadline_ts") == 112.0
 
 
-def test_deadline_ts_omitted_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_deadline_ts_none_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Leave deadline_ts as None when deadline propagation is disabled.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+
+    Returns:
+        None.
+    """
     monkeypatch.setattr(settings.agents, "enable_deadline_propagation", False)
     monkeypatch.setattr("src.agents.coordinator.time.monotonic", lambda: 100.0)
 

@@ -104,7 +104,15 @@ def build_pii_log_entry(value: str, key_id: str | None = None) -> RedactionResul
 
 
 def fingerprint_text(value: str, key_id: str | None = None) -> dict[str, str | int]:
-    """Return fingerprint metadata for logging without emitting raw content."""
+    """Return fingerprint metadata for logging without emitting raw content.
+
+    Args:
+        value: Raw text to fingerprint.
+        key_id: Optional key identifier to namespace the fingerprint.
+
+    Returns:
+        Mapping with length and fingerprint metadata fields.
+    """
     fingerprint, canon_version, secret_version = _fingerprint_value(value, key_id)
     return {
         "len": len(value),
@@ -115,10 +123,13 @@ def fingerprint_text(value: str, key_id: str | None = None) -> dict[str, str | i
 
 
 def safe_url_for_log(url: str) -> str:
-    """Return origin-only URL (scheme://host[:port]) for logs/telemetry.
+    """Return origin-only URL (scheme://host[:port]) for logs or telemetry.
 
-    This intentionally drops any userinfo (username/password) and any
-    path/query/fragment components.
+    Args:
+        url: Candidate URL to sanitize for logging.
+
+    Returns:
+        Origin-only URL or an empty string when invalid or missing scheme/host.
     """
     try:
         parts = urlsplit(str(url))
@@ -158,8 +169,11 @@ _BACKSTOP_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 def redact_text_backstop(text: str) -> str:
     """Deterministic regex redaction for rare strings that may reach logs.
 
-    Intended for exception strings and similar fields. Do not use this as a
-    general-purpose redactor for user content.
+    Args:
+        text: Candidate text to apply backstop redactions to.
+
+    Returns:
+        Redacted text string.
     """
     out = str(text)
     for pattern, repl in _BACKSTOP_PATTERNS:

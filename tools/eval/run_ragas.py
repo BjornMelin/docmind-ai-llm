@@ -199,6 +199,23 @@ def main() -> None:
         batch_size=batch_size,
     )
 
+    def _aggregate_scores(items: list[dict[str, Any]]) -> dict[str, float]:
+        totals: dict[str, float] = {}
+        counts: dict[str, int] = {}
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            for key, value in item.items():
+                if value is None:
+                    continue
+                try:
+                    numeric = float(value)
+                except (TypeError, ValueError):
+                    continue
+                totals[key] = totals.get(key, 0.0) + numeric
+                counts[key] = counts.get(key, 0) + 1
+        return {key: totals[key] / counts[key] for key in totals if counts[key]}
+
     scores: dict[str, Any] = {}
     if isinstance(result, dict):
         scores = result
@@ -206,6 +223,8 @@ def main() -> None:
         candidate = getattr(result, "scores", None)
         if isinstance(candidate, dict):
             scores = candidate
+        elif isinstance(candidate, list):
+            scores = _aggregate_scores(candidate)
 
     required = [
         "faithfulness",

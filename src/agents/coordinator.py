@@ -901,7 +901,21 @@ class MultiAgentCoordinator:
             has_history = bool(
                 self.list_checkpoints(thread_id=thread_id, user_id=user_id, limit=1)
             )
-        except Exception:
+        except (
+            RuntimeError,
+            ValueError,
+            AttributeError,
+            TimeoutError,
+            ConnectionError,
+        ) as exc:
+            redaction = build_pii_log_entry(
+                str(exc), key_id="coordinator.history_check"
+            )
+            logger.warning(
+                "History check failed (error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
             has_history = True
         if has_history:
             return None, None

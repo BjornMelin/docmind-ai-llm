@@ -50,7 +50,7 @@ This is a deletion/cleanup task. Prefer local repo truth.
 
 - Confirm real usage:
   - `rg -n \"\\bsrc\\.utils\\.multimodal\\b|\\butils\\.multimodal\\b|\\bmultimodal\\.py\\b\" -S src tests docs scripts templates`
-  - `rg -n \"T\\s*O\\s*D\\s*O\\(multimodal-phase-2\\)\" -S src || true`
+  - `rg -n \"work-marker\\(multimodal-phase-2\\)\" -S src || true`
 - Verify already-implemented canonical multimodal stack remains intact:
   - `rg -n \"SigLIP|siglip|ColPali|open_image_encrypted\" -S src/retrieval src/models src/utils`
 

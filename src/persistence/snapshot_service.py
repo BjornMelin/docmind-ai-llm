@@ -20,6 +20,7 @@ from src.persistence.hashing import compute_config_hash, compute_corpus_hash
 from src.persistence.snapshot import SnapshotManager
 from src.persistence.snapshot_utils import current_config_dict, timestamped_export_path
 from src.utils.hashing import sha256_file
+from src.utils.log_safety import build_pii_log_entry
 
 MAX_CORPUS_FILES = 10_000
 
@@ -199,8 +200,6 @@ def _export_graphs(
                 duration_ms=(time.perf_counter() - start_json) * 1000.0,
             )
         except Exception as exc:
-            from src.utils.log_safety import build_pii_log_entry
-
             redaction = build_pii_log_entry(str(exc), key_id="snapshot.graph_jsonl")
             logger.warning(
                 "Graph JSONL export failed (snapshot) (error_type={} error={})",
@@ -233,8 +232,6 @@ def _export_graphs(
                 duration_ms=(time.perf_counter() - start_parquet) * 1000.0,
             )
         except Exception as exc:
-            from src.utils.log_safety import build_pii_log_entry
-
             redaction = build_pii_log_entry(str(exc), key_id="snapshot.graph_parquet")
             logger.warning(
                 "Graph Parquet export failed (snapshot) (error_type={} error={})",
@@ -386,8 +383,6 @@ def _collect_corpus_paths(settings_obj: Any) -> tuple[list[Path], Path]:
         with manifest_file.open("w") as f:
             json.dump({"files": [str(p) for p in corpus_paths]}, f)
     except OSError as e:
-        from src.utils.log_safety import build_pii_log_entry
-
         redaction = build_pii_log_entry(str(e), key_id="snapshot.corpus_manifest_cache")
         path_name = manifest_file.name
         if e.errno in (errno.EACCES, errno.EPERM):
@@ -406,8 +401,6 @@ def _collect_corpus_paths(settings_obj: Any) -> tuple[list[Path], Path]:
                 redaction.redacted,
             )
     except Exception as e:
-        from src.utils.log_safety import build_pii_log_entry
-
         redaction = build_pii_log_entry(str(e), key_id="snapshot.corpus_manifest_cache")
         logger.debug(
             "Failed to cache corpus manifest at {} (error_type={} error={})",

@@ -114,7 +114,7 @@ graph TD
 
 - Programmatic pages defined in `src/app.py` (launched via `app.py`) using `st.Page` and `st.navigation`
 - Native session state for cross‑page context; no custom state manager
-- Native caching for data/resources; avoid bespoke caches
+- Native caching for data/resources; avoid bespoke caches.
 
 ### Implementation Details
 

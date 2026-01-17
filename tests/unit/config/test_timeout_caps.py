@@ -14,6 +14,14 @@ pytestmark = pytest.mark.unit
 
 
 def test_build_chat_model_timeout_capped_by_decision_timeout() -> None:
+    """Cap ChatOpenAI timeout using the decision timeout.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+    """
     cfg = DocMindSettings()
     cfg.llm_backend = "openai_compatible"
     cfg.openai.base_url = "http://localhost:8000"
@@ -33,6 +41,14 @@ def test_build_chat_model_timeout_capped_by_decision_timeout() -> None:
 
 
 def test_build_llm_timeout_capped_by_decision_timeout() -> None:
+    """Cap LLM timeout using the decision timeout.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+    """
     cfg = DocMindSettings()
     cfg.llm_backend = "vllm"
     cfg.vllm_base_url = "http://localhost:8000"

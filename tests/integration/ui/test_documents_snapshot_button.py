@@ -38,11 +38,29 @@ def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[AppTest]:
     }
 
     # Stub ingestion adapter and storage helpers to avoid heavy imports.
+    def _empty_ingest_result() -> dict[str, object]:
+        return {
+            "count": 0,
+            "vector_index": None,
+            "pg_index": None,
+            "manifest": None,
+            "exports": [],
+            "duration_ms": 0.0,
+            "metadata": {},
+            "nlp_preview": None,
+            "documents": [],
+        }
+
+    def _save_uploaded_file(*_, **__) -> tuple[Path, str]:
+        dummy = tmp_path / "dummy"
+        dummy.write_text("", encoding="utf-8")
+        return dummy, "0"
+
     _install_stub(
         "src.ui.ingest_adapter",
-        ingest_files=lambda *_, **__: {"count": 0},
-        ingest_inputs=lambda *_, **__: {"count": 0},
-        save_uploaded_file=lambda *_, **__: (tmp_path / "dummy", "0"),
+        ingest_files=lambda *_, **__: _empty_ingest_result(),
+        ingest_inputs=lambda *_, **__: _empty_ingest_result(),
+        save_uploaded_file=_save_uploaded_file,
     )
     _install_stub(
         "src.utils.storage",

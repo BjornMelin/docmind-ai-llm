@@ -829,7 +829,7 @@ The testing framework integrates with CI/CD through quality gates:
 # .github/workflows/ci.yml
 - name: Run tests with coverage
   run: |
-    uv run python scripts/run_tests.py --unit --integration
+    uv run python scripts/run_tests.py --coverage
     
 - name: Quality gate check
   run: |

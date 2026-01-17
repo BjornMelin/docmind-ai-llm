@@ -20,9 +20,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from grpc import RpcError
 from loguru import logger
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
+from qdrant_client.http.exceptions import UnexpectedResponse
 
 from src.config.settings import SemanticCacheConfig
 from src.persistence.hashing import compute_config_hash
@@ -58,7 +60,14 @@ def _sha256_hex(data: bytes) -> str:
 
 
 def build_prompt_key(payload: dict[str, Any]) -> str:
-    """Return a stable prompt key for exact-match lookups."""
+    """Return a stable prompt key for exact-match lookups.
+
+    Args:
+        payload: Canonicalizable payload used to build the cache key.
+
+    Returns:
+        Stable SHA-256 hex digest for exact-match lookups.
+    """
     canonical = json.dumps(
         payload,
         sort_keys=True,
@@ -79,7 +88,21 @@ def build_cache_key(
     corpus_hash: str,
     config_hash: str,
 ) -> CacheKey:
-    """Build a strict cache key without persisting raw prompt text."""
+    """Build a strict cache key without persisting raw prompt text.
+
+    Args:
+        query: User query text used in the prompt.
+        namespace: Cache namespace for isolation.
+        model_id: Identifier for the LLM model.
+        template_id: Prompt template identifier.
+        template_version: Prompt template version identifier.
+        temperature: LLM temperature setting.
+        corpus_hash: Hash of the uploaded corpus.
+        config_hash: Hash of retrieval/ingestion config.
+
+    Returns:
+        CacheKey with all strict invalidation fields populated.
+    """
     prompt_key = build_prompt_key(
         {
             "query": str(query),
@@ -203,7 +226,17 @@ class SemanticCache:
         vector_dim: int,
         embed_query: Callable[[str], list[float]],
     ) -> None:
-        """Initialize the semantic cache."""
+        """Initialize the semantic cache.
+
+        Args:
+            client: Qdrant client instance.
+            cfg: Semantic cache configuration.
+            vector_dim: Embedding dimension for query vectors.
+            embed_query: Callable to embed query strings.
+
+        Returns:
+            None.
+        """
         self._client = client
         self._cfg = cfg
         self._collection = _collection_name(cfg)
@@ -212,17 +245,20 @@ class SemanticCache:
 
     def ensure_ready(self) -> None:
         """Create the collection if it does not exist."""
-        collections = self._client.get_collections()
-        names = {c.name for c in getattr(collections, "collections", [])}
-        if self._collection in names:
+        if self._client.collection_exists(self._collection):
             return
-        self._client.create_collection(
-            collection_name=self._collection,
-            vectors_config=qmodels.VectorParams(
-                size=self._vector_dim,
-                distance=qmodels.Distance.COSINE,
-            ),
-        )
+        try:
+            self._client.create_collection(
+                collection_name=self._collection,
+                vectors_config=qmodels.VectorParams(
+                    size=self._vector_dim,
+                    distance=qmodels.Distance.COSINE,
+                ),
+            )
+        except (UnexpectedResponse, RpcError):
+            if self._client.collection_exists(self._collection):
+                return
+            raise
 
     def lookup(self, *, key: CacheKey, query: str) -> CacheHit | None:
         """Attempt exact-match then semantic lookup; returns None on miss."""
@@ -386,7 +422,14 @@ class SemanticCache:
 
 
 def config_hash_for_semcache(settings_obj: Any) -> str:
-    """Return the config hash used for semantic cache invalidation."""
+    """Return the config hash used for semantic cache invalidation.
+
+    Args:
+        settings_obj: Settings object to hash.
+
+    Returns:
+        Stable hash string for semantic cache invalidation.
+    """
     from src.persistence.snapshot_utils import current_config_dict
 
     return compute_config_hash(current_config_dict(settings_obj))

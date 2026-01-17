@@ -9,6 +9,7 @@ from src.persistence.backup_service import create_backup
 from tests.fixtures.test_settings import create_test_settings
 
 
+@pytest.mark.unit
 def test_create_backup_writes_manifest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -53,6 +54,7 @@ def test_create_backup_writes_manifest(
     assert "snapshots" in result.included
 
 
+@pytest.mark.unit
 def test_create_backup_requires_enabled(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

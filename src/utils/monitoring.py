@@ -378,7 +378,7 @@ def get_memory_usage() -> dict[str, float]:
     except (OSError, psutil.Error) as exc:
         redaction = build_pii_log_entry(str(exc), key_id="monitoring.get_memory_usage")
         logger.warning(
-            "Failed to get memory usage (error_type={} error={})",
+            "Failed to get memory usage (error_type={}, error={})",
             type(exc).__name__,
             redaction.redacted,
         )
@@ -405,7 +405,7 @@ def get_system_info() -> dict[str, Any]:
     except (OSError, psutil.Error) as exc:
         redaction = build_pii_log_entry(str(exc), key_id="monitoring.get_system_info")
         logger.warning(
-            "Failed to get system info (error_type={} error={})",
+            "Failed to get system info (error_type={}, error={})",
             type(exc).__name__,
             redaction.redacted,
         )

@@ -42,6 +42,14 @@ class _Router:
 def test_retrieve_documents_uses_router_engine_when_enabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify router injection is used when enabled.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+
+    Returns:
+        None.
+    """
     monkeypatch.setattr(settings.agents, "enable_router_injection", True)
     router = _Router()
 

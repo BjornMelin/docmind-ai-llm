@@ -40,6 +40,10 @@ class _FakeVectorIndex:
 def chat_analysis_app_test(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AppTest:
     from src.config.settings import settings as app_settings
 
+    original_data_dir = app_settings.data_dir
+    original_chat_path = app_settings.chat.sqlite_path
+    original_db_path = app_settings.database.sqlite_db_path
+
     app_settings.data_dir = tmp_path
     app_settings.chat.sqlite_path = tmp_path / "chat.db"
     app_settings.database.sqlite_db_path = tmp_path / "docmind.db"
@@ -110,7 +114,12 @@ def chat_analysis_app_test(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> A
     at = AppTest.from_file(str(page_path))
     at.default_timeout = 6
     at.session_state["vector_index"] = _FakeVectorIndex()
-    return at
+    try:
+        yield at
+    finally:
+        app_settings.data_dir = original_data_dir
+        app_settings.chat.sqlite_path = original_chat_path
+        app_settings.database.sqlite_db_path = original_db_path
 
 
 def test_analysis_separate_mode_renders_per_doc_outputs(

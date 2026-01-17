@@ -46,9 +46,16 @@ def documents_ingest_app_test(tmp_path: Path, monkeypatch) -> AppTest:
             "count": len(inputs),
             "vector_index": object(),
             "pg_index": None,
+            "manifest": {
+                "corpus_hash": "c" * 64,
+                "config_hash": "f" * 64,
+                "versions": {},
+            },
             "exports": [],
+            "duration_ms": 0.0,
             "metadata": {},
             "nlp_preview": None,
+            "documents": [],
         },
     )
 

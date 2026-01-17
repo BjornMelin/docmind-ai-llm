@@ -238,7 +238,12 @@ def _error_payload(*, msg: str, exc: Exception | None = None) -> str:
         try:
             redaction = build_pii_log_entry(detail, key_id=f"ollama_web_tools:{msg}")
             payload["detail"] = redaction.redacted
-        except Exception:  # pragma: no cover - defensive against settings issues
+        except Exception as exc:  # pragma: no cover - defensive against settings issues
+            logger.debug(
+                "build_pii_log_entry failed (error_type={} error={})",
+                type(exc).__name__,
+                str(exc),
+            )
             payload["detail"] = ""
     return _json_with_limit(payload, max_chars=_MAX_TOOL_RESULT_CHARS)
 

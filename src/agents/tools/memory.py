@@ -29,6 +29,7 @@ from loguru import logger
 from pydantic import BaseModel, Field, ValidationError
 
 from src.config import settings
+from src.utils.log_safety import build_pii_log_entry
 from src.utils.telemetry import log_jsonl
 
 MAX_RECALL_LIMIT = 100
@@ -172,8 +173,6 @@ def remember(
         return json.dumps({"ok": False, "error": "memory store unavailable"})
     ns = _namespace_from_config(config, scope=scope)
     user_id, thread_id = _ids_from_config(config)
-    from src.utils.log_safety import build_pii_log_entry
-
     thread_redacted = build_pii_log_entry(
         str(thread_id), key_id="telemetry.thread_id"
     ).redacted
@@ -252,8 +251,6 @@ def recall_memories(
         )
     ns = _namespace_from_config(config, scope=scope)
     user_id, thread_id = _ids_from_config(config)
-    from src.utils.log_safety import build_pii_log_entry
-
     thread_redacted = build_pii_log_entry(
         str(thread_id), key_id="telemetry.thread_id"
     ).redacted
@@ -307,8 +304,6 @@ def forget_memory(
         return json.dumps({"ok": False, "error": "memory store unavailable"})
     ns = _namespace_from_config(config, scope=scope)
     user_id, thread_id = _ids_from_config(config)
-    from src.utils.log_safety import build_pii_log_entry
-
     thread_redacted = build_pii_log_entry(
         str(thread_id), key_id="telemetry.thread_id"
     ).redacted
@@ -369,8 +364,6 @@ class _SuppressTelemetry:
         if exc_type is not None:
             is_expected = issubclass(exc_type, (OSError, RuntimeError, ValueError))
             log_func = logger.debug if is_expected else logger.warning
-            from src.utils.log_safety import build_pii_log_entry
-
             redaction = build_pii_log_entry(
                 str(exc), key_id="agents.tools.memory.telemetry"
             )
