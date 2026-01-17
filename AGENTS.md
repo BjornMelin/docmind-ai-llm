@@ -53,6 +53,8 @@ and docs under `docs/specs/` + `docs/developers/adrs/`.
 
 This repo uses a lightweight, compaction-resilient log so we can resume work without re-researching or re-deciding.
 
+Worklogs are **local-only** by default (gitignored) and should not be committed to the repo.
+
 After any material research, decisions, or implementation:
 
 1. Update `docs/developers/worklogs/CONTEXT.md` with:

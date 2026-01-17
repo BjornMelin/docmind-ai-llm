@@ -115,14 +115,34 @@ def fingerprint_text(value: str, key_id: str | None = None) -> dict[str, str | i
 
 
 def safe_url_for_log(url: str) -> str:
-    """Return origin-only URL (scheme://host[:port]) for logs/telemetry."""
+    """Return origin-only URL (scheme://host[:port]) for logs/telemetry.
+
+    This intentionally drops any userinfo (username/password) and any
+    path/query/fragment components.
+    """
     try:
         parts = urlsplit(str(url))
     except Exception:
         return ""
-    if not parts.scheme or not parts.netloc:
+    if not parts.scheme:
         return ""
-    return f"{parts.scheme}://{parts.netloc}"
+
+    hostname = parts.hostname
+    if not hostname:
+        return ""
+
+    host_for_origin = hostname
+    if ":" in host_for_origin and not host_for_origin.startswith("["):
+        host_for_origin = f"[{host_for_origin}]"
+
+    try:
+        port = parts.port
+    except ValueError:
+        port = None
+
+    if port is None:
+        return f"{parts.scheme}://{host_for_origin}"
+    return f"{parts.scheme}://{host_for_origin}:{port}"
 
 
 _BACKSTOP_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (

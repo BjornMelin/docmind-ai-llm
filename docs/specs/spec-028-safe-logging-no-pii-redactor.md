@@ -46,6 +46,7 @@ Suggested helpers:
   - `len` (int)
   - `hmac_sha256_12` (hex prefix, keyed) for correlation
 - `safe_url_for_log(url: str) -> str` returning only `scheme://host[:port]` (no path/query)
+  - Userinfo is stripped by construction (no `username:password@` in logs), even if present in the configured URL.
 - `redact_text_backstop(text: str) -> str` (deterministic regex redaction) intended only for:
   - exception messages
   - rare string fields that could accidentally contain content

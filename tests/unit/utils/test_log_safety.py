@@ -31,6 +31,9 @@ def test_fingerprint_text_is_deterministic() -> None:
     [
         ("https://example.com/path?x=1", "https://example.com"),
         ("http://localhost:8000/v1/models", "http://localhost:8000"),
+        ("https://user:pass@example.com/v1/models", "https://example.com"),
+        ("http://[::1]:8000/v1/models", "http://[::1]:8000"),
+        ("http://example.com:bad/v1/models", "http://example.com"),
         ("not-a-url", ""),
         ("", ""),
     ],
