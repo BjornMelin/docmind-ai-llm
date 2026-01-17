@@ -43,6 +43,7 @@ from src.retrieval.postprocessor_utils import (
     build_retriever_query_engine,
     build_vector_query_engine,
 )
+from src.utils.log_safety import build_pii_log_entry
 from src.utils.telemetry import log_jsonl
 
 # Constants
@@ -419,9 +420,16 @@ class ToolFactory:
                         "keyword_tool.error_type": type(exc).__name__,
                     }
                 )
-                logger.warning("Keyword tool registration failed: %s", exc)
+                redaction = build_pii_log_entry(
+                    str(exc), key_id="tool_factory.keyword_tool"
+                )
+                logger.warning(
+                    "Keyword tool registration failed (error_type={}, error={})",
+                    type(exc).__name__,
+                    redaction.redacted,
+                )
 
-        logger.info("Created %d tools for agent", len(tools))
+        logger.info("Created {} tools for agent", len(tools))
         return tools
 
     @classmethod

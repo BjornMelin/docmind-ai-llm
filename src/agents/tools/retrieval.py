@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 import json
 import re
@@ -15,25 +16,111 @@ from langgraph.prebuilt import InjectedState
 from llama_index.core import Document
 from loguru import logger
 
+from src.config.settings import settings
+from src.utils.log_safety import build_pii_log_entry
+from src.utils.telemetry import log_jsonl
+
 from .constants import (
     CONTENT_KEY_LENGTH,
     MAX_RETRIEVAL_RESULTS,
     VARIANT_QUERY_LIMIT,
 )
 
-_LOG_QUERY_MAX_LEN = 160
 
+def _safe_query_for_log(query: str, *, max_len: int = 200) -> str:
+    """Return a compact query string for internal logging/debugging.
 
-def _safe_query_for_log(query: str, *, max_len: int = _LOG_QUERY_MAX_LEN) -> str:
-    """Return a normalized, truncated query string for logs.
+    The return value is intended for non-sensitive troubleshooting and must not
+    be used to log raw user content. It exists primarily to cap log sizes and
+    to support targeted unit tests that validate truncation behavior.
 
-    Queries can contain sensitive user content. Keep logs useful while reducing
-    exposure by collapsing whitespace and truncating to a bounded length.
+    Args:
+        query: Query string to truncate.
+        max_len: Maximum number of characters to keep before appending an
+            ellipsis. When the query exceeds this length, the returned string is
+            `max_len + 1` characters (including the ellipsis).
+
+    Returns:
+        A compact string. When truncated, it ends with the unicode ellipsis
+        character ("…").
     """
-    collapsed = " ".join(str(query).split())
-    if len(collapsed) <= max_len:
-        return collapsed
-    return f"{collapsed[:max_len]}…"
+    normalized = " ".join(str(query).split())
+    if max_len <= 0:
+        return "…" if normalized else ""
+    if len(normalized) <= max_len:
+        return normalized
+    return normalized[:max_len].rstrip() + "…"
+
+
+def _resolve_router_engine(
+    state: dict | None, runtime: ToolRuntime | None
+) -> Any | None:
+    runtime_ctx = runtime.context if runtime is not None else None
+    if isinstance(runtime_ctx, dict):
+        router_engine = runtime_ctx.get("router_engine")
+        if router_engine is not None:
+            return router_engine
+
+    tools_data = state.get("tools_data") if isinstance(state, dict) else None
+    if isinstance(tools_data, dict):
+        router_engine = tools_data.get("router_engine")
+        if router_engine is not None:
+            return router_engine
+
+    return None
+
+
+def _emit_router_injection_event(*, used: bool, reason: str) -> None:
+    with contextlib.suppress(Exception):  # pragma: no cover - telemetry
+        log_jsonl({"router_injection_used": True, "used": bool(used), "reason": reason})
+
+
+def _maybe_router_injection_response(
+    *,
+    query: str,
+    state: dict | None,
+    runtime: ToolRuntime | None,
+    start_time: float,
+) -> str | None:
+    if not settings.agents.enable_router_injection:
+        return None
+
+    router_engine = _resolve_router_engine(state, runtime)
+    if router_engine is None:
+        _emit_router_injection_event(used=False, reason="router_engine_missing")
+        return None
+
+    try:
+        resp = router_engine.query(query)
+    except Exception as exc:  # pragma: no cover - fail open
+        _emit_router_injection_event(used=False, reason="router_query_failed")
+        redaction = build_pii_log_entry(
+            str(exc), key_id="retrieve_documents.router_injection"
+        )
+        logger.debug(
+            "router injection failed (error_type={}, error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
+        return None
+
+    documents = _parse_tool_result(resp)
+    _emit_router_injection_event(used=True, reason="router_engine_present")
+    processing_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    return json.dumps(
+        {
+            "documents": documents[:MAX_RETRIEVAL_RESULTS],
+            "strategy_used": "router_injection",
+            "query_original": query,
+            "query_optimized": query,
+            "document_count": len(documents),
+            "processing_time_ms": processing_time_ms,
+            "dspy_used": False,
+            "graphrag_used": False,
+            "router_injection": True,
+        },
+        default=str,
+    )
 
 
 @tool
@@ -49,7 +136,17 @@ def retrieve_documents(
     try:
         start_time = time.perf_counter()
 
+        router_response = _maybe_router_injection_response(
+            query=query,
+            state=state,
+            runtime=runtime,
+            start_time=start_time,
+        )
+        if router_response is not None:
+            return router_response
+
         vector_index, kg_index, retriever = _extract_indexes(state, runtime)
+
         if vector_index is None and retriever is None and kg_index is None:
             return json.dumps(
                 {
@@ -149,11 +246,18 @@ def retrieve_documents(
         return json.dumps(result_data, default=str)
 
     except (OSError, RuntimeError, ValueError, AttributeError) as e:
-        logger.error("Document retrieval failed: {}", e)
+        redaction = build_pii_log_entry(str(e), key_id="retrieve_documents.exception")
+        logger.error(
+            "Document retrieval failed (error_type={}, error={})",
+            type(e).__name__,
+            redaction.redacted,
+        )
         return json.dumps(
             {
                 "documents": [],
-                "error": str(e),
+                "error": "Document retrieval failed",
+                "error_type": type(e).__name__,
+                "error_fingerprint": redaction.fingerprint[:12],
                 "strategy_used": strategy,
                 "query_optimized": query,
             },
@@ -204,9 +308,8 @@ def _optimize_queries(query: str, use_dspy: bool) -> tuple[str, list[str]]:
 
             optimized = DSPyLlamaIndexRetriever.optimize_query(query)
             logger.debug(
-                "DSPy optimization: '{}' -> '{}'",
-                _safe_query_for_log(query),
-                _safe_query_for_log(optimized["refined"]),
+                "DSPy optimization produced {} variants",
+                len(optimized.get("variants", [])),
             )
         except ImportError:
             logger.warning(
@@ -238,14 +341,13 @@ def _run_graphrag(kg_index: Any, queries: list[str]) -> tuple[list[dict], bool]:
             result = search_tool.call(q)
             new_docs = _parse_tool_result(result)
             documents.extend(new_docs)
-            logger.debug(
-                "GraphRAG retrieved {} documents for query: {}",
-                len(new_docs),
-                _safe_query_for_log(q),
-            )
+            logger.debug("GraphRAG retrieved {} documents", len(new_docs))
         except (OSError, RuntimeError, ValueError, AttributeError) as e:
+            redaction = build_pii_log_entry(str(e), key_id="graphrag.query.exception")
             logger.warning(
-                "GraphRAG failed for query '{}': {}", _safe_query_for_log(q), e
+                "GraphRAG query failed (error_type={}, error={})",
+                type(e).__name__,
+                redaction.redacted,
             )
             fallback = True
             break
@@ -296,10 +398,9 @@ def _run_vector_hybrid(
             new_docs = _parse_tool_result(result)
             documents.extend(new_docs)
             logger.debug(
-                "{} retrieved {} documents for query: {}",
+                "{} retrieved {} documents",
                 strategy_used,
                 len(new_docs),
-                _safe_query_for_log(q),
             )
             # If this is the primary query and hybrid returned empty, fallback to vector
             if (
@@ -324,13 +425,23 @@ def _run_vector_hybrid(
                             log_event(
                                 "hybrid_fallback",
                                 reason="empty_results",
-                                query=_safe_query_for_log(primary_query),
+                                query_len=len(primary_query),
                             )
                 except (OSError, RuntimeError, ValueError, AttributeError) as fe:
-                    logger.warning("Vector fallback failed: {}", fe)
+                    redaction = build_pii_log_entry(
+                        str(fe), key_id="vector_fallback.exception"
+                    )
+                    logger.warning(
+                        "Vector fallback failed (error_type={}, error={})",
+                        type(fe).__name__,
+                        redaction.redacted,
+                    )
         except (OSError, RuntimeError, ValueError, AttributeError) as e:
+            redaction = build_pii_log_entry(str(e), key_id="vector_hybrid.exception")
             logger.error(
-                "Retrieval failed for query '{}': {}", _safe_query_for_log(q), e
+                "Retrieval failed (error_type={}, error={})",
+                type(e).__name__,
+                redaction.redacted,
             )
     return documents, strategy_used, None
 
@@ -477,10 +588,15 @@ def _parse_tool_result(result: Any) -> list[dict[str, Any]]:
                     get_content = getattr(node, "get_content", None)
                     text = str(get_content()) if callable(get_content) else str(node)
             except Exception as exc:
-                logger.opt(exception=exc).debug(
+                from src.utils.log_safety import build_pii_log_entry
+
+                redaction = build_pii_log_entry(str(exc), key_id="retrieval.parse_node")
+                logger.debug(
                     "Failed to extract text from node; falling back to str(node) "
-                    "(node_type={node_type})",
-                    node_type=type(node).__name__,
+                    "(node_type={} error_type={} error={})",
+                    type(node).__name__,
+                    type(exc).__name__,
+                    redaction.redacted,
                 )
                 text = str(node)
             meta = _sanitize_metadata(getattr(node, "metadata", None) or {})
@@ -517,24 +633,47 @@ def _parse_tool_result(result: Any) -> list[dict[str, Any]]:
 
 def _collect_via_tool_factory(
     query: str, vector_index: Any, kg_index: Any, retriever: Any
-) -> list[dict]:
+) -> list[dict[str, Any]]:
+    """Collect documents by executing tools produced by ToolFactory.
+
+    This helper is fail-open: any tool failure is logged and the remaining tools
+    are still executed.
+    """
     try:
         tool_list = _get_tool_factory().create_tools_from_indexes(
             vector_index=vector_index, kg_index=kg_index, retriever=retriever
         )
-        collected: list[dict] = []
-        for t in tool_list or []:
-            try:
-                res = t.invoke(query) if hasattr(t, "invoke") else t.call(query)
-                collected.extend(_parse_tool_result(res))
-            except Exception as te:
-                logger.error("Tool execution failed: {}", te)
-                logger.warning("Partial failure: continuing with other tools")
-                continue
-        return collected
-    except Exception:
-        logger.debug("Tool collection path failed; using detailed path", exc_info=True)
+    except Exception as exc:
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="retrieval.tool_collect")
+        logger.debug(
+            "Tool collection path failed; using detailed path (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
         return []
+
+    collected: list[dict[str, Any]] = []
+    for tool_obj in tool_list or []:
+        try:
+            res = (
+                tool_obj.invoke(query)
+                if hasattr(tool_obj, "invoke")
+                else tool_obj.call(query)
+            )
+            collected.extend(_parse_tool_result(res))
+        except Exception as exc:
+            from src.utils.log_safety import build_pii_log_entry
+
+            redaction = build_pii_log_entry(str(exc), key_id="retrieval.tool_execute")
+            logger.error(
+                "Tool execution failed (error_type={} error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
+            continue
+    return collected
 
 
 def _get_tool_factory():

@@ -113,9 +113,14 @@ class DefaultToolRegistry:
         """Return the retrieval tool callable."""
         from src.agents.tools.memory import forget_memory, recall_memories, remember
         from src.agents.tools.ollama_web_tools import get_langchain_web_tools
-        from src.agents.tools.router_tool import router_tool
+        from src.agents.tools.retrieval import retrieve_documents
 
-        tools: list[Any] = [router_tool, recall_memories, remember, forget_memory]
+        tools: list[Any] = [
+            retrieve_documents,
+            recall_memories,
+            remember,
+            forget_memory,
+        ]
         tools.extend(get_langchain_web_tools(self.app_settings))
         return tools
 
@@ -137,10 +142,17 @@ class DefaultToolRegistry:
         if callable(fn):
             try:
                 return bool(fn())
-            except (AttributeError, TypeError, ValueError):
+            except (AttributeError, TypeError, ValueError) as exc:
+                from src.utils.log_safety import build_pii_log_entry
+
+                redaction = build_pii_log_entry(
+                    str(exc), key_id="tool_registry.is_graphrag_enabled"
+                )
                 logging.getLogger(__name__).debug(
-                    "is_graphrag_enabled() raised; GraphRAG disabled (fail-closed)",
-                    exc_info=True,
+                    "is_graphrag_enabled() raised; GraphRAG disabled (fail-closed) "
+                    "(error_type=%s error=%s)",
+                    type(exc).__name__,
+                    redaction.redacted,
                 )
                 return False
         try:

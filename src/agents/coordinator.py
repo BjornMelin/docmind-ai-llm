@@ -24,6 +24,8 @@ Example:
         # response.content contains the generated text
 """
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import threading
@@ -32,7 +34,7 @@ import warnings
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from langchain.agents import create_agent
 from langchain_core.messages import HumanMessage
@@ -62,9 +64,14 @@ from src.config import settings
 from src.config.langchain_factory import build_chat_model
 from src.dspy_integration import DSPyLlamaIndexRetriever, is_dspy_available
 from src.telemetry.opentelemetry import configure_observability
+from src.utils.log_safety import build_pii_log_entry
+from src.utils.telemetry import log_jsonl
 
 # Import agent-specific models
 from .models import AgentResponse, MultiAgentGraphState, MultiAgentState
+
+if TYPE_CHECKING:  # pragma: no cover
+    from src.utils.semantic_cache import CacheKey
 
 _COORDINATOR_TRACER = trace.get_tracer("docmind.agents.coordinator")
 _COORDINATOR_LATENCY = None
@@ -123,6 +130,41 @@ PARALLEL_TOOL_CALLS_ENABLED = True
 MEMORY_CONSOLIDATION_MAX_WORKERS = 2
 MEMORY_CONSOLIDATION_TIMEOUT_S = 10.0
 MEMORY_CONSOLIDATION_RELEASE_GRACE_S = 30.0
+
+
+def _ensure_event_loop() -> None:
+    """Ensure an asyncio event loop exists.
+
+    Avoid deprecated ``asyncio.get_event_loop()`` patterns.
+    """
+    try:
+        asyncio.get_event_loop_policy().get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+
+def _as_state_dict(state: Any) -> dict[str, Any]:
+    """Normalize a graph state into a plain dict."""
+    if isinstance(state, dict):
+        return state
+    model_dump = getattr(state, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
+        return dumped if isinstance(dumped, dict) else {}
+    logger.debug(
+        "Unexpected state type {} without model_dump; using empty dict",
+        type(state).__name__,
+    )
+    return {}
+
+
+def _coerce_deadline_ts(initial_state: dict[str, Any]) -> float | None:
+    raw_deadline = initial_state.get("deadline_ts")
+    try:
+        return float(raw_deadline) if raw_deadline is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _shared_llm_attempts() -> int:
@@ -252,7 +294,7 @@ class MultiAgentCoordinator:
         )
         self._memory_executor_closed = False
 
-        logger.info("MultiAgentCoordinator initialized (model: %s)", model_path)
+        logger.info("MultiAgentCoordinator initialized (model: {})", model_path)
 
     def close(self) -> None:
         """Release resources held by the coordinator."""
@@ -292,7 +334,7 @@ class MultiAgentCoordinator:
                         try:
                             self.llamaindex_llm.max_retries = retries  # type: ignore[attr-defined]
                             logger.info(
-                                "Configured shared LlamaIndex LLM retries: %d",
+                                "Configured shared LlamaIndex LLM retries: {}",
                                 retries,
                             )
                         except (AttributeError, TypeError, ValueError):
@@ -336,8 +378,11 @@ class MultiAgentCoordinator:
             return True
 
         except (RuntimeError, ValueError, AttributeError, ImportError) as e:
-            logger.exception(
-                "Failed to setup coordinator ({}): {}", type(e).__name__, e
+            redaction = build_pii_log_entry(str(e), key_id="coordinator.setup")
+            logger.error(
+                "Failed to setup coordinator (error_type={}, error={})",
+                type(e).__name__,
+                redaction.redacted,
             )
             return False
 
@@ -423,8 +468,13 @@ class MultiAgentCoordinator:
             logger.info("Agent graph setup completed successfully")
 
         except (RuntimeError, ValueError, AttributeError) as e:
-            logger.error("Failed to setup agent graph: %s", e)
-            raise RuntimeError(f"Agent graph initialization failed: {e}") from e
+            redaction = build_pii_log_entry(str(e), key_id="coordinator.agent_graph")
+            logger.error(
+                "Failed to setup agent graph (error_type={}, error={})",
+                type(e).__name__,
+                redaction.redacted,
+            )
+            raise RuntimeError("Agent graph initialization failed") from e
 
     def _create_supervisor_prompt(self) -> str:
         """Create system prompt for supervisor agent."""
@@ -484,7 +534,12 @@ class MultiAgentCoordinator:
 
                 return state
             except (RuntimeError, ValueError, AttributeError) as e:
-                logger.warning("Pre-model hook failed: %s", e)
+                redaction = build_pii_log_entry(str(e), key_id="coordinator.pre_hook")
+                logger.warning(
+                    "Pre-model hook failed (error_type={}, error={})",
+                    type(e).__name__,
+                    redaction.redacted,
+                )
                 # Non-fatal: annotate state for observability only if dict
                 if isinstance(state, dict):
                     state["hook_error"] = True
@@ -504,7 +559,12 @@ class MultiAgentCoordinator:
                 )
                 return state
             except (RuntimeError, ValueError, AttributeError) as e:
-                logger.warning("Post-model hook failed: %s", e)
+                redaction = build_pii_log_entry(str(e), key_id="coordinator.post_hook")
+                logger.warning(
+                    "Post-model hook failed (error_type={}, error={})",
+                    type(e).__name__,
+                    redaction.redacted,
+                )
                 if isinstance(state, dict):
                     state["hook_error"] = True
                     state["hook_name"] = "post_model_hook"
@@ -620,13 +680,184 @@ class MultiAgentCoordinator:
         Returns:
             Initial MultiAgentState as a dict.
         """
+        deadline_ts = None
+        if settings.agents.enable_deadline_propagation:
+            deadline_ts = time.monotonic() + float(self.max_agent_timeout)
         return MultiAgentState(
             messages=[HumanMessage(content=query)],
             tools_data=tools_data,
             total_start_time=start_time,
             output_mode="last_message",
             parallel_execution_active=True,
+            deadline_ts=deadline_ts,
         ).model_dump()
+
+    def _maybe_semantic_cache_lookup(
+        self,
+        *,
+        query: str,
+        thread_id: str,
+        user_id: str,
+        checkpoint_id: str | None,
+        start_time: float,
+        span: Span,
+    ) -> tuple[AgentResponse | None, CacheKey | None]:
+        """Attempt a semantic cache lookup for a new thread.
+
+        This lookup is fail-open and never blocks the user. It is skipped when the
+        cache is disabled, when resuming from a checkpoint, or when the thread has
+        existing history.
+
+        Args:
+            query: User query to evaluate for caching.
+            thread_id: Conversation thread identifier.
+            user_id: User namespace identifier (used for memory scoping).
+            checkpoint_id: Optional checkpoint id (cache lookup is skipped when set).
+            start_time: Query processing start time for timing metrics.
+            span: Active trace span.
+
+        Returns:
+            tuple[AgentResponse | None, CacheKey | None]: A tuple of (cached_response,
+            cache_key). `cached_response` is non-None only on cache hit.
+        """
+        sem_cfg = getattr(settings, "semantic_cache", None)
+        if sem_cfg is None or not bool(getattr(sem_cfg, "enabled", False)):
+            return None, None
+        if checkpoint_id is not None:
+            return None, None
+
+        try:
+            has_history = bool(
+                self.list_checkpoints(thread_id=thread_id, user_id=user_id, limit=1)
+            )
+        except Exception:
+            has_history = True
+        if has_history:
+            return None, None
+
+        semantic_cache_key: CacheKey | None = None
+        try:
+            from src.persistence.hashing import compute_corpus_hash
+            from src.persistence.langchain_embeddings import LlamaIndexEmbeddingsAdapter
+            from src.persistence.snapshot_utils import collect_corpus_paths
+            from src.utils.semantic_cache import (
+                SemanticCache,
+                build_cache_key,
+                config_hash_for_semcache,
+            )
+            from src.utils.storage import create_sync_client
+
+            uploads_dir = settings.data_dir / "uploads"
+            corpus_hash = compute_corpus_hash(
+                collect_corpus_paths(uploads_dir),
+                base_dir=uploads_dir,
+            )
+            cfg_hash = config_hash_for_semcache(settings)
+
+            model_id = str(settings.model or settings.vllm.model or "") or "unknown"
+            semantic_cache_key = build_cache_key(
+                query=str(query),
+                namespace=str(settings.semantic_cache.namespace),
+                model_id=model_id,
+                template_id="chat",
+                template_version=str(settings.app_version),
+                temperature=float(settings.vllm.temperature),
+                corpus_hash=corpus_hash,
+                config_hash=cfg_hash,
+            )
+
+            with create_sync_client() as client:
+                cache = SemanticCache(
+                    client=client,
+                    cfg=settings.semantic_cache,
+                    vector_dim=int(settings.embedding.dimension),
+                    embed_query=LlamaIndexEmbeddingsAdapter().embed_query,
+                )
+                hit = cache.lookup(key=semantic_cache_key, query=str(query))
+        except Exception as exc:  # pragma: no cover - fail open
+            redaction = build_pii_log_entry(
+                str(exc), key_id="semantic_cache.lookup.exception"
+            )
+            logger.debug(
+                "Semantic cache lookup skipped (error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
+            return None, semantic_cache_key
+
+        if hit is None:
+            return None, semantic_cache_key
+
+        processing_time = time.perf_counter() - start_time
+        response = AgentResponse(
+            content=str(hit.response_text),
+            sources=[],
+            metadata={
+                "semantic_cache": {
+                    "hit": True,
+                    "kind": hit.kind,
+                    "score": hit.score,
+                }
+            },
+            validation_score=0.0,
+            processing_time=processing_time,
+            optimization_metrics={"semantic_cache": True},
+            agent_decisions=[],
+            fallback_used=False,
+        )
+        self.successful_queries += 1
+        self._update_performance_metrics(processing_time, 0.0)
+        self._record_query_metrics(processing_time, True)
+        span.set_attribute("semantic_cache.hit", True)
+        span.set_attribute("semantic_cache.kind", str(hit.kind))
+        return response, semantic_cache_key
+
+    def _maybe_semantic_cache_store(
+        self,
+        *,
+        semantic_cache_key: CacheKey,
+        query: str,
+        response_text: str,
+    ) -> None:
+        """Store a completed response in the semantic cache (best-effort).
+
+        This is fail-open and never blocks the user response.
+
+        Args:
+            semantic_cache_key: Cache key used for invalidation and filtering.
+            query: User query string used for embeddings.
+            response_text: Response text to store (bounded by cache config).
+        """
+        sem_cfg = getattr(settings, "semantic_cache", None)
+        if sem_cfg is None or not bool(getattr(sem_cfg, "enabled", False)):
+            return
+
+        try:
+            from src.persistence.langchain_embeddings import LlamaIndexEmbeddingsAdapter
+            from src.utils.semantic_cache import SemanticCache
+            from src.utils.storage import create_sync_client
+
+            with create_sync_client() as client:
+                cache = SemanticCache(
+                    client=client,
+                    cfg=settings.semantic_cache,
+                    vector_dim=int(settings.embedding.dimension),
+                    embed_query=LlamaIndexEmbeddingsAdapter().embed_query,
+                )
+                cache.store(
+                    key=semantic_cache_key,
+                    query=str(query),
+                    response_text=str(response_text),
+                )
+        except Exception as exc:  # pragma: no cover - fail open
+            redaction = build_pii_log_entry(
+                str(exc), key_id="semantic_cache.store.exception"
+            )
+            logger.debug(
+                "Semantic cache store skipped (error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
 
     def _handle_timeout_response(
         self, query: str, context: Any | None, start_time: float
@@ -651,7 +882,14 @@ class MultiAgentCoordinator:
                 else:
                     response.optimization_metrics = {"timeout": True}
             except (KeyError, TypeError, AttributeError) as exc:
-                logger.debug("Failed to annotate fallback metadata: %s", exc)
+                redaction = build_pii_log_entry(
+                    str(exc), key_id="coordinator.fallback_metadata"
+                )
+                logger.debug(
+                    "Failed to annotate fallback metadata (error_type={}, error={})",
+                    type(exc).__name__,
+                    redaction.redacted,
+                )
             return response, True
         processing_time = time.perf_counter() - start_time
         response = AgentResponse(
@@ -783,6 +1021,17 @@ class MultiAgentCoordinator:
             span = self._start_span(exit_stack, thread_id, len(query))
 
             try:
+                cached_response, semantic_cache_key = self._maybe_semantic_cache_lookup(
+                    query=query,
+                    thread_id=thread_id,
+                    user_id=user_id,
+                    checkpoint_id=checkpoint_id,
+                    start_time=start_time,
+                    span=span,
+                )
+                if cached_response is not None:
+                    return cached_response
+
                 tools_data: dict[str, Any] = self.tool_registry.build_tools_data(
                     settings_override
                 )
@@ -806,6 +1055,18 @@ class MultiAgentCoordinator:
                         result, query, context, start_time, coordination_time
                     )
                 )
+
+                # Best-effort semantic cache store (never impact user flow).
+                if (
+                    semantic_cache_key is not None
+                    and not workflow_timed_out
+                    and not used_fallback
+                ):
+                    self._maybe_semantic_cache_store(
+                        semantic_cache_key=semantic_cache_key,
+                        query=str(query),
+                        response_text=str(response.content),
+                    )
 
                 # Update performance metrics
                 processing_time = time.perf_counter() - start_time
@@ -847,8 +1108,16 @@ class MultiAgentCoordinator:
 
             except (RuntimeError, ValueError, AttributeError, TimeoutError) as exc:
                 span.set_attribute("coordinator.success", False)
-                span.set_attribute("coordinator.error", str(exc))
-                logger.error("Multi-agent processing failed: {}", exc)
+                redaction = build_pii_log_entry(
+                    str(exc), key_id="coordinator.process_query.exception"
+                )
+                span.set_attribute("coordinator.error", redaction.redacted)
+                span.set_attribute("coordinator.error_type", type(exc).__name__)
+                logger.error(
+                    "Multi-agent processing failed (error_type={}, error={})",
+                    type(exc).__name__,
+                    redaction.redacted,
+                )
 
                 # Fallback to basic RAG if enabled
                 if self.enable_fallback:
@@ -873,17 +1142,19 @@ class MultiAgentCoordinator:
             if self.compiled_graph is None:
                 raise RuntimeError("Agent graph is not compiled")
 
-            # Ensure an event loop exists (avoid asyncio.get_event_loop deprecations).
-            try:
-                asyncio.get_event_loop_policy().get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+            deadline_ts = (
+                _coerce_deadline_ts(initial_state)
+                if settings.agents.enable_deadline_propagation
+                else None
+            )
+
+            _ensure_event_loop()
 
             cfg: dict[str, Any] = {"thread_id": str(thread_id), "user_id": str(user_id)}
             if checkpoint_id:
                 cfg["checkpoint_id"] = str(checkpoint_id)
             config: RunnableConfig = {"configurable": cfg}
+
             result: dict[str, Any] | None = None
             graph = cast(Any, self.compiled_graph)
             for state in graph.stream(
@@ -892,43 +1163,53 @@ class MultiAgentCoordinator:
                 context=runtime_context,
                 stream_mode="values",
             ):
-                if isinstance(state, dict):
-                    result = cast(dict[str, Any], state)
-                else:
-                    model_dump = getattr(state, "model_dump", None)
-                    if not callable(model_dump):
-                        logger.debug(
-                            "Unexpected state type %s without model_dump; "
-                            "using empty dict",
-                            type(state).__name__,
-                        )
-                    result = cast(
-                        dict[str, Any], model_dump() if callable(model_dump) else {}
-                    )
+                result = _as_state_dict(state)
                 elapsed = time.perf_counter() - float(
                     initial_state.get("total_start_time", 0.0)
                 )
-                if elapsed > self.max_agent_timeout:
-                    logger.warning("Agent workflow timeout after %.2fs", elapsed)
-                    try:
-                        if isinstance(result, dict):
-                            result["timed_out"] = True
-                            result["deadline_s"] = float(self.max_agent_timeout)
-                    except (TypeError, AttributeError) as exc:
-                        logger.debug("Failed to mark timeout flag on state: %s", exc)
+
+                if deadline_ts is not None and time.monotonic() > deadline_ts:
+                    logger.warning(
+                        "Agent workflow deadline exceeded after {:.2f}s", elapsed
+                    )
+                    result["timed_out"] = True
+                    result["deadline_s"] = float(self.max_agent_timeout)
+                    result["cancel_reason"] = "deadline_exceeded"
+                    with contextlib.suppress(Exception):  # pragma: no cover - telemetry
+                        log_jsonl(
+                            {
+                                "agent_deadline_exceeded": True,
+                                "decision_timeout_s": float(self.max_agent_timeout),
+                                "elapsed_s": float(elapsed),
+                            }
+                        )
+                    break
+
+                if deadline_ts is None and elapsed > self.max_agent_timeout:
+                    logger.warning("Agent workflow timeout after {:.2f}s", elapsed)
+                    result["timed_out"] = True
+                    result["deadline_s"] = float(self.max_agent_timeout)
                     break
 
             if result is not None:
                 return result
+            thread_redacted = build_pii_log_entry(
+                str(thread_id), key_id="coordinator.thread_id"
+            ).redacted
             logger.warning(
-                "Agent workflow produced no result; returning initial state "
-                "(thread_id=%s)",
-                thread_id,
+                "Agent workflow produced no result; returning initial "
+                "state (thread_id={})",
+                thread_redacted,
             )
             return initial_state
 
         except (RuntimeError, ValueError, AttributeError, TimeoutError) as e:
-            logger.error("Agent workflow execution failed: %s", e)
+            redaction = build_pii_log_entry(str(e), key_id="agent_workflow.exception")
+            logger.error(
+                "Agent workflow execution failed (error_type={}, error={})",
+                type(e).__name__,
+                redaction.redacted,
+            )
             raise
 
     def _extract_response(
@@ -997,12 +1278,22 @@ class MultiAgentCoordinator:
             )
 
         except (RuntimeError, ValueError, AttributeError) as e:
-            logger.error("Failed to extract response: %s", e)
+            redaction = build_pii_log_entry(
+                str(e), key_id="coordinator.extract_response"
+            )
+            logger.error(
+                "Failed to extract response (error_type={}, error={})",
+                type(e).__name__,
+                redaction.redacted,
+            )
             processing_time = time.perf_counter() - start_time
             return AgentResponse(
-                content=f"Error extracting response: {e!s}",
+                content="Error extracting response.",
                 sources=[],
-                metadata={"extraction_error": str(e)},
+                metadata={
+                    "extraction_error_type": type(e).__name__,
+                    "extraction_error": redaction.redacted,
+                },
                 validation_score=0.0,
                 processing_time=processing_time,
                 optimization_metrics={"error": True},
@@ -1039,9 +1330,8 @@ class MultiAgentCoordinator:
 
             return AgentResponse(
                 content=(
-                    f"I understand you're asking about: {query}. However, the "
-                    f"advanced multi-agent system is currently unavailable. Please try "
-                    f"again later."
+                    "The multi-agent system is temporarily unavailable. "
+                    "Please try again shortly."
                 ),
                 sources=[],
                 metadata={
@@ -1055,15 +1345,21 @@ class MultiAgentCoordinator:
             )
 
         except (RuntimeError, ValueError, AttributeError, Exception) as e:
-            logger.error("Fallback RAG also failed: %s", e)
+            redaction = build_pii_log_entry(str(e), key_id="coordinator.fallback_rag")
+            logger.error(
+                "Fallback RAG also failed (error_type={}, error={})",
+                type(e).__name__,
+                redaction.redacted,
+            )
             processing_time = time.perf_counter() - start_time
             return AgentResponse(
-                content=f"System temporarily unavailable. Error: {e!s}",
+                content="System temporarily unavailable.",
                 sources=[],
                 metadata={
                     "fallback_used": True,
                     "fallback_failed": True,
-                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "error": redaction.redacted,
                 },
                 validation_score=0.0,
                 processing_time=processing_time,
@@ -1179,7 +1475,14 @@ class MultiAgentCoordinator:
                     }
                 )
         except Exception as exc:
-            logger.debug("Checkpoint listing failed: %s", exc)
+            redaction = build_pii_log_entry(
+                str(exc), key_id="coordinator.list_checkpoints"
+            )
+            logger.debug(
+                "Checkpoint listing failed (error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
         return out
 
     def fork_from_checkpoint(
@@ -1204,23 +1507,32 @@ class MultiAgentCoordinator:
             "checkpoint_id": str(checkpoint_id),
         }
         config: RunnableConfig = {"configurable": cfg}
+        thread_redacted = build_pii_log_entry(
+            str(thread_id), key_id="coordinator.thread_id"
+        ).redacted
+        checkpoint_redacted = build_pii_log_entry(
+            str(checkpoint_id), key_id="coordinator.checkpoint_id"
+        ).redacted
 
         # First, fetch the checkpoint to verify it exists and preserve metadata
         try:
             source_state = self.compiled_graph.get_state(config)
             if not source_state or not source_state.values:
                 logger.debug(
-                    "Checkpoint not found or empty (thread_id=%s checkpoint_id=%s)",
-                    thread_id,
-                    checkpoint_id,
+                    "Checkpoint not found or empty (thread_id={} checkpoint_id={})",
+                    thread_redacted,
+                    checkpoint_redacted,
                 )
                 return None
         except (RuntimeError, ValueError, AttributeError) as exc:
+            err = build_pii_log_entry(str(exc), key_id="coordinator.get_state")
             logger.debug(
-                "Failed to fetch checkpoint (thread_id=%s checkpoint_id=%s): %s",
-                thread_id,
-                checkpoint_id,
-                exc,
+                "Failed to fetch checkpoint (thread_id={} "
+                "checkpoint_id={} error_type={} error={})",
+                thread_redacted,
+                checkpoint_redacted,
+                type(exc).__name__,
+                err.redacted,
             )
             return None
 
@@ -1235,21 +1547,28 @@ class MultiAgentCoordinator:
             )
         except (RuntimeError, ValueError, AttributeError, TypeError) as exc:
             # Specific exception handling for LangGraph API errors
+            err = build_pii_log_entry(str(exc), key_id="coordinator.update_state")
             logger.debug(
-                "Checkpoint fork failed (thread_id=%s checkpoint_id=%s): %s",
-                thread_id,
-                checkpoint_id,
-                exc,
+                "Checkpoint fork failed (thread_id={} checkpoint_id={} "
+                "error_type={} error={})",
+                thread_redacted,
+                checkpoint_redacted,
+                type(exc).__name__,
+                err.redacted,
             )
             return None
         except Exception as exc:
             # Catch any unexpected exceptions but log them for debugging
+            err = build_pii_log_entry(
+                str(exc), key_id="coordinator.update_state.unhandled"
+            )
             logger.debug(
-                "Unexpected error during checkpoint fork "
-                "(thread_id=%s checkpoint_id=%s): %s",
-                thread_id,
-                checkpoint_id,
-                exc,
+                "Unexpected error during checkpoint fork (thread_id={} "
+                "checkpoint_id={} error_type={} error={})",
+                thread_redacted,
+                checkpoint_redacted,
+                type(exc).__name__,
+                err.redacted,
             )
             return None
 
@@ -1385,7 +1704,16 @@ class MultiAgentCoordinator:
             apply_consolidation_policy(self.store, namespace, actions, policy=policy)
 
         except Exception as exc:
-            logger.debug("Memory consolidation background task failed: {}", exc)
+            from src.utils.log_safety import build_pii_log_entry
+
+            redaction = build_pii_log_entry(
+                str(exc), key_id="coordinator.memory_consolidation_background"
+            )
+            logger.debug(
+                "Memory consolidation background task failed (error_type={} error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
 
     def _schedule_memory_consolidation(
         self,
@@ -1466,18 +1794,34 @@ class MultiAgentCoordinator:
                             MEMORY_CONSOLIDATION_RELEASE_GRACE_S, _release_if_stuck
                         ).start()
                     except (RuntimeError, TypeError) as exc:
+                        from src.utils.log_safety import build_pii_log_entry
+
+                        redaction = build_pii_log_entry(
+                            str(exc),
+                            key_id="coordinator.memory_consolidation_add_callback",
+                        )
                         # If callback cannot be added (rare; future may be done),
                         # release immediately as fallback
                         logger.debug(
-                            "Could not attach done callback for thread {}: {}; "
-                            "releasing slot immediately",
+                            "Could not attach done callback for thread {} "
+                            "(error_type={} error={}); releasing slot immediately",
                             thread_id,
-                            exc,
+                            type(exc).__name__,
+                            redaction.redacted,
                         )
                         _release_once("callback-failed")
                         should_release = False  # Already released, avoid double-release
             except Exception as exc:
-                logger.debug("Memory consolidation task failed: {}", exc)
+                from src.utils.log_safety import build_pii_log_entry
+
+                redaction = build_pii_log_entry(
+                    str(exc), key_id="coordinator.memory_consolidation_task"
+                )
+                logger.debug(
+                    "Memory consolidation task failed (error_type={} error={})",
+                    type(exc).__name__,
+                    redaction.redacted,
+                )
             finally:
                 if should_release:
                     _release_once("completed")

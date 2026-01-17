@@ -114,9 +114,22 @@ def synthesize_results(
         logger.info("Synthesis complete: {} final documents", len(final_documents))
         return json.dumps(result_data, default=str)
 
-    except (RuntimeError, ValueError, AttributeError) as e:
-        logger.error("Result synthesis failed: {}", e)
-        return json.dumps({"documents": [], "error": str(e), "synthesis_metadata": {}})
+    except (RuntimeError, ValueError, AttributeError) as exc:
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="agents.tools.synthesis")
+        logger.error(
+            "Result synthesis failed (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
+        return json.dumps(
+            {
+                "documents": [],
+                "error": "synthesis failed",
+                "synthesis_metadata": {},
+            }
+        )
 
 
 def _rank_documents_by_relevance(documents: list[dict], query: str) -> list[dict]:

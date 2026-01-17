@@ -381,19 +381,36 @@ class RetrievalAgent:
         try:
             raw = _invoke_direct_tool()
         except TOOL_FALLBACK_ERRORS as exc:
-            logger.error("Direct tool invocation failed: {}", exc)
+            from src.utils.log_safety import build_pii_log_entry
+
+            redaction = build_pii_log_entry(str(exc), key_id="agents.retrieval.invoke")
+            logger.error(
+                "Direct tool invocation failed (error_type={} error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
+            err_msg = str(exc)
             return RetrievalPayload(
                 documents=[],
                 query_original=query,
                 query_optimized=query,
                 strategy_used=f"{strategy}_failed",
-                error=str(exc),
+                error=err_msg,
             )
 
         try:
             return self._parser.parse_raw(raw)
         except ValueError as exc:
-            logger.error("Direct tool returned malformed payload: {}", exc)
+            from src.utils.log_safety import build_pii_log_entry
+
+            redaction = build_pii_log_entry(
+                str(exc), key_id="agents.retrieval.malformed_payload"
+            )
+            logger.error(
+                "Direct tool returned malformed payload (error_type={} error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
             return RetrievalPayload(
                 documents=[],
                 query_original=query,

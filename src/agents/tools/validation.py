@@ -10,6 +10,8 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 from loguru import logger
 
+from src.utils.monitoring import log_error_with_context
+
 from .constants import (
     ACCEPT_CONFIDENCE_THRESHOLD,
     CONFIDENCE_REDUCTION_COHERENCE,
@@ -102,8 +104,8 @@ def validate_response(
         )
         return json.dumps(validation_result)
 
-    except (RuntimeError, ValueError, AttributeError) as e:
-        logger.error("Response validation failed: {}", e)
+    except (RuntimeError, ValueError, AttributeError) as exc:
+        log_error_with_context(exc, operation="validate_response")
         return json.dumps(
             {
                 "valid": False,
@@ -112,11 +114,12 @@ def validate_response(
                     {
                         "type": "validation_error",
                         "severity": "high",
-                        "description": str(e),
+                        "description": "validation failed",
                     }
                 ],
                 "suggested_action": "regenerate",
-                "error": str(e),
+                "error_type": type(exc).__name__,
+                "error": "validation failed",
             }
         )
 
