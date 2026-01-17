@@ -488,7 +488,13 @@ def _ensure_router_engine() -> None:
     try:
         _load_latest_snapshot_into_session()
     except Exception as exc:
-        st.caption(f"Autoload skipped: {exc}")
+        redaction = build_pii_log_entry(str(exc), key_id="chat.autoload_snapshot")
+        logger.debug(
+            "Autoload skipped (error_type={}, error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
+        st.caption("Autoload skipped.")
     if "router_engine" not in st.session_state:
         try:
             snap = latest_snapshot_dir()
@@ -1075,6 +1081,14 @@ def _hydrate_router_from_snapshot(snap_dir: Path) -> None:
     st.session_state["vector_index"] = vec
     if kg is not None:
         st.session_state["graphrag_index"] = kg
+    if vec is None:
+        logger.debug(
+            "Snapshot autoload skipped: missing vector index (snapshot_id={})",
+            current_id,
+        )
+        st.session_state["router_engine"] = None
+        st.session_state["_snapshot_loaded_id"] = current_id
+        return
     # Best-effort: provide a multimodal fusion retriever for agent tools.
     try:
         from src.retrieval.multimodal_fusion import MultimodalFusionRetriever
@@ -1095,6 +1109,7 @@ def _hydrate_router_from_snapshot(snap_dir: Path) -> None:
             f"Autoloaded snapshot: {snap_dir.name} (graph={'yes' if kg else 'no'})"
         )
     except (
+        AttributeError,
         ValueError,
         RuntimeError,
         OSError,
