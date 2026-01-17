@@ -7,6 +7,7 @@ pre-validation to avoid persisting invalid configuration.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Sequence
 from pathlib import Path, PurePath
@@ -27,28 +28,13 @@ def _validate_candidate(
 ) -> tuple[DocMindSettings | None, list[str]]:
     """Validate a candidate settings payload before Apply/Save.
 
-    The ``candidate`` argument is expected to be a dictionary whose keys
-    correspond to the fields of :class:`DocMindSettings`. Typical keys include
-    top-level runtime options such as ``"llm_backend"``, ``"model"``,
-    ``"context_window"``, ``"llm_request_timeout_seconds"``,
-    ``"enable_gpu_acceleration"``, provider URLs like ``"ollama_base_url"``,
-    ``"vllm_base_url"``, ``"lmstudio_base_url"``, ``"llamacpp_base_url"``,
-    and nested sections such as ``"retrieval"`` (e.g. ``"rrf_k"``,
-    ``"text_rerank_timeout_ms"``, ``"siglip_timeout_ms"``,
-    ``"colpali_timeout_ms"``, ``"total_rerank_budget_ms"``) and ``"security"``
-    (e.g. ``"allow_remote_endpoints"``).
-
     Args:
-        candidate: A dict-like settings payload (for example, data collected
-            from the settings form or from ``st.session_state``) that matches
-            the schema of :class:`DocMindSettings`.
+        candidate: A dictionary whose keys correspond to DocMindSettings fields.
 
     Returns:
-        A tuple ``(validated_settings, error_messages)`` where
-        ``validated_settings`` is a :class:`DocMindSettings` instance on
-        success and ``None`` on failure, and ``error_messages`` is a list of
-        human-readable validation error messages (empty when validation
-        succeeds).
+        tuple[DocMindSettings | None, list[str]]: A tuple of (settings, errors).
+            The settings object is None if validation fails. The errors list
+            contains human-readable validation messages.
     """
     try:
         validated = DocMindSettings.model_validate(candidate)
@@ -85,7 +71,14 @@ def _get_resolved_home_dir() -> Path:
 
 
 def _clean_gguf_path_text(path_text: str) -> str | None:
-    """Validate and normalize raw GGUF path input."""
+    """Validate and normalize raw GGUF path input.
+
+    Args:
+        path_text: Raw path string from UI input.
+
+    Returns:
+        str | None: Trimmed and validated path string, or None if invalid.
+    """
     clean = (path_text or "").strip()
     if not clean:
         return None
@@ -101,7 +94,11 @@ def _clean_gguf_path_text(path_text: str) -> str | None:
 
 
 def _resolve_allowed_gguf_bases() -> list[Path]:
-    """Resolve allowed base directories for GGUF paths."""
+    """Resolve allowed base directories for GGUF paths.
+
+    Returns:
+        list[Path]: List of absolute, resolved paths allowed as GGUF bases.
+    """
     home_dir_resolved = _get_resolved_home_dir()
 
     allowed_bases = [home_dir_resolved]
@@ -127,7 +124,17 @@ def _resolve_allowed_gguf_bases() -> list[Path]:
 def _build_gguf_candidates(
     clean: str, base_dirs: list[Path], home_dir_resolved: Path
 ) -> list[tuple[Path, Path]]:
-    """Construct candidate GGUF paths under allowed bases."""
+    """Construct candidate GGUF paths under allowed bases.
+
+    Args:
+        clean: Normalized path string.
+        base_dirs: List of allowed base directories.
+        home_dir_resolved: The current user's resolved home directory.
+
+    Returns:
+        list[tuple[Path, Path]]: List of candidate (base_dir, candidate_path)
+            tuples to evaluate.
+    """
     raw_text = clean
     base_override: Path | None = None
     if clean.startswith("~/"):
@@ -156,7 +163,15 @@ def _build_gguf_candidates(
 
 
 def _is_valid_gguf_candidate(base_dir: Path, candidate: Path) -> Path | None:
-    """Return a resolved GGUF path if candidate passes safety checks."""
+    """Return a resolved GGUF path if candidate passes safety checks.
+
+    Args:
+        base_dir: The base directory to check against.
+        candidate: The candidate path to validate.
+
+    Returns:
+        Path | None: Resolved Path if valid and safe, else None.
+    """
     stop_at = base_dir
     symlink_found = False
     reached_base = False
@@ -193,6 +208,12 @@ def resolve_valid_gguf_path(path_text: str) -> Path | None:
     WARNING: This function is best-effort pre-validation only. Callers MUST
     treat any subsequent file operations as untrusted and handle failures
     defensively (including TOCTOU races, permission errors, and IO errors).
+
+    Args:
+        path_text: The raw path string from UI input.
+
+    Returns:
+        Path | None: The resolved and validated GGUF path, or None if invalid.
     """
     clean = _clean_gguf_path_text(path_text)
     if clean is None:
@@ -213,7 +234,11 @@ def resolve_valid_gguf_path(path_text: str) -> Path | None:
 
 
 def _apply_validated_runtime(validated: DocMindSettings) -> None:
-    """Apply runtime by updating settings then rebinding LlamaIndex Settings.llm."""
+    """Apply runtime by updating settings then rebinding LlamaIndex Settings.llm.
+
+    Args:
+        validated: The validated settings object to apply.
+    """
     updated = settings.model_copy(
         update={
             "llm_backend": validated.llm_backend,
@@ -221,6 +246,7 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
             "context_window": validated.context_window,
             "llm_request_timeout_seconds": validated.llm_request_timeout_seconds,
             "enable_gpu_acceleration": validated.enable_gpu_acceleration,
+            "openai": validated.openai,
             "ollama_base_url": validated.ollama_base_url,
             "ollama_api_key": validated.ollama_api_key,
             "ollama_enable_web_search": validated.ollama_enable_web_search,
@@ -272,6 +298,9 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
         TypeError,
         ValueError,
     ) as exc:  # pragma: no cover - defensive UI feedback
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="settings.apply")
         st.error(f"Runtime apply failed: {exc.__class__.__name__}")
         log_jsonl(
             {
@@ -280,7 +309,8 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
                 "backend": validated.llm_backend,
                 "model": model_label,
                 "reason": exc.__class__.__name__,
-                "error": str(exc),
+                "error_type": exc.__class__.__name__,
+                "error": redaction.redacted,
             }
         )
         return
@@ -320,31 +350,60 @@ def main() -> None:
     provider_badge(settings, graphrag_health=graphrag_health)
     provider = _render_provider_section()
     model, context_window, timeout_s, use_gpu = _render_model_section()
-    ollama_url, vllm_url, lmstudio_url, llamacpp_url = _render_provider_urls()
+    openai_base_url = str(settings.openai.base_url)
+    openai_api_key = (
+        settings.openai.api_key.get_secret_value()
+        if settings.openai.api_key is not None
+        else ""
+    )
+    openai_require_v1 = bool(getattr(settings.openai, "require_v1", True))
+    openai_api_mode = str(getattr(settings.openai, "api_mode", "chat_completions"))
+    openai_headers_json = _safe_json_dumps(
+        getattr(settings.openai, "default_headers", None) or {}
+    )
+    openai_ui_errors: list[str] = []
+    if provider == "openai_compatible":
+        (
+            openai_base_url,
+            openai_api_key,
+            openai_require_v1,
+            openai_api_mode,
+            openai_headers_json,
+            openai_ui_errors,
+        ) = _render_openai_compatible_section()
+
+    ollama_url, vllm_url, lmstudio_url, llamacpp_url = _render_provider_urls(provider)
     (
         ollama_api_key,
         ollama_enable_web_search,
         ollama_embed_dimensions,
         ollama_enable_logprobs,
         ollama_top_logprobs,
-    ) = _render_ollama_advanced_section()
-    gguf_path = _render_gguf_path()
+    ) = _render_ollama_advanced_section(provider)
+    gguf_path = _render_gguf_path(provider)
     allow_remote = _render_security_section()
     rrf_k, t_text, t_siglip, t_colpali, t_total = _render_retrieval_section()
     _render_graphrag_section(graphrag_health)
-    _render_ollama_web_search_warning(
-        enabled=ollama_enable_web_search,
-        allow_remote=allow_remote,
-        allowlist=settings.security.endpoint_allowlist,
-    )
+    if provider == "ollama":
+        _render_ollama_web_search_warning(
+            enabled=ollama_enable_web_search,
+            allow_remote=allow_remote,
+            allowlist=settings.security.endpoint_allowlist,
+        )
 
     ui_errors, resolved_gguf_path = _validate_gguf_inputs(
         provider, llamacpp_url, gguf_path
     )
+    ui_errors.extend(openai_ui_errors)
     values: SettingsFormValues = {
         "provider": provider,
         "model": model,
         "context_window": context_window,
+        "openai_base_url": openai_base_url,
+        "openai_api_key": openai_api_key,
+        "openai_require_v1": openai_require_v1,
+        "openai_api_mode": openai_api_mode,
+        "openai_headers_json": openai_headers_json,
         "ollama_url": ollama_url,
         "ollama_api_key": ollama_api_key,
         "ollama_enable_web_search": ollama_enable_web_search,
@@ -367,14 +426,19 @@ def main() -> None:
     validated, validation_errors = _validate_candidate(candidate)
     _render_resolved_base_url(validated)
     _render_validation(ui_errors, validation_errors)
+    _render_endpoint_test(validated)
     _render_actions(validated, ui_errors)
     _render_cache_controls()
 
 
 def _render_provider_section() -> str:
-    """Render provider selector and return selection."""
+    """Render provider selector and return selection.
+
+    Returns:
+        str: Selected provider name.
+    """
     st.subheader("Provider")
-    options = ["ollama", "vllm", "lmstudio", "llamacpp"]
+    options = ["ollama", "openai_compatible", "vllm", "lmstudio", "llamacpp"]
     try:
         default_index = options.index(settings.llm_backend)
     except ValueError:
@@ -388,7 +452,12 @@ def _render_provider_section() -> str:
 
 
 def _render_model_section() -> tuple[str, int, int, bool]:
-    """Render model/context inputs and return values."""
+    """Render model/context inputs and return values.
+
+    Returns:
+        tuple[str, int, int, bool]: Selected (model_name, context_window,
+            timeout_sec, use_gpu).
+    """
     st.subheader("Model & Context")
     model = st.text_input(
         "Model (id or GGUF path)",
@@ -419,12 +488,218 @@ def _render_model_section() -> tuple[str, int, int, bool]:
     return model, context_window, timeout_s, use_gpu
 
 
-def _render_provider_urls() -> tuple[str, str, str, str]:
+_OPENAI_COMPAT_PRESETS: dict[str, dict[str, object]] = {
+    "Custom": {},
+    "OpenAI": {
+        "base_url": "https://api.openai.com/v1",
+        "require_v1": True,
+        "headers": {},
+        "api_mode": "responses",
+    },
+    "OpenRouter": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "require_v1": True,
+        "headers": {"HTTP-Referer": "", "X-Title": ""},
+        "api_mode": "chat_completions",
+    },
+    "xAI": {
+        "base_url": "https://api.x.ai/v1",
+        "require_v1": True,
+        "headers": {},
+        "api_mode": "chat_completions",
+    },
+    "Vercel AI Gateway": {
+        "base_url": "https://ai-gateway.vercel.sh/v1",
+        "require_v1": True,
+        "headers": {},
+        "api_mode": "responses",
+    },
+    "LiteLLM Proxy": {
+        "base_url": "http://localhost:4000",
+        "require_v1": False,
+        "headers": {},
+        "api_mode": "responses",
+    },
+}
+
+
+def _safe_json_dumps(value: object) -> str:
+    try:
+        return json.dumps(value, indent=2, sort_keys=True)
+    except (TypeError, ValueError):
+        return "{}"
+
+
+def _safe_json_dumps_compact(value: object) -> str:
+    try:
+        return json.dumps(value, separators=(",", ":"), sort_keys=True)
+    except (TypeError, ValueError):
+        return "{}"
+
+
+_HEADER_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _parse_headers_json(raw: str) -> tuple[dict[str, str] | None, list[str]]:
+    """Parse a JSON object as headers mapping.
+
+    Args:
+        raw: Raw JSON string from UI input.
+
+    Returns:
+        tuple[dict[str, str] | None, list[str]]: A tuple of (headers, errors).
+            The headers dictionary is None if the input is empty or invalid.
+            The errors list contains human-readable validation messages.
+    """
+    text = (raw or "").strip()
+    if not text:
+        return None, []
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        return None, [f"openai.default_headers: invalid JSON ({exc.msg})"]
+    if not isinstance(parsed, dict):
+        return None, ["openai.default_headers: must be a JSON object"]
+
+    headers: dict[str, str] = {}
+    errors: list[str] = []
+    for raw_k, raw_v in parsed.items():
+        k = str(raw_k).strip()
+        if not k:
+            continue
+        v = str(raw_v).strip()
+        if not v:
+            continue
+        if _HEADER_CONTROL_CHARS_RE.search(k) or _HEADER_CONTROL_CHARS_RE.search(v):
+            errors.append(
+                "openai.default_headers: control characters are not "
+                "allowed in keys/values"
+            )
+            continue
+        if "\n" in k or "\r" in k or "\n" in v or "\r" in v:
+            errors.append(
+                "openai.default_headers: newlines are not allowed in keys/values"
+            )
+            continue
+        headers[k] = v
+    return (headers or None), errors
+
+
+def _render_openai_compatible_section() -> tuple[str, str, bool, str, str, list[str]]:
+    """Render OpenAI-compatible provider settings.
+
+    Returns:
+        tuple[str, str, bool, str, str, list[str]]: Selected (base_url, api_key,
+            require_v1, api_mode, headers_json, ui_errors).
+    """
+    st.subheader("OpenAI-Compatible Provider")
+    st.caption(
+        "Use this for OpenAI, OpenRouter, xAI, Vercel AI Gateway, LiteLLM Proxy, "
+        "or any OpenAI-compatible server. Remote endpoints are opt-in."
+    )
+
+    preset_names = list(_OPENAI_COMPAT_PRESETS.keys())
+    preset = st.selectbox(
+        "Provider preset",
+        options=preset_names,
+        index=0,
+    )
+    preset_cfg = _OPENAI_COMPAT_PRESETS.get(preset) or {}
+
+    base_url_key = "docmind_openai_base_url"
+    api_key_key = "docmind_openai_api_key"
+    require_v1_key = "docmind_openai_require_v1"
+    api_mode_key = "docmind_openai_api_mode"
+    headers_key = "docmind_openai_headers_json"
+
+    if base_url_key not in st.session_state:
+        st.session_state[base_url_key] = str(settings.openai.base_url)
+    api_key_value = (
+        settings.openai.api_key.get_secret_value()
+        if settings.openai.api_key is not None
+        else ""
+    )
+    if api_key_key not in st.session_state:
+        st.session_state[api_key_key] = api_key_value
+    if require_v1_key not in st.session_state:
+        st.session_state[require_v1_key] = bool(
+            getattr(settings.openai, "require_v1", True)
+        )
+    if api_mode_key not in st.session_state:
+        st.session_state[api_mode_key] = str(
+            getattr(settings.openai, "api_mode", "chat_completions")
+        )
+    if headers_key not in st.session_state:
+        st.session_state[headers_key] = _safe_json_dumps(
+            getattr(settings.openai, "default_headers", None) or {}
+        )
+
+    if st.button("Use preset values", use_container_width=True):
+        if "base_url" in preset_cfg:
+            st.session_state[base_url_key] = str(preset_cfg["base_url"])
+        if "require_v1" in preset_cfg:
+            st.session_state[require_v1_key] = bool(preset_cfg["require_v1"])
+        if "api_mode" in preset_cfg:
+            st.session_state[api_mode_key] = str(preset_cfg["api_mode"])
+        if "headers" in preset_cfg:
+            st.session_state[headers_key] = _safe_json_dumps(preset_cfg["headers"])
+        st.rerun()
+
+    base_url = st.text_input(
+        "Base URL",
+        help="Full base URL (with or without /v1 depending on provider).",
+        key=base_url_key,
+    )
+    api_key = st.text_input(
+        "API key (optional)",
+        type="password",
+        help="Bearer token for the provider. For local servers, a placeholder is fine.",
+        key=api_key_key,
+    )
+    require_v1 = st.checkbox(
+        "Normalize base URL to include /v1",
+        help="Disable for providers rooted at '/', such as LiteLLM Proxy default.",
+        key=require_v1_key,
+    )
+    api_mode = st.selectbox(
+        "API mode",
+        options=["chat_completions", "responses"],
+        help=(
+            "Use /responses only when the provider supports it "
+            "(e.g., OpenAI, Vercel AI Gateway, xAI, vLLM, LiteLLM Proxy, Ollama; "
+            "OpenRouter support is beta)."
+        ),
+        key=api_mode_key,
+    )
+    headers_json = st.text_area(
+        "Default headers (JSON object)",
+        height=140,
+        help=(
+            "Optional. Example: "
+            '{"HTTP-Referer": "https://example.com", "X-Title": "DocMind"}'
+        ),
+        key=headers_key,
+    )
+    _, header_errors = _parse_headers_json(headers_json)
+    return base_url, api_key, require_v1, str(api_mode), headers_json, header_errors
+
+
+def _render_provider_urls(provider: str) -> tuple[str, str, str, str]:
     """Render provider URL inputs.
+
+    Args:
+        provider: The currently selected LLM provider.
 
     Returns:
         Tuple of `(ollama_url, vllm_url, lmstudio_url, llamacpp_url)` as strings.
     """
+    if provider == "openai_compatible":
+        return (
+            str(settings.ollama_base_url).rstrip("/"),
+            str(settings.vllm_base_url or settings.vllm.vllm_base_url),
+            str(settings.lmstudio_base_url),
+            str(settings.llamacpp_base_url) if settings.llamacpp_base_url else "",
+        )
     st.subheader("Provider URLs")
     col1, col2 = st.columns(2)
     with col1:
@@ -451,13 +726,37 @@ def _render_provider_urls() -> tuple[str, str, str, str]:
     return ollama_url, vllm_url, lmstudio_url, llamacpp_url
 
 
-def _render_ollama_advanced_section() -> tuple[str, bool, int | None, bool, int]:
+def _render_ollama_advanced_section(
+    provider: str,
+) -> tuple[str, bool, int | None, bool, int]:
     """Render Ollama advanced settings and return values.
+
+    Args:
+        provider: The currently selected LLM provider.
 
     Returns:
         Tuple of (api_key, enable_web_search, embed_dimensions, enable_logprobs,
         top_logprobs).
     """
+    if provider != "ollama":
+        api_key_value = (
+            settings.ollama_api_key.get_secret_value()
+            if settings.ollama_api_key is not None
+            else ""
+        )
+        embed_dimensions = (
+            int(settings.ollama_embed_dimensions)
+            if settings.ollama_embed_dimensions is not None
+            else None
+        )
+        return (
+            api_key_value,
+            bool(settings.ollama_enable_web_search),
+            embed_dimensions,
+            bool(settings.ollama_enable_logprobs),
+            int(settings.ollama_top_logprobs),
+        )
+
     st.subheader("Ollama (Advanced)")
     st.caption("Optional Ollama-native features (cloud web tools are opt-in).")
     api_key_value = (
@@ -504,8 +803,17 @@ def _render_ollama_advanced_section() -> tuple[str, bool, int | None, bool, int]
     return api_key, enable_web_search, embed_dimensions, enable_logprobs, top_logprobs
 
 
-def _render_gguf_path() -> str:
-    """Render GGUF path input and return value."""
+def _render_gguf_path(provider: str) -> str:
+    """Render GGUF path input and return value.
+
+    Args:
+        provider: Current provider name.
+
+    Returns:
+        str: Normalized GGUF path string.
+    """
+    if provider != "llamacpp":
+        return str(settings.vllm.llamacpp_model_path)
     return st.text_input(
         "GGUF model path (LlamaCPP local)",
         value=str(settings.vllm.llamacpp_model_path),
@@ -513,13 +821,33 @@ def _render_gguf_path() -> str:
 
 
 def _render_security_section() -> bool:
-    """Render security controls and return allow-remote setting."""
+    """Render security controls and return allow-remote setting.
+
+    Returns:
+        bool: True if remote connections are permitted.
+    """
     st.subheader("Security")
     allow_remote = st.checkbox(
         "Allow remote endpoints",
         value=bool(settings.security.allow_remote_endpoints),
-        help="When off, only localhost URLs are accepted",
+        help=(
+            "When off, non-loopback hosts must be allowlisted and resolve to "
+            "public IPs. When on, strict endpoint validation is disabled "
+            "(use for internal endpoints)."
+        ),
     )
+    if allow_remote:
+        st.warning(
+            "Remote endpoints are allowed. Strict endpoint validation and "
+            "DNS hardening are disabled in this mode. Prefer keeping this "
+            "off and using `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST` when "
+            "possible."
+        )
+    else:
+        st.info(
+            "Remote endpoints are restricted. Non-loopback hosts must be allowlisted "
+            "and resolve to public IPs."
+        )
     st.caption("Effective policy (read-only)")
     st.text_input(
         "Remote endpoints allowed",
@@ -535,7 +863,12 @@ def _render_security_section() -> bool:
 
 
 def _render_retrieval_section() -> tuple[int, int, int, int, int]:
-    """Render retrieval policy inputs and return values."""
+    """Render retrieval policy inputs and return values.
+
+    Returns:
+        tuple[int, int, int, int, int]: Selected (rrf_k, text_rerank_timeout_ms,
+            siglip_timeout_ms, colpali_timeout_ms, total_rerank_budget_ms).
+    """
     st.subheader("Retrieval (Policy)")
     st.caption("Server-side hybrid and fusion are managed by environment policy")
     st.text_input(
@@ -601,7 +934,12 @@ def _render_retrieval_section() -> tuple[int, int, int, int, int]:
 def _render_graphrag_section(
     graphrag_health: tuple[bool, str, str] | None = None,
 ) -> None:
-    """Render GraphRAG status section."""
+    """Render GraphRAG status section.
+
+    Args:
+        graphrag_health: Optional tuple containing (supports, adapter_name, hint)
+            for GraphRAG health. If None, it will be fetched.
+    """
     st.subheader("GraphRAG")
     if graphrag_health is None:
         graphrag_health = adapter_registry.get_default_adapter_health()
@@ -619,7 +957,18 @@ def _render_graphrag_section(
 def _validate_gguf_inputs(
     provider: str, llamacpp_url: str, gguf_path: str
 ) -> tuple[list[str], Path | None]:
-    """Validate GGUF path inputs for llama.cpp settings."""
+    """Validate GGUF path inputs for llama.cpp settings.
+
+    Args:
+        provider: Current provider name.
+        llamacpp_url: The llama.cpp server URL.
+        gguf_path: The path to the GGUF model file.
+
+    Returns:
+        tuple[list[str], Path | None]: A tuple of (ui_errors, resolved_gguf_path).
+            ui_errors is a list of human-readable error messages.
+            resolved_gguf_path is the validated and resolved Path object, or None.
+    """
     ui_errors: list[str] = []
     clean_llamacpp_url = (llamacpp_url or "").strip()
     clean_gguf_path = (gguf_path or "").strip()
@@ -655,6 +1004,11 @@ class SettingsFormValues(TypedDict):
     provider: str
     model: str
     context_window: int
+    openai_base_url: str
+    openai_api_key: str
+    openai_require_v1: bool
+    openai_api_mode: str
+    openai_headers_json: str
     ollama_url: str
     ollama_api_key: str
     ollama_enable_web_search: bool
@@ -685,10 +1039,18 @@ def _build_candidate_settings(
         if is_llamacpp and resolved_gguf_path is not None
         else str(settings.vllm.llamacpp_model_path)
     )
+    headers, _ = _parse_headers_json(values["openai_headers_json"])
     return {
         "llm_backend": provider,
         "model": str(values["model"]).strip() or None,
         "context_window": int(values["context_window"]),
+        "openai": {
+            "base_url": str(values["openai_base_url"]).strip(),
+            "api_key": str(values["openai_api_key"]).strip() or None,
+            "require_v1": bool(values["openai_require_v1"]),
+            "api_mode": str(values["openai_api_mode"]).strip() or "chat_completions",
+            "default_headers": headers,
+        },
         "ollama_base_url": str(values["ollama_url"]).strip(),
         "ollama_api_key": str(values["ollama_api_key"]).strip() or None,
         "ollama_enable_web_search": bool(values["ollama_enable_web_search"]),
@@ -734,6 +1096,69 @@ def _render_validation(ui_errors: list[str], validation_errors: list[str]) -> No
     st.subheader("Validation")
     for msg in ui_errors + validation_errors:
         st.error(msg)
+
+
+def _render_endpoint_test(validated: DocMindSettings | None) -> None:
+    """Render a manual connectivity test for the currently validated endpoint."""
+    if validated is None:
+        return
+    base_url = getattr(validated, "backend_base_url_normalized", None)
+    if not base_url:
+        return
+
+    st.subheader("Connectivity Test")
+    st.caption("Sends a lightweight `GET /models` request to the configured endpoint.")
+    if not st.button("Test endpoint", use_container_width=True):
+        return
+
+    try:
+        import httpx
+
+        url = str(base_url).rstrip("/") + "/models"
+        headers: dict[str, str] = {"Accept": "application/json"}
+        if validated.openai.api_key is not None:
+            headers["Authorization"] = (
+                f"Bearer {validated.openai.api_key.get_secret_value()}"
+            )
+        if validated.openai.default_headers:
+            headers.update(validated.openai.default_headers)
+
+        timeout_s = float(
+            getattr(
+                validated,
+                "llm_request_timeout_seconds",
+                getattr(validated.ui, "request_timeout_seconds", 30),
+            )
+        )
+        with httpx.Client(timeout=timeout_s) as client:
+            resp = client.get(url, headers=headers)
+        if resp.status_code >= 400:
+            st.error(f"Endpoint test failed: HTTP {resp.status_code}")
+            return
+        try:
+            payload = resp.json()
+        except ValueError:
+            st.success("Endpoint reachable (non-JSON response).")
+            return
+        models = payload.get("data")
+        if isinstance(models, list):
+            st.success(f"Endpoint reachable. Models returned: {len(models)}")
+        else:
+            st.success("Endpoint reachable.")
+    except Exception as exc:  # pragma: no cover - UI feedback
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="settings.endpoint_test")
+        st.error(f"Endpoint test failed ({type(exc).__name__}).")
+        st.caption(f"Error reference: {redaction.redacted}")
+        log_jsonl(
+            {
+                "settings.endpoint_test": True,
+                "success": False,
+                "error_type": type(exc).__name__,
+                "error": redaction.redacted,
+            }
+        )
 
 
 def _render_ollama_web_search_warning(
@@ -822,6 +1247,23 @@ def _persist_env_from_validated(validated: DocMindSettings) -> None:
         "DOCMIND_ENABLE_GPU_ACCELERATION": (
             "true" if validated.enable_gpu_acceleration else "false"
         ),
+        "DOCMIND_OPENAI__BASE_URL": str(validated.openai.base_url).rstrip("/"),
+        "DOCMIND_OPENAI__API_KEY": (
+            validated.openai.api_key.get_secret_value()
+            if validated.openai.api_key is not None
+            else ""
+        ),
+        "DOCMIND_OPENAI__REQUIRE_V1": (
+            "true" if getattr(validated.openai, "require_v1", True) else "false"
+        ),
+        "DOCMIND_OPENAI__API_MODE": str(
+            getattr(validated.openai, "api_mode", "chat_completions")
+        ),
+        "DOCMIND_OPENAI__DEFAULT_HEADERS": _safe_json_dumps_compact(
+            getattr(validated.openai, "default_headers", None) or {}
+        )
+        if getattr(validated.openai, "default_headers", None)
+        else "",
         "DOCMIND_OLLAMA_BASE_URL": str(validated.ollama_base_url).rstrip("/"),
         "DOCMIND_OLLAMA_API_KEY": (
             validated.ollama_api_key.get_secret_value()
@@ -868,15 +1310,19 @@ def _persist_env_from_validated(validated: DocMindSettings) -> None:
     try:
         persist_env(env_map)
     except (ValueError, OSError, RuntimeError) as exc:
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="settings.save")
         key = getattr(exc, "key", "")
         suffix = f" (key={key})" if key else ""
-        st.error(f"Failed to write .env{suffix}: {exc}")
+        st.error(f"Failed to write .env{suffix}: {exc.__class__.__name__}")
         log_jsonl(
             {
                 "settings.save": True,
                 "success": False,
                 "reason": exc.__class__.__name__,
-                "error": str(exc),
+                "error_type": exc.__class__.__name__,
+                "error": redaction.redacted,
             }
         )
     else:
@@ -903,7 +1349,19 @@ def _render_cache_controls() -> None:
             ValueError,
             TypeError,
         ) as e:  # pragma: no cover - defensive UI feedback
-            st.error(f"Failed to clear caches: {e}")
+            from src.utils.log_safety import build_pii_log_entry
+
+            redaction = build_pii_log_entry(str(e), key_id="settings.clear_caches")
+            st.error(f"Failed to clear caches ({type(e).__name__}).")
+            st.caption(f"Error reference: {redaction.redacted}")
+            log_jsonl(
+                {
+                    "settings.clear_caches": True,
+                    "success": False,
+                    "error_type": type(e).__name__,
+                    "error": redaction.redacted,
+                }
+            )
 
 
 if __name__ == "__main__":  # pragma: no cover - manual launch
