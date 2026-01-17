@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1.7
 
-FROM python:3.11-slim-bookworm AS builder
+FROM python:3.13.11-slim-bookworm AS builder
 
 WORKDIR /app
 
-ARG TORCH_VERSION=2.7.1
+ARG TORCH_VERSION=2.8.0
 ARG TORCH_WHEEL_URL=""
 ARG TORCH_WHEEL_SHA256=""
 
@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libmupdf-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install uv==0.9.8
+RUN pip install uv==0.9.24
 
 ENV UV_HTTP_TIMEOUT=3600 \
     UV_HTTP_RETRIES=20 \
@@ -69,7 +69,7 @@ COPY src ./src
 COPY templates ./templates
 
 
-FROM python:3.11-slim-bookworm AS runtime
+FROM python:3.13.11-slim-bookworm AS runtime
 
 WORKDIR /app
 

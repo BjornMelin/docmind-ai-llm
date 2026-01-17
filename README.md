@@ -35,7 +35,7 @@ Design goals:
 - **ArtifactStore (multimodal durability):** Page images/thumbnails are stored as content-addressed `ArtifactRef(sha256, suffix)` (no base64 blobs or host paths in durable stores).
 - **Multimodal UX:** Chat renders image sources and supports query-by-image “Visual search” (SigLIP) for image-rich PDFs.
 - **Offline-first design:** Runs fully offline once models are present; remote endpoints must be explicitly enabled.
-- **GPU acceleration:** Optional vLLM + FlashInfer stack (gpu extra) for fast local inference.
+- **GPU acceleration:** Optional GPU extras for local embedding/reranking acceleration (vLLM runs as an external OpenAI-compatible server).
 - **Robust retries and logging:** Tenacity-backed retries for LLM calls and structured logging via Loguru.
 - **Observability and operations:** Optional OTLP tracing/metrics plus JSONL telemetry; Docker and Compose included for local deployments.
 
@@ -89,8 +89,8 @@ Design goals:
       - [3. Model Download Issues](#3-model-download-issues)
       - [4. Memory Issues](#4-memory-issues)
       - [5. Document Processing Errors](#5-document-processing-errors)
-      - [6. vLLM FlashInfer Installation Issues](#6-vllm-flashinfer-installation-issues)
-      - [7. PyTorch 2.7.1 Compatibility Issues](#7-pytorch-271-compatibility-issues)
+      - [6. vLLM Server Connectivity Issues](#6-vllm-server-connectivity-issues)
+      - [7. PyTorch Compatibility Issues](#7-pytorch-compatibility-issues)
       - [8. GPU Memory Issues (16 GB RTX 4090)](#8-gpu-memory-issues-16-gb-rtx-4090)
       - [9. Performance Validation](#9-performance-validation)
     - [Performance Optimization](#performance-optimization)
@@ -108,7 +108,7 @@ Design goals:
 
 - One supported LLM backend running locally: [Ollama](https://ollama.com/) (default), vLLM OpenAI-compatible server, LM Studio, or a llama.cpp server.
 
-- Python 3.11.x (requires >=3.11,<3.12; see `pyproject.toml`)
+- Python 3.13.11 recommended (supported: 3.11–3.13; see `pyproject.toml`)
 
 - (Optional) Docker and Docker Compose for containerized deployment.
 
@@ -237,9 +237,9 @@ Design goals:
 
    For a complete overview, see `docs/developers/configuration.md`. The relevant section is `LLM Backend Selection`.
 
-5. **(Optional) Install GPU support for RTX 4090 with vLLM FlashInfer:**
+5. **(Optional) Install GPU support (embeddings/reranking acceleration):**
 
-   Install the repo’s GPU extras (includes vLLM 0.10.x + FlashInfer, and uses the CUDA wheel index for PyTorch):
+   Install the repo’s GPU extras and the CUDA wheel index for PyTorch:
 
    ```bash
    nvidia-smi
@@ -255,7 +255,7 @@ Design goals:
 
    **Notes:**
 
-   - vLLM uses FP8 KV cache by default (`DOCMIND_VLLM__KV_CACHE_DTYPE=fp8_e5m2`).
+   - vLLM is supported via an external OpenAI-compatible server (see Troubleshooting section 6 for connectivity checks).
    - Measure performance on your hardware with `uv run python scripts/performance_monitor.py`.
 
    See [GPU Setup Guide](docs/developers/gpu-setup.md) (installation) and [Hardware Policy](docs/developers/hardware_policy.md) (hardware/VRAM guidance).
@@ -496,7 +496,7 @@ flowchart TD
 
 ### Performance Optimizations
 
-- **GPU Acceleration:** Optional vLLM + FlashInfer (gpu extra) with FP8 KV cache defaults.
+- **GPU Acceleration:** Optional GPU extras for embeddings/reranking; vLLM runs as an external OpenAI-compatible server.
 - **Async processing:** Asynchronous ingestion is supported; retrieval/rerank stages use bounded timeouts and fail open.
 - **Reranking:** Text cross-encoder + SigLIP visual stage with rank-level RRF merge; ColPali optional.
 - **Memory Management:** Device selection and VRAM checks are centralized in `src/utils/core.py`.
@@ -759,36 +759,29 @@ uv run python scripts/run_ingestion_demo.py
 uv run python -c "from pathlib import Path; from src.models.processing import IngestionConfig, IngestionInput; from src.processing.ingestion_pipeline import ingest_documents_sync; p=Path('path/to/problem-file.pdf'); r=ingest_documents_sync(IngestionConfig(cache_dir=Path('./cache/ingestion-debug')), [IngestionInput(document_id='debug', source_path=p, metadata={'source': p.name})]); print(f'nodes={len(r.nodes)} exports={len(r.exports)}')"
 ```
 
-#### 6. vLLM FlashInfer Installation Issues
+#### 6. vLLM Server Connectivity Issues
 
 ```bash
-# Check CUDA compatibility
-nvcc --version  # Should show CUDA 12.8+
-nvidia-smi     # Should show RTX 4090 and compatible driver
+# Confirm the app is pointing at the right server
+echo "$DOCMIND_LLM_BACKEND"
+echo "$DOCMIND_OPENAI__BASE_URL"
 
-# Clean installation if issues occur
-uv pip uninstall torch torchvision torchaudio vllm flashinfer-python -y
-uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 \
-    --extra-index-url https://download.pytorch.org/whl/cu128
-uv pip install "vllm>=0.10.1,<0.11.0" \
-    --extra-index-url https://download.pytorch.org/whl/cu128
-uv pip install "flashinfer-python>=0.5.3,<0.6.0"
-
-# Test FlashInfer availability
-uv run python -c "import vllm; print('vLLM with FlashInfer imported successfully')"
+# vLLM is OpenAI-compatible; this should return JSON.
+curl --fail --silent "$DOCMIND_OPENAI__BASE_URL/models" | head
 ```
 
-#### 7. PyTorch 2.7.1 Compatibility Issues
+Notes:
 
-This repo pins **vLLM 0.10.x** (and **PyTorch 2.7.1**) to keep a stable CUDA stack and avoid major vLLM/Torch jumps (vLLM 0.11.x moves to Torch 2.8).
+- vLLM does not support Windows natively; use WSL2 or run vLLM on a Linux host.
+- vLLM performance features (FlashInfer, FP8 KV cache) are configured on the vLLM server process, not inside this app.
+
+#### 7. PyTorch Compatibility Issues
+
+This repo pins **PyTorch 2.8.0** for reproducibility. If you need CUDA wheels, install with the CUDA index:
 
 ```bash
-# Verify versions
-uv run python -c "import torch; print(f'PyTorch: {torch.__version__}')"
-uv run python -c "import vllm; print(f'vLLM: {vllm.__version__}')"
-
-# If you move to newer vLLM versions, expect Torch/Transformers constraints to change;
-# follow vLLM release notes and adjust versions together.
+uv pip install torch==2.8.0 --extra-index-url https://download.pytorch.org/whl/cu128
+uv run python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
 ```
 
 #### 8. GPU Memory Issues (16 GB RTX 4090)

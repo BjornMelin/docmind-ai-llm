@@ -38,7 +38,7 @@ and docs under `docs/specs/` + `docs/developers/adrs/`.
 - GPU check: `uv run python scripts/test_gpu.py --quick`
 - Prefetch models: `uv run python tools/models/pull.py --all --cache_dir ./models_cache`
 - spaCy model (opt): `uv run python -m spacy download en_core_web_sm`
-- Review triage: `python3 scripts/analyze_github_reviews.py --json-file <path>` (or set `DOCMIND_REVIEW_JSON`)
+- Review triage: `uv run python scripts/analyze_github_reviews.py --json-file <path>` (or set `DOCMIND_REVIEW_JSON`)
 
 ## Non-negotiables (CI + Security)
 
@@ -50,7 +50,7 @@ and docs under `docs/specs/` + `docs/developers/adrs/`.
 
 ## Optional extras
 
-- `uv sync --extra gpu` (vLLM, FlashInfer, fastembed-gpu)
+- `uv sync --extra gpu` (fastembed-gpu, CuPy CUDA wheels)
 - `uv sync --extra graph` (GraphRAG adapters)
 - `uv sync --extra multimodal` (ColPali reranker)
 - `uv sync --extra observability` (OTLP exporters + portalocker)
@@ -60,9 +60,9 @@ and docs under `docs/specs/` + `docs/developers/adrs/`.
 
 Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
-- Python: `>=3.11,<3.12`
+- Python: `>=3.11,<3.14` (primary dev/runtime: Python 3.13.11)
 - Keep these coupled:
-  - Torch 2.7.x ↔ vLLM 0.10.x ↔ Transformers `<4.58`
+  - Torch 2.8.x ↔ Transformers `<5.0` (vLLM is external-only via OpenAI-compatible HTTP)
   - DuckDB `<1.4.0` (LlamaIndex integrations cap it)
   - LlamaIndex packages stay `<0.15.0`
   - Streamlit `<2.0.0`
@@ -96,7 +96,7 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
 ## Containerization (CI-enforced)
 
-- `Dockerfile`: Python 3.11 base; final `USER` non-root; `CMD`/`ENTRYPOINT` exec-form (no `sh -c`); no `:latest`.
+- `Dockerfile`: Python 3.13.11 base; final `USER` non-root; `CMD`/`ENTRYPOINT` exec-form (no `sh -c`); no `:latest`.
 - `.dockerignore`: ignore `.env` (`.env`, `.env.*`, or `.env*`); don’t bake `.env` into images.
 - Compose: use canonical `DOCMIND_*` env vars (no legacy `OLLAMA_BASE_URL`/`VLLM_BASE_URL`/`LMSTUDIO_BASE_URL`); prod override sets `read_only: true` and `tmpfs: /tmp`.
 
