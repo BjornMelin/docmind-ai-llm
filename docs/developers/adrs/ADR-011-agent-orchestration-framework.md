@@ -1,26 +1,27 @@
 ---
 ADR: 011
-Title: Agent Orchestration with LangGraph Supervisor
+Title: Agent Orchestration with LangGraph StateGraph
 Status: Accepted (Amended)
-Version: 6.3
-Date: 2026-01-09
+Version: 7.0
+Date: 2026-01-17
 Supersedes:
 Superseded-by:
 Related: 001, 003, 004, 010, 015, 016, 024
 Tags: orchestration, agents, langgraph, supervisor
 References:
-- [LangGraph Supervisor — GitHub](https://github.com/langchain-ai/langgraph-supervisor-py)
 - [LangGraph — Official Docs](https://langchain-ai.github.io/langgraph/)
-- [LangGraph Multi‑Agent Patterns (Supervisor)](https://langchain-ai.github.io/langgraph/concepts/agentic_concepts/#multi-agent)
+- [LangGraph Multi‑Agent Patterns](https://langchain-ai.github.io/langgraph/concepts/agentic_concepts/#multi-agent)
 ---
 
 ## Description
 
-Use LangGraph Supervisor to coordinate five agent roles (router, planner, retrieval, synthesis, validation). Replace custom orchestration logic with proven, library‑first patterns that are easy to test and maintain.
+Use LangGraph `StateGraph` to coordinate five agent roles (router, planner, retrieval, synthesis, validation). Preserve the existing external coordinator behavior while removing the `langgraph-supervisor` dependency (which currently pulls a deprecated `create_react_agent` path).
 
 ## Context
 
-DocMind AI relies on multiple agent roles that must coordinate while preserving context and working fully offline. A prebuilt supervisor pattern avoids bespoke state machines and reduces orchestration bugs.
+DocMind AI relies on multiple agent roles that must coordinate while preserving context and working fully offline. The project originally adopted `langgraph-supervisor` for a prebuilt supervisor pattern. However, the pinned supervisor package relies on deprecated LangGraph prebuilts (`create_react_agent`) which forces local warning suppression and creates upgrade risk.
+
+We therefore migrate the orchestration to graph-native LangGraph primitives (`StateGraph`) while keeping the existing per-role agents built via LangChain v1 `create_agent` and continuing to use LlamaIndex for retrieval/indexing (not as the orchestration runtime).
 
 ## Decision Drivers
 
@@ -28,25 +29,30 @@ DocMind AI relies on multiple agent roles that must coordinate while preserving 
 - Local‑first operation (no external services)
 - Clear observability of handoffs and outcomes
 - Compatibility with adaptive retrieval (ADR‑003)
+- Avoid deprecated dependencies and reduce upgrade risk
 
 ## Alternatives
 
 - Monolithic agent — simple but inflexible; weak error recovery
 - Manual orchestration — complex state and error handling
 - Heavy multi‑agent frameworks — overkill for local desktop app
-- LangGraph Supervisor (Selected) — prebuilt, testable patterns
+- LlamaIndex AgentWorkflow — introduces a second orchestration/state subsystem; would require rewriting existing LangChain/LangGraph tool seams
+- LangGraph Supervisor library — prebuilt, but currently depends on deprecated LangGraph prebuilts in the pinned version
+- LangGraph StateGraph (Selected) — graph-native, testable, minimizes dependencies and upgrade risk
 
 ### Decision Framework
 
-| Option               | Simplicity (40%) | Reliability (30%) | Capability (20%) | Effort (10%) | Total | Decision    |
-| -------------------- | ---------------- | ----------------- | ---------------- | ------------ | ----- | ----------- |
-| LangGraph Supervisor | 10               | 9                 | 9                | 9            | 9.5   | ✅ Selected |
-| Manual orchestration | 3                | 5                 | 8                | 4            | 4.9   | Rejected    |
-| Monolithic agent     | 9                | 4                 | 4                | 8            | 6.1   | Rejected    |
+| Option                    | Simplicity (35%) | Reliability (30%) | Maintenance (25%) | Adaptability (10%) | Total | Decision    |
+| ------------------------- | ---------------- | ----------------- | ----------------- | ------------------ | ----- | ----------- |
+| LangGraph StateGraph      | 9                | 9                 | 9                 | 9                  | 9.0   | ✅ Selected |
+| LangGraph Supervisor lib  | 9                | 8                 | 6                 | 7                  | 7.9   | Rejected    |
+| LlamaIndex AgentWorkflow  | 6                | 7                 | 6                 | 7                  | 6.4   | Rejected    |
+| Manual orchestration      | 3                | 5                 | 5                 | 6                  | 4.3   | Rejected    |
+| Monolithic agent          | 9                | 4                 | 6                 | 5                  | 6.2   | Rejected    |
 
 ## Decision
 
-Adopt LangGraph Supervisor for five‑agent coordination with minimal customization. Surface small, explicit configuration for logging, parallel tool calls (ADR‑010), and guardrails.
+Adopt a graph-native LangGraph `StateGraph` for five-agent coordination with minimal customization. Preserve the current `MultiAgentCoordinator` external API and state fields. Keep per-role agents built with LangChain v1 `create_agent` and keep the existing tool interfaces (LangChain tools with LangGraph `InjectedState` / `ToolRuntime` injection).
 
 ### Agent Roles and Coordinator
 
@@ -108,27 +114,28 @@ graph TD
 
 ```python
 # src/agents/coordinator.py (skeleton)
-from langgraph_supervisor import create_supervisor
+from langgraph.graph import END, START, StateGraph
 
 SUPERVISOR_PROMPT = (
     "You are a supervisor coordinating a modern 5‑agent RAG system. "
     "Route, plan, retrieve, synthesize, and validate answers. Prefer minimal steps."
 )
 
-def create_app(llm, tools):
-    agents = make_agents(llm, tools)  # router, planner, retrieval, synthesis, validation
-    return create_supervisor(
-        agents=agents,
-        model=llm,
-        prompt=SUPERVISOR_PROMPT,
-        parallel_tool_calls=True,          # concurrent agent/tool paths
-        output_mode="last_message",        # structured data stays in state
-        add_handoff_messages=True,         # track coordination handoffs
-        # Optional hooks for context/window management
-        pre_model_hook=trim_context_hook,  # enforce 128K cap (ADR‑004/010)
-        post_model_hook=collect_metrics_hook,
-        tools=[create_forward_message_tool("supervisor")],
-    )
+def create_app(state_schema, nodes, *, checkpointer, store):
+    # nodes: router_agent/planner_agent/retrieval_agent/synthesis_agent/validation_agent
+    graph = StateGraph(state_schema)
+    for name, node in nodes.items():
+        graph.add_node(name, node)
+
+    # Minimal deterministic pipeline; optional early exits are encoded in router/planner nodes.
+    graph.add_edge(START, "router_agent")
+    graph.add_edge("router_agent", "planner_agent")
+    graph.add_edge("planner_agent", "retrieval_agent")
+    graph.add_edge("retrieval_agent", "synthesis_agent")
+    graph.add_edge("synthesis_agent", "validation_agent")
+    graph.add_edge("validation_agent", END)
+
+    return graph.compile(checkpointer=checkpointer, store=store)
 ```
 
 ### Supervisor Configuration (Key Options)
@@ -182,7 +189,7 @@ def test_supervisor_boots_with_agents(supervisor_app):
 
 ### Dependencies
 
-- Python: `langgraph>=1.0.5`, `langchain-core>=1.2.6`, `langgraph-supervisor>=0.0.31`
+- Python: `langgraph>=1.0.5`, `langchain-core>=1.2.6` (remove `langgraph-supervisor`)
 
 ### Ongoing Maintenance & Considerations
 
@@ -195,6 +202,7 @@ def test_supervisor_boots_with_agents(supervisor_app):
 - 6.2 (2025‑09‑04): Restored explicit agent role list and supervisor configuration details (parallel_tool_calls, output_mode, create_forward_message_tool, add_handoff_back_messages) with hook notes and prompt
 - 6.1 (2025‑09‑04): Standardized to template; added diagram, PR/IR, config/tests
 - 6.0 (2025‑08‑19): Accepted Supervisor implementation; integrates ADR‑003/004/010
+- 7.0 (2026‑01‑17): Migrate orchestration to graph-native LangGraph `StateGraph`; remove `langgraph-supervisor` dependency due to deprecated `create_react_agent` path.
 
 ## Supervisor Configuration Updates
 
