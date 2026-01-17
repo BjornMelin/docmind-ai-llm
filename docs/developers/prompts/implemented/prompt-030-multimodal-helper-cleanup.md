@@ -1,3 +1,13 @@
+---
+prompt: PROMPT-030
+title: Multimodal Helper Cleanup
+status: Completed
+date: 2026-01-17
+version: 1.0
+related_adrs: ["ADR-049"]
+related_specs: ["SPEC-030"]
+---
+
 # Implementation Prompt — Multimodal Helper Cleanup
 
 Implements `ADR-049` + `SPEC-030` (final-release hygiene; no placeholder multimodal “toy pipeline” in `src/`).

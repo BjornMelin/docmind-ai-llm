@@ -4,7 +4,7 @@ title: Operational Metadata Store (SQLite WAL)
 version: 1.0.0
 date: 2026-01-09
 owners: ["ai-arch"]
-status: Accepted
+status: Implemented
 related_requirements:
   - FR-015: Persist operational metadata via SQLite WAL.
   - FR-025: Background jobs record progress/cancellation safely.

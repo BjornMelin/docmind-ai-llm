@@ -1,3 +1,13 @@
+---
+prompt: PROMPT-040
+title: Agent Deadline Propagation + Router Injection
+status: Completed
+date: 2026-01-17
+version: 1.0
+related_adrs: ["ADR-056"]
+related_specs: ["SPEC-040"]
+---
+
 # Implementation Prompt — Agent Deadline Propagation + Router Injection
 
 Implements `ADR-056` + `SPEC-040`.

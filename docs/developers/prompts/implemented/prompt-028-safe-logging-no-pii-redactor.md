@@ -1,3 +1,13 @@
+---
+prompt: PROMPT-028
+title: Safe Logging Policy (No PII Redactor Stub)
+status: Completed
+date: 2026-01-17
+version: 1.0
+related_adrs: ["ADR-047"]
+related_specs: ["SPEC-028"]
+---
+
 # Implementation Prompt — Safe Logging Policy (No PII Redactor Stub)
 
 Implements `ADR-047` + `SPEC-028`.

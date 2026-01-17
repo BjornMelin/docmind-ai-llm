@@ -4,7 +4,7 @@ title: Local Backup & Retention (Snapshots, Cache, Analytics, Qdrant)
 version: 1.0.0
 date: 2026-01-09
 owners: ["ai-arch"]
-status: Draft
+status: Implemented
 related_requirements:
   - FR-027: Users can create local backups with retention/restore steps.
   - NFR-SEC-001: Offline-first; no remote endpoints by default.

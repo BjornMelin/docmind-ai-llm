@@ -4,7 +4,7 @@ title: Agent Deadline Propagation + Router Injection (Cooperative Cancellation)
 version: 1.0.0
 date: 2026-01-09
 owners: ["ai-arch"]
-status: Draft
+status: Implemented
 related_requirements:
   - FR-014: LangGraph-supervised multi-agent flow.
   - FR-029: Agent deadline propagation/cooperative cancellation.

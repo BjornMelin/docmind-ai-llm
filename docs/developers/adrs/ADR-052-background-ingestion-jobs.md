@@ -1,7 +1,7 @@
 ---
 ADR: 052
 Title: Background Ingestion and Snapshot Jobs in Streamlit (Threads + Fragments)
-Status: Proposed
+Status: Implemented
 Version: 1.0
 Date: 2026-01-09
 Supersedes:

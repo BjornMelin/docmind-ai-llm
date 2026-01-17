@@ -1,3 +1,13 @@
+---
+prompt: PROMPT-036
+title: Document Analysis Modes (Separate / Combined / Auto)
+status: Completed
+date: 2026-01-17
+version: 1.0
+related_adrs: ["ADR-023"]
+related_specs: ["SPEC-036"]
+---
+
 # Implementation Prompt — Document Analysis Modes (Separate / Combined / Auto)
 
 Implements `ADR-023` + `SPEC-036`.

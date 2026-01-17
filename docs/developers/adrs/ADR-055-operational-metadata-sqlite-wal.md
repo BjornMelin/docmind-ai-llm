@@ -1,7 +1,7 @@
 ---
 ADR: 055
 Title: Operational Metadata Store (SQLite WAL)
-Status: Proposed
+Status: Implemented
 Version: 1.0
 Date: 2026-01-09
 Supersedes:

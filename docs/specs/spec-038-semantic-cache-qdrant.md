@@ -4,7 +4,7 @@ title: Semantic Response Cache (Qdrant-backed, Guardrailed)
 version: 1.0.0
 date: 2026-01-09
 owners: ["ai-arch"]
-status: Draft
+status: Implemented
 related_requirements:
   - FR-026: Optional semantic response caching for repeated/near-duplicate requests.
   - NFR-SEC-001: Offline-first; remote endpoints gated.

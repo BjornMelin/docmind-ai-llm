@@ -14,17 +14,6 @@ Each prompt is self-contained and embeds DocMind’s “Implementation Executor 
 ## Prompts (recommended order)
 
 1. `docs/developers/prompts/prompt-021-release-readiness-v1.md`
-2. `docs/developers/prompts/prompt-040-agent-deadline-propagation-and-router-injection.md`
-3. `docs/developers/prompts/prompt-032-documents-snapshot-service-boundary.md`
-4. `docs/developers/prompts/prompt-039-operational-metadata-sqlite-wal.md`
-5. `docs/developers/prompts/prompt-033-background-ingestion-jobs.md`
-6. `docs/developers/prompts/prompt-036-document-analysis-modes.md`
-7. `docs/developers/prompts/prompt-038-semantic-cache-qdrant.md`
-8. `docs/developers/prompts/prompt-037-local-backup-and-retention.md`
-9. `docs/developers/prompts/prompt-028-safe-logging-no-pii-redactor.md`
-10. `docs/developers/prompts/prompt-034-analytics-page-hardening.md`
-11. `docs/developers/prompts/prompt-030-multimodal-helper-cleanup.md`
-12. `docs/developers/prompts/prompt-029-docs-consistency-pass.md`
 
 ## Implemented prompts
 
@@ -33,8 +22,19 @@ Each prompt is self-contained and embeds DocMind’s “Implementation Executor 
 - `docs/developers/prompts/implemented/prompt-025-keyword-tool-sparse-only.md`
 - `docs/developers/prompts/implemented/prompt-026-ingestion-api-facade.md`
 - `docs/developers/prompts/implemented/prompt-027-remove-legacy-main-entrypoint.md`
+- `docs/developers/prompts/implemented/prompt-028-safe-logging-no-pii-redactor.md`
+- `docs/developers/prompts/implemented/prompt-029-docs-consistency-pass.md`
+- `docs/developers/prompts/implemented/prompt-030-multimodal-helper-cleanup.md`
 - `docs/developers/prompts/implemented/prompt-031-config-discipline-env-bridges.md`
+- `docs/developers/prompts/implemented/prompt-032-documents-snapshot-service-boundary.md`
+- `docs/developers/prompts/implemented/prompt-033-background-ingestion-jobs.md`
 - `docs/developers/prompts/implemented/prompt-046-config-discipline-remaining.md`
+- `docs/developers/prompts/implemented/prompt-034-analytics-page-hardening.md`
+- `docs/developers/prompts/implemented/prompt-036-document-analysis-modes.md`
+- `docs/developers/prompts/implemented/prompt-037-local-backup-and-retention.md`
+- `docs/developers/prompts/implemented/prompt-038-semantic-cache-qdrant.md`
+- `docs/developers/prompts/implemented/prompt-039-operational-metadata-sqlite-wal.md`
+- `docs/developers/prompts/implemented/prompt-040-agent-deadline-propagation-and-router-injection.md`
 - `docs/developers/prompts/implemented/prompt-041-chat-persistence-langgraph-sqlite-hybrid-memory.md`
 - `docs/developers/prompts/implemented/prompt-042-multimodal-ingestion.md`
 - `docs/developers/prompts/implemented/prompt-043-hybrid-retrieval-logic.md`

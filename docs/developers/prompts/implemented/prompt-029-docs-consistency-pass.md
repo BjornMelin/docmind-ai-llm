@@ -1,3 +1,13 @@
+---
+prompt: PROMPT-029
+title: Docs Consistency Pass (Specs/Handbook/RTM)
+status: Completed
+date: 2026-01-17
+version: 1.0
+related_adrs: ["ADR-048"]
+related_specs: ["SPEC-029"]
+---
+
 # Implementation Prompt — Docs Consistency Pass (Specs/Handbook/RTM)
 
 Implements `ADR-048` + `SPEC-029`.

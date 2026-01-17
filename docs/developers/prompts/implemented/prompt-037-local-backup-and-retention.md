@@ -1,3 +1,13 @@
+---
+prompt: PROMPT-037
+title: Local Backup & Retention (Snapshots, Cache, Analytics, Qdrant)
+status: Completed
+date: 2026-01-17
+version: 1.0
+related_adrs: ["ADR-033"]
+related_specs: ["SPEC-037"]
+---
+
 # Implementation Prompt — Local Backup & Retention (Snapshots, Cache, Analytics, Qdrant)
 
 Implements `ADR-033` + `SPEC-037`.

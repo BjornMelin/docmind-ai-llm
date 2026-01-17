@@ -43,8 +43,12 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
 
 - **[ADR-024 — Unified Settings Architecture](ADR-024-configuration-architecture.md)**<br>
   Scope: Pydantic BaseSettings + LlamaIndex Settings integration
-- **[ADR-062 — Python 3.13.11 Baseline + External vLLM Policy](ADR-062-python-313-baseline-and-external-vllm-policy.md)**<br>
-  Scope: Primary runtime/version support policy, tooling targeting, and vLLM out-of-process integration
+- **[ADR-064 — Python 3.13-Only Baseline (Primary 3.13.11)](ADR-064-python-313-only-baseline.md)**<br>
+  Scope: Single-version Python baseline and tooling targeting
+- **[ADR-062 — Python 3.13.11 Baseline + External vLLM Policy (Superseded)](ADR-062-python-313-baseline-and-external-vllm-policy.md)**<br>
+  Scope: Historical multi-version baseline + vLLM policy (superseded by ADR-064)
+- **[ADR-063 — LLM Provider Architecture (OpenAI-Compatible Core + Open Responses Alignment)](ADR-063-llm-provider-architecture-openai-compatible-core.md)**<br>
+  Scope: Multi-provider configuration via OpenAI-compatible endpoints, Responses API opt-in, and gateway strategy
 
 ## Caching & Persistence
 

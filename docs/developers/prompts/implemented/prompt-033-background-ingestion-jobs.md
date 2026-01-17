@@ -1,3 +1,13 @@
+---
+prompt: PROMPT-033
+title: Background Ingestion & Snapshot Jobs
+status: Completed
+date: 2026-01-17
+version: 1.0
+related_adrs: ["ADR-052"]
+related_specs: ["SPEC-033"]
+---
+
 # Implementation Prompt — Background Ingestion & Snapshot Jobs
 
 Implements `ADR-052` + `SPEC-033`.

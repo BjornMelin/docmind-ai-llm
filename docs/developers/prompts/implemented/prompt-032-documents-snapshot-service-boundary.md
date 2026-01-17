@@ -1,3 +1,13 @@
+---
+prompt: PROMPT-032
+title: Documents Snapshot Service Boundary
+status: Completed
+date: 2026-01-17
+version: 1.0
+related_adrs: ["ADR-051"]
+related_specs: ["SPEC-032"]
+---
+
 # Implementation Prompt — Documents Snapshot Service Boundary
 
 Implements `ADR-051` + `SPEC-032`.

@@ -1,3 +1,13 @@
+---
+prompt: PROMPT-038
+title: Semantic Response Cache (Qdrant-backed, Guardrailed)
+status: Completed
+date: 2026-01-17
+version: 1.0
+related_adrs: ["ADR-035"]
+related_specs: ["SPEC-038"]
+---
+
 # Implementation Prompt — Semantic Response Cache (Qdrant-backed, Guardrailed)
 
 Implements `ADR-035` + `SPEC-038`.

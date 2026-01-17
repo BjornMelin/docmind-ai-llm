@@ -4,7 +4,7 @@ title: Documents Snapshot Service Boundary (Snapshot Rebuild/Export Service)
 version: 1.0.0
 date: 2026-01-09
 owners: ["ai-arch"]
-status: Draft
+status: Implemented
 related_requirements:
   - NFR-MAINT-001: Library-first layering and reuse
   - NFR-MAINT-003: No drift between specs and shipped code

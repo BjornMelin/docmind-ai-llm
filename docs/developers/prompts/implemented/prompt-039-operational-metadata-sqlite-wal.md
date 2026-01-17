@@ -1,3 +1,13 @@
+---
+prompt: PROMPT-039
+title: Operational Metadata Store (SQLite WAL)
+status: Completed
+date: 2026-01-17
+version: 1.0
+related_adrs: ["ADR-055"]
+related_specs: ["SPEC-039"]
+---
+
 # Implementation Prompt — Operational Metadata Store (SQLite WAL)
 
 Implements `ADR-055` + `SPEC-039`.

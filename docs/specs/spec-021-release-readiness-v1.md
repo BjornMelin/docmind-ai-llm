@@ -67,18 +67,18 @@ Each work package MUST ship with:
 | 04 | Keyword tool: sparse-only Qdrant retriever | ADR-044 | SPEC-025 | `docs/developers/prompts/implemented/prompt-025-keyword-tool-sparse-only.md` |
 | 05 | Ingestion API cleanup (`src/processing/ingestion_api.py`) | ADR-045 | SPEC-026 | `docs/developers/prompts/implemented/prompt-026-ingestion-api-facade.md` |
 | 06 | Remove legacy `src/main.py` entrypoint | ADR-046 | SPEC-027 | `docs/developers/prompts/implemented/prompt-027-remove-legacy-main-entrypoint.md` |
-| 07 | Safe logging policy (remove PII redactor stub) | ADR-047 | SPEC-028 | `docs/developers/prompts/prompt-028-safe-logging-no-pii-redactor.md` |
-| 08 | Docs consistency pass (spec drift + ADR number backfill) | ADR-048 | SPEC-029 | `docs/developers/prompts/prompt-029-docs-consistency-pass.md` |
-| 09 | Multimodal helper cleanup (remove placeholder markers; clarify test-only helper) | ADR-049 | SPEC-030 | `docs/developers/prompts/prompt-030-multimodal-helper-cleanup.md` |
+| 07 | Safe logging policy (remove PII redactor stub) | ADR-047 | SPEC-028 | `docs/developers/prompts/implemented/prompt-028-safe-logging-no-pii-redactor.md` |
+| 08 | Docs consistency pass (spec drift + ADR number backfill) | ADR-048 | SPEC-029 | `docs/developers/prompts/implemented/prompt-029-docs-consistency-pass.md` |
+| 09 | Multimodal helper cleanup (remove placeholder markers; clarify test-only helper) | ADR-049 | SPEC-030 | `docs/developers/prompts/implemented/prompt-030-multimodal-helper-cleanup.md` |
 | 10 | Config discipline: remove `os.getenv` sprawl; fix ADR placeholder marker; formalize hashing secret | ADR-050 | SPEC-031 | `docs/developers/prompts/implemented/prompt-031-config-discipline-env-bridges.md` |
-| 11 | Documents snapshot service boundary (extract rebuild/export) | ADR-051 | SPEC-032 | `docs/developers/prompts/prompt-032-documents-snapshot-service-boundary.md` |
-| 12 | Background ingestion & snapshot jobs (progress + cancel) | ADR-052 | SPEC-033 | `docs/developers/prompts/prompt-033-background-ingestion-jobs.md` |
+| 11 | Documents snapshot service boundary (extract rebuild/export) | ADR-051 | SPEC-032 | `docs/developers/prompts/implemented/prompt-032-documents-snapshot-service-boundary.md` |
+| 12 | Background ingestion & snapshot jobs (progress + cancel) | ADR-052 | SPEC-033 | `docs/developers/prompts/implemented/prompt-033-background-ingestion-jobs.md` |
 | 13 | Analytics page hardening (DuckDB + telemetry parsing) | ADR-053 | SPEC-034 | `docs/developers/prompts/implemented/prompt-034-analytics-page-hardening.md` |
-| 14 | Document analysis modes (auto/separate/combined) | ADR-023 | SPEC-036 | `docs/developers/prompts/prompt-036-document-analysis-modes.md` |
-| 15 | Local backup & retention (snapshots + cache + Qdrant) | ADR-033 | SPEC-037 | `docs/developers/prompts/prompt-037-local-backup-and-retention.md` |
-| 16 | Semantic response cache (Qdrant-backed, guardrailed) | ADR-035 | SPEC-038 | `docs/developers/prompts/prompt-038-semantic-cache-qdrant.md` |
-| 17 | Operational metadata store (SQLite WAL) | ADR-055 | SPEC-039 | `docs/developers/prompts/prompt-039-operational-metadata-sqlite-wal.md` |
-| 18 | Agent deadline propagation + router injection | ADR-056 | SPEC-040 | `docs/developers/prompts/prompt-040-agent-deadline-propagation-and-router-injection.md` |
+| 14 | Document analysis modes (auto/separate/combined) | ADR-023 | SPEC-036 | `docs/developers/prompts/implemented/prompt-036-document-analysis-modes.md` |
+| 15 | Local backup & retention (snapshots + cache + Qdrant) | ADR-033 | SPEC-037 | `docs/developers/prompts/implemented/prompt-037-local-backup-and-retention.md` |
+| 16 | Semantic response cache (Qdrant-backed, guardrailed) | ADR-035 | SPEC-038 | `docs/developers/prompts/implemented/prompt-038-semantic-cache-qdrant.md` |
+| 17 | Operational metadata store (SQLite WAL) | ADR-055 | SPEC-039 | `docs/developers/prompts/implemented/prompt-039-operational-metadata-sqlite-wal.md` |
+| 18 | Agent deadline propagation + router injection | ADR-056 | SPEC-040 | `docs/developers/prompts/implemented/prompt-040-agent-deadline-propagation-and-router-injection.md` |
 
 All ADR/SPEC/prompt files referenced above are stored under `docs/` in this repo and are part of this release plan.
 
