@@ -109,6 +109,4 @@ Emit:
 
 ## RTM Updates
 
-Update `docs/specs/traceability.md`:
-
-- Add row `FR-027` with code + tests once implemented.
+`FR-027` is tracked in `docs/specs/traceability.md` with code + test coverage.

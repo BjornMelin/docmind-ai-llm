@@ -1,15 +1,15 @@
 ---
 spec: SPEC-044
-title: Runtime & Toolchain Baseline — Python 3.13.11 Primary, Multi-Version Support, uv-first
-version: 1.0.0
-date: 2026-01-16
+title: Runtime & Toolchain Baseline — Python 3.13.11 Only, uv-first
+version: 1.1.0
+date: 2026-01-17
 owners: ["ai-arch"]
 status: Implemented
 related_requirements:
   - NFR-MAINT-002: Ruff/pyright pass (ruff enforces pylint-equivalent rules).
   - NFR-MAINT-003: No placeholders; docs/specs/RTM must match code.
   - NFR-PORT-003: Docker/compose runnable + reproducible.
-related_adrs: ["ADR-062", "ADR-014", "ADR-024", "ADR-042"]
+related_adrs: ["ADR-064", "ADR-014", "ADR-024", "ADR-042"]
 ---
 
 ## Objective
@@ -33,11 +33,7 @@ Define a single, enforceable baseline for:
 ### Supported versions
 
 - Primary development/runtime version: **CPython 3.13.11** (see `.python-version`).
-- Supported range for the application: **Python 3.11–3.13** (`requires-python = ">=3.11,<3.14"`).
-
-### Multi-version correctness
-
-The repository must remain runnable under each supported version:
+- Supported range for the application: **Python 3.13** (`requires-python = ">=3.13,<3.14"`).
 
 ```bash
 uv sync --frozen
@@ -47,13 +43,11 @@ uv run python scripts/run_tests.py
 
 ## Tooling policy (lint + type)
 
-DocMind supports multiple Python versions while keeping 3.13.11 primary. To prevent accidental usage of syntax or stdlib APIs that break older supported runtimes:
+DocMind targets Python 3.13 only:
 
-- Ruff targets the lowest supported version (`target-version = "py311"`).
-- Pyright checks against Python 3.11 (`pythonVersion = "3.11"`).
-- CI runs the full test suite against 3.11, 3.12, and 3.13.11.
-
-This combination keeps the codebase compatible while still allowing runtime testing on newer versions.
+- Ruff targets Python 3.13 (`target-version = "py313"`).
+- Pyright checks against Python 3.13 (`pythonVersion = "3.13"`).
+- CI runs the full test suite against Python 3.13.11.
 
 ## Dependency resolution policy (uv)
 

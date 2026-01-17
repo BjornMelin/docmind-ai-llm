@@ -7,7 +7,7 @@ This page combines quick fixes for common issues and answers to frequently asked
 ```bash
 # System checks
 nvidia-smi                          # GPU status
-uv run python -c "import sys; print(sys.version)"  # Python 3.11–3.13 (3.13.11 recommended)
+uv run python -c "import sys; print(sys.version)"  # Python 3.13.11
 curl http://localhost:11434/api/version  # Ollama service
 
 # App checks
@@ -21,7 +21,7 @@ uv run python -c "from src.config import settings; print('Config loaded OK')"
 
 ```bash
 uv sync                 # Reinstall deps
-uv run python -c "import sys; print(sys.version)"  # Should be 3.11–3.13 (3.13.11 recommended)
+uv run python -c "import sys; print(sys.version)"  # Should be 3.13.11
 find . -name "*.pyc" -delete; find . -name "__pycache__" -type d -exec rm -rf {} +
 lsof -i :8501          # Free port 8501 if in use
 ```

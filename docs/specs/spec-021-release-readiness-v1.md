@@ -98,7 +98,7 @@ Recommended dependency order (minimizes churn):
 10. WP16 → adds semantic cache (optional; default-off; strict invalidation).
 11. WP15 → adds local backup/retention once data layout is stable (uses snapshots/cache dirs).
 12. WP06/WP07/WP13 → eliminates legacy entrypoints, strengthens logging safety, and hardens Analytics.
-13. WP09/WP08 → removes remaining TODOs and aligns docs/RTM.
+13. WP09/WP08 → removes remaining work markers and aligns docs/RTM.
 14. WP02 (Docker/Compose) → can be done anytime, but should be validated before release.
 
 ## Release quality gates (commands)

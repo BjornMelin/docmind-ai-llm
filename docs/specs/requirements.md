@@ -26,7 +26,7 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 - G3: Provide accurate multimodal retrieval with tunable hybrid search and reranking.
 - C1: Library-first; minimize custom code (KISS/DRY/YAGNI).
 - C2: One definitive architecture (no prod/local split).
-- C3: Primary runtime is CPython **3.13.11**, while maintaining support for **3.11–3.13** (`requires-python = ">=3.11,<3.14"`).
+- C3: Primary runtime is CPython **3.13.11** (`requires-python = ">=3.13,<3.14"`).
 - C4: High-performance LLM serving (vLLM) is supported **out-of-process** via OpenAI-compatible HTTP; the app must not require `vllm` as an in-env dependency.
 
 ## 2. Functional Requirements (FR-###)

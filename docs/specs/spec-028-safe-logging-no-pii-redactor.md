@@ -1,10 +1,10 @@
 ---
 spec: SPEC-028
 title: Safe Logging Policy — No PII Redactor Stub; Metadata-only + Keyed Fingerprints + Backstop
-version: 1.0.0
-date: 2026-01-10
+version: 1.0.1
+date: 2026-01-17
 owners: ["ai-arch"]
-status: Draft
+status: Implemented
 related_requirements:
   - NFR-SEC-002: Logging excludes sensitive content.
   - NFR-MAINT-003: No misleading stubs in security helpers.
