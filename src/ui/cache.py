@@ -12,6 +12,8 @@ from typing import Any
 import streamlit as st
 from loguru import logger
 
+from src.utils.log_safety import build_pii_log_entry
+
 
 def clear_caches(settings_obj: Any | None = None) -> int:
     """Clear Streamlit caches and bump a global cache version.
@@ -40,8 +42,6 @@ def clear_caches(settings_obj: Any | None = None) -> int:
         try:
             st.cache_data.clear()
         except Exception as exc:  # pragma: no cover - defensive
-            from src.utils.log_safety import build_pii_log_entry
-
             redaction = build_pii_log_entry(str(exc), key_id="ui.cache_data.clear")
             logger.debug(
                 "failed to clear st.cache_data (error_type={} error={})",
@@ -52,8 +52,6 @@ def clear_caches(settings_obj: Any | None = None) -> int:
         try:
             st.cache_resource.clear()
         except Exception as exc:  # pragma: no cover - defensive
-            from src.utils.log_safety import build_pii_log_entry
-
             redaction = build_pii_log_entry(str(exc), key_id="ui.cache_resource.clear")
             logger.debug(
                 "failed to clear st.cache_resource (error_type={} error={})",

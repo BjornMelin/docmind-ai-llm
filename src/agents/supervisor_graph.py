@@ -147,7 +147,14 @@ def create_handoff_tool(
             name=name,
             tool_call_id=tool_call_id,
         )
-        last_ai_message = cast(AIMessage, state["messages"][-1])
+        messages = state.get("messages") or []
+        if not messages:
+            return Command(
+                graph=Command.PARENT,
+                goto=agent_name,
+                update={"messages": [tool_message]},
+            )
+        last_ai_message = cast(AIMessage, messages[-1])
 
         # Parallel handoffs: use Send to allow ToolNode aggregation.
         if len(getattr(last_ai_message, "tool_calls", []) or []) > 1:
@@ -359,7 +366,8 @@ def build_multi_agent_supervisor_graph(
         params: Configuration object for build options.
 
     Returns:
-        A compiled StateGraph ready for execution.
+        An uncompiled StateGraph builder. Call `.compile(checkpointer=..., store=...)`
+        to obtain the executable graph.
 
     Raises:
         ValueError: If agents lack names or have duplicate names.

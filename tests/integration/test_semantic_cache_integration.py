@@ -86,12 +86,13 @@ def test_coordinator_semantic_cache_hit_short_circuits(
     assert first.content == "fresh"
 
     # Second call should hit cache and bypass workflow execution.
+    def _fail_if_called(*_a, **_k):  # type: ignore[no-untyped-def]
+        raise AssertionError("_run_agent_workflow should not be called on cache hit")
+
     monkeypatch.setattr(
         coord,
         "_run_agent_workflow",
-        lambda *_a, **_k: (_ for _ in ()).throw(
-            AssertionError("_run_agent_workflow should not be called on cache hit")
-        ),
+        _fail_if_called,
     )
     second = coord.process_query("hello", thread_id="t", user_id="u")
     assert second.content == "fresh"

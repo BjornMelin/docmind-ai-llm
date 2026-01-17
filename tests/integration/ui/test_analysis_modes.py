@@ -129,20 +129,24 @@ def test_analysis_separate_mode_renders_per_doc_outputs(
     assert not app.exception
 
     # Select separate mode and both uploaded docs.
-    mode_select = next(sb for sb in app.selectbox if sb.key == "analysis_mode")
+    mode_select = next((sb for sb in app.selectbox if sb.key == "analysis_mode"), None)
+    assert mode_select is not None
     app = mode_select.set_value("separate").run()
     assert not app.exception
 
-    docs_multi = next(ms for ms in app.multiselect if ms.key == "analysis_docs")
+    docs_multi = next((ms for ms in app.multiselect if ms.key == "analysis_docs"), None)
+    assert docs_multi is not None
     selected_docs = list(getattr(docs_multi, "options", [])[:2])
     app = docs_multi.set_value(selected_docs).run()
     assert not app.exception
 
-    query_area = next(ta for ta in app.text_area if ta.key == "analysis_query")
+    query_area = next((ta for ta in app.text_area if ta.key == "analysis_query"), None)
+    assert query_area is not None
     app = query_area.set_value("What is in these docs?").run()
     assert not app.exception
 
-    run_button = next(btn for btn in app.button if btn.key == "analysis_run")
+    run_button = next((btn for btn in app.button if btn.key == "analysis_run"), None)
+    assert run_button is not None
     result = run_button.click().run()
     assert not result.exception
 

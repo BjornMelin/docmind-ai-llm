@@ -1,3 +1,5 @@
+"""Tests for backup manifest creation."""
+
 from __future__ import annotations
 
 import json
@@ -13,6 +15,15 @@ from tests.fixtures.test_settings import create_test_settings
 def test_create_backup_writes_manifest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Creates a backup and writes a manifest.
+
+    Args:
+        tmp_path: Temporary directory for test artifacts.
+        monkeypatch: Pytest monkeypatch fixture.
+
+    Returns:
+        None.
+    """
     monkeypatch.chdir(tmp_path)
 
     cfg = create_test_settings(
@@ -58,6 +69,18 @@ def test_create_backup_writes_manifest(
 def test_create_backup_requires_enabled(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Raises when backups are disabled.
+
+    Args:
+        tmp_path: Temporary directory for test artifacts.
+        monkeypatch: Pytest monkeypatch fixture.
+
+    Returns:
+        None.
+
+    Raises:
+        ValueError: When backups are disabled.
+    """
     monkeypatch.chdir(tmp_path)
 
     cfg = create_test_settings(

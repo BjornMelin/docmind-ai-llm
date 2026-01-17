@@ -524,6 +524,14 @@ _OPENAI_COMPAT_PRESETS: dict[str, dict[str, object]] = {
 
 
 def _safe_json_dumps(value: object) -> str:
+    """Serialize value to pretty-printed JSON with fallback.
+
+    Args:
+        value: Object to serialize.
+
+    Returns:
+        str: JSON string or "{}" on serialization failure.
+    """
     try:
         return json.dumps(value, indent=2, sort_keys=True)
     except (TypeError, ValueError):
@@ -531,6 +539,14 @@ def _safe_json_dumps(value: object) -> str:
 
 
 def _safe_json_dumps_compact(value: object) -> str:
+    """Serialize value to compact JSON with fallback.
+
+    Args:
+        value: Object to serialize.
+
+    Returns:
+        str: JSON string or "{}" on serialization failure.
+    """
     try:
         return json.dumps(value, separators=(",", ":"), sort_keys=True)
     except (TypeError, ValueError):
@@ -1123,12 +1139,15 @@ def _render_endpoint_test(validated: DocMindSettings | None) -> None:
         if validated.openai.default_headers:
             headers.update(validated.openai.default_headers)
 
-        timeout_s = float(
-            getattr(
-                validated,
-                "llm_request_timeout_seconds",
-                getattr(validated.ui, "request_timeout_seconds", 30),
-            )
+        timeout_s = min(
+            30.0,
+            float(
+                getattr(
+                    validated,
+                    "llm_request_timeout_seconds",
+                    getattr(validated.ui, "request_timeout_seconds", 30),
+                )
+            ),
         )
         with httpx.Client(timeout=timeout_s) as client:
             resp = client.get(url, headers=headers)

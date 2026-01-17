@@ -29,7 +29,7 @@ def test_deadline_ts_seeded_when_enabled(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_deadline_ts_none_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Leave deadline_ts as None when deadline propagation is disabled.
+    """Keep deadline_ts key present with None when disabled.
 
     Args:
         monkeypatch: Pytest monkeypatch fixture.
@@ -43,4 +43,5 @@ def test_deadline_ts_none_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None
     coord = MultiAgentCoordinator(max_agent_timeout=12.0, enable_fallback=False)
     state = coord._build_initial_state("q", start_time=0.0, tools_data={})
 
-    assert state.get("deadline_ts") is None
+    assert "deadline_ts" in state
+    assert state["deadline_ts"] is None

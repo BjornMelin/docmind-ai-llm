@@ -12,6 +12,14 @@ from src.config import settings
 def test_agent_deadline_exceeded_marks_state_and_emits_event(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify deadline propagation sets timeout state and emits an event.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+
+    Returns:
+        None.
+    """
     monkeypatch.setattr(settings.agents, "enable_deadline_propagation", True)
 
     events: list[dict[str, object]] = []

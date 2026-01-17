@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from src.analysis.models import AnalysisMode, AnalysisResult, DocumentRef, PerDocResult
+from src.analysis.models import (
+    AnalysisMode,
+    AnalysisResult,
+    DocumentRef,
+    PerDocResult,
+    ResolvedAnalysisMode,
+)
 from src.analysis.service import (
     AnalysisCancelledError,
     discover_uploaded_documents,
@@ -15,6 +21,7 @@ __all__ = [
     "AnalysisResult",
     "DocumentRef",
     "PerDocResult",
+    "ResolvedAnalysisMode",
     "discover_uploaded_documents",
     "run_analysis",
 ]

@@ -8,9 +8,9 @@
 > - **Multi-Agent System**: Complete 5-agent LangGraph supervisor coordination system
 > - **Performance Optimization**: FP8 quantization achieving 100-160 tok/s decode, 800-1300 tok/s prefill
 > - **128K Context Support**: Full 131,072 token context window with FP8 KV cache optimization
-> - **VRAM Optimization**: Validated 12-14GB VRAM usage on RTX 4090 Laptop hardware
+> - **VRAM Optimization**: Validated 12-14 GB VRAM usage on RTX 4090 Laptop hardware
 > - **Token Efficiency**: Achieved 50-87% token reduction through parallel tool execution
-> - **GPU Stack**: CUDA 12.8+, PyTorch 2.8.0 (CUDA wheels via PyTorch index), vLLM runs out-of-process
+> - **GPU Stack**: CUDA 12.8+, PyTorch 2.8.x (CUDA wheels via PyTorch index; coupled with Transformers <5.0), vLLM runs out-of-process
 >
 > - **Library-First Ingestion Pipeline**: LlamaIndex `IngestionPipeline` with DuckDB cache, deterministic hashing, and AES-GCM page image support
 > - **Snapshot Persistence**: Portalocker-backed SnapshotManager with tri-file manifests, CURRENT pointer discipline, GraphRAG export packaging
@@ -19,13 +19,13 @@
 
 ## 1. Executive Summary
 
-DocMind AI is an offline-first document analysis system using Qwen3-4B-Instruct-2507-FP8 with 128K context windows, achieving 100-160 tokens/second decode performance. It uses a **LlamaIndex** stack with hybrid vector search (BGE-M3 embeddings), knowledge graphs, and a **5-agent LangGraph supervisor system** for document processing with FP8 KV cache optimization. By eliminating external APIs and using local computation only, it provides zero data exfiltration for document analysis.
+DocMind AI is an offline-first document analysis system using Qwen3-4B-Instruct-2507-FP8 with 128K context windows, achieving 100-160 tokens/second decode performance. It uses a **LlamaIndex** stack with hybrid vector search (BGE-M3 embeddings), optional knowledge graph retrieval when GraphRAG is enabled, and a **5-agent LangGraph supervisor system** for document processing with FP8 KV cache optimization. By eliminating external APIs and using local computation only, it provides zero data exfiltration for document analysis.
 
 ## 2. Problem Statement & Opportunity
 
 **Problem Statement:** In today's data-rich world, professionals, researchers, and students are inundated with digital documents. Extracting meaningful insights is a time-consuming, manual process. Furthermore, existing AI-powered solutions are almost exclusively cloud-based, forcing users to upload sensitive or proprietary documents to third-party servers, creating significant privacy risks and vendor lock-in. There is limited availability of solutions that offer modern AI capabilities with complete privacy through local, offline processing.
 
-**Opportunity:** Professional users require AI document processing without cloud dependencies for data security. DocMind AI provides offline-first RAG with 128K context capability using local models only. The system processes documents with 100% local computation, zero external API calls, and requires 12-14GB VRAM on RTX 4090 hardware.
+**Opportunity:** Professional users require AI document processing without cloud dependencies for data security. DocMind AI provides offline-first RAG with 128K context capability using local models only. The system processes documents with 100% local computation, zero external API calls, and requires 12-14 GB VRAM on RTX 4090 hardware.
 
 ## 3. Features & Epics
 
@@ -47,7 +47,7 @@ This section groups the system's requirements into high-level, user-centric feat
   - **Requirements:** FR-8, FR-9, FR-10, NFR-1, AR-6
 
 - **Epic 4: Local Processing Infrastructure**
-  - **Description:** The underlying infrastructure providing 100-160 tok/s decode performance, 12-14GB VRAM usage, and 100% offline operation.
+  - **Description:** The underlying infrastructure providing 100-160 tok/s decode performance, 12-14 GB VRAM usage, and 100% offline operation.
   - **Requirements:** NFR-1, NFR-3, NFR-5, NFR-6, NFR-7, NFR-8, NFR-9, AR-1, AR-2, AR-3, AR-4
 
 ## 4. System Requirements
@@ -76,7 +76,7 @@ The following requirements are derived directly from the architectural decisions
 - **NFR-3: Performance - Asynchronous Processing**: The system should leverage asynchronous and parallel processing patterns where appropriate to ensure a responsive UI and throughput, without coupling to specific pipeline abstractions. **(ADR-012)**
 - **NFR-4: Privacy - Offline First**: The system must be capable of operating 100% offline, with no reliance on external APIs for any core functionality, including parsing and model inference. **(ADR-001)**
 - **NFR-5: Resilience - Error Handling**: The system must handle transient failures (network hiccups, file errors) using exponential backoff retry strategies (3 attempts, 2s base delay) for infrastructure operations. **(ADR-022)**
-- **NFR-6: Memory Efficiency - VRAM Optimization**: The system must employ FP8 quantization and FP8 KV cache to enable 128K context processing within ~12-14GB VRAM on RTX 4090 Laptop hardware, providing optimized memory usage with a vLLM server configured for FlashInfer. **(ADR-004, ADR-010)**
+- **NFR-6: Memory Efficiency - VRAM Optimization**: The system must employ FP8 quantization and FP8 KV cache to enable 128K context processing within ~12-14 GB VRAM on RTX 4090 Laptop hardware, providing optimized memory usage with a vLLM server configured for FlashInfer. **(ADR-004, ADR-010)**
 - **NFR-7: Memory Efficiency - Multimodal VRAM**: The multimodal embedding model (SigLIP base, or CLIP ViT‑B/32) should be selected for low VRAM usage (≈1.4GB) to ensure efficiency. **(ADR-016)**
 - **NFR-8: Scalability - Local Concurrency**: The persistence layer (SQLite) must be configured in WAL (Write-Ahead Logging) mode to support concurrent read/write operations from multiple local processes. **(ADR-008)**
 - **NFR-9: Hardware Adaptability**: The system must detect GPU availability (CUDA 12.8+) and select appropriate models: Qwen3-4B-FP8 for RTX 4090, CPU fallback for systems without GPUs. **(ADR-017)**
@@ -85,7 +85,7 @@ The following requirements are derived directly from the architectural decisions
 
 - **AR-1: Pure LlamaIndex Stack**: The architecture must be a consolidated, pure LlamaIndex ecosystem, minimizing external dependencies and custom code. **(ADR-021, ADR-015)**
 - **AR-2: Library-First Principle**: Development must prioritize the use of proven, well-maintained libraries over custom-built solutions for common problems (e.g., using Tenacity for retries, not custom code). **(ADR-018)**
-- **AR-3: Unified Configuration**: All global configurations (LLM, embedding model, chunk size, etc.) must be managed through the native LlamaIndex `Settings` singleton, eliminating dual-configuration systems. **(ADR-020)**
+- **AR-3: Unified Configuration**: All global configurations (LLM, embedding model, chunk size, etc.) are managed via DocMind's Pydantic settings with explicit binding into LlamaIndex `Settings` at runtime, avoiding drift between app config and LlamaIndex defaults. **(ADR-020)**
 - **AR-4: Simplified GPU Management**: GPU device allocation and management must be handled via the native `device_map="auto"` pattern, eliminating the need for complex custom monitoring scripts. **(ADR-003)**
 - **AR-5: Native Component Integration**: The system must use native LlamaIndex components for core tasks, such as `UnstructuredReader` for parsing, `IngestionPipeline` for processing, and `IngestionCache` for caching. **(ADR-004, ADR-006)**
 - **AR-6: Multi-Agent Coordination**: The system shall use LangGraph supervisor patterns to coordinate 5 specialized agents (query router, planner, retrieval expert, synthesizer, validator) for enhanced query processing quality and reliability. **(ADR-011-NEW)**
@@ -107,7 +107,7 @@ The system is built on a pure LlamaIndex stack, emphasizing native component int
 
 Retrieval is composed via a Router/Query Engine built by `router_factory`, registering tools `semantic_search`, `hybrid_search`, and (when present and healthy) `knowledge_graph`. The selector prefers `PydanticSingleSelector` when available and falls back to `LLMSingleSelector`. The graph retriever/query engine uses a default `path_depth=1` to bound traversal.
 
-Hybrid retrieval uses Qdrant's Query API server‑side fusion with named vectors (`text-dense`, `text-sparse`). Default fusion is RRF; DBSF may be enabled via environment where supported. There are no client‑side fusion knobs.
+Hybrid retrieval uses Qdrant's Query API server‑side fusion with named vectors (`text-dense`, `text-sparse`). Default fusion is RRF; DBSF may be enabled via environment where supported. There are no client‑side fusion knobs. When GraphRAG is enabled, graph retrieval defaults to `path_depth=1` to bound traversal.
 
 ```mermaid
 graph TD
@@ -124,7 +124,7 @@ graph TD
     subgraph "Data Indexing & Storage"
         E --> F["Embeddings<br/>Dense: BGE‑M3<br/>Sparse: FastEmbed BM42/BM25 + IDF<br/>Multimodal: SigLIP (default) or CLIP"]
         F --> G["Vector Store<br/>Qdrant"]
-        E --> H["Knowledge Graph<br/>PropertyGraphIndex (LlamaIndex; path_depth=1)"]
+        E --> H["Knowledge Graph<br/>PropertyGraphIndex (optional; path_depth=1)"]
     end
 
     subgraph "Query & Multi-Agent System"
@@ -138,8 +138,8 @@ graph TD
     end
 
     subgraph "Core Configuration & Optimization"
-        R["Simple Configuration<br/>Environment Variables + Streamlit Config"]
-        S["PyTorch Optimization<br/>TorchAO Quantization"]
+        R["Pydantic Settings<br/>DOCMIND_* env"]
+        S["LLM Optimization<br/>FP8 + FlashInfer (vLLM)"]
         T["GPU Management<br/>device_map='auto'"]
     end
 
@@ -157,7 +157,7 @@ graph TD
     H --> M
 
     K -- Uses Tools Derived From --> L
-    J -- Manages --> Q[ChatMemoryBuffer<br/>65K Context]
+    J -- Manages --> Q[ChatMemoryBuffer<br/>131K Context Cap]
 
     %% Link to Core Systems
     J -- Configured by --> R
@@ -172,15 +172,15 @@ graph TD
 
 ### Core Libraries
 
-| Component        | Library                        | Version          | Purpose                                  |
-| ---------------- | ------------------------------ | ---------------- | ---------------------------------------- |
-| RAG Framework    | llama-index                    | >=0.12.0         | Core pipelines, agent, native components |
-| Document Parsing | unstructured                   | >=0.15.13        | PDF/Office parsing                       |
-| Vector Database  | qdrant-client                  | 1.15.0           | Hybrid vector storage                    |
-| LLM Backends     | ollama, llama-cpp-python, vllm | Latest           | Local LLM Inference                      |
-| GPU Acceleration | torch, torchao                 | >=2.7.0, >=0.1.0 | CUDA support & Quantization              |
-| Resilience       | tenacity                       | >=9.1.2          | Production-grade error handling          |
-| Web Interface    | streamlit                      | >=1.47.1         | User interface                           |
+| Component        | Library                        | Version                    | Purpose                                  |
+| ---------------- | ------------------------------ | -------------------------- | ---------------------------------------- |
+| RAG Framework    | llama-index                    | >=0.14.12,<0.15.0           | Core pipelines, agent, native components |
+| Document Parsing | unstructured                   | >=0.18.26,<0.19.0           | PDF/Office parsing                       |
+| Vector Database  | qdrant-client                  | >=1.15.1,<2.0.0             | Hybrid vector storage                    |
+| LLM Backends     | ollama, llama-cpp-python, vllm | 0.6.1, >=0.3.16,<0.4.0, external-only | Local LLM Inference |
+| GPU Acceleration | torch                          | 2.8.x                      | CUDA support & Quantization              |
+| Resilience       | tenacity                       | >=9.1.2,<10.0.0             | Production-grade error handling          |
+| Web Interface    | streamlit                      | >=1.52.2,<2.0.0             | User interface                           |
 
 ### Model Dependencies
 
@@ -195,12 +195,13 @@ graph TD
 
 ### Configuration Approach
 
-DocMind AI uses **distributed, simple configuration** following KISS principles:
+DocMind AI uses **centralized, typed configuration** via Pydantic Settings v2:
 
-- **Environment Variables** (`.env`): Runtime settings, model paths, feature flags
-- **Streamlit Native Config** (`.streamlit/config.toml`): UI theme, upload limits
-- **Library Defaults**: Components use sensible library defaults (LlamaIndex, Qdrant)
-- **Feature Flags**: Boolean environment variables for experimental features (GraphRAG, DSPy optimization). GraphRAG is currently default ON; disable via `DOCMIND_ENABLE_GRAPHRAG=false`. Reranking is always-on by default; ops may override via the canonical env `DOCMIND_RETRIEVAL__USE_RERANKING=true|false` (no UI toggle).
+- **Settings Source of Truth** (`src/config/settings.py`): All env wiring and validation (prefix `DOCMIND_`, nested keys with `__`).
+- **Environment Variables** (`.env`): Runtime settings, model paths, feature flags.
+- **Streamlit Native Config** (`.streamlit/config.toml`): UI theme, upload limits.
+- **Library Defaults**: Components use sensible library defaults (LlamaIndex, Qdrant).
+- **Feature Flags**: GraphRAG is **disabled by default**; enable with `DOCMIND_ENABLE_GRAPHRAG=true` **and** `DOCMIND_GRAPHRAG_CFG__ENABLED=true`. Reranking is enabled by default and can be overridden via `DOCMIND_RETRIEVAL__USE_RERANKING=true|false` (no UI toggle).
 
 ### Snapshots & Staleness
 
@@ -223,7 +224,7 @@ DocMind AI uses **distributed, simple configuration** following KISS principles:
 
 - [ ] Query latency <1.5 seconds for 95th percentile (RTX 4090 Laptop).
 - [ ] Document processing throughput >50 pages/second with GPU and caching.
-- [ ] System VRAM usage ~12-14GB with 128K context capability.
+- [ ] System VRAM usage ~12-14 GB with 128K context capability.
 - [ ] Multi-agent coordination overhead remains under 200ms with LangGraph supervisor patterns achieving 50-87% token reduction through parallel execution.
 - [ ] Retrieval accuracy >80% relevance on domain-specific queries.
 - [ ] FP8 KV cache enables 128K context processing without OOM errors.

@@ -90,7 +90,8 @@ def test_job_manager_cleanup_expires_done_jobs() -> None:
         manager.wait_for_completion(job_id, owner_id=owner_id, timeout_sec=1.0)
         == "succeeded"
     )
-    # Simulate an orphaned job (not polled recently) and ensure cleanup removes it.
+    # Simulate an orphaned job (not polled recently) by touching private state;
+    # no public hook exists for forcing stale timestamps in tests.
     with manager._lock:
         state = manager._jobs.get(job_id)
         assert state is not None

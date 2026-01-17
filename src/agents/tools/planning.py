@@ -266,7 +266,7 @@ def plan_query(
         )
         return json.dumps(plan)
 
-    except (RuntimeError, ValueError, AttributeError) as exc:
+    except Exception as exc:
         log_error_with_context(exc, operation="plan_query")
         # Fallback plan
         fallback = {

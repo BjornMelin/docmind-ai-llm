@@ -715,8 +715,6 @@ def _parse_tool_result(result: Any) -> list[dict[str, Any]]:
                     get_content = getattr(node, "get_content", None)
                     text = str(get_content()) if callable(get_content) else str(node)
             except Exception as exc:
-                from src.utils.log_safety import build_pii_log_entry
-
                 redaction = build_pii_log_entry(str(exc), key_id="retrieval.parse_node")
                 logger.debug(
                     "Failed to extract text from node; falling back to str(node) "
@@ -777,8 +775,6 @@ def _collect_via_tool_factory(
             vector_index=vector_index, kg_index=kg_index, retriever=retriever
         )
     except Exception as exc:
-        from src.utils.log_safety import build_pii_log_entry
-
         redaction = build_pii_log_entry(str(exc), key_id="retrieval.tool_collect")
         logger.debug(
             "Tool collection path failed; using detailed path (error_type={} error={})",
@@ -797,8 +793,6 @@ def _collect_via_tool_factory(
             )
             collected.extend(_parse_tool_result(res))
         except Exception as exc:
-            from src.utils.log_safety import build_pii_log_entry
-
             redaction = build_pii_log_entry(str(exc), key_id="retrieval.tool_execute")
             logger.error(
                 "Tool execution failed (error_type={} error={})",

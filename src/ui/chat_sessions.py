@@ -23,6 +23,9 @@ from src.persistence.chat_db import (
     touch_session,
 )
 
+_chat_db_conn: sqlite3.Connection | None = None
+_chat_db_conn_cleanup_registered = False
+
 
 @dataclass(frozen=True, slots=True)
 class ChatSelection:
@@ -47,9 +50,15 @@ def get_chat_db_conn() -> sqlite3.Connection:
     Returns:
         An active SQLite connection instance.
     """
+    global _chat_db_conn, _chat_db_conn_cleanup_registered
+    if _chat_db_conn is not None:
+        _close_chat_db_conn(_chat_db_conn)
     conn = open_chat_db(settings.chat.sqlite_path, cfg=settings)
     ensure_session_registry(conn)
-    atexit.register(_close_chat_db_conn, conn)
+    _chat_db_conn = conn
+    if not _chat_db_conn_cleanup_registered:
+        atexit.register(_close_current_chat_db_conn)
+        _chat_db_conn_cleanup_registered = True
     return conn
 
 
@@ -61,6 +70,13 @@ def _close_chat_db_conn(conn: sqlite3.Connection) -> None:
     """
     with contextlib.suppress(Exception):
         conn.close()
+
+
+def _close_current_chat_db_conn() -> None:
+    """Close the currently cached chat DB connection on process exit."""
+    if _chat_db_conn is None:
+        return
+    _close_chat_db_conn(_chat_db_conn)
 
 
 def _get_or_init_user_id() -> str:

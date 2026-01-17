@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
@@ -70,7 +70,15 @@ def discover_uploaded_documents(uploads_dir: Path) -> list[DocumentRef]:
 def auto_select_mode(
     *, doc_count: int, cfg: DocMindSettings
 ) -> tuple[ResolvedAnalysisMode, str]:
-    """Select an analysis mode when requested mode is ``auto``."""
+    """Select an analysis mode when requested mode is ``auto``.
+
+    Args:
+        doc_count: Number of documents selected for analysis.
+        cfg: Settings controlling analysis concurrency.
+
+    Returns:
+        Tuple of (resolved_mode, reason) for auto-selection.
+    """
     if doc_count <= 0:
         return "combined", "no_docs_selected"
     if doc_count == 1:
@@ -86,7 +94,16 @@ def resolve_mode(
     doc_count: int,
     cfg: DocMindSettings,
 ) -> tuple[ResolvedAnalysisMode, str | None]:
-    """Resolve the effective analysis mode and optional auto decision reason."""
+    """Resolve the effective analysis mode and optional auto decision reason.
+
+    Args:
+        requested: Requested analysis mode (auto/separate/combined).
+        doc_count: Number of documents selected for analysis.
+        cfg: Settings controlling analysis concurrency.
+
+    Returns:
+        Tuple of (resolved_mode, auto_reason). Reason is None when not auto.
+    """
     if requested == "auto":
         mode, reason = auto_select_mode(doc_count=doc_count, cfg=cfg)
         return mode, reason
@@ -153,7 +170,7 @@ def _query_vector_index(
     query: str,
     cfg: DocMindSettings,
     filters: Any | None,
-) -> tuple[str, list[dict[str, Any]]]:
+) -> tuple[str, list[Mapping[str, object]]]:
     """Query a vector index and return (answer, citations)."""
     engine: Any
     try:
@@ -168,7 +185,7 @@ def _query_vector_index(
     response = engine.query(str(query))
     answer = str(getattr(response, "response", response))
 
-    citations: list[dict[str, Any]] = []
+    citations: list[Mapping[str, object]] = []
     source_nodes = getattr(response, "source_nodes", None)
     if isinstance(source_nodes, list):
         for item in source_nodes[:25]:

@@ -69,9 +69,9 @@ def ingest_files(
 
     saved_inputs: list[IngestionInput] = []
     default_encrypt = (
-        bool(encrypt_images)
+        encrypt_images
         if encrypt_images is not None
-        else bool(settings.processing.encrypt_page_images)
+        else settings.processing.encrypt_page_images
     )
     for file_obj in files:
         stored_path, digest = save_uploaded_file(file_obj)
@@ -92,7 +92,6 @@ def ingest_files(
     return ingest_inputs(
         saved_inputs,
         enable_graphrag=enable_graphrag,
-        encrypt_images=encrypt_images,
         nlp_service=nlp_service,
     )
 

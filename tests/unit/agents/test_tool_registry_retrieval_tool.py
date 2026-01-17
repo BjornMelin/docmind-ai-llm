@@ -19,6 +19,14 @@ def _tool_names(tools) -> set[str]:
 
 
 def test_tool_registry_uses_retrieve_documents_for_retrieval_agent() -> None:
+    """Ensure retrieval tools include retrieve_documents and exclude router_tool.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+    """
     registry = DefaultToolRegistry()
     names = _tool_names(registry.get_retrieval_tools())
     assert "retrieve_documents" in names

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
+
+from loguru import logger
 
 from src.config.settings import DocMindSettings, settings
 
@@ -148,7 +149,7 @@ class DefaultToolRegistry:
                 redaction = build_pii_log_entry(
                     str(exc), key_id="tool_registry.is_graphrag_enabled"
                 )
-                logging.getLogger(__name__).debug(
+                logger.debug(
                     "is_graphrag_enabled() raised; GraphRAG disabled (fail-closed) "
                     "(error_type=%s error=%s)",
                     type(exc).__name__,

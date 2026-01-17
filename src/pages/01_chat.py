@@ -845,7 +845,10 @@ def _render_analysis_job_panel(*, owner_id: str) -> None:
     if events:
         st.session_state["analysis_last_event"] = events[-1]
 
-    last: ProgressEvent | None = st.session_state.get("analysis_last_event")
+    last_event = st.session_state.get("analysis_last_event")
+    last: ProgressEvent | None = (
+        last_event if isinstance(last_event, ProgressEvent) else None
+    )
     pct = int(last.percent) if isinstance(last, ProgressEvent) else 0
     phase = last.phase if isinstance(last, ProgressEvent) else "analysis"
     message = last.message if isinstance(last, ProgressEvent) else ""
@@ -862,7 +865,9 @@ def _render_analysis_job_panel(*, owner_id: str) -> None:
         return
 
     st.session_state.pop("analysis_job_id", None)
-    if state.status == "succeeded" and isinstance(state.result, AnalysisResult):
+    succeeded = state.status == "succeeded"
+    result_is_analysis = isinstance(state.result, AnalysisResult)
+    if succeeded and result_is_analysis:
         st.session_state["analysis_last_result"] = state.result
         st.success("Analysis completed.")
     elif state.status == "canceled":
