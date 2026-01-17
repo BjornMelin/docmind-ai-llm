@@ -36,6 +36,7 @@ ENV UV_HTTP_TIMEOUT=3600 \
     TORCH_WHEEL_SHA256=${TORCH_WHEEL_SHA256}
 
 COPY pyproject.toml uv.lock README.md ./
+COPY app.py ./app.py
 COPY scripts/docker_fetch_torch_wheel.py /usr/local/bin/docker_fetch_torch_wheel.py
 
 RUN --mount=type=cache,target=/root/.cache/torch \
@@ -97,4 +98,4 @@ EXPOSE 8501
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD ["python", "-c", "import socket; s = socket.create_connection(('127.0.0.1', 8501), timeout=3); s.close()"]
 
-CMD ["streamlit", "run", "src/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+CMD ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501"]

@@ -4,7 +4,7 @@ DocMind AI is a local-first document analysis app. It runs offline after initial
 
 ## Prerequisites
 
-- **Python**: 3.13.11 recommended (supported: 3.11–3.13; see `pyproject.toml`)
+- **Python**: 3.13.11 (see `pyproject.toml`)
 - **uv**: dependency manager used by this repo
 - **Docker** (optional but recommended): for running Qdrant locally
 - **One local LLM backend**:
@@ -65,6 +65,21 @@ DocMind uses a single `DOCMIND_*` configuration surface. Backends that expose an
   echo 'DOCMIND_LLM_BACKEND=vllm' >> .env
   echo 'DOCMIND_OPENAI__BASE_URL=http://localhost:8000/v1' >> .env
   echo 'DOCMIND_OPENAI__API_KEY=not-needed' >> .env
+  ```
+
+Recommended defaults:
+
+- Prefer local backends (Ollama, LM Studio, vLLM, llama.cpp server) with loopback URLs.
+- Keep `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` unless you explicitly need non-loopback endpoints.
+
+- **OpenAI-compatible cloud / gateway** (OpenAI/OpenRouter/xAI/Vercel AI Gateway/LiteLLM Proxy):
+
+  ```bash
+  echo 'DOCMIND_LLM_BACKEND=openai_compatible' >> .env
+  echo 'DOCMIND_OPENAI__BASE_URL=https://api.openai.com/v1' >> .env
+  echo 'DOCMIND_OPENAI__API_KEY=sk-...' >> .env
+  echo 'DOCMIND_OPENAI__API_MODE=responses' >> .env
+  echo 'DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true' >> .env
   ```
 
 For a full list of configuration knobs, see:
