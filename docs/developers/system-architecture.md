@@ -246,41 +246,32 @@ graph TD
 
 ### LangGraph Supervisor Implementation
 
-The implementation uses LangGraph's native supervisor pattern:
+DocMind uses a **repo-local**, graph-native supervisor implementation (no external
+supervisor wrapper dependency). The coordinator builds a parent `StateGraph`
+and uses **handoff tools** that return `langgraph.types.Command(graph=Command.PARENT, ...)`
+to route from the supervisor agent into subagent nodes.
+
+Key code paths:
+
+- `src/agents/coordinator.py` (wiring + compilation with checkpointer/store)
+- `src/agents/supervisor_graph.py` (handoff tools + `StateGraph` builder)
 
 ```python
-from langchain.agents import create_agent
-from langgraph.graph import MessagesState
-from langgraph.checkpoint.memory import InMemorySaver
+from src.agents.supervisor_graph import (
+    SupervisorBuildParams,
+    build_multi_agent_supervisor_graph,
+    create_forward_message_tool,
+)
 
-class MultiAgentCoordinator:
-    """5-agent coordination system with LangGraph supervisor."""
-
-    def __init__(self, llm, tools_data):
-        # Create specialized agents
-        self.agents = {
-            "router": create_agent(llm, tools=[route_query]),
-            "planner": create_agent(llm, tools=[plan_query]),
-            "retrieval": create_agent(llm, tools=[retrieve_documents]),
-            "synthesis": create_agent(llm, tools=[synthesize_results]),
-            "validator": create_agent(llm, tools=[validate_response])
-        }
-
-        # Create supervisor graph with memory
-        self.memory = InMemorySaver()
-        self.supervisor = langgraph_supervisor.create_supervisor(
-            agents=self.agents,
-            system_prompt="Coordinate multi-agent document analysis",
-            memory=self.memory
-        )
-
-    def process_query(self, query: str, context: Any | None = None) -> AgentResponse:
-        """Execute multi-agent coordination (synchronous public API)."""
-
-        # Internal async execution logic (wrapped in sync call)
-        result = self._run_agent_workflow(query, context)
-
-        return self._extract_response(result, query)
+graph = build_multi_agent_supervisor_graph(
+    [router_agent, planner_agent, retrieval_agent, synthesis_agent, validation_agent],
+    model=model,
+    prompt=system_prompt,
+    state_schema=MultiAgentGraphState,
+    extra_tools=[create_forward_message_tool(supervisor_name="supervisor")],
+    params=SupervisorBuildParams(output_mode="last_message"),
+)
+compiled = graph.compile(checkpointer=checkpointer, store=store)
 ```
 
 ### Shared Tool Functions

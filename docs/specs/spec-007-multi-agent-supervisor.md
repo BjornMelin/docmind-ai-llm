@@ -1,12 +1,12 @@
 ---
 spec: SPEC-007
 title: LangGraph Supervisor Orchestrator with Deterministic JSON-Schema Outputs
-version: 1.0.1
-date: 2026-01-09
+version: 1.1.0
+date: 2026-01-17
 owners: ["ai-arch"]
 status: Revised
 related_requirements:
-  - FR-AGENT-001: Use langgraph-supervisor-py to coordinate specialized agents.
+  - FR-AGENT-001: Use a graph-native LangGraph `StateGraph` supervisor to coordinate specialized agents (no external supervisor wrapper dependency).
   - FR-AGENT-002: Enforce JSON schema outputs where backend supports structured decoding.
   - FR-AGENT-003: Provide stop conditions and max step limits.
 related_adrs: ["ADR-001","ADR-011"]
@@ -15,7 +15,7 @@ related_adrs: ["ADR-001","ADR-011"]
 
 ## Objective
 
-Restore and integrate your **langgraph-supervisor-py** multi-agent system with the RAG pipeline and tools. Use schema-guided decoding for deterministic outputs when LLM provider supports it.
+Implement and integrate DocMind’s **multi-agent supervisor** with the RAG pipeline and tools using a **graph-native** LangGraph `StateGraph` supervisor. Use schema-guided decoding for deterministic outputs when the selected LLM provider supports it.
 
 ## Provider Capability Notes (Structured Outputs / Tools)
 
@@ -25,14 +25,13 @@ Restore and integrate your **langgraph-supervisor-py** multi-agent system with t
 
 ## Libraries and Imports
 
-LangGraph v1 deprecates `langgraph.prebuilt.create_react_agent`. Use
-`langchain.agents.create_agent` (LangChain v1) for agent construction and keep
-`langgraph-supervisor` for orchestration.
+Use `langchain.agents.create_agent` (LangChain v1) for agent construction and keep
+DocMind’s repo-local `StateGraph` supervisor (`src/agents/supervisor_graph.py`) for orchestration.
 
 ```python
-from langgraph_supervisor import create_supervisor
 from langchain.agents import create_agent
 from langchain_core.tools import tool
+from src.agents.supervisor_graph import build_multi_agent_supervisor_graph
 from src.retrieval.router_factory import build_router_engine
 ```
 
@@ -40,7 +39,8 @@ from src.retrieval.router_factory import build_router_engine
 
 ### CREATE
 
-- `src/agents/coordinator.py`: supervisor coordinator using `langgraph-supervisor` and registered tools.
+- `src/agents/supervisor_graph.py`: repo-local supervisor graph builder and handoff tools.
+- `src/agents/coordinator.py`: coordinator wiring + compilation with checkpointer/store + streaming.
 - Agent tools live under `src/agents/tools/` and are registered via the tool registry/factory.
 
 ### UPDATE

@@ -15,11 +15,11 @@ References:
 
 ## Description
 
-Use LangGraph `StateGraph` to coordinate five agent roles (router, planner, retrieval, synthesis, validation). Preserve the existing external coordinator behavior while removing the `langgraph-supervisor` dependency (which currently pulls a deprecated `create_react_agent` path).
+Use LangGraph `StateGraph` to coordinate five agent roles (router, planner, retrieval, synthesis, validation). Preserve the existing external coordinator behavior while removing the legacy third‑party supervisor wrapper (which depended on deprecated LangGraph prebuilts in the pinned version).
 
 ## Context
 
-DocMind AI relies on multiple agent roles that must coordinate while preserving context and working fully offline. The project originally adopted `langgraph-supervisor` for a prebuilt supervisor pattern. However, the pinned supervisor package relies on deprecated LangGraph prebuilts (`create_react_agent`) which forces local warning suppression and creates upgrade risk.
+DocMind AI relies on multiple agent roles that must coordinate while preserving context and working fully offline. The project originally adopted a third‑party supervisor wrapper for a prebuilt supervisor pattern. However, the pinned wrapper depended on deprecated LangGraph prebuilts, which forced local warning suppression and created upgrade risk.
 
 We therefore migrate the orchestration to graph-native LangGraph primitives (`StateGraph`) while keeping the existing per-role agents built via LangChain v1 `create_agent` and continuing to use LlamaIndex for retrieval/indexing (not as the orchestration runtime).
 
@@ -37,7 +37,7 @@ We therefore migrate the orchestration to graph-native LangGraph primitives (`St
 - Manual orchestration — complex state and error handling
 - Heavy multi‑agent frameworks — overkill for local desktop app
 - LlamaIndex AgentWorkflow — introduces a second orchestration/state subsystem; would require rewriting existing LangChain/LangGraph tool seams
-- LangGraph Supervisor library — prebuilt, but currently depends on deprecated LangGraph prebuilts in the pinned version
+- Third‑party supervisor wrapper — prebuilt, but depended on deprecated LangGraph prebuilts in the pinned version
 - LangGraph StateGraph (Selected) — graph-native, testable, minimizes dependencies and upgrade risk
 
 ### Decision Framework
@@ -45,7 +45,7 @@ We therefore migrate the orchestration to graph-native LangGraph primitives (`St
 | Option                    | Simplicity (35%) | Reliability (30%) | Maintenance (25%) | Adaptability (10%) | Total | Decision    |
 | ------------------------- | ---------------- | ----------------- | ----------------- | ------------------ | ----- | ----------- |
 | LangGraph StateGraph      | 9                | 9                 | 9                 | 9                  | 9.0   | ✅ Selected |
-| LangGraph Supervisor lib  | 9                | 8                 | 6                 | 7                  | 7.9   | Rejected    |
+| Third‑party supervisor    | 9                | 8                 | 6                 | 7                  | 7.9   | Rejected    |
 | LlamaIndex AgentWorkflow  | 6                | 7                 | 6                 | 7                  | 6.4   | Rejected    |
 | Manual orchestration      | 3                | 5                 | 5                 | 6                  | 4.3   | Rejected    |
 | Monolithic agent          | 9                | 4                 | 6                 | 5                  | 6.2   | Rejected    |
@@ -114,39 +114,46 @@ graph TD
 
 ```python
 # src/agents/coordinator.py (skeleton)
-from langgraph.graph import END, START, StateGraph
+from langchain.agents import create_agent
+from langgraph.checkpoint.memory import InMemorySaver
 
-SUPERVISOR_PROMPT = (
-    "You are a supervisor coordinating a modern 5‑agent RAG system. "
-    "Route, plan, retrieve, synthesize, and validate answers. Prefer minimal steps."
+from src.agents.models import MultiAgentGraphState
+from src.agents.supervisor_graph import (
+    SupervisorBuildParams,
+    build_multi_agent_supervisor_graph,
+    create_forward_message_tool,
 )
 
-def create_app(state_schema, nodes, *, checkpointer, store):
-    # nodes: router_agent/planner_agent/retrieval_agent/synthesis_agent/validation_agent
-    graph = StateGraph(state_schema)
-    for name, node in nodes.items():
-        graph.add_node(name, node)
+# Build role-specific agents (LangChain v1 create_agent).
+router_agent = create_agent(model, tools=router_tools, state_schema=MultiAgentGraphState, name="router_agent")
+planner_agent = create_agent(model, tools=planner_tools, state_schema=MultiAgentGraphState, name="planner_agent")
+retrieval_agent = create_agent(model, tools=retrieval_tools, state_schema=MultiAgentGraphState, name="retrieval_agent")
+synthesis_agent = create_agent(model, tools=synthesis_tools, state_schema=MultiAgentGraphState, name="synthesis_agent")
+validation_agent = create_agent(model, tools=validation_tools, state_schema=MultiAgentGraphState, name="validation_agent")
 
-    # Minimal deterministic pipeline; optional early exits are encoded in router/planner nodes.
-    graph.add_edge(START, "router_agent")
-    graph.add_edge("router_agent", "planner_agent")
-    graph.add_edge("planner_agent", "retrieval_agent")
-    graph.add_edge("retrieval_agent", "synthesis_agent")
-    graph.add_edge("synthesis_agent", "validation_agent")
-    graph.add_edge("validation_agent", END)
-
-    return graph.compile(checkpointer=checkpointer, store=store)
+# Build a parent StateGraph supervisor that routes via handoff tools (Command.PARENT).
+graph = build_multi_agent_supervisor_graph(
+    [router_agent, planner_agent, retrieval_agent, synthesis_agent, validation_agent],
+    model=model,
+    prompt=SUPERVISOR_PROMPT,
+    state_schema=MultiAgentGraphState,
+    extra_tools=[create_forward_message_tool(supervisor_name="supervisor")],
+    params=SupervisorBuildParams(output_mode="last_message"),
+)
+compiled = graph.compile(checkpointer=InMemorySaver(), store=store)
 ```
 
 ### Supervisor Configuration (Key Options)
 
-- `parallel_tool_calls`: Enable concurrent tool/agent branches to reduce tokens (50–87%)
-- `output_mode`: Controls message history added by the supervisor. Supported values:
+- `output_mode`: Controls message history added by each subagent handoff. Supported values:
   - `"last_message"` (default): Add only the final agent message
   - `"full_history"`: Add the entire agent message history
 - `create_forward_message_tool`: Allow direct message passthrough when no processing is needed
 - `add_handoff_messages`: Emit coordination breadcrumbs for debugging and audits
-- `pre_model_hook`/`post_model_hook`: Trim context (e.g., at ~120K) and attach metrics (always-on)
+- `add_handoff_back_messages`: Emit return-to-supervisor breadcrumbs after each subagent
+- Hooks: Apply trimming/metrics with LangChain agent middleware (`before_model`/`after_model`).
+  When trimming messages, use the `RemoveMessage(id=REMOVE_ALL_MESSAGES)` mechanism so the
+  `add_messages` reducer replaces history rather than appending.
 
 ### Configuration
 
@@ -161,8 +168,8 @@ DOCMIND_LOG_LEVEL=INFO
 
 ### Deprecations
 
-- `output_mode="structured"` is not supported by the Supervisor. Structured metadata belongs in state and response models. Use `output_mode="last_message"` or `"full_history"` and rely on hooks/state to record metrics.
-- `add_handoff_back_messages` is no longer relied upon; use `add_handoff_messages=True` to include handoff traces.
+- Deprecated LangGraph prebuilts are not used; build subagents with `langchain.agents.create_agent`.
+- `output_mode="structured"` is not supported. Structured metadata belongs in state/response models.
 
 ## Testing
 
@@ -189,7 +196,7 @@ def test_supervisor_boots_with_agents(supervisor_app):
 
 ### Dependencies
 
-- Python: `langgraph>=1.0.5`, `langchain-core>=1.2.6` (remove `langgraph-supervisor`)
+- Python: `langgraph==1.0.6`, `langchain>=1.2.2`, `langchain-core>=1.2.6`
 
 ### Ongoing Maintenance & Considerations
 
@@ -199,15 +206,14 @@ def test_supervisor_boots_with_agents(supervisor_app):
 
 ## Changelog
 
-- 6.2 (2025‑09‑04): Restored explicit agent role list and supervisor configuration details (parallel_tool_calls, output_mode, create_forward_message_tool, add_handoff_back_messages) with hook notes and prompt
+- 6.2 (2025‑09‑04): Restored explicit agent role list and supervisor configuration details (output_mode, create_forward_message_tool, handoff messages) with hook notes and prompt
 - 6.1 (2025‑09‑04): Standardized to template; added diagram, PR/IR, config/tests
 - 6.0 (2025‑08‑19): Accepted Supervisor implementation; integrates ADR‑003/004/010
-- 7.0 (2026‑01‑17): Migrate orchestration to graph-native LangGraph `StateGraph`; remove `langgraph-supervisor` dependency due to deprecated `create_react_agent` path.
+- 7.0 (2026‑01‑17): Migrate orchestration to graph-native LangGraph `StateGraph`; remove legacy third‑party supervisor wrapper due to deprecated prebuilt agent dependency.
 
 ## Supervisor Configuration Updates
 
 - Supervisor `output_mode` MUST be one of `last_message` (default) or `full_history`. A custom `structured` output mode is NOT supported; structured metadata SHOULD be carried in state/response models.
-- Rename legacy `add_handoff_back_messages` to `add_handoff_messages`.
 - Prefer `create_forward_message_tool("supervisor")` when summarization is unnecessary.
 
 ## Performance & Timeouts

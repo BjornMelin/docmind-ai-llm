@@ -145,7 +145,7 @@ Design goals:
    **Key Dependencies Included:**
 
    - **LlamaIndex (>=0.14.12,<0.15.0)**: Retrieval, RouterQueryEngine, IngestionPipeline, PropertyGraphIndex
-   - **LangGraph (==1.0.5)**: 5-agent supervisor orchestration with langgraph-supervisor library
+   - **LangGraph (==1.0.6)**: 5-agent supervisor orchestration (graph-native `StateGraph`, no external supervisor wrapper)
    - **Streamlit (>=1.52.2,<2.0.0)**: Web interface framework
    - **Ollama (0.6.1)**: Local LLM integration
    - **Qdrant Client (>=1.15.1,<2.0.0)**: Vector database operations
@@ -479,7 +479,7 @@ flowchart TD
 
 ### Multi-Agent Coordination
 
-- **Supervisor Pattern:** LangGraph supervisor using `langgraph-supervisor` library for proven coordination patterns with automatic state management
+- **Supervisor Pattern:** LangGraph `StateGraph` supervisor (repo-local implementation in `src/agents/supervisor_graph.py`) with checkpoint/store support
 
 - **5 Specialized Agents:**
 

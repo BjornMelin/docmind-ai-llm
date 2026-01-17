@@ -13,7 +13,7 @@ and docs under `docs/specs/` + `docs/developers/adrs/`.
 - `src/config/`: settings + integration wiring
 - `src/processing/`: ingestion, OCR, PDF page exports
 - `src/retrieval/`: router, hybrid retrieval, reranking, GraphRAG helpers
-- `src/agents/`: LangGraph coordinator (package name `langgraph-supervisor` stays)
+- `src/agents/`: LangGraph coordinator (graph-native supervisor via `StateGraph`)
 - `src/persistence/`: snapshots, hashing, locking, chat DB
 - `src/telemetry/` + `src/utils/telemetry.py`: OTEL + JSONL events
 - `templates/`: prompt templates/presets
