@@ -18,7 +18,7 @@ This guide helps you set up a working development environment and run DocMind AI
 
 ### Prerequisites - Quick Start
 
-- Python 3.13.11 recommended (supported: 3.11–3.13)
+- Python 3.13.11
 - CUDA-compatible GPU (RTX 4060+ recommended)
 - Docker for Qdrant vector database
 - Git
@@ -66,7 +66,7 @@ uv run python scripts/performance_monitor.py --run-tests --check-regressions
 
 ### Required Software
 
-- **Python**: 3.13.11 recommended (supported: 3.11–3.13)
+- **Python**: 3.13.11
 - **uv**: For package management (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 - **Git**: Version control
 - **Docker**: Optional, for Qdrant database
@@ -430,7 +430,7 @@ uv pip list | grep -E "(torch|streamlit)"
 uv sync --force-reinstall
 
 # Verify correct Python version
-uv run python -c "import sys; print(sys.version)"  # Should be 3.11–3.13 (3.13.11 recommended)
+uv run python -c "import sys; print(sys.version)"  # Should be 3.13.11
 ```
 
 ## Next Steps

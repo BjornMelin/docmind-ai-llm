@@ -195,7 +195,7 @@ During `startup_init()`, specific settings are propagated back to `os.environ`. 
 
 | Variable                           | Type    | Default                  | Description                                                                                       |
 | :--------------------------------- | :------ | :----------------------- | :------------------------------------------------------------------------------------------------ |
-| `DOCMIND_LLM_BACKEND`              | enum    | `ollama`                 | Options: `vllm`, `ollama`, `lmstudio`, `llamacpp`.                                                |
+| `DOCMIND_LLM_BACKEND`              | enum    | `ollama`                 | Options: `openai_compatible`, `vllm`, `ollama`, `lmstudio`, `llamacpp`.                           |
 | `DOCMIND_MODEL`                    | string  | `None`                   | **Alias Override** for `vllm.model`.                                                              |
 | `DOCMIND_CONTEXT_WINDOW`           | int     | `None`                   | **Alias Override** for `vllm.context_window`.                                                     |
 | `DOCMIND_OLLAMA_BASE_URL`          | string  | `http://localhost:11434` | Endpoint for Ollama backend.                                                                      |
@@ -207,7 +207,20 @@ During `startup_init()`, specific settings are propagated back to `os.environ`. 
 | `DOCMIND_VLLM_BASE_URL`            | string  | `None`                   | Direct endpoint for vLLM (native or OpenAI-compatible).                                           |
 | `DOCMIND_ENABLE_GPU_ACCELERATION`  | boolean | `true`                   | Controls hardware offloading for LlamaCPP/Embeddings.                                             |
 
-> [!IMPORTANT] > **Backend URL Normalization**: All OpenAI-compatible endpoints are automatically normalized to include a single `/v1` suffix (e.g., `http://localhost:1234` -> `http://localhost:1234/v1`).
+#### OpenAI-compatible provider configuration (cloud/gateways/local servers)
+
+When `DOCMIND_LLM_BACKEND=openai_compatible`, DocMind uses `DOCMIND_OPENAI__*` as the single configuration surface for the OpenAI-compatible endpoint:
+
+| Variable | Type | Default | Description |
+| --- | --- | --- | --- |
+| `DOCMIND_OPENAI__BASE_URL` | string | `http://localhost:1234/v1` | OpenAI-compatible base URL (local server, proxy, or cloud gateway). |
+| `DOCMIND_OPENAI__API_KEY` | string | `None` | Optional API key (Bearer token). Local servers can use a placeholder. |
+| `DOCMIND_OPENAI__REQUIRE_V1` | boolean | `true` | If `true`, normalize base URL to include a single `/v1`. Disable for endpoints rooted at `/` (e.g., LiteLLM Proxy default). |
+| `DOCMIND_OPENAI__API_MODE` | enum | `chat_completions` | `chat_completions` (default) or `responses` (use only when supported). |
+| `DOCMIND_OPENAI__DEFAULT_HEADERS` | json | `{}` | Optional default headers (JSON object string) for provider-required headers (e.g., OpenRouter attribution). |
+
+> [!IMPORTANT]
+> **Backend URL Normalization**: for OpenAI-compatible endpoints, DocMind normalizes to include a single `/v1` suffix by default. For `openai_compatible`, this is controlled by `DOCMIND_OPENAI__REQUIRE_V1`.
 
 **App config vs provider env vars:** DocMind uses a single `DOCMIND_*` config surface for the application (routing, security policy, and backend selection). Provider/daemon variables (e.g., `OLLAMA_*`, `OPENAI_*`, `VLLM_*`) configure those services directly and are intentionally not reused here to avoid collisions and ambiguity. Use `DOCMIND_OLLAMA_API_KEY` for Ollama Cloud access; reserve `OLLAMA_*` for the Ollama server/CLI.
 

@@ -32,12 +32,12 @@ This comprehensive handbook provides practical implementation guidance for devel
 
 ```bash
 # Format and lint (run before commits)
-ruff format . && ruff check . --fix
+uv run ruff format . && uv run ruff check . --fix
 
 # Configuration in pyproject.toml
 [tool.ruff]
 line-length = 88
-target-version = "py311"
+target-version = "py313"
 select = ["E", "F", "I", "UP", "N", "S", "B", "A", "C4", "PT", "SIM", "TID", "D"]
 ignore = ["D203", "D213", "S301", "S603", "S607", "S108"]
 ```

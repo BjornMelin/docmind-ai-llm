@@ -141,7 +141,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 **Primary Task:** Fix Dockerfile + docker-compose so containers run correctly and match repo constraints (Python 3.13.11 baseline, `DOCMIND_*` env vars, Streamlit entrypoint `src/app.py`).
 
-**Why now:** Current Docker artifacts are not runnable and violate Python constraint (`>=3.11,<3.14`), blocking any “ship-ready” claim.
+**Why now:** Current Docker artifacts are not runnable and violate Python constraint (`>=3.13,<3.14`), blocking any “ship-ready” claim.
 
 **Definition of Done (DoD):**
 

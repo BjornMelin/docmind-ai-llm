@@ -5,14 +5,12 @@ description = "Local LLM for AI-Powered Document Analysis"
 authors = [{ name = "Bjorn Melin" }]
 license-files = ["LICENSE"]
 readme = "README.md"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.13,<3.14"
 keywords = ["ai", "rag", "document-analysis", "llm", "hybrid-search"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
@@ -37,7 +35,7 @@ dependencies = [
     "torch==2.8.0",                      # PyTorch runtime (CPU-first baseline; GPU via extras)
     "transformers>=4.55.0,<5.0.0",       # HF model interfaces (vLLM 0.13.x + ColPali compat)
     "tiktoken==0.11.0",
-    "openai>=1.109.1,<2.0.0",
+    "openai>=2.8.0,<3.0.0",
     "openai-whisper==20250625",          # Whisper speech-to-text (optional)
     # Local LLM Backends (CPU defaults; GPU in [gpu] extra)
     "ollama==0.6.1",
@@ -172,7 +170,7 @@ Manual Installation Steps (if needed):
 
 [tool.ruff]
 line-length = 88
-target-version = "py311"
+target-version = "py313"
 extend-exclude = ["opensrc"]
 preview = false
 
@@ -490,7 +488,7 @@ exclude = [
     ".codex",
     "**/*.egg-info",
 ]
-pythonVersion = "3.11"
+pythonVersion = "3.13"
 venvPath = "."
 venv = ".venv"
 typeCheckingMode = "standard"

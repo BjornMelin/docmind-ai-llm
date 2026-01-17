@@ -73,7 +73,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 **Primary Task:** Remove the dead `src/utils/multimodal.py` toy helper (and its tests) if it is not used by production code, and update docs that still reference it.
 
-**Why now:** The module is a test-only “toy pipeline” with TODOs, which is not acceptable for v1 release readiness.
+**Why now:** The module is a test-only “toy pipeline” with unfinished work markers, which is not acceptable for v1 release readiness.
 
 **Definition of Done (DoD):**
 

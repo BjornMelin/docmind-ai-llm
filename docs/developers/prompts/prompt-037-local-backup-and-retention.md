@@ -107,8 +107,8 @@ ADR-051 (Documents Snapshot Service Boundary) is currently **Proposed**. Until i
 
 **In-scope modules/files (initial):**
 
-- `scripts/backup.py` (new)
-- `src/utils/security.py` (reuse path validation helpers; no traversal/symlink escapes)
+- `scripts/backup.py`
+- `src/persistence/backup_service.py`
 - `src/config/settings.py` (only if new knobs required)
 - `tests/unit/scripts/test_backup_rotation.py` (new)
 - `tests/unit/scripts/test_backup_manifest.py` (new)
@@ -127,7 +127,7 @@ ADR-051 (Documents Snapshot Service Boundary) is currently **Proposed**. Until i
 
 #### 1) Python + Packaging
 
-- Python baseline is **3.13.11** (supported: 3.11–3.13; respect `pyproject.toml`).
+- Python baseline is **3.13.11** (Python 3.13-only; respect `pyproject.toml`).
 - Use **uv only**:
   - install/sync: `uv sync`
   - run tools: `uv run <cmd>`

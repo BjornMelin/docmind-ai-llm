@@ -9,7 +9,7 @@ DocMind AI is a pure Python project managed by `uv`.
 
 ### Prerequisites
 
-- **Python**: 3.13.11 recommended (supported: 3.11–3.13; managed by `uv`)
+- **Python**: 3.13.11 (managed by `uv`)
 - **GPU**: NVIDIA RTX 4090 (16GB VRAM) recommended for vLLM/ColPali.
 - **System**: Linux / macOS / WSL2.
 

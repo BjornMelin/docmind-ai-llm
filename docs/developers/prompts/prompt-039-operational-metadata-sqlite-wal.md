@@ -117,7 +117,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 #### 1) Python + Packaging
 
-- Python baseline is **3.13.11** (supported: 3.11–3.13; respect `pyproject.toml`).
+- Python baseline is **3.13.11** (Python 3.13-only; respect `pyproject.toml`).
 - Use **uv only**:
   - install/sync: `uv sync`
   - run tools: `uv run <cmd>`

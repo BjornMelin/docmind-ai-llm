@@ -4,7 +4,7 @@ This page outlines CI/CD practices for DocMind AI.
 
 ## Targets
 
-- Python 3.11–3.13 (primary: 3.13.11; project constraint: `>=3.11,<3.14`)
+- Python 3.13.11 (project constraint: `>=3.13,<3.14`)
 - Offline‑deterministic unit/integration tests (no network)
 - Lint and format: Ruff (format + check); Ruff enforces pylint-equivalent rules via `PL*` selectors in `pyproject.toml`
 
