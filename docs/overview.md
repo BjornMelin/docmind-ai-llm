@@ -52,7 +52,7 @@ Notes:
   - [System Architecture](developers/system-architecture.md): Technical diagrams and flows
   - [Cache Implementation](developers/cache.md): Cache wiring and operations
   - [Configuration Guide](developers/configuration.md): Developer configuration details
-  - [CI/CD Pipeline](developers/ci-cd-pipeline.md): GitHub Actions pipeline (3.11 + 3.10)
+  - [CI/CD Pipeline](developers/ci-cd-pipeline.md): GitHub Actions pipeline (3.11–3.13; primary 3.13.11)
   - [Operations Guide](developers/operations-guide.md): Deployment and operations
   - [Developer Handbook](developers/developer-handbook.md): Patterns and workflows
   - [Testing Guide](testing/testing-guide.md): How to write and run tests

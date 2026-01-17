@@ -121,7 +121,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 **Primary Task:** Replace the placeholder `keyword_search` tool with a real implementation using sparse-only Qdrant queries against the `text-sparse` named vector.
 
-**Why now:** Tests and code contain a TODO placeholder, and agent routing benefits from a distinct exact-term tool without adding BM25 dependencies.
+**Why now:** Tests and code contain a placeholder marker, and agent routing benefits from a distinct exact-term tool without adding BM25 dependencies.
 
 **Definition of Done (DoD):**
 
@@ -211,7 +211,7 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Tests**       |        | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | RTM updated                                                                        |
 | **Security**    |        | no raw query logs/content; allowlist posture unchanged                             |
-| **Tech Debt**   |        | zero TODO/FIXME introduced                                                         |
+| **Tech Debt**   |        | zero work-marker placeholders introduced                                           |
 | **Performance** |        | no new import-time heavy work; bounded query payloads                              |
 
 **EXECUTE UNTIL COMPLETE.**

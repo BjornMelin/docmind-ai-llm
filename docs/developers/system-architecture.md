@@ -77,7 +77,7 @@ graph TB
 | Component               | Purpose                                                  | Technology                     | Performance Target   |
 | ----------------------- | -------------------------------------------------------- | ------------------------------ | -------------------- |
 | **Supervisor**          | LangGraph-based agent orchestration                      | LangGraph v0.2+                | < 200ms overhead     |
-| **VLLM Backend**        | High-performance local inference                         | vLLM (FP8 / FlashInfer)        | 120-180 tok/s        |
+| **VLLM Backend**        | High-performance local inference (OpenAI-compatible)     | vLLM server (FP8 / FlashInfer) | 120-180 tok/s        |
 | **Vector Store**        | Multi-vector and hybrid retrieval                        | Qdrant                         | < 50ms query latency |
 | **Persistence**         | Durable chat sessions and multimodal artifacts           | SQLite WAL + ArtifactRef       | Zero-loss integrity  |
 
@@ -92,10 +92,10 @@ DocMind AI is architected with a strict **local-first** mandate (ADR-058):
 | ----------------------- | -------------------------------------------------------- | ------------------------------ | -------------------- |
 | **Frontend**            | Document uploads, configuration, results, chat interface | Streamlit                      | Real-time streaming  |
 | **Multi-Agent System**  | 5-agent coordination for complex queries                 | LangGraph Supervisor           | <200ms coordination  |
-| **LLM Backend**         | Language model inference with 128K context               | vLLM FlashInfer + Qwen3-4B-FP8 | 120-180 tok/s decode |
+| **LLM Backend**         | Language model inference with 128K context               | vLLM server + Qwen3-4B-FP8     | 120-180 tok/s decode |
 | **Vector Storage**      | Hybrid dense/sparse search with RRF fusion               | Qdrant                         | <100ms retrieval     |
 | **Document Processing** | Hi-res parsing with NLP enrichment (optional)            | Unstructured + spaCy           | <2s per document*    |
-| **Performance Layer**   | FP8 quantization, parallel execution, CUDA optimization  | PyTorch 2.7.0 + CUDA 12.8      | 12–14 GB VRAM usage  |
+| **Performance Layer**   | FP8 quantization, parallel execution, CUDA optimization  | PyTorch 2.8.0 + CUDA 12.8      | 12–14 GB VRAM usage  |
 
 *Processing time may vary based on whether optional spaCy NLP enrichment is enabled.
 

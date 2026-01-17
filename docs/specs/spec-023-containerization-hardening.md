@@ -1,6 +1,6 @@
 ---
 spec: SPEC-023
-title: Containerization Hardening — Python 3.11, uv-lock, Non-root, and Canonical DOCMIND Env
+title: Containerization Hardening — Python 3.13.11, uv-lock, Non-root, and Canonical DOCMIND Env
 version: 1.0.0
 date: 2026-01-10
 owners: ["ai-arch"]
@@ -16,7 +16,7 @@ related_adrs: ["ADR-042", "ADR-024"]
 
 Make Docker artifacts **runnable, reproducible, and secure-by-default** for DocMind v1:
 
-- Python 3.11 in container (matches repo)
+- Python 3.13.11 in container (matches repo primary)
 - dependency install via `uv sync --frozen` using `uv.lock`
 - Streamlit entrypoint runs `src/app.py`
 - non-root runtime
@@ -36,7 +36,7 @@ Use a multi-stage Dockerfile:
 
 1. Builder stage:
 
-   - base: Python 3.11 slim (bookworm)
+   - base: Python 3.13.11 slim (bookworm)
    - install build deps required by Unstructured/PyMuPDF (`libmagic1`, MuPDF libs, etc.)
    - install `uv`
    - set `UV_PYTHON_DOWNLOADS=never` to keep uv from downloading a separate Python
@@ -129,7 +129,7 @@ Add `.dockerignore` to exclude:
 
 - Run as non-root user.
 - Do not copy `.env` into images by default.
-- Avoid `latest` tags for base images; pin to Python 3.11 slim variant.
+- Avoid `latest` tags for base images; pin to Python 3.13.11 slim variant.
 - Add a healthcheck:
   - Prefer Streamlit’s health endpoint (`/_stcore/health`) when available.
 - Keep optional GPU backend internal-only by default (no public ports).

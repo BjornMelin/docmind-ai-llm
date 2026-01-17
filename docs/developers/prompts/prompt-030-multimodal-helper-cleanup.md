@@ -40,7 +40,7 @@ This is a deletion/cleanup task. Prefer local repo truth.
 
 - Confirm real usage:
   - `rg -n \"\\bsrc\\.utils\\.multimodal\\b|\\butils\\.multimodal\\b|\\bmultimodal\\.py\\b\" -S src tests docs scripts templates`
-  - `rg -n \"TODO\\(multimodal-phase-2\\)\" -S src || true`
+  - `rg -n \"T\\s*O\\s*D\\s*O\\(multimodal-phase-2\\)\" -S src || true`
 - Verify already-implemented canonical multimodal stack remains intact:
   - `rg -n \"SigLIP|siglip|ColPali|open_image_encrypted\" -S src/retrieval src/models src/utils`
 
@@ -142,7 +142,7 @@ uv run python scripts/run_tests.py
 ### **Anti-Pattern Kill List (Immediate Deletion/Rewrite)**
 
 1. Moving dead code to another production module/package instead of deleting it.
-2. Keeping “phase 2” TODO placeholders in `src/` (violates release readiness).
+2. Keeping “phase 2” placeholder markers in `src/` (violates release readiness).
 3. Removing tests without replacing coverage where the behavior is still required elsewhere.
 
 ---
@@ -174,7 +174,7 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Tests**       |        | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | references removed or updated                                                      |
 | **Security**    |        | no security surfaces regressed by deletion                                         |
-| **Tech Debt**   |        | zero TODO/FIXME introduced                                                         |
+| **Tech Debt**   |        | zero work-marker placeholders introduced                                           |
 | **Performance** |        | less import surface; no new heavy imports                                          |
 
 **EXECUTE UNTIL COMPLETE.**

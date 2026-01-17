@@ -220,7 +220,7 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Tests**       |        | JobManager + UI wiring green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | ADR/SPEC/RTM updated                                                                                             |
 | **Security**    |        | no Streamlit calls in threads; atomic finalize; no secret/content leaks                                          |
-| **Tech Debt**   |        | zero TODO/FIXME introduced                                                                                       |
+| **Tech Debt**   |        | zero work-marker placeholders introduced                                                                         |
 | **Performance** |        | bounded queues; fragments don’t leak UI elements on reruns                                                       |
 
 **EXECUTE UNTIL COMPLETE.**

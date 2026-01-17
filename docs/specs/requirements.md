@@ -26,6 +26,8 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 - G3: Provide accurate multimodal retrieval with tunable hybrid search and reranking.
 - C1: Library-first; minimize custom code (KISS/DRY/YAGNI).
 - C2: One definitive architecture (no prod/local split).
+- C3: Primary runtime is CPython **3.13.11**, while maintaining support for **3.11–3.13** (`requires-python = ">=3.11,<3.14"`).
+- C4: High-performance LLM serving (vLLM) is supported **out-of-process** via OpenAI-compatible HTTP; the app must not require `vllm` as an in-env dependency.
 
 ## 2. Functional Requirements (FR-###)
 
@@ -92,7 +94,7 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 | **Compatibility** | **NFR‑COMP‑001** | Windows/macOS/Linux supported; Apple Metal via llama.cpp; AMD ROCm via vLLM. | demo |
 | **Maintainability** | **NFR‑MAINT‑001** | Library‑first: app code **shall not** re‑implement features available in LlamaIndex/Qdrant/Streamlit. | inspection |
 | **Maintainability** | **NFR‑MAINT‑002** | Pylint score ≥9.5; Ruff passes. | inspection |
-| **Maintainability** | **NFR-MAINT-003** | No placeholder APIs (TODO/NotImplemented) in shipped production modules; docs/specs/RTM must match code. | inspection+quality gates |
+| **Maintainability** | **NFR-MAINT-003** | No placeholder APIs (work-marker comments / NotImplementedError) in shipped production modules; docs/specs/RTM must match code. | inspection+quality gates |
 | **Portability** | **NFR‑PORT‑001** | Single definitive architecture; no prod/local forks; configuration via settings/UI only. | inspection |
 | **Portability** | **NFR-PORT-002** | Cross-platform paths and cache env overrides supported for local packaging and model predownload workflows. | inspection |
 | **Portability** | **NFR-PORT-003** | Docker/compose artifacts **shall** run out-of-the-box for local deployments and be reproducible from `uv.lock`. | manual run+inspection |

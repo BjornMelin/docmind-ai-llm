@@ -9,7 +9,7 @@ DocMind AI is a pure Python project managed by `uv`.
 
 ### Prerequisites
 
-- **Python**: 3.11 (Managed by `uv`)
+- **Python**: 3.13.11 recommended (supported: 3.11–3.13; managed by `uv`)
 - **GPU**: NVIDIA RTX 4090 (16GB VRAM) recommended for vLLM/ColPali.
 - **System**: Linux / macOS / WSL2.
 
@@ -20,7 +20,7 @@ DocMind AI is a pure Python project managed by `uv`.
 uv sync --frozen
 
 # 2. Run the application
-uv run src/app.py
+uv run streamlit run src/app.py
 ```
 
 ---

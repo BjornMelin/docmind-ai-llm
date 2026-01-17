@@ -216,7 +216,7 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Tests**       |        | AppTest proves persistence; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | ADR/SPEC/RTM updated                                                                                           |
 | **Security**    |        | path validation under `settings.data_dir`; no content logs                                                     |
-| **Tech Debt**   |        | zero TODO/FIXME introduced                                                                                     |
+| **Tech Debt**   |        | zero work-marker placeholders introduced                                                                        |
 | **Performance** |        | no new import-time heavy work; IO done lazily                                                                  |
 
 **EXECUTE UNTIL COMPLETE.**

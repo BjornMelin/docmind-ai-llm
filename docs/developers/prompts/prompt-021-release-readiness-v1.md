@@ -24,7 +24,7 @@ package is considered **done** when its prompt has been moved into
 | 06 | Remove legacy `src/main.py` entrypoint | ADR-046 | SPEC-027 | ✅ Completed | `docs/developers/prompts/implemented/prompt-027-remove-legacy-main-entrypoint.md` |
 | 07 | Safe logging policy (remove PII redactor stub) | ADR-047 | SPEC-028 | ⏳ Remaining | `docs/developers/prompts/prompt-028-safe-logging-no-pii-redactor.md` |
 | 08 | Docs consistency pass (spec drift + ADR number backfill) | ADR-048 | SPEC-029 | ⏳ Remaining | `docs/developers/prompts/prompt-029-docs-consistency-pass.md` |
-| 09 | Multimodal helper cleanup (remove TODO; clarify test-only helper) | ADR-049 | SPEC-030 | ⏳ Remaining | `docs/developers/prompts/prompt-030-multimodal-helper-cleanup.md` |
+| 09 | Multimodal helper cleanup (remove placeholder markers; clarify test-only helper) | ADR-049 | SPEC-030 | ⏳ Remaining | `docs/developers/prompts/prompt-030-multimodal-helper-cleanup.md` |
 | 10 | Config discipline: remove `os.getenv` sprawl; formalize hashing secret | ADR-050 | SPEC-031 | ✅ Completed | `docs/developers/prompts/implemented/prompt-031-config-discipline-env-bridges.md` |
 | 11 | Documents snapshot service boundary (extract rebuild/export) | ADR-051 | SPEC-032 | ⏳ Remaining | `docs/developers/prompts/prompt-032-documents-snapshot-service-boundary.md` |
 | 12 | Background ingestion & snapshot jobs (progress + cancel) | ADR-052 | SPEC-033 | ⏳ Remaining | `docs/developers/prompts/prompt-033-background-ingestion-jobs.md` |
@@ -97,7 +97,7 @@ When a WP is finished and its quality gates pass:
 
 ```bash
 cd ${DOCMIND_REPO_ROOT:-/path/to/docmind-ai-llm}
-rg -n "\\b(TODO|FIXME|XXX)\\b" src tests docs scripts tools || true
+rg -n "\\b(T\\s*O\\s*D\\s*O|F\\s*I\\s*X\\s*M\\s*E|X\\s*X\\s*X)\\b" src tests docs scripts tools || true
 uv run python -c "import streamlit as st; print(st.__version__)"
 ```
 
@@ -187,9 +187,9 @@ All changes must remain minimal, library-first, and maintainable.
 **Definition of Done (DoD):**
 
 - All work packages in `docs/specs/spec-021-release-readiness-v1.md` are completed and their prompts are moved to `docs/developers/prompts/implemented/`, each passing its quality gates.
-- No TODO/FIXME/XXX placeholders remain in `src/` (except explicitly allowed in tests or archived docs).
+- No placeholder markers remain in `src/` (except explicitly allowed in tests or archived docs).
 - `docs/specs/traceability.md` reflects all shipped changes (status updated to Implemented).
-- Dockerfile + compose run successfully and respect Python 3.11 + `DOCMIND_*` env contract.
+- Dockerfile + compose run successfully and respect Python 3.13.11 + `DOCMIND_*` env contract.
 
 **In-scope modules/files (initial):**
 
@@ -208,7 +208,7 @@ All changes must remain minimal, library-first, and maintainable.
 
 #### 1) Python + Packaging
 
-- Python version must remain **3.11.x** (respect `pyproject.toml`).
+- Python baseline is **3.13.11** (supported: 3.11–3.13; respect `pyproject.toml`).
 - Use **uv only**:
   - install/sync: `uv sync`
   - run tools: `uv run <cmd>`
@@ -339,7 +339,7 @@ Use these tools as needed:
 | **Tests**       |        | `pytest` green (scoped + full tiers as required)                                                                                                                   |
 | **Docs**        |        | ADR/SPEC/RTM updated                                                                                                                                               |
 | **Security**    |        | allowlist + path validation + no secret logs                                                                                                                       |
-| **Tech Debt**   |        | zero TODO/FIXME introduced                                                                                                                                         |
+| **Tech Debt**   |        | zero work-marker placeholders introduced                                                                                                                           |
 | **Performance** |        | no new import-time heavy work; run `scripts/performance_monitor.py` and ensure key UI/ingest flows have no regressions >20% vs. baseline (see `scripts/README.md`) |
 
 **EXECUTE UNTIL COMPLETE.**

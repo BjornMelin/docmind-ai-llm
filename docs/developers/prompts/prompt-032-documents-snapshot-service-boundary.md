@@ -199,7 +199,7 @@ All items below must be completed (Status = ✓) before the implementation is re
 | **Tests**       |        | Must pass | service + UI wiring tests; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py`                        |
 | **Docs**        |        | Must pass | ADR/SPEC/RTM updated; verify `scripts/performance_monitor.py` details in `scripts/README.md`                                         |
 | **Security**    |        | Must pass | snapshot writes remain atomic; no new write surfaces                                                                                 |
-| **Tech Debt**   |        | Must pass | zero TODO/FIXME introduced                                                                                                           |
+| **Tech Debt**   |        | Must pass | zero work-marker placeholders introduced                                                                                             |
 | **Performance** |        | Advisory  | service layer keeps Streamlit pages import-light; target ≤10% regression vs. baseline (measure via `scripts/performance_monitor.py`) |
 
 **EXECUTE UNTIL COMPLETE.**

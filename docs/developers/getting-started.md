@@ -18,7 +18,7 @@ This guide helps you set up a working development environment and run DocMind AI
 
 ### Prerequisites - Quick Start
 
-- Python 3.10+ (tested with 3.11)
+- Python 3.13.11 recommended (supported: 3.11–3.13)
 - CUDA-compatible GPU (RTX 4060+ recommended)
 - Docker for Qdrant vector database
 - Git
@@ -34,7 +34,7 @@ cd docmind-ai-llm
 uv sync
 
 # 3. Start services
-docker-compose up -d qdrant
+docker compose up -d qdrant
 
 # 4. Copy environment template
 cp .env.example .env
@@ -47,10 +47,10 @@ streamlit run src/app.py
 
 ```bash
 # Check configuration loads correctly
-python3 -c "from src.config import settings; print(f'✅ {settings.app_name} v{settings.app_version}')"
+uv run python -c "from src.config import settings; print(f'✅ {settings.app_name} v{settings.app_version}')"
 
 # Verify 2026 Reference Alignment
-python3 -c "
+uv run python -c "
 from src.config import settings
 print(f'Model: {settings.model or settings.vllm.model}')
 print(f'Embedding: {settings.embedding.model_name}')
@@ -66,7 +66,7 @@ uv run python scripts/performance_monitor.py --run-tests --check-regressions
 
 ### Required Software
 
-- **Python**: 3.11+ (tested with 3.11)
+- **Python**: 3.13.11 recommended (supported: 3.11–3.13)
 - **uv**: For package management (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 - **Git**: Version control
 - **Docker**: Optional, for Qdrant database
@@ -85,9 +85,9 @@ uv run python scripts/performance_monitor.py --run-tests --check-regressions
 
 - **VRAM Usage**: 12-14GB with **FP8 KV Cache** optimization
 - **System Memory**: 32GB+ recommended
-- **CUDA Toolkit**: 12.8+ (required for PyTorch 2.7.0 support)
+- **CUDA Toolkit**: 12.8+ (for CUDA-enabled PyTorch wheels)
 - **Drive**: NVMe SSD (required for low-latency model loading)
-- **Attention**: FlashInfer backend recommended
+- **vLLM serving**: FlashInfer/FP8 optimizations are configured on the vLLM server (external)
 
 ## Installation
 
@@ -122,24 +122,18 @@ are installed with `--group`. Optional runtime features are published as extras
 For optimal performance with RTX 4090:
 
 ```bash
-# Phase 1: Install PyTorch 2.7.1 with CUDA 12.8
-uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 \
-    --extra-index-url https://download.pytorch.org/whl/cu128
-
-# Phase 2: Install vLLM and FlashInfer
-uv pip install "vllm>=0.10.1,<0.11.0" \
-    --extra-index-url https://download.pytorch.org/whl/cu128
-uv pip install "flashinfer-python>=0.5.3,<0.6.0"
-
-# Phase 3: Install remaining dependencies
+# Install app GPU extras (CUDA-enabled PyTorch wheels)
 uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 ```
+
+If you use vLLM, run it as an external OpenAI-compatible server and point DocMind at it via
+`DOCMIND_LLM_BACKEND=vllm` + `DOCMIND_OPENAI__BASE_URL`.
 
 ### 3. Start Required Services
 
 ```bash
 # Start Qdrant vector database
-docker-compose up -d qdrant
+docker compose up -d qdrant
 
 # Verify service is running
 curl -f http://localhost:6333/health || echo "Qdrant not ready"
@@ -183,7 +177,7 @@ DOCMIND_PROCESSING__ENCRYPT_PAGE_IMAGES=false
 > **Note:** If enabling encryption, generate a secure 256-bit AES key:
 >
 > ```bash
-> python -c "import os, base64; print(base64.b64encode(os.urandom(32)).decode())"
+> uv run python -c "import os, base64; print(base64.b64encode(os.urandom(32)).decode())"
 > ```
 
 ### 3. Key Configuration Concepts
@@ -198,13 +192,14 @@ DOCMIND_PROCESSING__ENCRYPT_PAGE_IMAGES=false
 
 ```bash
 # Test configuration loads correctly
-python3 -c "
+uv run python - <<'PY'
 from src.config import settings
-print(f'✅ App: {settings.app_name} v{settings.app_version}')
-print(f'✅ Model: {settings.model or settings.vllm.model}')
-print(f'✅ SQLite: {settings.database.sqlite_db_path}')
-print(f'✅ Qdrant: {settings.database.qdrant_url}')
-"
+
+print(f"✅ App: {settings.app_name} v{settings.app_version}")
+print(f"✅ Model: {settings.model or settings.vllm.model}")
+print(f"✅ SQLite: {settings.database.sqlite_db_path}")
+print(f"✅ Qdrant: {settings.database.qdrant_url}")
+PY
 ```
 
 ### 2. System Health Check
@@ -304,37 +299,27 @@ nvcc --version
 nvidia-smi
 
 # Verify PyTorch CUDA support
-python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+uv run python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
 ```
 
 **Solution**:
 
 ```bash
 # Reinstall PyTorch with correct CUDA version
-uv pip install torch==2.7.1 --extra-index-url https://download.pytorch.org/whl/cu128
+uv pip install torch==2.8.0 --extra-index-url https://download.pytorch.org/whl/cu128
 ```
 
-### vLLM Installation Issues
+### vLLM Server Issues
 
-**Issue**: vLLM compilation fails
-
-```bash
-# Check environment
-echo $CUDA_HOME
-echo $PATH | grep cuda
-```
+**Issue**: DocMind cannot connect to your vLLM server
 
 **Solution**:
 
 ```bash
-# Set CUDA environment variables
-export CUDA_HOME=/usr/local/cuda
-export PATH=$CUDA_HOME/bin:$PATH
-export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
-
-# Reinstall vLLM + FlashInfer (runtime pins)
-uv pip install --force-reinstall "vllm>=0.10.1,<0.11.0" --extra-index-url https://download.pytorch.org/whl/cu128
-uv pip install --force-reinstall "flashinfer-python>=0.5.3,<0.6.0"
+export DOCMIND_LLM_BACKEND=vllm
+export DOCMIND_OPENAI__BASE_URL=http://localhost:8000/v1
+export DOCMIND_OPENAI__API_KEY=not-needed
+curl --fail --silent "$DOCMIND_OPENAI__BASE_URL/models" | head
 ```
 
 ### Configuration Issues
@@ -343,10 +328,11 @@ uv pip install --force-reinstall "flashinfer-python>=0.5.3,<0.6.0"
 
 ```bash
 # Debug configuration loading and prefix detection
-python3 -c "
+uv run python - <<'PY'
 from src.config import settings
-print('Config loaded successfully:', hasattr(settings, 'app_name'))
-"
+
+print("Config loaded successfully:", hasattr(settings, "app_name"))
+PY
 ```
 
 **Solution**:
@@ -362,15 +348,15 @@ print('Config loaded successfully:', hasattr(settings, 'app_name'))
 ```bash
 # Check Qdrant status
 curl -f http://localhost:6333/health
-docker-compose ps
+docker compose ps
 ```
 
 **Solution**:
 
 ```bash
 # Restart Qdrant service
-docker-compose restart qdrant
-docker-compose logs qdrant
+docker compose restart qdrant
+docker compose logs qdrant
 ```
 
 ### Qdrant Dimension Mismatch (SigLIP image collection)
@@ -410,18 +396,19 @@ for the full multimodal indexing workflow.
 nvidia-smi
 
 # Check model configuration
-python -c "
+uv run python - <<'PY'
 from src.config import settings
-print(f'Model: {settings.vllm.model}')
-print(f'GPU memory: {settings.vllm.gpu_memory_utilization}')
-print(f'Attention backend: {settings.vllm.attention_backend}')
-"
+
+print(f"Model: {settings.vllm.model}")
+print(f"GPU memory: {settings.vllm.gpu_memory_utilization}")
+print(f"Attention backend: {settings.vllm.attention_backend}")
+PY
 ```
 
 **Solution**:
 
 1. Verify FP8 quantization is enabled
-2. Check FlashInfer backend configuration
+2. Verify vLLM server is configured for FlashInfer (server-side)
 3. Optimize GPU memory utilization settings
 
 ### Import Errors
@@ -430,10 +417,10 @@ print(f'Attention backend: {settings.vllm.attention_backend}')
 
 ```bash
 # Check Python path
-python -c "import sys; print('\n'.join(sys.path))"
+uv run python -c "import sys; print('\\n'.join(sys.path))"
 
 # Verify installation
-uv pip list | grep -E "(vllm|torch|streamlit)"
+uv pip list | grep -E "(torch|streamlit)"
 ```
 
 **Solution**:
@@ -443,7 +430,7 @@ uv pip list | grep -E "(vllm|torch|streamlit)"
 uv sync --force-reinstall
 
 # Verify correct Python version
-python --version  # Should be 3.11+
+uv run python -c "import sys; print(sys.version)"  # Should be 3.11–3.13 (3.13.11 recommended)
 ```
 
 ## Next Steps

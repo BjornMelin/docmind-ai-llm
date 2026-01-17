@@ -1248,14 +1248,14 @@ async def debug_agent_execution(self, query: str) -> str:
 
 ```bash
 # Debug configuration loading
-python -c "
+uv run python -c "
 from src.config import settings
 import pprint
 pprint.pprint(settings.model_dump())
 "
 
 # Validate specific configuration sections
-python -c "
+uv run python -c "
 from src.config import settings
 print('vLLM Config:', settings.vllm.model_dump())
 print('Agent Config:', settings.agents.model_dump())
@@ -1328,33 +1328,13 @@ def diagnose_gpu_setup():
         print(f"Reserved: {memory_reserved:.1f}GB")
         print(f"Available: {memory_total - memory_reserved:.1f}GB")
     
-    # vLLM diagnostics
-    try:
-        import vllm
-        print(f"vLLM Version: {vllm.__version__}")
-        # Report configured backend from env (if any)
-        backend = os.environ.get('VLLM_ATTENTION_BACKEND', '').upper() or 'DEFAULT'
-        print(f"vLLM Attention Backend (env): {backend}")
-
-        # Robust FlashInfer availability checks
-        # 1) Python package presence (flashinfer/flashinfer_torch)
-        try:
-            from importlib.util import find_spec
-            fi_installed = (find_spec('flashinfer') is not None) or (find_spec('flashinfer_torch') is not None)
-        except Exception:
-            fi_installed = False
-
-        # 2) vLLM compiled backend importability
-        try:
-            from vllm.attention.backends import flashinfer as _fi  # type: ignore
-            fi_backend_available = True
-        except Exception:
-            fi_backend_available = False
-
-        print(f"FlashInfer Installed: {fi_installed}")
-        print(f"FlashInfer Backend Available: {fi_backend_available}")
-    except ImportError:
-        print("vLLM not installed")
+    # vLLM diagnostics (external server)
+    base_url = os.environ.get("DOCMIND_OPENAI__BASE_URL") or os.environ.get("DOCMIND_VLLM__VLLM_BASE_URL")
+    if base_url:
+        print(f"vLLM Base URL (configured): {base_url}")
+        print("Tip: validate the server with: curl --fail --silent \"$DOCMIND_OPENAI__BASE_URL/models\"")
+    else:
+        print("vLLM Base URL not configured")
     
     # Environment variables
     print("\n=== RELEVANT ENV VARS ===")

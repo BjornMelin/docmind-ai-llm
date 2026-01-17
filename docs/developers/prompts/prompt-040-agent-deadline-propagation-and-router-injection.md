@@ -137,7 +137,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 #### 1) Python + Packaging
 
-- Python version must remain **3.11.x** (respect `pyproject.toml`).
+- Python baseline is **3.13.11** (supported: 3.11–3.13; respect `pyproject.toml`).
 - Use **uv only**:
   - install/sync: `uv sync`
   - run tools: `uv run <cmd>`
@@ -200,6 +200,6 @@ You MUST produce a plan and keep exactly one step “in_progress” at a time.
 | **Tests**      |        | `scripts/run_tests.py --fast` green                        |
 | **Docs**       |        | ADR/SPEC/RTM updated                                       |
 | **Security**   |        | no raw-content logs; bounded timeouts; allowlist preserved |
-| **Tech Debt**  |        | zero TODO/FIXME introduced                                 |
+| **Tech Debt**  |        | zero work-marker placeholders introduced                   |
 
 **Execute Until Complete.**

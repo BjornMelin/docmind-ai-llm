@@ -7,7 +7,7 @@ This page combines quick fixes for common issues and answers to frequently asked
 ```bash
 # System checks
 nvidia-smi                          # GPU status
-python --version                    # Python 3.10–3.11
+uv run python -c "import sys; print(sys.version)"  # Python 3.11–3.13 (3.13.11 recommended)
 curl http://localhost:11434/api/version  # Ollama service
 
 # App checks
@@ -21,7 +21,7 @@ uv run python -c "from src.config import settings; print('Config loaded OK')"
 
 ```bash
 uv sync                 # Reinstall deps
-python --version        # Should be 3.10–3.11
+uv run python -c "import sys; print(sys.version)"  # Should be 3.11–3.13 (3.13.11 recommended)
 find . -name "*.pyc" -delete; find . -name "__pycache__" -type d -exec rm -rf {} +
 lsof -i :8501          # Free port 8501 if in use
 ```
@@ -31,14 +31,14 @@ lsof -i :8501          # Free port 8501 if in use
 ```bash
 nvidia-smi
 uv run python -c "import torch; print(torch.cuda.is_available())"
-# Force GPU in config
-printf "\nDOCMIND_DEVICE=cuda\nDOCMIND_ENABLE_GPU_ACCELERATION=true\n" >> .env
+# Prefer explicit embed-device selection for embeddings + enable GPU acceleration
+printf "\nDOCMIND_EMBEDDING__EMBED_DEVICE=cuda\nDOCMIND_ENABLE_GPU_ACCELERATION=true\n" >> .env
 ```
 
 ### Out of memory (CUDA)
 
 ```bash
-printf "\nDOCMIND_GPU_MEMORY_UTILIZATION=0.75\nDOCMIND_CONTEXT_WINDOW_SIZE=32768\n" >> .env
+printf "\nDOCMIND_VLLM__GPU_MEMORY_UTILIZATION=0.75\nDOCMIND_CONTEXT_WINDOW_SIZE=32768\n" >> .env
 uv run python -c "import torch; torch.cuda.empty_cache(); print('GPU cache cleared')"
 ```
 
@@ -96,7 +96,7 @@ PDF, DOCX, TXT, RTF, MD, XLSX, CSV, PPTX, JSON, XML, MSG, ODT, EPUB, HTML.
 
 ### How do I optimize performance?
 
-Set `VLLM_ATTENTION_BACKEND=FLASHINFER` and adjust memory/context settings in `.env`. See docs/user/configuration.md.
+If you run vLLM, configure performance options (FlashInfer, FP8 KV cache, chunked prefill) on the vLLM server process. See docs/user/configuration.md.
 
 ### How do I get help?
 

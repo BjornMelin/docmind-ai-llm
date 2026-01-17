@@ -134,7 +134,8 @@ def test_engine_args_compose(settings):
 
 ### Dependencies
 
-- Python: `vllm`, `flashinfer`
+- Server-side (recommended): vLLM with FlashInfer attention backend (Linux + NVIDIA GPU).
+- Python app: none (uses OpenAI-compatible HTTP via `DOCMIND_OPENAI__BASE_URL`).
 
 ## Changelog
 

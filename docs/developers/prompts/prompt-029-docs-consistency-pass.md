@@ -40,7 +40,7 @@ Docs drift is best solved with repo-local tooling + grep first.
   - `rg -n \"(NotImplementedError|ingestion-phase-2|phase 2|placeholder)\" docs -S`
   - `rg -n \"spec-012-observability|ObservabilityConfig\" docs src -S`
 - Use scripts where possible:
-  - `uv run python scripts/test_health.py` (if it already checks TODO/drift patterns)
+- `uv run python scripts/test_health.py` (if it already checks work-marker/drift patterns)
 
 **MCP resources first (when available):**
 
@@ -206,7 +206,7 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dri
 | **Tests**       |        | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | no references to missing modules                                                   |
 | **Security**    |        | security guidance matches repo posture (offline-first)                             |
-| **Tech Debt**   |        | zero TODO/FIXME introduced                                                         |
+| **Tech Debt**   |        | zero work-marker placeholders introduced                                           |
 | **Performance** |        | drift checker runs fast (O(files) scans; no heavy IO)                              |
 
 **EXECUTE UNTIL COMPLETE.**

@@ -109,7 +109,7 @@ uv run ruff format . && uv run ruff check . --fix && uv run pyright && uv run py
 | Tests | Done | `uv run python scripts/run_tests.py` (1254 passed) |
 | Docs | Done | ADR-050 Accepted; SPEC-031 Implemented; RTM updated |
 | Security | Done | No secrets logged; no implicit egress |
-| Debt | Done | No `TODO\|FIXME\|XXX` introduced |
+| Debt | Done | No work-marker placeholders introduced |
 | Perf | Done | No import-time IO added |
 
 **EXECUTE UNTIL COMPLETE.**

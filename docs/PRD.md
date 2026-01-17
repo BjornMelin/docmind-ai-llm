@@ -4,13 +4,13 @@
 >
 > ✅ **COMPLETED COMPONENTS:**
 >
-> - **vLLM Integration**: Fully implemented with Qwen3-4B-Instruct-2507-FP8 and FlashInfer backend
+> - **vLLM Integration**: Supported via external OpenAI-compatible vLLM server (FlashInfer/FP8 configured on the server)
 > - **Multi-Agent System**: Complete 5-agent LangGraph supervisor coordination system
 > - **Performance Optimization**: FP8 quantization achieving 100-160 tok/s decode, 800-1300 tok/s prefill
 > - **128K Context Support**: Full 131,072 token context window with FP8 KV cache optimization
 > - **VRAM Optimization**: Validated 12-14GB VRAM usage on RTX 4090 Laptop hardware
 > - **Token Efficiency**: Achieved 50-87% token reduction through parallel tool execution
-> - **GPU Stack**: Complete CUDA 12.8+, PyTorch 2.7.1, vLLM 0.10.x (<0.11) (+ FlashInfer)
+> - **GPU Stack**: CUDA 12.8+, PyTorch 2.8.0 (CUDA wheels via PyTorch index), vLLM runs out-of-process
 >
 > - **Library-First Ingestion Pipeline**: LlamaIndex `IngestionPipeline` with DuckDB cache, deterministic hashing, and AES-GCM page image support
 > - **Snapshot Persistence**: Portalocker-backed SnapshotManager with tri-file manifests, CURRENT pointer discipline, GraphRAG export packaging
@@ -76,7 +76,7 @@ The following requirements are derived directly from the architectural decisions
 - **NFR-3: Performance - Asynchronous Processing**: The system should leverage asynchronous and parallel processing patterns where appropriate to ensure a responsive UI and throughput, without coupling to specific pipeline abstractions. **(ADR-012)**
 - **NFR-4: Privacy - Offline First**: The system must be capable of operating 100% offline, with no reliance on external APIs for any core functionality, including parsing and model inference. **(ADR-001)**
 - **NFR-5: Resilience - Error Handling**: The system must handle transient failures (network hiccups, file errors) using exponential backoff retry strategies (3 attempts, 2s base delay) for infrastructure operations. **(ADR-022)**
-- **NFR-6: Memory Efficiency - VRAM Optimization**: The system must employ FP8 quantization and FP8 KV cache to enable 128K context processing within ~12-14GB VRAM on RTX 4090 Laptop hardware, providing optimized memory usage with vLLM FlashInfer backend. **(ADR-004, ADR-010)**
+- **NFR-6: Memory Efficiency - VRAM Optimization**: The system must employ FP8 quantization and FP8 KV cache to enable 128K context processing within ~12-14GB VRAM on RTX 4090 Laptop hardware, providing optimized memory usage with a vLLM server configured for FlashInfer. **(ADR-004, ADR-010)**
 - **NFR-7: Memory Efficiency - Multimodal VRAM**: The multimodal embedding model (SigLIP base, or CLIP ViT‑B/32) should be selected for low VRAM usage (≈1.4GB) to ensure efficiency. **(ADR-016)**
 - **NFR-8: Scalability - Local Concurrency**: The persistence layer (SQLite) must be configured in WAL (Write-Ahead Logging) mode to support concurrent read/write operations from multiple local processes. **(ADR-008)**
 - **NFR-9: Hardware Adaptability**: The system must detect GPU availability (CUDA 12.8+) and select appropriate models: Qwen3-4B-FP8 for RTX 4090, CPU fallback for systems without GPUs. **(ADR-017)**

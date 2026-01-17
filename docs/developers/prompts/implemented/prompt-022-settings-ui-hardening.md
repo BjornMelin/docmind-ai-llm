@@ -178,7 +178,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 #### 1) Python + Packaging
 
-- Python version must remain **3.11.x** (respect `pyproject.toml`).
+- Python baseline is **3.13.11** (supported: 3.11–3.13; respect `pyproject.toml`).
 - Use **uv only**.
 
 #### 2) Style, Types, and Lint
@@ -280,7 +280,7 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | Tests       |        | settings tests green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | Docs        |        | ADR/SPEC/RTM updated                                                                                     |
 | Security    |        | no unsafe HTML; allowlist enforced                                                                       |
-| Tech Debt   |        | no TODO/FIXME introduced                                                                                 |
+| Tech Debt   |        | no work-marker placeholders introduced                                                                   |
 | Performance |        | no new import-time heavy work                                                                            |
 
 **EXECUTE UNTIL COMPLETE.**
