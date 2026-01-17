@@ -4,14 +4,14 @@ title: Operational Metadata Store (SQLite WAL)
 version: 1.0.0
 date: 2026-01-09
 owners: ["ai-arch"]
-status: Implemented
+status: Draft
 related_requirements:
   - FR-015: Persist operational metadata via SQLite WAL.
   - FR-025: Background jobs record progress/cancellation safely.
   - NFR-REL-001: Recovery after restart without corruption.
   - NFR-SEC-001: Offline-first; local-only by default.
-related_adrs: ["ADR-031", "ADR-033", "ADR-032", "ADR-024"]
-notes: "ADR-055 and ADR-052 are currently 'Proposed' status (verified 2026-01-10); update references when they advance to 'Accepted'."
+related_adrs: ["ADR-055", "ADR-052", "ADR-031", "ADR-033", "ADR-032", "ADR-024"]
+notes: "ADR-055 and ADR-052 are currently 'Proposed' status (verified 2026-01-17); update references when they advance to 'Accepted'."
 ---
 
 ## Goals
@@ -19,13 +19,28 @@ notes: "ADR-055 and ADR-052 are currently 'Proposed' status (verified 2026-01-10
 1. Provide a **transactional, local-only ops metadata store** for DocMind.
    - This ops DB is separate from the LangGraph SQLite checkpointer + `SqliteStore` (ADR-057): separate file, schema, and connections; they may coexist under `settings.data_dir` but are operated independently.
 2. Enable **background job UX** and reliable state recovery across restarts:
-   - job lifecycle (queued/running/succeeded/failed/cancelled)
+   - job lifecycle (queued/running/done/failed; add cancelled via later migration)
    - progress updates (percent, stage, timestamps)
 3. Keep responsibilities separate:
    - ops metadata: SQLite WAL (this spec)
    - ingestion cache: LlamaIndex IngestionCache (DuckDBKV) (ADR-030)
    - analytics: DuckDB (ADR-032)
 4. Keep the system offline-first: no new network surfaces.
+
+## Implementation Status (2026-01-17)
+
+Current codebase coverage:
+
+- WAL setup exists for SQLite connections in `src/persistence/chat_db.py` and `src/persistence/memory_store.py`.
+- Settings include `settings.database.sqlite_db_path` and `settings.database.enable_wal_mode`.
+- Startup directory creation for the ops DB path exists in `src/config/integrations.py`.
+
+Missing for this spec to be implemented:
+
+- Ops DB schema and migrations (`jobs`, `snapshots`, `ui_state`) with `PRAGMA user_version` upgrades.
+- Ops DB initializer that enables WAL/foreign keys/busy_timeout and applies migrations at startup.
+- Ops DB API surface for job/snapshot/ui state reads/writes.
+- Unit/integration tests for migrations and ops DB behavior.
 
 ## Non-goals
 
@@ -52,38 +67,33 @@ On every connection:
 
 ### Schema (v1 minimal)
 
-Use a minimal schema that supports background jobs and snapshot history.
+Use a minimal schema that supports background jobs, snapshot history, and UI
+state. This mirrors the v1 schema described in ADR-055.
 
-#### `ops_job_run`
+#### `jobs`
 
-- `job_id TEXT PRIMARY KEY` (UUID)
-- `job_type TEXT NOT NULL` (e.g., `ingestion`, `snapshot_rebuild`, `backup`)
-- `status TEXT NOT NULL` (`queued|running|succeeded|failed|cancelled`)
+- `id TEXT PRIMARY KEY`
+- `status TEXT NOT NULL` (`queued|running|done|failed`)
+- `payload TEXT` (nullable; metadata-only JSON, can include progress/stage)
 - `created_at_ms INTEGER NOT NULL`
-- `started_at_ms INTEGER` (nullable)
 - `updated_at_ms INTEGER NOT NULL`
-- `finished_at_ms INTEGER` (nullable)
-- `progress_pct REAL` (0..100; nullable)
-- `stage TEXT` (nullable, short label)
-- `message TEXT` (nullable; must be metadata-only, no raw doc content)
-- `error_code TEXT` (nullable)
 
-Indexes:
+#### `snapshots`
 
-- `(job_type, status)`
-- `(updated_at_ms)`
-
-#### `ops_snapshot_event`
-
-- `id INTEGER PRIMARY KEY`
-- `snapshot_id TEXT NOT NULL` (directory name / timestamp)
-- `event_type TEXT NOT NULL` (`created|gc_pruned|restored|failed`)
+- `id TEXT PRIMARY KEY`
+- `job_id TEXT` (nullable; FK to `jobs.id`)
+- `data TEXT` (nullable; metadata-only JSON)
 - `created_at_ms INTEGER NOT NULL`
-- `meta_json TEXT` (nullable; JSON string, metadata-only)
 
-Index:
+Foreign key:
 
-- `(snapshot_id, created_at_ms)`
+- `FOREIGN KEY(job_id) REFERENCES jobs(id)`
+
+#### `ui_state`
+
+- `key TEXT PRIMARY KEY`
+- `value TEXT` (nullable; metadata-only JSON)
+- `updated_at_ms INTEGER NOT NULL`
 
 ### Migrations
 
@@ -95,7 +105,7 @@ Implement migrations via `PRAGMA user_version`:
 - `ops_db.apply_migrations()` applies sequentially within a transaction
 - **Rollback**: Not supported; migrations are forward-only (document schema changes in ADR if needed)
 
-### Code Modules
+### Code Modules (Planned)
 
 Add:
 
@@ -103,23 +113,23 @@ Add:
   - `connect_ops_db(path: Path) -> sqlite3.Connection`
   - `apply_migrations(conn) -> None`
   - `OpsDB` thin wrapper (single-record operations; batch not needed for v1):
-    - `create_job(job_type: str) -> str` — creates and returns job_id
-    - `update_job(job_id: str, progress_pct: float | None, stage: str | None, message: str | None) -> None`
-    - `finish_job(job_id: str, status: str, error_code: str | None = None) -> None`
-    - `list_jobs(limit: int = 50) -> list[dict]` — returns recent jobs ordered by `updated_at_ms` DESC
-    - `record_snapshot_event(snapshot_id: str, event_type: str, meta: dict | None) -> None`
+    - `create_job(job_id: str, status: str, payload: dict | None) -> None`
+    - `update_job(job_id: str, status: str, payload: dict | None = None) -> None`
+    - `record_snapshot(snapshot_id: str, job_id: str | None, data: dict | None) -> None`
+    - `upsert_ui_state(key: str, value: dict | None) -> None`
+    - `get_ui_state(key: str) -> dict | None`
 
 Integrate:
 
 - `src/ui/background_jobs.py` writes job lifecycle state to ops DB (best-effort; fail-open: if ops DB write fails, log a warning and continue; do not abort the job).
-- Snapshot actions record `ops_snapshot_event` entries where relevant.
+- Snapshot actions record `snapshots` entries where relevant.
 
 ### Observability
 
 Emit JSONL events (local-only) for:
 
 - `ops_db_migrated` with `{from_version, to_version}`
-- `job_state_changed` with `{job_id, job_type, status, progress_pct}`
+- `job_state_changed` with `{job_id, status}`
 
 Never include raw prompt/document text.
 
@@ -131,14 +141,14 @@ Never include raw prompt/document text.
 - Store only metadata; no secrets; no raw content.
 - Use bounded retries for `SQLITE_BUSY` and avoid unbounded loops.
 
-## Testing Strategy
+## Testing Strategy (Planned)
 
 ### Unit
 
 - `tests/unit/persistence/test_ops_db_migrations.py`
   - initializes empty DB, applies migrations, checks `user_version`
 - `tests/unit/persistence/test_ops_db_jobs.py`
-  - create/update/finish job, list jobs ordering, status transitions
+  - create/update job, verify status transitions and timestamps
 
 ### Integration
 
@@ -156,4 +166,4 @@ All tests must run offline and deterministic.
 
 Update `docs/specs/traceability.md`:
 
-- Add/expand `FR-015` mapping to `src/persistence/ops_db.py` + tests above.
+- Add/expand `FR-015` mapping to `src/persistence/ops_db.py` + tests above once implemented.
