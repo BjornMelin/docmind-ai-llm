@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from src.utils.hashing import sha256_file
+from src.utils.log_safety import build_pii_log_entry
 
 if TYPE_CHECKING:  # pragma: no cover
     from llama_index.core import Document
@@ -177,7 +178,13 @@ def collect_paths(
             _assert_no_symlinks_under_root(root_path, entry)
             resolved = _assert_resolves_within_root(root_resolved, entry)
         except (OSError, ValueError) as exc:
-            logger.warning("Skipping unsafe ingestion path {}: {}", entry, exc)
+            redaction = build_pii_log_entry(str(exc), key_id="ingestion.unsafe_path")
+            logger.warning(
+                "Skipping unsafe ingestion path {} (error_type={}, error={})",
+                entry.name,
+                type(exc).__name__,
+                redaction.redacted,
+            )
             continue
         collected.append(resolved)
 
@@ -230,7 +237,13 @@ async def load_documents(
         try:
             _assert_no_symlink_components(path)
         except ValueError as exc:
-            logger.warning("Skipping symlinked ingestion path {}: {}", path, exc)
+            redaction = build_pii_log_entry(str(exc), key_id="ingestion.symlink_path")
+            logger.warning(
+                "Skipping symlinked ingestion path {} (error_type={}, error={})",
+                path.name,
+                type(exc).__name__,
+                redaction.redacted,
+            )
             continue
 
         if doc_id and len(paths) == 1:
@@ -258,14 +271,30 @@ async def load_documents(
                 if loaded_items:
                     continue
             except Exception as exc:
-                logger.debug("UnstructuredReader failed for {}: {}", path.name, exc)
+                redaction = build_pii_log_entry(
+                    str(exc), key_id="ingestion.unstructured_reader"
+                )
+                logger.debug(
+                    "UnstructuredReader failed for {} (error_type={}, error={})",
+                    path.name,
+                    type(exc).__name__,
+                    redaction.redacted,
+                )
 
         try:
             text = await asyncio.to_thread(
                 path.read_text, encoding="utf-8", errors="ignore"
             )
         except Exception as exc:
-            logger.debug("Fallback text read failed for {}: {}", path.name, exc)
+            redaction = build_pii_log_entry(
+                str(exc), key_id="ingestion.fallback_text_read"
+            )
+            logger.debug(
+                "Fallback text read failed for {} (error_type={}, error={})",
+                path.name,
+                type(exc).__name__,
+                redaction.redacted,
+            )
             text = ""
         docs.append(
             Document(
@@ -304,12 +333,20 @@ async def load_documents_from_inputs(
         if item.source_path is not None:
             path = Path(item.source_path).expanduser()
             if not path.exists() or not path.is_file():
-                logger.warning("Skipping missing ingestion source: {}", path)
+                logger.warning("Skipping missing ingestion source: {}", path.name)
                 continue
             try:
                 _assert_no_symlink_components(path)
             except ValueError as exc:
-                logger.warning("Skipping symlinked ingestion path {}: {}", path, exc)
+                redaction = build_pii_log_entry(
+                    str(exc), key_id="ingestion.symlink_path"
+                )
+                logger.warning(
+                    "Skipping symlinked ingestion path {} (error_type={}, error={})",
+                    path.name,
+                    type(exc).__name__,
+                    redaction.redacted,
+                )
                 continue
             file_docs = await load_documents(
                 [path], reader=resolved_reader, doc_id=item.document_id
@@ -353,7 +390,7 @@ def clear_ingestion_cache() -> None:
         return
 
     if target.is_symlink():
-        logger.warning("Refusing to delete symlink cache dir: {}", target)
+        logger.warning("Refusing to delete symlink cache dir: {}", target.name)
         return
 
     try:
@@ -362,13 +399,19 @@ def clear_ingestion_cache() -> None:
     except FileNotFoundError:
         return
     except OSError as exc:
-        logger.warning("Skipping ingestion cache cleanup for {}: {}", target, exc)
+        redaction = build_pii_log_entry(str(exc), key_id="ingestion.cache_cleanup")
+        logger.warning(
+            "Skipping ingestion cache cleanup for {} (error_type={}, error={})",
+            target.name,
+            type(exc).__name__,
+            redaction.redacted,
+        )
         return
 
     if not target_resolved.is_relative_to(base_resolved):
         logger.warning(
             "Refusing ingestion cache cleanup outside base: {} -> {} (base={})",
-            target,
+            target.name,
             target_resolved,
             base_resolved,
         )
