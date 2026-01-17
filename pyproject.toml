@@ -58,8 +58,8 @@ dependencies = [
     "fastembed>=0.5.1",                     # Sparse vectors (BM42) CPU support (FR-005)
     "llama-index-readers-file>=0.5.6,<0.6.0",
     # Agentic Orchestration
-    "langgraph==1.0.5",                     # Graph-based orchestration (pin to avoid ToolRuntime API churn)
-    "langgraph-checkpoint-sqlite==3.0.1",   # Durable checkpoints (ADR-058)
+    "langgraph==1.0.6",                     # Graph-based orchestration (pin to avoid ToolRuntime API churn)
+    "langgraph-checkpoint-sqlite==3.0.2",   # Durable checkpoints (ADR-058)
     "sqlite-vec>=0.1.6",                    # Semantic search in agentic memory (SPEC-041)
     "langgraph-supervisor>=0.0.31,<0.1.0",
     "langchain>=1.2.2,<2.0.0",              # Agent factory (create_agent) for LangGraph v1

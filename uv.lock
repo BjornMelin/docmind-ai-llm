@@ -594,8 +594,8 @@ name = "cupy-cuda12x"
 version = "13.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "fastrlock" },
-    { name = "numpy" },
+    { name = "fastrlock", marker = "sys_platform != 'darwin'" },
+    { name = "numpy", marker = "sys_platform != 'darwin'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/19/ec/f62cb991f11fb41291c4c15b6936d7b67ffa71ddb344ad6e8894e06ce58d/cupy_cuda12x-13.6.0-cp313-cp313-manylinux2014_aarch64.whl", hash = "sha256:e5426ae3b1b9cf59927481e457a89e3f0b50a35b114a8034ec9110e7a833434c", size = 126904601, upload-time = "2025-08-18T08:24:59.951Z" },
@@ -901,8 +901,8 @@ requires-dist = [
     { name = "langchain", specifier = ">=1.2.2,<2.0.0" },
     { name = "langchain-core", specifier = ">=1.2.6,<2.0.0" },
     { name = "langchain-openai", specifier = ">=1.1.6,<2.0.0" },
-    { name = "langgraph", specifier = "==1.0.5" },
-    { name = "langgraph-checkpoint-sqlite", specifier = "==3.0.1" },
+    { name = "langgraph", specifier = "==1.0.6" },
+    { name = "langgraph-checkpoint-sqlite", specifier = "==3.0.2" },
     { name = "langgraph-supervisor", specifier = ">=0.0.31,<0.1.0" },
     { name = "llama-cpp-python", specifier = ">=0.3.16,<0.4.0" },
     { name = "llama-index", specifier = ">=0.14.12,<0.15.0" },
@@ -2030,7 +2030,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/0e/72/a3add0e4eec4eb9e2
 
 [[package]]
 name = "langgraph"
-version = "1.0.5"
+version = "1.0.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "langchain-core" },
@@ -2040,9 +2040,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "xxhash" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7d/47/28f4d4d33d88f69de26f7a54065961ac0c662cec2479b36a2db081ef5cb6/langgraph-1.0.5.tar.gz", hash = "sha256:7f6ae59622386b60fe9fa0ad4c53f42016b668455ed604329e7dc7904adbf3f8", size = 493969, upload-time = "2025-12-12T23:05:48.224Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c2/9c/dac99ab1732e9fb2d3b673482ac28f02bee222c0319a3b8f8f73d90727e6/langgraph-1.0.6.tar.gz", hash = "sha256:dd8e754c76d34a07485308d7117221acf63990e7de8f46ddf5fe256b0a22e6c5", size = 495092, upload-time = "2026-01-12T20:33:30.778Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/23/1b/e318ee76e42d28f515d87356ac5bd7a7acc8bad3b8f54ee377bef62e1cbf/langgraph-1.0.5-py3-none-any.whl", hash = "sha256:b4cfd173dca3c389735b47228ad8b295e6f7b3df779aba3a1e0c23871f81281e", size = 157056, upload-time = "2025-12-12T23:05:46.499Z" },
+    { url = "https://files.pythonhosted.org/packages/10/45/9960747781416bed4e531ed0c6b2f2c739bc7b5397d8e92155463735a40e/langgraph-1.0.6-py3-none-any.whl", hash = "sha256:bcfce190974519c72e29f6e5b17f0023914fd6f936bfab8894083215b271eb89", size = 157356, upload-time = "2026-01-12T20:33:29.191Z" },
 ]
 
 [[package]]
@@ -2060,16 +2060,16 @@ wheels = [
 
 [[package]]
 name = "langgraph-checkpoint-sqlite"
-version = "3.0.1"
+version = "3.0.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiosqlite" },
     { name = "langgraph-checkpoint" },
     { name = "sqlite-vec" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/df/a0/106a0d6c4f02385b11d9cb1dacedae3beee72023448c619702fc62745f22/langgraph_checkpoint_sqlite-3.0.1.tar.gz", hash = "sha256:c6580138e6abfd2ade7ea49186c664d47ef28dc44538674fa47e50a8a5f8af83", size = 110351, upload-time = "2025-12-09T22:03:13.112Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a9/f6/eceda876bbbc15c9d9060c95e392f8a9f9fb9262ace23f30995f865f04c0/langgraph_checkpoint_sqlite-3.0.2.tar.gz", hash = "sha256:a34961c035944af0ee7af416f8f26fec25059b10387a69dcb13fc6cc59c30a25", size = 109772, upload-time = "2026-01-12T20:31:51.951Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/dd/95/41be362f3eb25d7b4efe5b034efe8b9ce152a37ffe8a3a2fe1595f40272c/langgraph_checkpoint_sqlite-3.0.1-py3-none-any.whl", hash = "sha256:616124676e5827294966997ed853f5d41490cc61f73b3c79359f4ff307728508", size = 33382, upload-time = "2025-12-09T22:03:12.245Z" },
+    { url = "https://files.pythonhosted.org/packages/ae/e3/8ed603baf04368618faaedabb198684b5d214697e17ddf8d8aced0f0b58f/langgraph_checkpoint_sqlite-3.0.2-py3-none-any.whl", hash = "sha256:c627e4be7b801f7ac3d1dd3ab407f068bb1150d76b302a458c45904d57feca01", size = 33386, upload-time = "2026-01-12T20:31:51.111Z" },
 ]
 
 [[package]]
@@ -3119,7 +3119,7 @@ name = "nvidia-cudnn-cu12"
 version = "9.10.2.21"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12" },
+    { name = "nvidia-cublas-cu12", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ba/51/e123d997aa098c61d029f76663dedbfb9bc8dcf8c60cbd6adbe42f76d049/nvidia_cudnn_cu12-9.10.2.21-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:949452be657fa16687d0930933f032835951ef0892b37d2d53824d1a84dc97a8", size = 706758467, upload-time = "2025-06-06T21:54:08.597Z" },
@@ -3130,7 +3130,7 @@ name = "nvidia-cufft-cu12"
 version = "11.3.3.83"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12" },
+    { name = "nvidia-nvjitlink-cu12", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1f/13/ee4e00f30e676b66ae65b4f08cb5bcbb8392c03f54f2d5413ea99a5d1c80/nvidia_cufft_cu12-11.3.3.83-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:4d2dd21ec0b88cf61b62e6b43564355e5222e4a3fb394cac0db101f2dd0d4f74", size = 193118695, upload-time = "2025-03-07T01:45:27.821Z" },
@@ -3157,9 +3157,9 @@ name = "nvidia-cusolver-cu12"
 version = "11.7.3.90"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12" },
-    { name = "nvidia-cusparse-cu12" },
-    { name = "nvidia-nvjitlink-cu12" },
+    { name = "nvidia-cublas-cu12", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+    { name = "nvidia-cusparse-cu12", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+    { name = "nvidia-nvjitlink-cu12", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/85/48/9a13d2975803e8cf2777d5ed57b87a0b6ca2cc795f9a4f59796a910bfb80/nvidia_cusolver_cu12-11.7.3.90-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:4376c11ad263152bd50ea295c05370360776f8c3427b30991df774f9fb26c450", size = 267506905, upload-time = "2025-03-07T01:47:16.273Z" },
@@ -3170,7 +3170,7 @@ name = "nvidia-cusparse-cu12"
 version = "12.5.8.93"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12" },
+    { name = "nvidia-nvjitlink-cu12", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c2/f5/e1854cb2f2bcd4280c44736c93550cc300ff4b8c95ebe370d0aa7d2b473d/nvidia_cusparse_cu12-12.5.8.93-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:1ec05d76bbbd8b61b06a80e1eaf8cf4959c3d4ce8e711b65ebd0443bb0ebb13b", size = 288216466, upload-time = "2025-03-07T01:48:13.779Z" },
@@ -4909,7 +4909,7 @@ wheels = [
 
 [package.optional-dependencies]
 apple = [
-    { name = "thinc-apple-ops" },
+    { name = "thinc-apple-ops", marker = "sys_platform == 'darwin'" },
 ]
 
 [[package]]
@@ -5114,8 +5114,8 @@ name = "thinc-apple-ops"
 version = "1.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy" },
-    { name = "thinc" },
+    { name = "numpy", marker = "sys_platform == 'darwin'" },
+    { name = "thinc", marker = "sys_platform == 'darwin'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0d/44/15fa7fd8c4f3011f29393a1aed7616b3991fb7562ef044a31a818c25558f/thinc_apple_ops-1.0.0.tar.gz", hash = "sha256:97238eb6693e758bfdcf1ac8e92c064bbe893ab74a6a3a4237c5bdf17318e502", size = 63163, upload-time = "2024-10-01T09:54:04.474Z" }
 
@@ -5344,7 +5344,7 @@ name = "triton"
 version = "3.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "setuptools" },
+    { name = "setuptools", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/30/7b/0a685684ed5322d2af0bddefed7906674f67974aa88b0fae6e82e3b766f6/triton-3.4.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:00be2964616f4c619193cb0d1b29a99bd4b001d7dc333816073f92cf2a8ccdeb", size = 155569223, upload-time = "2025-07-30T19:58:44.017Z" },
