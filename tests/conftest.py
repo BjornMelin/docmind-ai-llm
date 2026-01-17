@@ -53,7 +53,7 @@ def pytest_runtest_setup(item) -> None:  # type: ignore[no-untyped-def]
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _streamlit_disable_repl_detection() -> Generator[None, None, None]:
+def _streamlit_disable_repl_detection() -> Generator[None]:
     """Avoid slow `inspect.stack()`-based REPL detection in Streamlit tests.
 
     Streamlit's `env_util.is_repl()` can be surprisingly expensive in large
@@ -264,7 +264,7 @@ def _stub_llm_builder(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture(autouse=True)
 def _router_factory_stubs(
     request: pytest.FixtureRequest,
-) -> Generator[None, None, None]:
+) -> Generator[None]:
     """Inject a stub llama-index adapter unless the test requests the real one."""
     from src.retrieval.llama_index_adapter import set_llama_index_adapter
 

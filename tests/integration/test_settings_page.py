@@ -204,6 +204,91 @@ def test_settings_save_persists_env(
     assert values.get("DOCMIND_OLLAMA_TOP_LOGPROBS") == "2"
 
 
+def test_settings_save_persists_openai_compatible_env(
+    settings_app_test: AppTest,
+    tmp_path: Path,
+    reset_settings_after_test: None,
+) -> None:
+    """Saving settings should persist OpenAI-compatible configuration to .env."""
+    import json
+
+    app = settings_app_test.run()
+    assert not app.exception
+
+    providers = [w for w in app.selectbox if getattr(w, "label", "") == "LLM Provider"]
+    assert providers, "LLM Provider selectbox not found"
+    app = providers[0].set_value("openai_compatible").run()
+    assert not app.exception
+
+    # Remote provider base URL needs allow_remote_endpoints enabled in tests.
+    allow_remote = [w for w in app.checkbox if "Allow remote endpoints" in str(w)]
+    assert allow_remote, "Allow remote endpoints checkbox not found"
+    app = allow_remote[0].set_value(True).run()
+    assert not app.exception
+
+    # Configure OpenAI-compatible fields.
+    text_inputs = list(app.text_input)
+    base_url_inputs = [w for w in text_inputs if getattr(w, "label", "") == "Base URL"]
+    assert base_url_inputs, "OpenAI-compatible Base URL input not found"
+    app = base_url_inputs[0].set_value("https://ai-gateway.vercel.sh/v1").run()
+    assert not app.exception
+
+    text_inputs = list(app.text_input)
+    api_key_inputs = [
+        w for w in text_inputs if getattr(w, "label", "") == "API key (optional)"
+    ]
+    assert api_key_inputs, "OpenAI-compatible API key input not found"
+    app = api_key_inputs[0].set_value("key-xyz").run()
+    assert not app.exception
+
+    require_v1 = [
+        w
+        for w in app.checkbox
+        if getattr(w, "label", "") == "Normalize base URL to include /v1"
+    ]
+    assert require_v1, "Require /v1 checkbox not found"
+    app = require_v1[0].set_value(True).run()
+    assert not app.exception
+
+    api_mode = [w for w in app.selectbox if getattr(w, "label", "") == "API mode"]
+    assert api_mode, "API mode selectbox not found"
+    app = api_mode[0].set_value("responses").run()
+    assert not app.exception
+
+    headers_areas = [
+        w
+        for w in app.text_area
+        if getattr(w, "label", "") == "Default headers (JSON object)"
+    ]
+    assert headers_areas, "Default headers text area not found"
+    app = (
+        headers_areas[0]
+        .set_value(
+            json.dumps({"HTTP-Referer": "https://example.com", "X-Test": "1"}, indent=2)
+        )
+        .run()
+    )
+    assert not app.exception
+
+    save_buttons = [b for b in app.button if getattr(b, "label", "") == "Save"]
+    assert save_buttons, "Save button not found"
+    save_buttons[0].click().run()
+
+    env_file = tmp_path / ".env"
+    assert env_file.exists(), ".env not created by Save action"
+    from dotenv import dotenv_values
+
+    values = dotenv_values(env_file)
+    assert values.get("DOCMIND_LLM_BACKEND") == "openai_compatible"
+    assert values.get("DOCMIND_OPENAI__BASE_URL") == "https://ai-gateway.vercel.sh/v1"
+    assert values.get("DOCMIND_OPENAI__API_KEY") == "key-xyz"
+    assert values.get("DOCMIND_OPENAI__REQUIRE_V1") == "true"
+    assert values.get("DOCMIND_OPENAI__API_MODE") == "responses"
+    assert values.get("DOCMIND_OPENAI__DEFAULT_HEADERS") == (
+        '{"HTTP-Referer":"https://example.com","X-Test":"1"}'
+    )
+
+
 def test_settings_save_normalizes_lmstudio_url(
     settings_app_test: AppTest,
     tmp_path: Path,

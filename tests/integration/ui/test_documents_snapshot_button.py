@@ -38,7 +38,12 @@ def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[AppTest]:
     }
 
     # Stub ingestion adapter and storage helpers to avoid heavy imports.
-    _install_stub("src.ui.ingest_adapter", ingest_files=lambda *_, **__: {"count": 0})
+    _install_stub(
+        "src.ui.ingest_adapter",
+        ingest_files=lambda *_, **__: {"count": 0},
+        ingest_inputs=lambda *_, **__: {"count": 0},
+        save_uploaded_file=lambda *_, **__: (tmp_path / "dummy", "0"),
+    )
     _install_stub(
         "src.utils.storage",
         create_vector_store=lambda *_, **__: object(),

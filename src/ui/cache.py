@@ -40,12 +40,26 @@ def clear_caches(settings_obj: Any | None = None) -> int:
         try:
             st.cache_data.clear()
         except Exception as exc:  # pragma: no cover - defensive
-            logger.debug("failed to clear st.cache_data", exc_info=exc)
+            from src.utils.log_safety import build_pii_log_entry
+
+            redaction = build_pii_log_entry(str(exc), key_id="ui.cache_data.clear")
+            logger.debug(
+                "failed to clear st.cache_data (error_type={} error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
     with suppress(Exception):  # pragma: no cover - defensive
         try:
             st.cache_resource.clear()
         except Exception as exc:  # pragma: no cover - defensive
-            logger.debug("failed to clear st.cache_resource", exc_info=exc)
+            from src.utils.log_safety import build_pii_log_entry
+
+            redaction = build_pii_log_entry(str(exc), key_id="ui.cache_resource.clear")
+            logger.debug(
+                "failed to clear st.cache_resource (error_type={} error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
 
     return int(getattr(settings_obj, "cache_version", 0))
 
