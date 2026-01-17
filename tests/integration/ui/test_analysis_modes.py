@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from src.ui.background_jobs import ProgressEvent
+import src.ui.background_jobs as bg
 
 pytestmark = pytest.mark.integration
 
@@ -51,8 +51,6 @@ def chat_analysis_app_test(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> A
 
     # Replace background job manager with a synchronous fake so results render
     # deterministically in the same AppTest run.
-    import src.ui.background_jobs as bg
-
     class _State:
         def __init__(self, *, owner_id: str, status: str, result, error: str | None):
             self.owner_id = owner_id
@@ -62,14 +60,14 @@ def chat_analysis_app_test(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> A
 
     class _FakeJobManager:
         def __init__(self) -> None:
-            self._events: dict[str, list[ProgressEvent]] = {}
+            self._events: dict[str, list[bg.ProgressEvent]] = {}
             self._states: dict[str, _State] = {}
 
         def start_job(self, *, owner_id: str, fn):  # type: ignore[no-untyped-def]
             job_id = "job-1"
-            events: list[ProgressEvent] = []
+            events: list[bg.ProgressEvent] = []
 
-            def _report(evt: ProgressEvent) -> None:
+            def _report(evt: bg.ProgressEvent) -> None:
                 events.append(evt)
 
             try:

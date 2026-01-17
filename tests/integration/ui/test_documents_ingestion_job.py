@@ -11,7 +11,7 @@ import pytest
 import streamlit as st
 from streamlit.testing.v1 import AppTest
 
-from src.ui.background_jobs import ProgressEvent
+import src.ui.background_jobs as bg
 
 
 @pytest.fixture
@@ -88,7 +88,6 @@ def documents_ingest_app_test(tmp_path: Path, monkeypatch) -> AppTest:
 
     # Replace background job manager with a synchronous fake so success renders
     # deterministically in the same AppTest run.
-    import src.ui.background_jobs as bg
 
     class _State:
         def __init__(self, *, owner_id: str, status: str, result, error: str | None):
@@ -99,14 +98,14 @@ def documents_ingest_app_test(tmp_path: Path, monkeypatch) -> AppTest:
 
     class _FakeJobManager:
         def __init__(self) -> None:
-            self._events: dict[str, list[ProgressEvent]] = {}
+            self._events: dict[str, list[bg.ProgressEvent]] = {}
             self._states: dict[str, _State] = {}
 
         def start_job(self, *, owner_id: str, fn):  # type: ignore[no-untyped-def]
             job_id = "job-1"
-            events: list[ProgressEvent] = []
+            events: list[bg.ProgressEvent] = []
 
-            def _report(evt: ProgressEvent) -> None:
+            def _report(evt: bg.ProgressEvent) -> None:
                 events.append(evt)
 
             try:

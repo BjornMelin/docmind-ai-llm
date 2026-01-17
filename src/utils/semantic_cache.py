@@ -151,6 +151,10 @@ def _must_filters(
                 match=qmodels.MatchValue(value=key.template_version),
             ),
             qmodels.FieldCondition(
+                key="temperature",
+                range=qmodels.Range(gte=key.temperature, lte=key.temperature),
+            ),
+            qmodels.FieldCondition(
                 key="corpus_hash",
                 match=qmodels.MatchValue(value=key.corpus_hash),
             ),
