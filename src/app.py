@@ -6,9 +6,17 @@ thin multipage shell with no business logic or helper wrappers.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import streamlit as st
 
-from src.config import bootstrap_settings, settings
+project_root = Path(__file__).resolve().parents[1]
+root_str = str(project_root)
+if root_str not in sys.path:
+    sys.path.insert(0, root_str)
+
+from src.config import bootstrap_settings, settings  # noqa: E402
 
 
 def main() -> None:  # pragma: no cover - Streamlit entrypoint
