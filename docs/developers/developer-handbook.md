@@ -178,35 +178,15 @@ else:
 ### Error Handling Patterns
 
 ```python
-# Comprehensive error handling with fallbacks
-class RetrievalAgent:
-    async def retrieve_documents(
-        self, 
-        query: str, 
-        strategy: str = "hybrid"
-    ) -> List[Document]:
-        """Retrieve documents with fallback strategies."""
-        
-        try:
-            # Primary strategy
-            if strategy == "hybrid":
-                return await self._hybrid_search(query)
-            elif strategy == "dense":
-                return await self._dense_search(query)
-            else:
-                return await self._sparse_search(query)
-                
-        except QdrantConnectionError as e:
-            logger.warning(f"Qdrant connection failed: {e}, using cache")
-            return await self._fallback_cache_search(query)
-            
-        except EmbeddingGenerationError as e:
-            logger.warning(f"Embedding generation failed: {e}, using keyword search")
-            return await self._fallback_keyword_search(query)
-            
-        except Exception as e:
-            logger.error(f"All retrieval strategies failed: {e}")
-            raise RetrievalError(f"Retrieval failed: {e}")
+# DocMind tools are fail-open: tools should return a structured payload even when
+# the underlying integration fails, rather than raising and aborting the run.
+#
+# Example: src/agents/tools/retrieval.py returns a JSON string on both success
+# and error paths.
+from src.agents.tools.retrieval import retrieve_documents
+
+payload_json = retrieve_documents("find docs about embeddings", strategy="hybrid")
+print(payload_json)  # {"documents": [...], ...} or {"documents": [], "error": "...", ...}
 ```
 
 ### Tool Creation Pattern
