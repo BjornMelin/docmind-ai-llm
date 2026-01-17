@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Literal, overload
+from urllib.parse import urlsplit
 
 from src.config import settings
 from src.utils.canonicalization import CanonicalizationConfig, compute_hashes
@@ -101,4 +103,55 @@ def build_pii_log_entry(value: str, key_id: str | None = None) -> RedactionResul
     )
 
 
-__all__ = ["RedactionResult", "build_pii_log_entry", "redact_pii"]
+def fingerprint_text(value: str, key_id: str | None = None) -> dict[str, str | int]:
+    """Return fingerprint metadata for logging without emitting raw content."""
+    fingerprint, canon_version, secret_version = _fingerprint_value(value, key_id)
+    return {
+        "len": len(value),
+        "hmac_sha256_12": fingerprint[:12],
+        "canonicalization_version": canon_version,
+        "hmac_secret_version": secret_version,
+    }
+
+
+def safe_url_for_log(url: str) -> str:
+    """Return origin-only URL (scheme://host[:port]) for logs/telemetry."""
+    try:
+        parts = urlsplit(str(url))
+    except Exception:
+        return ""
+    if not parts.scheme or not parts.netloc:
+        return ""
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+_BACKSTOP_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"sk-[A-Za-z0-9]{10,}"), "[redacted:sk]"),
+    (re.compile(r"Bearer\s+[-A-Za-z0-9._+/=]{10,}"), "Bearer [redacted]"),
+    (
+        re.compile(r"(?i)authorization:\s*bearer\s+[-A-Za-z0-9._+/=]{10,}"),
+        "authorization: Bearer [redacted]",
+    ),
+)
+
+
+def redact_text_backstop(text: str) -> str:
+    """Deterministic regex redaction for rare strings that may reach logs.
+
+    Intended for exception strings and similar fields. Do not use this as a
+    general-purpose redactor for user content.
+    """
+    out = str(text)
+    for pattern, repl in _BACKSTOP_PATTERNS:
+        out = pattern.sub(repl, out)
+    return out
+
+
+__all__ = [
+    "RedactionResult",
+    "build_pii_log_entry",
+    "fingerprint_text",
+    "redact_pii",
+    "redact_text_backstop",
+    "safe_url_for_log",
+]

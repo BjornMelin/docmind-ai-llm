@@ -239,9 +239,7 @@ def log_performance(
 
 
 @contextmanager
-def performance_timer(
-    operation: str, **context: Any
-) -> Generator[dict[str, Any], None, None]:
+def performance_timer(operation: str, **context: Any) -> Generator[dict[str, Any]]:
     """Context manager for timing operations.
 
     Args:
@@ -301,7 +299,7 @@ def performance_timer(
 @asynccontextmanager
 async def async_performance_timer(
     operation: str, **context: Any
-) -> AsyncGenerator[dict[str, Any], None]:
+) -> AsyncGenerator[dict[str, Any]]:
     """Async context manager for timing operations.
 
     Args:
@@ -377,8 +375,13 @@ def get_memory_usage() -> dict[str, float]:
             ),
             "percent": round(process.memory_percent(), 2),
         }
-    except (OSError, psutil.Error) as e:
-        logger.warning("Failed to get memory usage: {}", e)
+    except (OSError, psutil.Error) as exc:
+        redaction = build_pii_log_entry(str(exc), key_id="monitoring.get_memory_usage")
+        logger.warning(
+            "Failed to get memory usage (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
         return {"rss_mb": 0.0, "vms_mb": 0.0, "percent": 0.0}
 
 
@@ -399,8 +402,13 @@ def get_system_info() -> dict[str, Any]:
             if hasattr(psutil, "getloadavg")
             else None,
         }
-    except (OSError, psutil.Error) as e:
-        logger.warning("Failed to get system info: {}", e)
+    except (OSError, psutil.Error) as exc:
+        redaction = build_pii_log_entry(str(exc), key_id="monitoring.get_system_info")
+        logger.warning(
+            "Failed to get system info (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
         return {}
 
 

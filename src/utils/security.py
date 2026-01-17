@@ -25,13 +25,6 @@ except ImportError:
 from src.config.settings import settings
 
 
-def redact_pii(text: str) -> str:
-    """Return text with PII redaction for safe logging."""
-    from src.utils.log_safety import redact_pii as _redact_pii
-
-    return _redact_pii(text)
-
-
 def _get_key() -> bytes | None:
     if settings.image_encryption.aes_key_base64 is None:
         return None
@@ -184,6 +177,5 @@ __all__ = [
     "decrypt_file",
     "encrypt_file",
     "get_image_kid",
-    "redact_pii",
     "validate_export_path",
 ]

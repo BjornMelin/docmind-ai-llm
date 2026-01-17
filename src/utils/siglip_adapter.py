@@ -228,12 +228,17 @@ class SiglipEmbedding:
                     feats = self._model.get_image_features(pixel_values=pix)  # type: ignore[union-attr]
                     feats = feats / feats.norm(dim=-1, keepdim=True)
                     out.append(feats.detach().cpu().numpy().astype(np.float32))
-        except Exception:
+        except Exception as exc:
+            from src.utils.log_safety import build_pii_log_entry
+
+            redaction = build_pii_log_entry(str(exc), key_id="siglip.images")
             logger.debug(
-                "siglip batch embedding failed for images count=%d dim=%s",
+                "siglip image embedding failed (count={} dim={} "
+                "error_type={} error={})",
                 len(images),
                 self._dim,
-                exc_info=True,
+                type(exc).__name__,
+                redaction.redacted,
             )
             dim = int(self._dim or 768)
             return np.zeros((len(images), dim), dtype=np.float32)
@@ -283,12 +288,16 @@ class SiglipEmbedding:
                     )
                     feats = feats / feats.norm(dim=-1, keepdim=True)
                     out.append(feats.detach().cpu().numpy().astype(np.float32))
-        except Exception:
+        except Exception as exc:
+            from src.utils.log_safety import build_pii_log_entry
+
+            redaction = build_pii_log_entry(str(exc), key_id="siglip.texts")
             logger.debug(
-                "siglip batch embedding failed for texts count=%d dim=%s",
+                "siglip text embedding failed (count={} dim={} error_type={} error={})",
                 len(texts),
                 self._dim,
-                exc_info=True,
+                type(exc).__name__,
+                redaction.redacted,
             )
             dim = int(self._dim or 768)
             return np.zeros((len(texts), dim), dtype=np.float32)
