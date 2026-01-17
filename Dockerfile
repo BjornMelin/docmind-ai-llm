@@ -80,7 +80,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl \
         libmagic1 \
         libmupdf-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -96,6 +95,6 @@ USER docmind
 EXPOSE 8501
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD ["curl", "--silent", "--fail", "http://localhost:8501/_stcore/health"]
+    CMD ["python", "-c", "import socket; s = socket.create_connection(('127.0.0.1', 8501), timeout=3); s.close()"]
 
 CMD ["streamlit", "run", "src/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
