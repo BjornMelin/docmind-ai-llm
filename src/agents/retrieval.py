@@ -1,8 +1,7 @@
 """Lean retrieval agent built on LangGraph tooling.
 
 This module intentionally mirrors the lightweight patterns recommended in the
-official LangGraph tutorials and the ``langgraph-supervisor-py`` reference
-implementation. The agent simply orchestrates the shared
+official LangGraph tutorials. The agent simply orchestrates the shared
 ``retrieve_documents`` tool through ``create_agent`` and only contains
 small amounts of glue code for metrics and result normalization.
 """

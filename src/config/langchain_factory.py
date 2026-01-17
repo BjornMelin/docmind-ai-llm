@@ -1,8 +1,8 @@
 """LangChain chat model factory for LangGraph workflows.
 
 The core application uses LlamaIndex as the primary integration layer for
-retrieval and offline-first backends. LangGraph (and langgraph-supervisor)
-operate on LangChain `LanguageModelLike` runnables, so we provide a small
+retrieval and offline-first backends. LangGraph agent graphs operate on LangChain
+`LanguageModelLike` runnables, so we provide a small
 factory to build a compatible LangChain chat model from the same unified
 settings.
 """
