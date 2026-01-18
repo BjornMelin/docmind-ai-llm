@@ -86,7 +86,13 @@ def _emit_router_injection_event(*, used: bool, reason: str) -> None:
         reason: Descriptive reason for the injection status.
     """
     with contextlib.suppress(Exception):  # pragma: no cover - telemetry
-        log_jsonl({"router_injection_used": True, "used": bool(used), "reason": reason})
+        log_jsonl(
+            {
+                "router_injection_attempted": True,
+                "used": bool(used),
+                "reason": reason,
+            }
+        )
 
 
 def _maybe_router_injection_response(

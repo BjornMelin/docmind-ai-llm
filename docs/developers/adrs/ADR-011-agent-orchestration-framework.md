@@ -2,7 +2,6 @@
 ADR: 011
 Title: Agent Orchestration with LangGraph StateGraph
 Status: Accepted (Amended)
-Version: 7.0
 Version: 7.1
 Date: 2026-01-18
 Supersedes:
@@ -151,7 +150,7 @@ compiled = graph.compile(checkpointer=InMemorySaver(), store=store)
   - `"full_history"`: Add the entire agent message history
 - `create_forward_message_tool`: Allow direct message passthrough when no processing is needed
 - `add_handoff_messages`: Emit coordination breadcrumbs for debugging and audits
-- `add_handoff_back_messages`: Emit return-to-supervisor breadcrumbs after each subagent
+- `add_handoff_back_messages` (deprecated): Emit return-to-supervisor breadcrumbs after each subagent. Prefer `add_handoff_messages` unless you need explicit back-edge tracing.
 - Hooks: Apply trimming/metrics with LangChain agent middleware (`before_model`/`after_model`).
   When trimming messages, use the `RemoveMessage(id=REMOVE_ALL_MESSAGES)` mechanism so the
   `add_messages` reducer replaces history rather than appending.

@@ -95,6 +95,9 @@ def _copy_file(src: Path, dst: Path) -> int:
         src: Source file to copy.
         dst: Destination file to create.
 
+    Returns:
+        int: Number of bytes written to dst.
+
     Raises:
         ValueError: If the source is a symlink.
     """

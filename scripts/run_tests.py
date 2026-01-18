@@ -522,7 +522,7 @@ else:
                     "json",
                     "--fail-under=0",
                     "-o",
-                    "coverage.json",
+                    str(coverage_json),
                 ],
                 "Coverage JSON",
             )
@@ -534,7 +534,7 @@ else:
                     "xml",
                     "--fail-under=0",
                     "-o",
-                    "coverage.xml",
+                    str(coverage_xml),
                 ],
                 "Coverage XML",
             )
@@ -546,7 +546,7 @@ else:
                     "html",
                     "--fail-under=0",
                     "-d",
-                    "htmlcov",
+                    str(coverage_html),
                 ],
                 "Coverage HTML",
             )

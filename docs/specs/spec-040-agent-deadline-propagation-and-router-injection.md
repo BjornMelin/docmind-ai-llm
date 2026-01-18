@@ -99,6 +99,12 @@ DocMind's supervisor graph executes subagents synchronously via `agent.invoke(..
 - Parallelism SHOULD be expressed at the orchestration layer (e.g., multiple tool
   calls executed by the agent/tool runner with bounded concurrency), not by hiding
   internal `asyncio.gather(...)` inside a tool implementation.
+- Orchestration-level parallelism is gated by `DOCMIND_AGENTS__ENABLE_PARALLEL_TOOL_EXECUTION`.
+  Supervisors using `agent.invoke(...)` (see `src/agents/supervisor_graph.py`) and tools
+  implementing `BaseTool.invoke(...)` MUST remain sync-compatible; enabling
+  `DOCMIND_AGENTS__ENABLE_PARALLEL_TOOL_EXECUTION` is the supported path for parallel
+  tool execution instead of embedding `asyncio.gather(...)` inside tools or switching
+  to async-only `ainvoke`/`astream` codepaths.
 
 ### Observability
 
