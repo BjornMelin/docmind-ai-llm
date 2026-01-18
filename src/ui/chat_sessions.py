@@ -24,7 +24,7 @@ from src.persistence.chat_db import (
 )
 
 _chat_db_conn: sqlite3.Connection | None = None
-_chat_db_conn_cleanup_registered = False
+_chat_db_conn_cleanup_registered: bool = False
 
 
 @dataclass(frozen=True, slots=True)

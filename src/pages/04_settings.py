@@ -1121,7 +1121,7 @@ def _render_endpoint_test(validated: DocMindSettings | None) -> None:
     base_url = getattr(validated, "backend_base_url_normalized", None)
     if not base_url:
         return
-    backend_type = getattr(validated, "backend_type", None)
+    backend_type = getattr(validated, "llm_backend", None)
     openai_cfg = validated.openai
     openai_compatible = bool(
         getattr(validated, "openai_compatible", False)
@@ -1266,6 +1266,7 @@ def _persist_env_from_validated(validated: DocMindSettings) -> None:
     Args:
         validated: Validated settings instance to serialize.
     """
+    default_headers = getattr(validated.openai, "default_headers", None)
     context_window_value = (
         validated.context_window
         if validated.context_window is not None
@@ -1293,11 +1294,11 @@ def _persist_env_from_validated(validated: DocMindSettings) -> None:
         "DOCMIND_OPENAI__API_MODE": str(
             getattr(validated.openai, "api_mode", "chat_completions")
         ),
-        "DOCMIND_OPENAI__DEFAULT_HEADERS": _safe_json_dumps_compact(
-            getattr(validated.openai, "default_headers", None) or {}
-        )
-        if getattr(validated.openai, "default_headers", None)
-        else "",
+        "DOCMIND_OPENAI__DEFAULT_HEADERS": (
+            _safe_json_dumps_compact(default_headers)
+            if default_headers
+            else ""
+        ),
         "DOCMIND_OLLAMA_BASE_URL": str(validated.ollama_base_url).rstrip("/"),
         "DOCMIND_OLLAMA_API_KEY": (
             validated.ollama_api_key.get_secret_value()

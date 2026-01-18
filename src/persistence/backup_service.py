@@ -248,7 +248,14 @@ def _download_qdrant_snapshot(
 
 
 def _qdrant_target_collections(cfg: DocMindSettings) -> list[str]:
-    """Return the list of Qdrant collections to snapshot."""
+    """Return the list of Qdrant collections to snapshot.
+
+    Args:
+        cfg: DocMind settings container for database and cache configuration.
+
+    Returns:
+        Sorted list of unique Qdrant collection names to be snapshotted.
+    """
     targets = [
         str(cfg.database.qdrant_collection),
         str(cfg.database.qdrant_image_collection),
@@ -325,7 +332,17 @@ def _create_qdrant_snapshots(
 
 
 def _write_manifest(path: Path, payload: dict[str, Any]) -> None:
-    """Write a manifest file to the specified path."""
+    """Write a manifest file to the specified path using UTF-8 encoding.
+
+    Args:
+        path: Destination file path.
+        payload: JSON-serializable manifest data.
+
+    Raises:
+        TypeError: If the payload contains objects that are not JSON-serializable.
+        ValueError: If JSON serialization fails for other reasons.
+        OSError: If filesystem operations (mkdir or write) fail.
+    """
     _safe_mkdir(path.parent)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
@@ -361,7 +378,7 @@ def _include_file(
 
     Args:
         source: Source file to include.
-        dest: Destination directory for the file.
+        dest: Full destination file path (e.g., tmp_dir / ".env").
         label: Label for the file.
         included: List of included files.
         warnings: List of warnings to append to.

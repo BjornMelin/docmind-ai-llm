@@ -18,7 +18,7 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from grpc import RpcError
 from loguru import logger
@@ -73,7 +73,7 @@ class CacheHit:
         A CacheHit instance representing a successful lookup.
     """
 
-    kind: str  # "exact" | "semantic"
+    kind: Literal["exact", "semantic"]
     score: float | None
     response_text: str
 
@@ -429,6 +429,12 @@ class SemanticCache:
         flt = qmodels.Filter(must=_must_filters(key, require_prompt_key=False))
         vec = self._embed_query(str(query))
         if len(vec) != self._vector_dim:
+            active_logger = getattr(self, "_logger", logger)
+            active_logger.debug(
+                f"semantic cache _semantic_lookup skipped: _embed_query dim mismatch "
+                f"(got={len(vec)}, expected=_vector_dim={self._vector_dim}); "
+                f"cache_key={key.prompt_key}, namespace={key.namespace}"
+            )
             return None
         response = self._client.query_points(
             collection_name=self._collection,

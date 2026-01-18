@@ -392,10 +392,9 @@ def run_analysis(
         key_id="analysis.mode_selected",
     )
 
-    _check_cancel(cancel_event)
-    _progress(0, "Starting analysis", report_progress=report_progress)
-
     try:
+        _check_cancel(cancel_event)
+        _progress(0, "Starting analysis", report_progress=report_progress)
         if resolved == "combined":
             result = _run_combined_mode(
                 vector_index=vector_index,

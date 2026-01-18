@@ -25,7 +25,7 @@ DocMind AI is an offline-first document analysis system using Qwen3-4B-Instruct-
 
 **Problem Statement:** In today's data-rich world, professionals, researchers, and students are inundated with digital documents. Extracting meaningful insights is a time-consuming, manual process. Furthermore, existing AI-powered solutions are almost exclusively cloud-based, forcing users to upload sensitive or proprietary documents to third-party servers, creating significant privacy risks and vendor lock-in. There is limited availability of solutions that offer modern AI capabilities with complete privacy through local, offline processing.
 
-**Opportunity:** Professional users require AI document processing without cloud dependencies for data security. DocMind AI provides offline-first RAG with 128K context capability using local models only. The system processes documents with 100% local computation, zero external API calls, and requires 12-14 GB VRAM on RTX 4090 hardware.
+**Opportunity:** Professional users require AI document processing without cloud dependencies for data security. DocMind AI provides offline-first RAG with 128K context capability using local models only. The system processes documents with 100% local computation, zero external API calls, and requires 12-14 GB VRAM on RTX 4090 Laptop hardware.
 
 ## 3. Features & Epics
 
