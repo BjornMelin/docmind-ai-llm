@@ -10,7 +10,14 @@ import os
 
 
 def is_ci() -> bool:
-    """Return True when running under a CI environment."""
+    """Return True when running under a CI environment.
+
+    Args:
+        None.
+
+    Returns:
+        True when the process appears to be running in CI.
+    """
 
     def _is_truthy(key: str) -> bool:
         return os.getenv(key, "").strip().lower() in {"1", "true", "yes", "on"}
@@ -20,6 +27,13 @@ def is_ci() -> bool:
 
 def apptest_timeout_sec(*, default_local: int = 8, default_ci: int = 20) -> int:
     """Return a default timeout for AppTest runs.
+
+    Args:
+        default_local: Default timeout in seconds for local runs.
+        default_ci: Default timeout in seconds for CI runs.
+
+    Returns:
+        Timeout in seconds after applying overrides.
 
     Precedence:
     1) `TEST_TIMEOUT` env var (int seconds)

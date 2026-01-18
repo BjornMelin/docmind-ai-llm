@@ -119,7 +119,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 **Primary Task:** Replace the placeholder `keyword_search` tool with a real implementation using sparse-only Qdrant queries against the `text-sparse` named vector.
 
-**Why now:** Tests and code contain a placeholder marker, and agent routing benefits from a distinct exact-term tool without adding BM25 dependencies.
+**Why now:** Tests and code contain a work-marker placeholder, and agent routing benefits from a distinct exact-term tool without adding BM25 dependencies.
 
 **Definition of Done (DoD):**
 

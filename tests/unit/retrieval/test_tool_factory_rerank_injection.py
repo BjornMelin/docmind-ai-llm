@@ -11,7 +11,7 @@ import pytest
 
 pytest.importorskip("llama_index.core", reason="requires llama_index.core")
 
-pytestmark = pytest.mark.requires_llama
+pytestmark = [pytest.mark.unit, pytest.mark.requires_llama]
 
 
 class _FakeIndex:

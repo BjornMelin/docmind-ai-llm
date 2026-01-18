@@ -93,7 +93,15 @@ def test_app_entrypoint_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
 def chat_app_smoke(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> Generator[AppTest, None, None]:  # noqa: UP043
-    """AppTest harness for Chat page with a stub coordinator."""
+    """AppTest harness for Chat page with a stub coordinator.
+
+    Args:
+        tmp_path: Temporary directory for test data.
+        monkeypatch: Pytest monkeypatch fixture.
+
+    Returns:
+        Generator yielding a configured AppTest instance.
+    """
     from src.config.settings import settings as app_settings
 
     original_data_dir = app_settings.data_dir
@@ -182,7 +190,7 @@ def _build_page_app(
     app_settings.data_dir = tmp_path
     if analytics_enabled is not None:
         original_enabled = getattr(app_settings, "analytics_enabled", None)
-        app_settings.analytics_enabled = analytics_enabled
+        object.__setattr__(app_settings, "analytics_enabled", analytics_enabled)
 
     st.cache_resource.clear()
     st.cache_data.clear()

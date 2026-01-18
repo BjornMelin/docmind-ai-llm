@@ -148,7 +148,7 @@ def test_load_documents_skips_symlink_components(tmp_path: Path) -> None:
 
 
 def test_normalize_extensions_handles_dotless_inputs() -> None:
-    """Test that_normalize_extensions accepts dotless and mixed-case extensions."""
+    """Test that _normalize_extensions accepts dotless and mixed-case extensions."""
     out = ingestion_api._normalize_extensions({"TXT", ".Md", ""})
     assert ".txt" in out
     assert ".md" in out

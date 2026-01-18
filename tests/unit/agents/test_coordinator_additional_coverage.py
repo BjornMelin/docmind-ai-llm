@@ -265,7 +265,8 @@ def test_ensure_event_loop_creates_loop_when_missing() -> None:
 
     thread = threading.Thread(target=_worker)
     thread.start()
-    thread.join()
+    thread.join(timeout=1)
+    assert not thread.is_alive()
     assert not errors
 
 
