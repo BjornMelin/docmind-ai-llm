@@ -8,8 +8,6 @@ related_adrs: ["ADR-056"]
 related_specs: ["SPEC-040"]
 ---
 
-# Implementation Prompt — Agent Deadline Propagation + Router Injection
-
 Implements `ADR-056` + `SPEC-040`.
 
 **Read first (repo truth):**

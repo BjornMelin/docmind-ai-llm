@@ -8,8 +8,6 @@ related_adrs: ["ADR-042"]
 related_specs: ["SPEC-023"]
 ---
 
-## Implementation Prompt — Containerization Hardening (Dockerfile + Compose)
-
 Implements `ADR-042` + `SPEC-023`.
 
 **Read first (repo truth):**

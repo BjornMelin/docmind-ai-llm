@@ -8,8 +8,6 @@ related_adrs: ["ADR-055"]
 related_specs: ["SPEC-039"]
 ---
 
-# Implementation Prompt — Operational Metadata Store (SQLite WAL)
-
 Implements `ADR-055` + `SPEC-039`.
 
 **Read first (repo truth):**

@@ -8,8 +8,6 @@ related_adrs: ["ADR-044"]
 related_specs: ["SPEC-025"]
 ---
 
-## Implementation Prompt — Keyword Tool (Sparse-only Qdrant)
-
 Implements `ADR-044` + `SPEC-025`.
 
 **Read first (repo truth):**

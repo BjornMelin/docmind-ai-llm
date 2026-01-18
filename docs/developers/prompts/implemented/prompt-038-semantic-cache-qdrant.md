@@ -8,8 +8,6 @@ related_adrs: ["ADR-035"]
 related_specs: ["SPEC-038"]
 ---
 
-# Implementation Prompt — Semantic Response Cache (Qdrant-backed, Guardrailed)
-
 Implements `ADR-035` + `SPEC-038`.
 
 **Read first (repo truth):**

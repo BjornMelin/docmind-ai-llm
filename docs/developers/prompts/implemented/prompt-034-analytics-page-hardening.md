@@ -8,8 +8,6 @@ related_adrs: ["ADR-053"]
 related_specs: ["SPEC-034"]
 ---
 
-## Implementation Prompt — Analytics Page Hardening
-
 Implements `ADR-053` + `SPEC-034`.
 
 **Read first (repo truth):**

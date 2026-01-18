@@ -8,8 +8,6 @@ related_adrs: ["ADR-041"]
 related_specs: ["SPEC-022"]
 ---
 
-## Implementation Prompt — Settings UI Hardening + Safe Provider Badge
-
 Implements `ADR-041` + `SPEC-022`.
 
 **Read first (repo truth):**
