@@ -103,7 +103,8 @@ def _l2_normalize(arr: np.ndarray, axis: int = -1) -> np.ndarray:
     """
     norm = np.linalg.norm(arr, axis=axis, keepdims=True)
     # Avoid division by zero: only divide where norm > 0
-    safe = np.where(norm > 0, arr / norm, arr)
+    safe = np.zeros_like(arr)
+    np.divide(arr, norm, out=safe, where=norm > 0)
     return safe.astype(arr.dtype, copy=False)
 
 

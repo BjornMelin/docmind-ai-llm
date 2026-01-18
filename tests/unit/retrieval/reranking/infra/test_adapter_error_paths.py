@@ -14,10 +14,17 @@ def _nws(nid: str, s: float = 0.0):
 
 
 def test_siglip_fail_open_on_timeout(monkeypatch):
-    # Patch _now_ms to force timeout immediately
+    # Patch _now_ms to force timeout immediately and avoid heavy model loads
     import src.retrieval.reranking as rr
 
-    monkeypatch.setattr(rr, "_now_ms", lambda: 1000.0)
+    clock = {"t": 1000.0}
+
+    def _tick() -> float:
+        clock["t"] += 1.0
+        return clock["t"]
+
+    monkeypatch.setattr(rr, "_now_ms", _tick)
+    monkeypatch.setattr(rr, "_load_images_for_siglip", lambda *_a, **_k: [])
 
     # Make processing always think timeout elapsed
     nodes = [_nws("x"), _nws("y")]

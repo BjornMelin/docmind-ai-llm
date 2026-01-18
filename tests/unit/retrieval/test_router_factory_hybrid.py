@@ -39,6 +39,11 @@ def test_hybrid_params_respected(monkeypatch) -> None:  # type: ignore[no-untype
 
     monkeypatch.setattr("src.retrieval.hybrid.ServerHybridRetriever", _DummyHybrid)
 
+    def _pp(_mode, *, use_reranking: bool, **_kwargs):  # type: ignore[no-untyped-def]
+        return [] if use_reranking else None
+
+    monkeypatch.setattr(rf, "_safe_get_postprocessors", lambda: _pp)
+
     vec = _VecIndex()
     pg = _PgIndex()
     cfg = SimpleNamespace(
@@ -83,6 +88,11 @@ def test_hybrid_rerank_flag_propagation(monkeypatch, use_rerank: bool) -> None: 
             return SimpleNamespace(qe=True, kwargs=kwargs)
 
     monkeypatch.setattr("src.retrieval.hybrid.ServerHybridRetriever", _DummyHybrid)
+
+    def _pp(_mode, *, use_reranking: bool, **_kwargs):  # type: ignore[no-untyped-def]
+        return [] if use_reranking else None
+
+    monkeypatch.setattr(rf, "_safe_get_postprocessors", lambda: _pp)
     monkeypatch.setattr(
         rf,
         "build_retriever_query_engine",

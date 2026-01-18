@@ -121,6 +121,8 @@ class MockDocMindSettings(DocMindSettings):
     - Small document sizes (fast processing)
     """
 
+    __test__ = False
+
     model_config = SettingsConfigDict(
         env_file=None,  # Don't load .env in tests
         env_prefix="DOCMIND_TEST_",  # Use different prefix for isolation
