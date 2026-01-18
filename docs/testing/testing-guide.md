@@ -132,10 +132,20 @@ For Streamlit AppTest UI checks:
 - Prefer reusing existing AppTest fixtures instead of adding extra `AppTest` runs.
 - Run tests from a temporary working directory (`monkeypatch.chdir(tmp_path)`) to
   avoid local `.env` coupling and reduce file-watcher overhead.
-- Use `default_timeout=` on `AppTest.from_file(…)` for CI stability; avoid
-  strict wall-clock assertions in functional tests.
+- Use `default_timeout=` on `AppTest.from_file(…)` for CI stability. Prefer the
+  shared helper `tests/helpers/apptest_utils.py` (`apptest_timeout_sec()`), and
+  use `TEST_TIMEOUT=<seconds>` to reproduce CI slowness locally.
 - CI cold-starts can be slow; integration tests pre-warm AppTest once in
   `tests/integration/conftest.py` (avoid per-test timeout bumps where possible).
+- Keep UI tests import-light: the provider badge calls
+  `adapter_registry.get_default_adapter_health()` which can trigger optional
+  GraphRAG adapter discovery. UI tests stub this by default in
+  `tests/integration/ui/conftest.py` unless the adapter itself is under test.
+- Stub before constructing `AppTest`: AppTest resolves imports at run time, so
+  patch module-level seams (coordinator factories, service boundaries, analysis
+  entry points) before calling `AppTest.from_file(…)`.
+- Avoid polling/sleeps in UI tests; prefer patching a single boundary and
+  asserting on rendered elements/state in one `AppTest.run()` call.
 
 ## Patterns
 
