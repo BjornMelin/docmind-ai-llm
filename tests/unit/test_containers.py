@@ -42,7 +42,6 @@ def test_get_multi_agent_coordinator_constructs_instance(
         raising=True,
     )
     coord = containers.get_multi_agent_coordinator(enable_fallback=False)
-    from src.agents.coordinator import MultiAgentCoordinator
 
-    assert isinstance(coord, MultiAgentCoordinator)
+    assert isinstance(coord, containers.MultiAgentCoordinator)
     assert coord.enable_fallback is False
