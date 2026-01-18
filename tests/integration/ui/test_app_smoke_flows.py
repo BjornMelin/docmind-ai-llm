@@ -13,10 +13,10 @@ from streamlit.testing.v1 import AppTest
 @pytest.mark.integration
 def test_app_entrypoint_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure the root app entrypoint renders without loading heavy pages."""
-    captured: dict[str, object] = {}
+    captured: dict[str, list[object]] = {}
 
-    def _navigation(pages):
-        captured["pages"] = pages
+    def _navigation(pages: list[object]) -> object:
+        captured["pages"] = list(pages)
 
         class _Nav:
             def run(self) -> None:
@@ -31,25 +31,40 @@ def test_app_entrypoint_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     assert not app.exception
     assert app.markdown
 
-    pages = captured.get("pages") or []
+    pages = captured.get("pages", [])
     assert len(pages) == 4
     titles = [getattr(page, "title", None) for page in pages]
     assert [t for t in titles if t] == ["Chat", "Documents", "Analytics", "Settings"]
 
 
 @pytest.fixture
-def documents_app(tmp_path: Path) -> Generator[AppTest]:
+def documents_app(tmp_path: Path) -> Generator[AppTest, None, None]:  # noqa: UP043
     """AppTest harness for Documents page with temp data dir."""
+    yield from _build_page_app(tmp_path, page_name="02_documents.py")
+
+
+def _build_page_app(
+    tmp_path: Path,
+    *,
+    page_name: str,
+    analytics_enabled: bool | None = None,
+) -> Generator[AppTest, None, None]:  # noqa: UP043
+    """Create an AppTest instance with a temp data dir and optional flags."""
     from src.config.settings import settings as app_settings
 
     original_data_dir = app_settings.data_dir
+    original_enabled: bool | None = None
+
     app_settings.data_dir = tmp_path
+    if analytics_enabled is not None:
+        original_enabled = bool(getattr(app_settings, "analytics_enabled", False))
+        app_settings.analytics_enabled = analytics_enabled
 
     st.cache_resource.clear()
     st.cache_data.clear()
 
     root = Path(__file__).resolve().parents[3]
-    page_path = root / "src" / "pages" / "02_documents.py"
+    page_path = root / "src" / "pages" / page_name
     app = AppTest.from_file(str(page_path))
     app.default_timeout = 6
 
@@ -57,6 +72,8 @@ def documents_app(tmp_path: Path) -> Generator[AppTest]:
         yield app
     finally:
         app_settings.data_dir = original_data_dir
+        if analytics_enabled is not None and original_enabled is not None:
+            app_settings.analytics_enabled = original_enabled
         st.cache_resource.clear()
         st.cache_data.clear()
 
@@ -77,31 +94,13 @@ def test_documents_empty_ingest_warns(documents_app: AppTest) -> None:
 
 
 @pytest.fixture
-def analytics_app(tmp_path: Path) -> Generator[AppTest]:
+def analytics_app(tmp_path: Path) -> Generator[AppTest, None, None]:  # noqa: UP043
     """AppTest harness for Analytics page with analytics disabled."""
-    from src.config.settings import settings as app_settings
-
-    original_data_dir = app_settings.data_dir
-    original_enabled = bool(getattr(app_settings, "analytics_enabled", False))
-
-    app_settings.data_dir = tmp_path
-    app_settings.analytics_enabled = False
-
-    st.cache_resource.clear()
-    st.cache_data.clear()
-
-    root = Path(__file__).resolve().parents[3]
-    page_path = root / "src" / "pages" / "03_analytics.py"
-    app = AppTest.from_file(str(page_path))
-    app.default_timeout = 6
-
-    try:
-        yield app
-    finally:
-        app_settings.data_dir = original_data_dir
-        app_settings.analytics_enabled = original_enabled
-        st.cache_resource.clear()
-        st.cache_data.clear()
+    yield from _build_page_app(
+        tmp_path,
+        page_name="03_analytics.py",
+        analytics_enabled=False,
+    )
 
 
 @pytest.mark.integration

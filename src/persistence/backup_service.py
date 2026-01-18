@@ -317,22 +317,36 @@ def _create_qdrant_snapshots(
                 continue
 
             desc: qmodels.SnapshotDescription | None = None
+            snapshot_name: str | None = None
             try:
                 created = client.create_snapshot(collection_name=collection)
                 if not isinstance(created, qmodels.SnapshotDescription):
+                    snapshot_name = next(
+                        (
+                            str(value)
+                            for value in (
+                                getattr(created, "name", None),
+                                getattr(created, "snapshot_name", None),
+                                getattr(created, "snapshot_id", None),
+                                getattr(created, "id", None),
+                            )
+                            if value
+                        ),
+                        None,
+                    )
                     warnings.append(
                         f"qdrant: snapshot create returned no description: {collection}"
                     )
                     continue
                 desc = created
+                snapshot_name = str(desc.name)
 
-                filename = str(desc.name)
-                dest_file = dest_dir / "qdrant" / collection / filename
+                dest_file = dest_dir / "qdrant" / collection / snapshot_name
                 snapshot_bytes = _download_qdrant_snapshot(
                     qdrant_url=qdrant_url,
                     api_key=api_key,
                     collection=collection,
-                    snapshot_name=str(desc.name),
+                    snapshot_name=snapshot_name,
                     dest_file=dest_file,
                     timeout_s=timeout_s,
                 )
@@ -340,29 +354,38 @@ def _create_qdrant_snapshots(
                 snapshots.append(
                     QdrantSnapshotFile(
                         collection=collection,
-                        snapshot_name=str(desc.name),
+                        snapshot_name=snapshot_name,
                         filename=str(dest_file.relative_to(dest_dir)),
                         size_bytes=int(desc.size),
                         checksum=str(desc.checksum) if desc.checksum else None,
                     )
                 )
             except Exception as exc:
+                redaction = build_pii_log_entry(
+                    str(exc), key_id="backup.qdrant_snapshot"
+                )
                 warnings.append(
-                    f"qdrant: snapshot/download failed: {collection}: {exc}"
+                    "qdrant: snapshot/download failed: "
+                    f"{collection}: {exc.__class__.__name__}: "
+                    f"{redaction.redacted}"
                 )
             finally:
-                if desc and hasattr(desc, "name"):
+                if snapshot_name:
                     try:
                         client.delete_snapshot(
                             collection_name=collection,
-                            snapshot_name=str(desc.name),
+                            snapshot_name=snapshot_name,
                         )
                     except Exception as exc:  # pragma: no cover
+                        redaction = build_pii_log_entry(
+                            str(exc), key_id="backup.qdrant_delete"
+                        )
                         logger.warning(
                             "qdrant: failed to delete server-side snapshot: "
-                            "collection={}, error={}",
+                            "collection={}, error_type={}, error={}",
                             collection,
-                            exc,
+                            type(exc).__name__,
+                            redaction.redacted,
                         )
     return snapshots, bytes_written
 

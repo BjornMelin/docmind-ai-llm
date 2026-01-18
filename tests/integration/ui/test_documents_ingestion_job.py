@@ -22,7 +22,17 @@ def documents_ingest_app_test(
     fake_job_manager,
     fake_job_owner_id,
 ) -> Generator[AppTest]:
-    """Create an AppTest instance for the Documents ingestion job path."""
+    """Create an AppTest instance for the Documents ingestion job path.
+
+    Args:
+        tmp_path: Temporary directory for test data.
+        monkeypatch: Pytest monkeypatch fixture.
+        fake_job_manager: Synchronous fake job manager fixture.
+        fake_job_owner_id: Deterministic owner identifier fixture.
+
+    Returns:
+        Generator yielding an AppTest instance for the documents page.
+    """
     from src.config.settings import settings as app_settings
 
     # Save original values
@@ -138,6 +148,14 @@ def documents_ingest_app_test(
 def test_documents_ingestion_job_renders_success(
     documents_ingest_app_test: AppTest,
 ) -> None:
+    """Run the ingestion flow and assert success rendering.
+
+    Args:
+        documents_ingest_app_test: Prepared AppTest fixture.
+
+    Returns:
+        None.
+    """
     app = documents_ingest_app_test.run()
     assert not app.exception
 
