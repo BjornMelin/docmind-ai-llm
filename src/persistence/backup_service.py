@@ -163,6 +163,9 @@ def prune_backups(backup_root: Path, *, keep_last: int) -> list[Path]:
 
     Returns:
         A list of deleted backup directories (best-effort).
+
+    Raises:
+        ValueError: If keep_last is less than 1.
     """
     if keep_last < 1:
         raise ValueError("keep_last must be >= 1")
@@ -175,9 +178,24 @@ def prune_backups(backup_root: Path, *, keep_last: int) -> list[Path]:
     for path in to_delete:
         try:
             shutil.rmtree(path)
-        except OSError:
-            continue
-        deleted.append(path)
+            deleted.append(path)
+        except OSError as exc:
+            redaction = build_pii_log_entry(str(exc), key_id="backup.prune.oserror")
+            logger.warning(
+                "Failed to delete backup directory (path={}, error_type={}, error={})",
+                path,
+                type(exc).__name__,
+                redaction.redacted,
+            )
+            _safe_log_jsonl(
+                {
+                    "event": "backup_prune_failed",
+                    "path": str(path),
+                    "error_type": type(exc).__name__,
+                    "error_fingerprint": redaction.fingerprint[:12],
+                },
+                key_id="backup.prune.failed.telemetry",
+            )
     if deleted:
         _safe_log_jsonl(
             {
@@ -557,6 +575,10 @@ def create_backup(
 
     Returns:
         BackupResult with paths, bytes written, and warnings.
+
+    Raises:
+        ValueError: If backups are disabled, keep_last < 1, backup directory
+            already exists, or if a symlink blocks the backup root path.
     """
     cfg = cfg or settings
     if not cfg.backup_enabled:

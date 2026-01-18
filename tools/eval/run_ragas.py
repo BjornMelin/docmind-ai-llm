@@ -140,7 +140,16 @@ def _as_float(x: Any) -> float:
 
 
 def _aggregate_scores(items: list[dict[str, Any]]) -> dict[str, float]:
-    """Aggregate a list of metric dictionaries into a single average dictionary."""
+    """Aggregate a list of metric dictionaries into a single average dictionary.
+
+    Args:
+        items: A list of dict[str, Any] representing metric dictionaries, where
+            keys are metric names and values are scores.
+
+    Returns:
+        A dict[str, float] of averaged metrics. Keys are present only when
+        counts > 0. Non-numeric or None values are skipped during aggregation.
+    """
     totals: dict[str, float] = {}
     counts: dict[str, int] = {}
     for item in items:

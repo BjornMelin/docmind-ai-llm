@@ -3,36 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from streamlit.testing.v1 import AppTest
 
 import src.ui.background_jobs as bg
+from tests.fixtures.vector_index import _FakeVectorIndex
 
 pytestmark = pytest.mark.integration
-
-
-class _FakeQueryEngine:
-    def __init__(self, doc_id: str) -> None:
-        self._doc_id = doc_id
-
-    def query(self, _query: str) -> object:
-        node = SimpleNamespace(metadata={"doc_id": self._doc_id})
-        src = SimpleNamespace(node=node)
-        return SimpleNamespace(response=f"answer:{self._doc_id}", source_nodes=[src])
-
-
-class _FakeVectorIndex:
-    def as_query_engine(self, **kwargs: object) -> _FakeQueryEngine:
-        doc_id = "combined"
-        filters = kwargs.get("filters")
-        parts = getattr(filters, "filters", None)
-        if isinstance(parts, list) and parts:
-            value = getattr(parts[0], "value", None)
-            if value is not None:
-                doc_id = str(value)
-        return _FakeQueryEngine(doc_id)
 
 
 @pytest.fixture

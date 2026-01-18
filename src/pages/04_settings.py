@@ -1121,6 +1121,21 @@ def _render_endpoint_test(validated: DocMindSettings | None) -> None:
     base_url = getattr(validated, "backend_base_url_normalized", None)
     if not base_url:
         return
+    backend_type = getattr(validated, "backend_type", None)
+    openai_cfg = validated.openai
+    openai_compatible = bool(
+        getattr(validated, "openai_compatible", False)
+        or getattr(openai_cfg, "openai_compatible", False)
+    )
+    if not (
+        openai_compatible
+        or backend_type in ("openai_compatible", "vllm", "lmstudio", "llamacpp")
+    ):
+        st.info(
+            "Connectivity test is only available for OpenAI-compatible backends "
+            "(OpenAI-compatible, vLLM, LM Studio, llama.cpp)."
+        )
+        return
 
     st.subheader("Connectivity Test")
     st.caption("Sends a lightweight `GET /models` request to the configured endpoint.")

@@ -267,7 +267,17 @@ class SemanticCache:
         self._embed_query = embed_query
 
     def ensure_ready(self) -> None:
-        """Create the collection if it does not exist."""
+        """Ensure the underlying Qdrant collection is created and ready.
+
+        Creates the collection if it does not already exist.
+
+        Returns:
+            None.
+
+        Raises:
+            UnexpectedResponse: If Qdrant returns an unexpected status code.
+            RpcError: If a gRPC connection or protocol error occurs.
+        """
         if self._client.collection_exists(self._collection):
             return
         try:
@@ -284,7 +294,20 @@ class SemanticCache:
             raise
 
     def lookup(self, *, key: CacheKey, query: str) -> CacheHit | None:
-        """Attempt exact-match then semantic lookup; returns None on miss."""
+        """Find a cached response using exact-match then semantic lookup.
+
+        Args:
+            key: Semantic CacheKey containing strict invalidation fields.
+            query: The user query text for semantic similarity search.
+
+        Returns:
+            A CacheHit instance if a valid match is found, otherwise None.
+            None is returned if the cache is disabled, or on a cache miss.
+
+        Raises:
+            UnexpectedResponse: Propagated from Qdrant if a lookup fails.
+            RpcError: Propagated from Qdrant if a connection error occurs.
+        """
         if not self._cfg.enabled or self._cfg.provider != "qdrant":
             return None
 
@@ -316,7 +339,24 @@ class SemanticCache:
         return None
 
     def store(self, *, key: CacheKey, query: str, response_text: str) -> None:
-        """Store a response when enabled and within size limits."""
+        """Persist a response in the semantic cache.
+
+        This operation may be a no-op if the cache is disabled, the provider is
+        not "qdrant", or the response exceeds max_response_bytes limits.
+
+        Args:
+            key: Semantic CacheKey for invalidation and lookup filtering.
+            query: User query text used to generate the embedding vector.
+            response_text: The complete LLM response text to cache.
+
+        Returns:
+            None.
+
+        Raises:
+            ValueError: If the current embedding dimension mismatches vector_dim.
+            UnexpectedResponse: If Qdrant fails to persist the record.
+            RpcError: If a connection error occurs during persistence.
+        """
         if not self._cfg.enabled or self._cfg.provider != "qdrant":
             return
         if not isinstance(response_text, str) or not response_text.strip():

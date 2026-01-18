@@ -3,38 +3,15 @@
 from __future__ import annotations
 
 import threading
-from types import SimpleNamespace
 
 import pytest
 
 from src.analysis.models import DocumentRef
 from src.analysis.service import AnalysisCancelledError, auto_select_mode, run_analysis
 from tests.fixtures.test_settings import create_test_settings
+from tests.fixtures.vector_index import _FakeVectorIndex
 
 pytestmark = pytest.mark.unit
-
-
-class _FakeQueryEngine:
-    def __init__(self, *, doc_id: str) -> None:
-        self._doc_id = doc_id
-
-    def query(self, _query: str) -> object:
-        node = SimpleNamespace(metadata={"doc_id": self._doc_id})
-        src = SimpleNamespace(node=node)
-        return SimpleNamespace(response=f"answer:{self._doc_id}", source_nodes=[src])
-
-
-class _FakeVectorIndex:
-    def as_query_engine(self, **kwargs: object) -> _FakeQueryEngine:
-        # Extract a stable doc_id hint from filters when present.
-        doc_id = "combined"
-        filters = kwargs.get("filters")
-        parts = getattr(filters, "filters", None)
-        if isinstance(parts, list) and parts:
-            value = getattr(parts[0], "value", None)
-            if value is not None:
-                doc_id = str(value)
-        return _FakeQueryEngine(doc_id=doc_id)
 
 
 def test_auto_select_mode_prefers_separate_for_small_sets() -> None:

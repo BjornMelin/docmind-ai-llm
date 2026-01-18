@@ -93,8 +93,8 @@ def _reset_docmind_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.config.settings import reset_bootstrap_state
     from src.config.settings import settings as app_settings
 
-    app_settings.__init__(_env_file=None)  # type: ignore[arg-type]
     reset_bootstrap_state()
+    app_settings.__init__(_env_file=None)  # type: ignore[arg-type]
 
 
 @pytest.fixture(autouse=True)

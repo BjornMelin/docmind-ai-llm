@@ -77,7 +77,7 @@ The following requirements are derived directly from the architectural decisions
 - **NFR-4: Privacy -- Offline First**: The system must be capable of operating 100% offline, with no reliance on external APIs for any core functionality, including parsing and model inference. **(ADR-001)**
 - **NFR-5: Resilience -- Error Handling**: The system must handle transient failures (network hiccups, file errors) using exponential backoff retry strategies (3 attempts, 2s base delay) for infrastructure operations. **(ADR-022)**
 - **NFR-6: Memory Efficiency -- VRAM Optimization**: The system must employ FP8 quantization and FP8 KV cache to enable 128K context processing within ~12-14 GB VRAM on RTX 4090 Laptop hardware, providing optimized memory usage with a vLLM server configured for FlashInfer. **(ADR-004, ADR-010)**
-- **NFR-7: Memory Efficiency -- Multimodal VRAM**: The multimodal embedding model (SigLIP base, or CLIP ViT‑B/32) should be selected for low VRAM usage (≈1.4GB) to ensure efficiency. **(ADR-016)**
+- **NFR-7: Memory Efficiency -- Multimodal VRAM**: The multimodal embedding model (SigLIP base, or CLIP ViT‑B/32) should be selected for low VRAM usage (≈1.4 GB) to ensure efficiency. **(ADR-016)**
 - **NFR-8: Scalability -- Local Concurrency**: The persistence layer (SQLite) must be configured in WAL (Write-Ahead Logging) mode to support concurrent read/write operations from multiple local processes. **(ADR-008)**
 - **NFR-9: Hardware Adaptability**: The system must detect GPU availability (CUDA 12.8+) and select appropriate models: Qwen3-4B-FP8 for RTX 4090, CPU fallback for systems without GPUs. **(ADR-017)**
 

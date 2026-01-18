@@ -318,7 +318,23 @@ def _run_separate_mode(
             }
             for completed, fut in enumerate(as_completed(futs), start=1):
                 _check_cancel(cancel_event)
-                per_doc.append(fut.result())
+                try:
+                    per_doc.append(fut.result())
+                except AnalysisCancelledError:
+                    raise
+                except Exception as exc:
+                    doc = futs[fut]
+                    _safe_log_jsonl(
+                        {
+                            "event": "analysis_doc_failed",
+                            "mode": "separate",
+                            "doc_id": doc.doc_id,
+                            "doc_name": doc.doc_name,
+                            "error_type": type(exc).__name__,
+                        },
+                        key_id="analysis.doc_failed",
+                    )
+                    raise
                 _progress(
                     int(completed / max(1, len(documents)) * 100),
                     f"Analyzed {futs[fut].doc_name}",
@@ -424,6 +440,18 @@ def run_analysis(
                 "duration_ms": round(duration_ms, 2),
             },
             key_id="analysis.cancelled",
+        )
+        raise
+    except Exception as exc:
+        duration_ms = (time.perf_counter() - start) * 1000.0
+        _safe_log_jsonl(
+            {
+                "event": "analysis_failed",
+                "mode": resolved,
+                "duration_ms": round(duration_ms, 2),
+                "error_type": type(exc).__name__,
+            },
+            key_id="analysis.failed",
         )
         raise
 

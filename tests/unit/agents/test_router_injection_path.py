@@ -41,11 +41,15 @@ class _Router:
 
 def test_retrieve_documents_uses_router_engine_when_enabled(
     monkeypatch: pytest.MonkeyPatch,
+    default_timeout: int,
 ) -> None:
     """Verify router injection is used when enabled.
 
+    The default_timeout fixture is provided by pytest for CI timeout consistency.
+
     Args:
         monkeypatch: Pytest monkeypatch fixture.
+        default_timeout: Fixture for CI timeout consistency.
 
     Returns:
         None.
