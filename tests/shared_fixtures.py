@@ -14,6 +14,7 @@ Key Components:
 import asyncio
 import os
 import time
+import warnings
 from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
@@ -37,7 +38,15 @@ from src.models.processing import IngestionConfig
 from src.processing.ingestion_pipeline import build_ingestion_pipeline
 from src.telemetry import opentelemetry as otel
 
-default_timeout = float(os.environ.get("TEST_TIMEOUT", "2.0"))
+_raw_timeout = os.environ.get("TEST_TIMEOUT", "2.0")
+try:
+    default_timeout = float(_raw_timeout)
+except (TypeError, ValueError):
+    warnings.warn(
+        f"Invalid TEST_TIMEOUT value {_raw_timeout!r}; defaulting to 2.0 seconds.",
+        RuntimeWarning,
+    )
+    default_timeout = 2.0
 
 
 @pytest.fixture(name="default_timeout")

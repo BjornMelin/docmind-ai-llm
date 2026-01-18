@@ -10,6 +10,7 @@ import os
 from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
+from typing import NoReturn
 
 import pytest
 from streamlit.testing.v1 import AppTest
@@ -331,10 +332,12 @@ def test_settings_connectivity_test_timeout_shows_error(
         def __enter__(self):
             return self
 
-        def __exit__(self, exc_type, exc, tb) -> bool:
+        def __exit__(self, exc_type, exc, tb) -> bool | None:
             return False
 
-        def get(self, url: str, headers: dict[str, str] | None = None) -> None:
+        def get(
+            self, url: str, headers: dict[str, str] | None = None
+        ) -> NoReturn:
             raise httpx.TimeoutException("timeout")
 
     monkeypatch.setattr(httpx, "Client", _TimeoutClient)

@@ -316,14 +316,14 @@ def _run_separate_mode(
                 ): doc
                 for doc in documents
             }
-            for completed_count, future in enumerate(as_completed(futs), start=1):
+            for idx, fut in enumerate(as_completed(futs), start=1):
                 _check_cancel(cancel_event)
                 try:
-                    per_doc.append(future.result())
+                    per_doc.append(fut.result())
                 except AnalysisCancelledError:
                     raise
                 except Exception as exc:
-                    doc = futs[future]
+                    doc = futs[fut]
                     _safe_log_jsonl(
                         {
                             "event": "analysis_doc_failed",
@@ -336,8 +336,8 @@ def _run_separate_mode(
                     )
                     raise
                 _progress(
-                    int(completed_count / max(1, len(documents)) * 100),
-                    f"Analyzed {futs[future].doc_name}",
+                    int(idx / max(1, len(documents)) * 100),
+                    f"Analyzed {futs[fut].doc_name}",
                     report_progress=report_progress,
                 )
 
