@@ -340,6 +340,19 @@ def _create_qdrant_snapshots(
                     continue
                 desc = created
                 snapshot_name = str(desc.name)
+                snapshot_path = Path(snapshot_name)
+                if (
+                    not snapshot_name
+                    or snapshot_name in {".", ".."}
+                    or snapshot_path.is_absolute()
+                    or snapshot_path.name != snapshot_name
+                    or "/" in snapshot_name
+                    or "\\" in snapshot_name
+                ):
+                    warnings.append(
+                        f"qdrant: invalid snapshot name: {collection}: {snapshot_name}"
+                    )
+                    continue
 
                 dest_file = dest_dir / "qdrant" / collection / snapshot_name
                 snapshot_bytes = _download_qdrant_snapshot(
@@ -456,6 +469,11 @@ def _include_file(
 
     Returns:
         Size of the included file in bytes.
+
+    Raises:
+        ValueError: If the source is a symlink.
+        OSError: If the source cannot be read or the destination cannot be
+            written.
     """
     if not source.exists():
         if warn_missing:
@@ -486,6 +504,10 @@ def _include_tree(
 
     Returns:
         Size of the included directory in bytes.
+
+    Raises:
+        ValueError: If the source is a symlink.
+        OSError: If the source tree cannot be read or written.
     """
     if not source.exists():
         if warn_missing:

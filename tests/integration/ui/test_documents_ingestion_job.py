@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 from collections.abc import Generator
 from pathlib import Path
@@ -39,9 +38,6 @@ def documents_ingest_app_test(
     orig_data_dir = app_settings.data_dir
     orig_chat_sqlite = app_settings.chat.sqlite_path
     orig_db_sqlite = app_settings.database.sqlite_db_path
-    orig_env_data_dir = os.environ.get("DOCMIND_DATA_DIR")
-    orig_env_cache_dir = os.environ.get("DOCMIND_CACHE_DIR")
-
     monkeypatch.setenv("DOCMIND_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("DOCMIND_CACHE_DIR", str(tmp_path / "cache"))
     app_settings.data_dir = tmp_path
@@ -134,14 +130,7 @@ def documents_ingest_app_test(
         app_settings.data_dir = orig_data_dir
         app_settings.chat.sqlite_path = orig_chat_sqlite
         app_settings.database.sqlite_db_path = orig_db_sqlite
-        if orig_env_data_dir is None:
-            os.environ.pop("DOCMIND_DATA_DIR", None)
-        else:
-            os.environ["DOCMIND_DATA_DIR"] = orig_env_data_dir
-        if orig_env_cache_dir is None:
-            os.environ.pop("DOCMIND_CACHE_DIR", None)
-        else:
-            os.environ["DOCMIND_CACHE_DIR"] = orig_env_cache_dir
+        # Note: monkeypatch.setenv auto-restores env vars on teardown.
 
 
 @pytest.mark.integration
