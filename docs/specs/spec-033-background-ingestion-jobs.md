@@ -1,7 +1,7 @@
 ---
 spec: SPEC-033
 title: Background Ingestion & Snapshot Jobs (Progress + Cancellation)
-version: 1.0.0
+version: 1.0.1
 date: 2026-01-09
 owners: ["ai-arch"]
 status: Implemented
@@ -123,6 +123,8 @@ Emit local JSONL events (best effort):
 - Cancel a job and assert UI state reflects cancellation.
 - Mock ingestion pipeline and heavy IO using `unittest.mock.patch` so AppTest runs in seconds, not minutes.
 - Use Streamlit AppTest for UI rendering; if needed, add a minimal UI smoke test via Playwright or a simple DOM snapshot.
+- Use `tests/helpers/apptest_utils.py` (`apptest_timeout_sec()`) for AppTest
+  timeouts, and `TEST_TIMEOUT=<seconds>` to reproduce CI slowness locally.
 
 ## Rollout / Migration
 

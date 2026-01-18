@@ -1,7 +1,7 @@
 ---
 spec: SPEC-036
 title: Document Analysis Modes (Separate / Combined / Auto)
-version: 1.0.0
+version: 1.0.1
 date: 2026-01-10
 owners: ["ai-arch"]
 status: Final
@@ -100,12 +100,17 @@ Never log raw prompts or document text.
 
 ### Integration (Streamlit AppTest)
 
+- Keep AppTest integration as UI wiring-only: stub the analysis entry point
+  (e.g. `src.analysis.service.run_analysis`) to return a deterministic
+  `AnalysisResult` when validating rendering/selection logic.
 - Chat page renders:
   - Combined mode produces a single output container.
   - Separate mode produces one tab per document and shows per-doc results.
 - Cancellation triggers:
   - sets job state to cancelled
   - no partial results are published as “complete”
+- Use `tests/helpers/apptest_utils.py` (`apptest_timeout_sec()`) for
+  `default_timeout=`; override with `TEST_TIMEOUT=<seconds>` for slow runners.
 
 ### System (optional)
 

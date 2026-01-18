@@ -1,7 +1,7 @@
 ---
 spec: SPEC-032
 title: Documents Snapshot Service Boundary (Snapshot Rebuild/Export Service)
-version: 1.0.0
+version: 1.0.1
 date: 2026-01-09
 owners: ["ai-arch"]
 status: Implemented
@@ -106,6 +106,11 @@ The service and page must avoid heavy imports at module import time:
 ### Integration (AppTest)
 
 - Update `tests/integration/ui/test_documents_snapshot_button.py` to stub the service rather than patching per-function exports inside the page.
+- Prefer stubbing `src.persistence.snapshot_service.rebuild_snapshot` and avoid
+  polling/sleeps in UI tests; run a single `AppTest.run()` and assert on UI
+  state/output.
+- Use `tests/helpers/apptest_utils.py` (`apptest_timeout_sec()`) for
+  `default_timeout=`; override with `TEST_TIMEOUT=<seconds>` for slow runners.
 
 ## Rollout / Migration
 

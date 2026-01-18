@@ -1,7 +1,7 @@
 ---
 spec: SPEC-041
 title: Chat Persistence + Hybrid Agentic Memory (LangGraph SQLite Checkpointer + Store)
-version: 1.0.0
+version: 1.0.1
 date: 2026-01-09
 owners: ["ai-arch"]
 status: Implemented
@@ -290,6 +290,9 @@ Threats and controls:
 - Create session → chat → restart AppTest → history persists
 - Time travel: fork from checkpoint → resume → UI shows new branch head
 - Long-term memory: store preference → recall it later
+- Use `tests/helpers/apptest_utils.py` (`apptest_timeout_sec()`) for AppTest
+  timeouts; keep tests offline by stubbing non-persistence seams (coordinator
+  factory, provider badge health checks) unless explicitly under test.
 
 ### Security tests
 
