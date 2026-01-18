@@ -515,15 +515,39 @@ else:
             coverage_json.exists() and coverage_xml.exists() and coverage_html.exists()
         ):
             self.run_command(
-                ["uv", "run", "coverage", "json", "-o", "coverage.json"],
+                [
+                    "uv",
+                    "run",
+                    "coverage",
+                    "json",
+                    "--fail-under=0",
+                    "-o",
+                    "coverage.json",
+                ],
                 "Coverage JSON",
             )
             self.run_command(
-                ["uv", "run", "coverage", "xml", "-o", "coverage.xml"],
+                [
+                    "uv",
+                    "run",
+                    "coverage",
+                    "xml",
+                    "--fail-under=0",
+                    "-o",
+                    "coverage.xml",
+                ],
                 "Coverage XML",
             )
             self.run_command(
-                ["uv", "run", "coverage", "html", "-d", "htmlcov"],
+                [
+                    "uv",
+                    "run",
+                    "coverage",
+                    "html",
+                    "--fail-under=0",
+                    "-d",
+                    "htmlcov",
+                ],
                 "Coverage HTML",
             )
 

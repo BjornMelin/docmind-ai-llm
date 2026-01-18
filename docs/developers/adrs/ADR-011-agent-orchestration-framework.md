@@ -3,7 +3,8 @@ ADR: 011
 Title: Agent Orchestration with LangGraph StateGraph
 Status: Accepted (Amended)
 Version: 7.0
-Date: 2026-01-17
+Version: 7.1
+Date: 2026-01-18
 Supersedes:
 Superseded-by:
 Related: 001, 003, 004, 010, 015, 016, 024
@@ -182,6 +183,11 @@ def test_supervisor_boots_with_agents(supervisor_app):
 ## Limitations / Future Improvements
 
 - Deadline propagation: The supervisor’s wall-clock timeout (decision timeout) is enforced at the coordinator boundary. Deadlines are not yet propagated to nested LLM/tool calls, so a long-running subcall may continue even after the overall timeout has elapsed. In practice, the coordinator returns a timeout fallback quickly and stops streaming to the UI, but subcalls may continue in the background. A future enhancement should propagate an absolute deadline or remaining time budget through agent graph calls and tools to enable cooperative cancellation.
+- Tool invocation model: The current supervisor graph calls subagents synchronously
+  via `agent.invoke(...)`. Tools SHOULD remain sync-callable (`BaseTool.invoke(...)`)
+  unless the orchestration is migrated end-to-end to async. Parallel tool execution,
+  when enabled, SHOULD be handled by the tool execution layer with bounded
+  concurrency (ADR-010), not by embedding `asyncio.gather(...)` inside tool bodies.
 
 ## Consequences
 

@@ -16,6 +16,14 @@ from src.agents.tools.retrieval import retrieve_documents
 pytestmark = pytest.mark.unit
 
 
+def test_retrieve_documents_supports_sync_invoke() -> None:
+    """`retrieve_documents.invoke()` should work for sync graph execution."""
+    result_json = retrieve_documents.invoke({"query": "test query", "state": {}})
+    result = json.loads(result_json)
+    assert result["documents"] == []
+    assert "error" in result
+
+
 @pytest.mark.asyncio
 class TestRetrieveDocuments:
     """Retrieval engine behavior across strategies and fallbacks."""

@@ -67,10 +67,19 @@ class BackupResult:
 
 
 def _utc_timestamp_compact() -> str:
+    """Return a compact UTC timestamp for backup directories."""
     return datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
 
 def _safe_mkdir(path: Path) -> None:
+    """Create a directory, blocking symlinks.
+
+    Args:
+        path: Directory to create.
+
+    Raises:
+        ValueError: If the path or any parent is a symlink.
+    """
     # Block symlink targets and symlink parents (existing dirs) to avoid writes
     # escaping the intended destination.
     for parent in (path, *path.parents):
@@ -80,6 +89,15 @@ def _safe_mkdir(path: Path) -> None:
 
 
 def _copy_file(src: Path, dst: Path) -> int:
+    """Copy a file, blocking symlinks.
+
+    Args:
+        src: Source file to copy.
+        dst: Destination file to create.
+
+    Raises:
+        ValueError: If the source is a symlink.
+    """
     if src.is_symlink():
         raise ValueError(f"Symlink source blocked: {src}")
     _safe_mkdir(dst.parent)
@@ -90,8 +108,15 @@ def _copy_file(src: Path, dst: Path) -> int:
 def _copy_tree(src_dir: Path, dst_dir: Path) -> int:
     """Copy a directory tree without following symlinks.
 
+    Args:
+        src_dir: Source directory to copy.
+        dst_dir: Destination directory to create.
+
     Returns:
         Total bytes written (best-effort based on destination sizes).
+
+    Raises:
+        ValueError: If the source is a symlink.
     """
     if src_dir.is_symlink():
         raise ValueError(f"Symlink source blocked: {src_dir}")
@@ -110,6 +135,14 @@ def _copy_tree(src_dir: Path, dst_dir: Path) -> int:
 
 
 def _list_backup_dirs(backup_root: Path) -> list[Path]:
+    """List backup directories in the root directory.
+
+    Args:
+        backup_root: Root directory containing backups.
+
+    Returns:
+        List of backup directories.
+    """
     if not backup_root.exists():
         return []
     out: list[Path] = []
@@ -166,6 +199,19 @@ def _download_qdrant_snapshot(
     dest_file: Path,
     timeout_s: int,
 ) -> int:
+    """Download a Qdrant snapshot.
+
+    Args:
+        qdrant_url: URL of the Qdrant server.
+        api_key: API key for authentication.
+        collection: Name of the collection to snapshot.
+        snapshot_name: Name of the snapshot to download.
+        dest_file: Destination file to create.
+        timeout_s: Timeout in seconds.
+
+    Returns:
+        Size of the downloaded snapshot in bytes.
+    """
     base = qdrant_url.rstrip("/")
     url = (
         f"{base}/collections/{urllib.parse.quote(collection)}/snapshots/"
@@ -181,6 +227,7 @@ def _download_qdrant_snapshot(
 
 
 def _qdrant_target_collections(cfg: DocMindSettings) -> list[str]:
+    """Return the list of Qdrant collections to snapshot."""
     targets = [
         str(cfg.database.qdrant_collection),
         str(cfg.database.qdrant_image_collection),
@@ -197,7 +244,16 @@ def _create_qdrant_snapshots(
     dest_dir: Path,
     warnings: list[str],
 ) -> tuple[list[QdrantSnapshotFile], int]:
-    """Create and download Qdrant collection snapshots (best-effort)."""
+    """Create and download Qdrant collection snapshots (best-effort).
+
+    Args:
+        cfg: DocMind settings.
+        dest_dir: Destination directory for snapshots.
+        warnings: List of warnings to append to.
+
+    Returns:
+        Tuple of list of QdrantSnapshotFile objects and total bytes written.
+    """
     from src.utils.storage import create_sync_client
 
     qdrant_url = str(cfg.database.qdrant_url).strip()
@@ -248,6 +304,7 @@ def _create_qdrant_snapshots(
 
 
 def _write_manifest(path: Path, payload: dict[str, Any]) -> None:
+    """Write a manifest file to the specified path."""
     _safe_mkdir(path.parent)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
@@ -279,6 +336,19 @@ def _include_file(
     warnings: list[str],
     warn_missing: bool = False,
 ) -> int:
+    """Include a file in the backup.
+
+    Args:
+        source: Source file to include.
+        dest: Destination directory for the file.
+        label: Label for the file.
+        included: List of included files.
+        warnings: List of warnings to append to.
+        warn_missing: Whether to warn if the file is missing.
+
+    Returns:
+        Size of the included file in bytes.
+    """
     if not source.exists():
         if warn_missing:
             warnings.append(f"{label}: missing: {source}")
@@ -296,6 +366,19 @@ def _include_tree(
     warnings: list[str],
     warn_missing: bool = False,
 ) -> int:
+    """Include a directory tree in the backup.
+
+    Args:
+        source: Source directory to include.
+        dest: Destination directory for the tree.
+        label: Label for the tree.
+        included: List of included files.
+        warnings: List of warnings to append to.
+        warn_missing: Whether to warn if the directory is missing.
+
+    Returns:
+        Size of the included directory in bytes.
+    """
     if not source.exists():
         if warn_missing:
             warnings.append(f"{label}: missing: {source}")

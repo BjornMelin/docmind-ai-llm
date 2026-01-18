@@ -200,22 +200,21 @@ def retrieve_documents(
 
         # Optional aggregator fast-path for resilience testing scenarios
         st = state if isinstance(state, dict) else {}
-        tool_count = sum(1 for x in (vector_index, kg_index, retriever) if x)
-        if st and (
-            any(
-                st.get(k)
-                for k in (
-                    "error_isolation_enabled",
-                    "continue_on_tool_failure",
-                    "resilience_mode_enabled",
-                    "partial_results_acceptable",
-                    "auto_cleanup_on_memory_pressure",
-                )
+        if st and any(
+            st.get(k)
+            for k in (
+                "error_isolation_enabled",
+                "continue_on_tool_failure",
+                "resilience_mode_enabled",
+                "partial_results_acceptable",
+                "auto_cleanup_on_memory_pressure",
             )
-            or tool_count >= 2
         ):
             collected = _collect_via_tool_factory(
-                query, vector_index, kg_index, retriever
+                query,
+                vector_index,
+                kg_index,
+                retriever,
             )
             if collected:
                 return json.dumps(
@@ -759,7 +758,7 @@ def _parse_tool_result(result: Any) -> list[dict[str, Any]]:
 def _collect_via_tool_factory(
     query: str, vector_index: Any, kg_index: Any, retriever: Any
 ) -> list[dict[str, Any]]:
-    """Executes multiple retrieval tools in parallel via the tool factory.
+    """Executes multiple retrieval tools sequentially via the tool factory.
 
     Args:
         query: Search query string.
@@ -783,14 +782,20 @@ def _collect_via_tool_factory(
         )
         return []
 
+    if not tool_list:
+        return []
+
     collected: list[dict[str, Any]] = []
-    for tool_obj in tool_list or []:
+    for tool_obj in tool_list:
         try:
-            res = (
-                tool_obj.invoke(query)
-                if hasattr(tool_obj, "invoke")
-                else tool_obj.call(query)
-            )
+            if hasattr(tool_obj, "invoke"):
+                res = tool_obj.invoke(query)
+            elif hasattr(tool_obj, "call"):
+                res = tool_obj.call(query)
+            else:
+                raise TypeError(
+                    f"Unsupported tool interface: {type(tool_obj).__name__}"
+                )
             collected.extend(_parse_tool_result(res))
         except Exception as exc:
             redaction = build_pii_log_entry(str(exc), key_id="retrieval.tool_execute")
@@ -800,6 +805,7 @@ def _collect_via_tool_factory(
                 redaction.redacted,
             )
             continue
+
     return collected
 
 

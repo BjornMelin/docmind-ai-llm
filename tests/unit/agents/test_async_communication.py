@@ -190,6 +190,9 @@ class TestAsyncAgentCommunication:
             "messages": [HumanMessage(content="Error test query")],
             "context": ChatMemoryBuffer.from_defaults(),
             "tools_data": {"vector": Mock(), "kg": Mock(), "retriever": Mock()},
+            # Trigger the retrieval tool-factory aggregation path (used for
+            # resilience/error-isolation scenarios).
+            "continue_on_tool_failure": True,
             "error_recovery_enabled": True,
             "fallback_strategy": "basic_rag",
         }

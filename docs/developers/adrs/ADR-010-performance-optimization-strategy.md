@@ -2,8 +2,8 @@
 ADR: 010
 Title: Performance Optimization Strategy
 Status: Implemented
-Version: 9.0
-Date: 2025-08-26
+Version: 9.1
+Date: 2026-01-18
 Supersedes:
 Superseded-by:
 Related: 004, 011, 024, 030
@@ -101,6 +101,15 @@ SUPERVISOR_TUNING = {
     "parallel_tool_calls": True,
 }
 ```
+
+Notes:
+
+- Prefer expressing parallelism at the orchestration layer (LangGraph tool execution)
+  using bounded concurrency (e.g., `RunnableConfig.max_concurrency` / supervisor
+  settings). Avoid hiding `asyncio.gather(...)` inside tool implementations.
+- Keep tools sync-callable (`BaseTool.invoke(...)`) unless the full orchestration is
+  migrated end-to-end to async. This preserves compatibility with the current
+  `agent.invoke(...)` execution model (ADR-011).
 
 ### Configuration
 
