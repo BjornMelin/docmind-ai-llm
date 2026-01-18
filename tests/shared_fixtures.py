@@ -12,6 +12,7 @@ Key Components:
 """
 
 import asyncio
+import os
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -35,6 +36,14 @@ from src.config.settings import settings as app_settings
 from src.models.processing import IngestionConfig
 from src.processing.ingestion_pipeline import build_ingestion_pipeline
 from src.telemetry import opentelemetry as otel
+
+default_timeout = float(os.environ.get("TEST_TIMEOUT", "2.0"))
+
+
+@pytest.fixture(name="default_timeout")
+def _default_timeout_fixture() -> float:
+    """Shared default timeout for CI consistency."""
+    return default_timeout
 
 
 @pytest.fixture

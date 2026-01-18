@@ -8,13 +8,20 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from src.ui.background_jobs import JobCanceledError, JobManager, ProgressEvent
+from tests.shared_fixtures import default_timeout
 
 pytestmark = pytest.mark.unit
 
 
-def _wait_for_terminal(manager: JobManager, job_id: str, *, owner_id: str) -> str:
+def _wait_for_terminal(
+    manager: JobManager,
+    job_id: str,
+    *,
+    owner_id: str,
+    timeout: float = default_timeout,
+) -> str:
     """Wait for a job to reach a terminal state."""
-    deadline = time.monotonic() + 2.0
+    deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         state = manager.get(job_id, owner_id=owner_id)
         if state is None:
@@ -25,7 +32,9 @@ def _wait_for_terminal(manager: JobManager, job_id: str, *, owner_id: str) -> st
     raise AssertionError("job did not reach terminal state in time")
 
 
-def test_job_manager_runs_job_and_keeps_progress_bounded() -> None:
+def test_job_manager_runs_job_and_keeps_progress_bounded(
+    default_timeout: float,
+) -> None:
     """Verify job execution, bounded progress queue, and result handling."""
     manager = JobManager(max_workers=1, max_progress_queue_size=3, job_ttl_sec=0)
 
@@ -43,7 +52,12 @@ def test_job_manager_runs_job_and_keeps_progress_bounded() -> None:
 
     owner_id = "owner"
     job_id = manager.start_job(owner_id=owner_id, fn=_work)
-    status = _wait_for_terminal(manager, job_id, owner_id=owner_id)
+    status = _wait_for_terminal(
+        manager,
+        job_id,
+        owner_id=owner_id,
+        timeout=default_timeout,
+    )
     assert status == "succeeded"
 
     state = manager.get(job_id, owner_id=owner_id)
@@ -56,7 +70,7 @@ def test_job_manager_runs_job_and_keeps_progress_bounded() -> None:
     assert events[-1].percent == 100
 
 
-def test_job_manager_cancel_sets_status() -> None:
+def test_job_manager_cancel_sets_status(default_timeout: float) -> None:
     """Verify cancellation updates job status and respects cancel events."""
     manager = JobManager(max_workers=1, max_progress_queue_size=5, job_ttl_sec=0)
 
@@ -77,7 +91,12 @@ def test_job_manager_cancel_sets_status() -> None:
     owner_id = "owner"
     job_id = manager.start_job(owner_id=owner_id, fn=_work)
     assert manager.cancel(job_id, owner_id=owner_id) is True
-    status = _wait_for_terminal(manager, job_id, owner_id=owner_id)
+    status = _wait_for_terminal(
+        manager,
+        job_id,
+        owner_id=owner_id,
+        timeout=default_timeout,
+    )
     assert status == "canceled"
 
 
