@@ -1,3 +1,5 @@
+"""Unit tests for backup rotation and prune_backups behavior."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -44,6 +46,9 @@ def test_prune_backups_rejects_invalid_keep_last(tmp_path: Path) -> None:
 
     Args:
         tmp_path: Temporary directory for test artifacts.
+
+    Raises:
+        ValueError: if keep_last is less than 1.
 
     Returns:
         None.

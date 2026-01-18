@@ -151,7 +151,7 @@ class DefaultToolRegistry:
                 )
                 logger.debug(
                     "is_graphrag_enabled() raised; GraphRAG disabled (fail-closed) "
-                    "(error_type=%s error=%s)",
+                    "(error_type={} error={})",
                     type(exc).__name__,
                     redaction.redacted,
                 )

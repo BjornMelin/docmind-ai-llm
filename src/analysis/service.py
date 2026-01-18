@@ -170,6 +170,7 @@ def _query_vector_index(
     query: str,
     cfg: DocMindSettings,
     filters: Any | None,
+    allow_unfiltered_fallback: bool = False,
 ) -> tuple[str, list[Mapping[str, object]]]:
     """Query a vector index and return (answer, citations)."""
     engine: Any
@@ -179,7 +180,17 @@ def _query_vector_index(
             filters=filters,
             response_mode="compact",
         )
-    except TypeError:
+    except TypeError as exc:
+        if filters is not None and not allow_unfiltered_fallback:
+            raise ValueError(
+                "Vector index does not support metadata filters. "
+                "Enable allow_unfiltered_fallback to proceed without filters."
+            ) from exc
+        if filters is not None:
+            logger.warning(
+                "Vector index does not support metadata filters; "
+                "falling back to an unfiltered query."
+            )
         engine = vector_index.as_query_engine()
 
     response = engine.query(str(query))
@@ -218,6 +229,7 @@ def _run_combined_mode(
         query=query,
         cfg=cfg,
         filters=filters,
+        allow_unfiltered_fallback=True,
     )
     _progress(100, "Done", report_progress=report_progress)
     return AnalysisResult(

@@ -368,7 +368,7 @@ class _SuppressTelemetry:
                 str(exc), key_id="agents.tools.memory.telemetry"
             )
             log_func(
-                "memory tool telemetry error (error_type={} error={})",
+                "memory tool telemetry error (error_type={}, error={})",
                 exc_type.__name__,
                 redaction.redacted,
             )

@@ -506,7 +506,7 @@ _OPENAI_COMPAT_PRESETS: dict[str, dict[str, object]] = {
         "base_url": "https://api.x.ai/v1",
         "require_v1": True,
         "headers": {},
-        "api_mode": "chat_completions",
+        "api_mode": "responses",
     },
     "Vercel AI Gateway": {
         "base_url": "https://ai-gateway.vercel.sh/v1",

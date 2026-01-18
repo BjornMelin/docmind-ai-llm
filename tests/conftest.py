@@ -13,6 +13,7 @@ import pytest
 
 pytest_plugins = [
     "tests.shared_fixtures",
+    "tests.fixtures.background_jobs",
 ]
 
 _REQUIRE_REAL_LLAMA = os.getenv("REQUIRE_REAL_LLAMA", "").lower() in {

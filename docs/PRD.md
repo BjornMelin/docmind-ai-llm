@@ -71,14 +71,14 @@ The following requirements are derived directly from the architectural decisions
 
 ### Non-Functional Requirements (How the System Performs)
 
-- **NFR-1: Performance - High Throughput**: The system must be optimized to achieve 100-160 tokens/second decode and 800-1300 tokens/second prefill (with FP8 optimization) for LLM inference on RTX 4090 Laptop hardware with 128K context capability. **(ADR-004, ADR-010)**
-- **NFR-2: Performance - Reranking Latency**: Reranking uses bounded timeouts (text ≈ 250ms, visual ≈ 150ms) with fail‑open behavior. Practical latency varies by hardware. Target end‑to‑end retrieval + rerank P95 < 2s on reference hardware. **(ADR-014)**
-- **NFR-3: Performance - Asynchronous Processing**: The system should leverage asynchronous and parallel processing patterns where appropriate to ensure a responsive UI and throughput, without coupling to specific pipeline abstractions. **(ADR-012)**
-- **NFR-4: Privacy - Offline First**: The system must be capable of operating 100% offline, with no reliance on external APIs for any core functionality, including parsing and model inference. **(ADR-001)**
-- **NFR-5: Resilience - Error Handling**: The system must handle transient failures (network hiccups, file errors) using exponential backoff retry strategies (3 attempts, 2s base delay) for infrastructure operations. **(ADR-022)**
-- **NFR-6: Memory Efficiency - VRAM Optimization**: The system must employ FP8 quantization and FP8 KV cache to enable 128K context processing within ~12-14 GB VRAM on RTX 4090 Laptop hardware, providing optimized memory usage with a vLLM server configured for FlashInfer. **(ADR-004, ADR-010)**
-- **NFR-7: Memory Efficiency - Multimodal VRAM**: The multimodal embedding model (SigLIP base, or CLIP ViT‑B/32) should be selected for low VRAM usage (≈1.4GB) to ensure efficiency. **(ADR-016)**
-- **NFR-8: Scalability - Local Concurrency**: The persistence layer (SQLite) must be configured in WAL (Write-Ahead Logging) mode to support concurrent read/write operations from multiple local processes. **(ADR-008)**
+- **NFR-1: Performance -- High Throughput**: The system must be optimized to achieve 100-160 tokens/second decode and 800-1300 tokens/second prefill (with FP8 optimization) for LLM inference on RTX 4090 Laptop hardware with 128K context capability. **(ADR-004, ADR-010)**
+- **NFR-2: Performance -- Reranking Latency**: Reranking uses bounded timeouts (text ≈ 250ms, visual ≈ 150ms) with fail‑open behavior. Practical latency varies by hardware. Target end‑to‑end retrieval + rerank P95 < 2s on reference hardware. **(ADR-014)**
+- **NFR-3: Performance -- Asynchronous Processing**: The system should leverage asynchronous and parallel processing patterns where appropriate to ensure a responsive UI and throughput, without coupling to specific pipeline abstractions. **(ADR-012)**
+- **NFR-4: Privacy -- Offline First**: The system must be capable of operating 100% offline, with no reliance on external APIs for any core functionality, including parsing and model inference. **(ADR-001)**
+- **NFR-5: Resilience -- Error Handling**: The system must handle transient failures (network hiccups, file errors) using exponential backoff retry strategies (3 attempts, 2s base delay) for infrastructure operations. **(ADR-022)**
+- **NFR-6: Memory Efficiency -- VRAM Optimization**: The system must employ FP8 quantization and FP8 KV cache to enable 128K context processing within ~12-14 GB VRAM on RTX 4090 Laptop hardware, providing optimized memory usage with a vLLM server configured for FlashInfer. **(ADR-004, ADR-010)**
+- **NFR-7: Memory Efficiency -- Multimodal VRAM**: The multimodal embedding model (SigLIP base, or CLIP ViT‑B/32) should be selected for low VRAM usage (≈1.4GB) to ensure efficiency. **(ADR-016)**
+- **NFR-8: Scalability -- Local Concurrency**: The persistence layer (SQLite) must be configured in WAL (Write-Ahead Logging) mode to support concurrent read/write operations from multiple local processes. **(ADR-008)**
 - **NFR-9: Hardware Adaptability**: The system must detect GPU availability (CUDA 12.8+) and select appropriate models: Qwen3-4B-FP8 for RTX 4090, CPU fallback for systems without GPUs. **(ADR-017)**
 
 ### Architectural & Implementation Requirements
@@ -172,15 +172,15 @@ graph TD
 
 ### Core Libraries
 
-| Component        | Library                        | Version                    | Purpose                                  |
-| ---------------- | ------------------------------ | -------------------------- | ---------------------------------------- |
-| RAG Framework    | llama-index                    | >=0.14.12,<0.15.0           | Core pipelines, agent, native components |
-| Document Parsing | unstructured                   | >=0.18.26,<0.19.0           | PDF/Office parsing                       |
-| Vector Database  | qdrant-client                  | >=1.15.1,<2.0.0             | Hybrid vector storage                    |
-| LLM Backends     | ollama, llama-cpp-python, vllm | 0.6.1, >=0.3.16,<0.4.0, external-only | Local LLM Inference |
-| GPU Acceleration | torch                          | 2.8.x                      | CUDA support & Quantization              |
-| Resilience       | tenacity                       | >=9.1.2,<10.0.0             | Production-grade error handling          |
-| Web Interface    | streamlit                      | >=1.52.2,<2.0.0             | User interface                           |
+| Component        | Library                        | Version                                | Purpose                                  |
+| ---------------- | ------------------------------ | -------------------------------------- | ---------------------------------------- |
+| RAG Framework    | llama-index                    | >=0.14.12,<0.15.0                      | Core pipelines, agent, native components |
+| Document Parsing | unstructured                   | >=0.18.26,<0.19.0                      | PDF/Office parsing                       |
+| Vector Database  | qdrant-client                  | >=1.15.1,<2.0.0                        | Hybrid vector storage                    |
+| LLM Backends     | ollama, llama-cpp-python, vllm | 0.6.1, >=0.3.16,<0.4.0, external-only  | Local LLM Inference                      |
+| GPU Acceleration | torch                          | 2.8.x                                  | CUDA support & Quantization              |
+| Resilience       | tenacity                       | >=9.1.2,<10.0.0                        | Production-grade error handling          |
+| Web Interface    | streamlit                      | >=1.52.2,<2.0.0                        | User interface                           |
 
 ### Model Dependencies
 

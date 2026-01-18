@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-import threading
+from collections.abc import Generator
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -15,9 +15,19 @@ import src.ui.background_jobs as bg
 
 
 @pytest.fixture
-def documents_ingest_app_test(tmp_path: Path, monkeypatch) -> AppTest:
+def documents_ingest_app_test(
+    tmp_path: Path,
+    monkeypatch,
+    fake_job_manager,
+    fake_job_owner_id,
+) -> Generator[AppTest]:
     """Create an AppTest instance for the Documents ingestion job path."""
     from src.config.settings import settings as app_settings
+
+    # Save original values
+    orig_data_dir = app_settings.data_dir
+    orig_chat_sqlite = app_settings.chat.sqlite_path
+    orig_db_sqlite = app_settings.database.sqlite_db_path
 
     monkeypatch.setenv("DOCMIND_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("DOCMIND_CACHE_DIR", str(tmp_path / "cache"))
@@ -96,65 +106,21 @@ def documents_ingest_app_test(tmp_path: Path, monkeypatch) -> AppTest:
     # Replace background job manager with a synchronous fake so success renders
     # deterministically in the same AppTest run.
 
-    class _State:
-        def __init__(self, *, owner_id: str, status: str, result, error: str | None):
-            self.owner_id = owner_id
-            self.status = status
-            self.result = result
-            self.error = error
-
-    class _FakeJobManager:
-        def __init__(self) -> None:
-            self._events: dict[str, list[bg.ProgressEvent]] = {}
-            self._states: dict[str, _State] = {}
-
-        def start_job(self, *, owner_id: str, fn):  # type: ignore[no-untyped-def]
-            job_id = "job-1"
-            events: list[bg.ProgressEvent] = []
-
-            def _report(evt: bg.ProgressEvent) -> None:
-                events.append(evt)
-
-            try:
-                res = fn(threading.Event(), _report)
-                state = _State(
-                    owner_id=owner_id, status="succeeded", result=res, error=None
-                )
-            except Exception as exc:  # pragma: no cover - defensive
-                state = _State(
-                    owner_id=owner_id, status="failed", result=None, error=str(exc)
-                )
-            self._events[job_id] = events
-            self._states[job_id] = state
-            return job_id
-
-        def get(self, job_id: str, *, owner_id: str):  # type: ignore[no-untyped-def]
-            state = self._states.get(job_id)
-            if state is None or state.owner_id != owner_id:
-                return None
-            return state
-
-        def drain_progress(self, job_id: str, *, owner_id: str, max_events: int = 100):  # type: ignore[no-untyped-def]
-            _ = max_events
-            state = self._states.get(job_id)
-            if state is None or state.owner_id != owner_id:
-                return []
-            events = self._events.get(job_id, [])
-            self._events[job_id] = []
-            return events
-
-        def cancel(self, *_a, **_k):  # type: ignore[no-untyped-def]
-            return True
-
-    fake_mgr = _FakeJobManager()
-    monkeypatch.setattr(bg, "get_job_manager", lambda *_a, **_k: fake_mgr)
-    monkeypatch.setattr(bg, "get_or_create_owner_id", lambda: "owner")
+    monkeypatch.setattr(bg, "get_job_manager", lambda *_a, **_k: fake_job_manager)
+    monkeypatch.setattr(bg, "get_or_create_owner_id", lambda: fake_job_owner_id)
 
     root = Path(__file__).resolve().parents[3]
     page_path = root / "src" / "pages" / "02_documents.py"
     at = AppTest.from_file(str(page_path))
     at.default_timeout = 6
-    return at
+
+    try:
+        yield at
+    finally:
+        # Restore original values
+        app_settings.data_dir = orig_data_dir
+        app_settings.chat.sqlite_path = orig_chat_sqlite
+        app_settings.database.sqlite_db_path = orig_db_sqlite
 
 
 @pytest.mark.integration

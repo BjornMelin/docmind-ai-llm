@@ -24,7 +24,7 @@ Define a single, enforceable baseline for:
 
 ## Non-goals
 
-- Supporting Python <3.11.
+- Supporting Python <3.13.
 - Adopting the free-threaded CPython build (GIL-disabled). The project uses the default CPython build.
 - Installing or running GPU inference servers (vLLM/LM Studio) inside the app environment or container image.
 
@@ -67,9 +67,10 @@ vLLM is supported as an **external OpenAI-compatible server** (out-of-process). 
 DocMind connects via:
 
 - `DOCMIND_LLM_BACKEND=vllm`
-- `DOCMIND_OPENAI__BASE_URL=http://localhost:8000/v1` (or `DOCMIND_VLLM__VLLM_BASE_URL`)
+- **Primary pattern**: `DOCMIND_OPENAI__BASE_URL=http://localhost:8000/v1` is the recommended OpenAI-compatible primary pattern when running vLLM.
+- **Alternatives**: `DOCMIND_VLLM__VLLM_BASE_URL` is available for explicit vLLM-targeted configuration; `DOCMIND_VLLM_BASE_URL` is a convenience top-level field.
 
-Server tuning (FlashInfer, FP8 KV cache, chunked prefill) is configured on the vLLM server process. DocMind may surface helper values via `settings.get_vllm_env_vars()` for convenience.
+Server tuning (FlashInfer, FP8 KV cache, chunked prefill) is configured on the vLLM server process. DocMind surfaces helper values via `settings.get_vllm_env_vars()` (e.g., for multi-GPU scheduling or memory overrides).
 
 ## Container baseline
 

@@ -10,6 +10,8 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 from loguru import logger
 
+from src.utils.log_safety import build_pii_log_entry
+
 from .constants import MAX_RETRIEVAL_RESULTS, SIMILARITY_THRESHOLD
 
 
@@ -115,8 +117,6 @@ def synthesize_results(
         return json.dumps(result_data, default=str)
 
     except (RuntimeError, ValueError, AttributeError) as exc:
-        from src.utils.log_safety import build_pii_log_entry
-
         redaction = build_pii_log_entry(
             str(exc),
             key_id="agents.tools.synthesis",

@@ -53,7 +53,7 @@ def test_retrieve_documents_uses_router_engine_when_enabled(
     monkeypatch.setattr(settings.agents, "enable_router_injection", True)
     router = _Router()
 
-    from langchain.tools import ToolRuntime
+    from langgraph.prebuilt import ToolRuntime
 
     runtime = ToolRuntime(
         state={},

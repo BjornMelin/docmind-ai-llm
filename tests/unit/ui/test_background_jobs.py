@@ -13,6 +13,7 @@ pytestmark = pytest.mark.unit
 
 
 def _wait_for_terminal(manager: JobManager, job_id: str, *, owner_id: str) -> str:
+    """Wait for a job to reach a terminal state."""
     deadline = time.monotonic() + 2.0
     while time.monotonic() < deadline:
         state = manager.get(job_id, owner_id=owner_id)
@@ -25,6 +26,7 @@ def _wait_for_terminal(manager: JobManager, job_id: str, *, owner_id: str) -> st
 
 
 def test_job_manager_runs_job_and_keeps_progress_bounded() -> None:
+    """Verify job execution, bounded progress queue, and result handling."""
     manager = JobManager(max_workers=1, max_progress_queue_size=3, job_ttl_sec=0)
 
     def _work(cancel_event, report):  # type: ignore[no-untyped-def]
@@ -55,6 +57,7 @@ def test_job_manager_runs_job_and_keeps_progress_bounded() -> None:
 
 
 def test_job_manager_cancel_sets_status() -> None:
+    """Verify cancellation updates job status and respects cancel events."""
     manager = JobManager(max_workers=1, max_progress_queue_size=5, job_ttl_sec=0)
 
     def _work(cancel_event, report):  # type: ignore[no-untyped-def]
@@ -79,6 +82,7 @@ def test_job_manager_cancel_sets_status() -> None:
 
 
 def test_job_manager_cleanup_expires_done_jobs() -> None:
+    """Verify JobManager prunes jobs that have exceeded their TTL."""
     manager = JobManager(max_workers=1, max_progress_queue_size=1, job_ttl_sec=0.01)
 
     def _work(_cancel_event, _report):  # type: ignore[no-untyped-def]

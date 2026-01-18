@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -37,7 +36,28 @@ class _FakeVectorIndex:
 
 
 @pytest.fixture
-def chat_analysis_app_test(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AppTest:
+def chat_analysis_app_test(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fake_job_manager,
+    fake_job_owner_id,
+) -> AppTest:
+    """Provides a configured AppTest environment for validating analysis modes.
+
+    This fixture prepares a temporary environment for UI testing by redirecting
+    database paths to a temporary directory, creating mock upload files, and
+    injecting a synchronous background job manager to ensure deterministic
+    execution within the AppTest lifecycle.
+
+    Args:
+        tmp_path: The temporary directory path provided by pytest for file isolation.
+        monkeypatch: The monkeypatch utility used to mock the background job system.
+        fake_job_manager: A synchronous mock for the background job manager.
+        fake_job_owner_id: A unique identifier for the simulated job owner.
+
+    Returns:
+        AppTest: A configured instance of the Streamlit AppTest for the chat page.
+    """
     from src.config.settings import settings as app_settings
 
     original_data_dir = app_settings.data_dir
@@ -55,59 +75,8 @@ def chat_analysis_app_test(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> A
 
     # Replace background job manager with a synchronous fake so results render
     # deterministically in the same AppTest run.
-    class _State:
-        def __init__(self, *, owner_id: str, status: str, result, error: str | None):
-            self.owner_id = owner_id
-            self.status = status
-            self.result = result
-            self.error = error
-
-    class _FakeJobManager:
-        def __init__(self) -> None:
-            self._events: dict[str, list[bg.ProgressEvent]] = {}
-            self._states: dict[str, _State] = {}
-
-        def start_job(self, *, owner_id: str, fn):  # type: ignore[no-untyped-def]
-            job_id = "job-1"
-            events: list[bg.ProgressEvent] = []
-
-            def _report(evt: bg.ProgressEvent) -> None:
-                events.append(evt)
-
-            try:
-                res = fn(threading.Event(), _report)
-                state = _State(
-                    owner_id=owner_id, status="succeeded", result=res, error=None
-                )
-            except Exception as exc:  # pragma: no cover - defensive
-                state = _State(
-                    owner_id=owner_id, status="failed", result=None, error=str(exc)
-                )
-            self._events[job_id] = events
-            self._states[job_id] = state
-            return job_id
-
-        def get(self, job_id: str, *, owner_id: str):  # type: ignore[no-untyped-def]
-            state = self._states.get(job_id)
-            if state is None or state.owner_id != owner_id:
-                return None
-            return state
-
-        def drain_progress(self, job_id: str, *, owner_id: str, max_events: int = 100):  # type: ignore[no-untyped-def]
-            _ = max_events
-            state = self._states.get(job_id)
-            if state is None or state.owner_id != owner_id:
-                return []
-            events = self._events.get(job_id, [])
-            self._events[job_id] = []
-            return events
-
-        def cancel(self, *_a, **_k):  # type: ignore[no-untyped-def]
-            return True
-
-    fake_mgr = _FakeJobManager()
-    monkeypatch.setattr(bg, "get_job_manager", lambda *_a, **_k: fake_mgr)
-    monkeypatch.setattr(bg, "get_or_create_owner_id", lambda: "owner")
+    monkeypatch.setattr(bg, "get_job_manager", lambda *_a, **_k: fake_job_manager)
+    monkeypatch.setattr(bg, "get_or_create_owner_id", lambda: fake_job_owner_id)
 
     root = Path(__file__).resolve().parents[3]
     page_path = root / "src" / "pages" / "01_chat.py"
@@ -125,6 +94,17 @@ def chat_analysis_app_test(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> A
 def test_analysis_separate_mode_renders_per_doc_outputs(
     chat_analysis_app_test: AppTest,
 ) -> None:
+    """Validates that the separate analysis mode renders unique outputs per document.
+
+    Ensures that when 'separate' mode is selected, the UI correctly iterates
+    through selected documents and displays the retrieved answer for each.
+
+    Args:
+        chat_analysis_app_test: The configured Streamlit AppTest helper fixture.
+
+    Returns:
+        None.
+    """
     app = chat_analysis_app_test.run()
     assert not app.exception
 

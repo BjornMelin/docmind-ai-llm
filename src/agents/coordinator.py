@@ -164,6 +164,7 @@ CONTEXT_TRIM_STRATEGY = "last"
 MEMORY_CONSOLIDATION_MAX_WORKERS = 2
 MEMORY_CONSOLIDATION_TIMEOUT_S = 10.0
 MEMORY_CONSOLIDATION_RELEASE_GRACE_S = 30.0
+SEMANTIC_CACHE_STORE_MAX_WORKERS = 2
 
 
 class _AgentHookMiddleware(AgentMiddleware[MultiAgentGraphState, Any]):
@@ -424,6 +425,14 @@ class MultiAgentCoordinator:
             MEMORY_CONSOLIDATION_MAX_WORKERS
         )
         self._memory_executor_closed = False
+        self._semantic_cache_executor = ThreadPoolExecutor(
+            max_workers=SEMANTIC_CACHE_STORE_MAX_WORKERS,
+            thread_name_prefix="docmind-semantic-cache",
+        )
+        self._semantic_cache_semaphore = threading.BoundedSemaphore(
+            SEMANTIC_CACHE_STORE_MAX_WORKERS
+        )
+        self._semantic_cache_executor_closed = False
 
         logger.info("MultiAgentCoordinator initialized (model: {})", model_path)
 
@@ -434,6 +443,11 @@ class MultiAgentCoordinator:
         self._memory_executor_closed = True
         with contextlib.suppress(Exception):
             self._memory_executor.shutdown(wait=False)
+        if self._semantic_cache_executor_closed:
+            return
+        self._semantic_cache_executor_closed = True
+        with contextlib.suppress(Exception):
+            self._semantic_cache_executor.shutdown(wait=False)
 
     def __del__(self) -> None:  # pragma: no cover - best-effort cleanup
         """Best-effort cleanup during interpreter teardown."""
@@ -1014,25 +1028,47 @@ class MultiAgentCoordinator:
         sem_cfg = getattr(settings, "semantic_cache", None)
         if sem_cfg is None or not bool(getattr(sem_cfg, "enabled", False)):
             return
+        if self._semantic_cache_executor_closed:
+            return
+        if not self._semantic_cache_semaphore.acquire(blocking=False):
+            return
+
+        def _store_in_background() -> None:
+            try:
+                from src.persistence.langchain_embeddings import (
+                    LlamaIndexEmbeddingsAdapter,
+                )
+                from src.utils.semantic_cache import SemanticCache
+                from src.utils.storage import create_sync_client
+
+                with create_sync_client() as client:
+                    cache = SemanticCache(
+                        client=client,
+                        cfg=settings.semantic_cache,
+                        vector_dim=int(settings.embedding.dimension),
+                        embed_query=LlamaIndexEmbeddingsAdapter().embed_query,
+                    )
+                    cache.store(
+                        key=semantic_cache_key,
+                        query=str(query),
+                        response_text=str(response_text),
+                    )
+            except Exception as exc:  # pragma: no cover - fail open
+                redaction = build_pii_log_entry(
+                    str(exc), key_id="semantic_cache.store.exception"
+                )
+                logger.debug(
+                    "Semantic cache store skipped (error_type={}, error={})",
+                    type(exc).__name__,
+                    redaction.redacted,
+                )
+            finally:
+                self._semantic_cache_semaphore.release()
 
         try:
-            from src.persistence.langchain_embeddings import LlamaIndexEmbeddingsAdapter
-            from src.utils.semantic_cache import SemanticCache
-            from src.utils.storage import create_sync_client
-
-            with create_sync_client() as client:
-                cache = SemanticCache(
-                    client=client,
-                    cfg=settings.semantic_cache,
-                    vector_dim=int(settings.embedding.dimension),
-                    embed_query=LlamaIndexEmbeddingsAdapter().embed_query,
-                )
-                cache.store(
-                    key=semantic_cache_key,
-                    query=str(query),
-                    response_text=str(response_text),
-                )
+            self._semantic_cache_executor.submit(_store_in_background)
         except Exception as exc:  # pragma: no cover - fail open
+            self._semantic_cache_semaphore.release()
             redaction = build_pii_log_entry(
                 str(exc), key_id="semantic_cache.store.exception"
             )

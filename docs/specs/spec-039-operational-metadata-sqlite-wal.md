@@ -37,10 +37,10 @@ Current codebase coverage:
 
 Missing for this spec to be implemented:
 
-- Ops DB schema and migrations (`jobs`, `snapshots`, `ui_state`) with `PRAGMA user_version` upgrades.
-- Ops DB initializer that enables WAL/foreign keys/busy_timeout and applies migrations at startup.
-- Ops DB API surface for job/snapshot/ui state reads/writes.
-- Unit/integration tests for migrations and ops DB behavior.
+- Schema and migrations (jobs, snapshots, ui_state) with PRAGMA user_version upgrades.
+- Initializer that enables WAL, foreign_keys and busy_timeout and applies migrations at startup.
+- Provide an Ops DB API for job/snapshot/ui state reads/writes.
+- Implement unit/integration tests for migrations and ops DB behavior.
 
 ## Non-goals
 

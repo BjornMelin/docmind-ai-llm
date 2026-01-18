@@ -34,7 +34,21 @@ _DEFAULT_COLLECTION = "docmind_semcache"
 
 @dataclass(frozen=True, slots=True)
 class CacheKey:
-    """Metadata key used for strict invalidation and filtering."""
+    """Metadata key used for strict invalidation and filtering.
+
+    Args:
+        prompt_key: Stable HMAC-free hash of the prompt and parameters.
+        namespace: Cache namespace for isolation.
+        model_id: Identifier for the LLM model.
+        template_id: Prompt template identifier.
+        template_version: Prompt template version identifier.
+        temperature: LLM temperature setting.
+        corpus_hash: Hash of the uploaded corpus files.
+        config_hash: Hash of retrieval/ingestion configuration.
+
+    Returns:
+        A CacheKey instance used for strict invalidation and filtering.
+    """
 
     prompt_key: str
     namespace: str
@@ -48,7 +62,16 @@ class CacheKey:
 
 @dataclass(frozen=True, slots=True)
 class CacheHit:
-    """Cache lookup result."""
+    """Cache lookup result.
+
+    Args:
+        kind: Type of match ("exact" or "semantic").
+        score: Similarity score for semantic matches (None for exact).
+        response_text: The cached response string.
+
+    Returns:
+        A CacheHit instance representing a successful lookup.
+    """
 
     kind: str  # "exact" | "semantic"
     score: float | None

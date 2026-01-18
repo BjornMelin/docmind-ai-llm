@@ -28,7 +28,15 @@ from src.utils.telemetry import log_jsonl
 
 @dataclass(frozen=True, slots=True)
 class QdrantSnapshotFile:
-    """A single Qdrant collection snapshot captured into the backup."""
+    """A single Qdrant collection snapshot captured into the backup.
+
+    Args:
+        collection: Name of the Qdrant collection.
+        snapshot_name: Name of the snapshot file on the server.
+        filename: Relative path to the snapshot file in the backup directory.
+        size_bytes: Size of the snapshot in bytes.
+        checksum: Optional checksum for integrity verification.
+    """
 
     collection: str
     snapshot_name: str
@@ -39,7 +47,16 @@ class QdrantSnapshotFile:
 
 @dataclass(frozen=True, slots=True)
 class BackupResult:
-    """Outcome of a backup run."""
+    """Outcome of a backup run.
+
+    Args:
+        backup_dir: Path to the created backup directory.
+        included: List of labels for artifacts included in the backup.
+        bytes_written: Total bytes written to the backup directory.
+        qdrant_snapshots: List of Qdrant collection snapshots captured.
+        duration_ms: Total duration of the backup process in milliseconds.
+        warnings: List of non-fatal warnings encountered during backup.
+    """
 
     backup_dir: Path
     included: list[str]
