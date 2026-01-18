@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from typing import Any
 
 import pytest
 from streamlit.testing.v1 import AppTest
@@ -14,6 +16,7 @@ from src.persistence.snapshot import (
     compute_config_hash,
     compute_corpus_hash,
 )
+from tests.helpers.apptest_utils import apptest_timeout_sec
 
 
 @pytest.fixture
@@ -75,9 +78,42 @@ def chat_app_autoload(tmp_path: Path, monkeypatch) -> AppTest:
     final = mgr.finalize_snapshot(tmp)
     assert final.exists()
 
+    # Stub the coordinator and chat session helpers; this test only validates
+    # snapshot hydration into session_state, not chat DB/coordinator behavior.
+    class _CoordinatorStub:
+        def __init__(self, *_, **__) -> None:
+            return
+
+        def list_checkpoints(self, *_, **__) -> list[dict[str, object]]:
+            return []
+
+        def get_state_values(self, *_, **__) -> dict[str, object]:
+            return {"messages": []}
+
+        def process_query(self, *_, **__) -> object:
+            return SimpleNamespace(content="ok", sources=[])
+
+    coord_mod: Any = ModuleType("src.agents.coordinator")
+    coord_mod.MultiAgentCoordinator = _CoordinatorStub
+    monkeypatch.setitem(sys.modules, "src.agents.coordinator", coord_mod)
+
+    @dataclass(frozen=True, slots=True)
+    class _ChatSelection:
+        thread_id: str
+        user_id: str
+
+    chat_sessions_mod: Any = ModuleType("src.ui.chat_sessions")
+    chat_sessions_mod.ChatSelection = _ChatSelection
+    chat_sessions_mod.get_chat_db_conn = lambda: object()
+    chat_sessions_mod.render_session_sidebar = lambda _conn: _ChatSelection(
+        thread_id="t", user_id="local"
+    )
+    chat_sessions_mod.render_time_travel_sidebar = lambda *_, **__: None
+    monkeypatch.setitem(sys.modules, "src.ui.chat_sessions", chat_sessions_mod)
+
     # Stub LI modules for loader internals
-    core_mod = ModuleType("llama_index.core")
-    graph_mod = ModuleType("llama_index.core.graph_stores")
+    core_mod: Any = ModuleType("llama_index.core")
+    graph_mod: Any = ModuleType("llama_index.core.graph_stores")
 
     class _StorageContext:
         def __init__(self, persist_dir: str) -> None:
@@ -112,16 +148,21 @@ def chat_app_autoload(tmp_path: Path, monkeypatch) -> AppTest:
     monkeypatch.setitem(sys.modules, "llama_index.core.graph_stores", graph_mod)
 
     # Stub router factory
-    rf_mod = ModuleType("src.retrieval.router_factory")
+    rf_mod: Any = ModuleType("src.retrieval.router_factory")
     rf_mod.build_router_engine = lambda *_, **__: object()
     monkeypatch.setitem(sys.modules, "src.retrieval.router_factory", rf_mod)
+
+    # Stub multimodal retriever module import (best effort).
+    monkeypatch.setitem(
+        sys.modules,
+        "src.retrieval.multimodal_fusion",
+        SimpleNamespace(MultimodalFusionRetriever=lambda *_a, **_k: object()),
+    )
 
     # Build AppTest for Chat page
     root = Path(__file__).resolve().parents[3]
     page_path = root / "src" / "pages" / "01_chat.py"
-    at = AppTest.from_file(str(page_path))
-    at.default_timeout = 6
-    return at
+    return AppTest.from_file(str(page_path), default_timeout=apptest_timeout_sec())
 
 
 @pytest.mark.integration

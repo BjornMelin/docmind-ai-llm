@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import sys
+from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
+from typing import Any
 
 import pytest
 from streamlit.testing.v1 import AppTest
 
 import src.ui.background_jobs as bg
+from src.analysis.models import AnalysisResult, PerDocResult
 from tests.fixtures.vector_index import _FakeVectorIndex
+from tests.helpers.apptest_utils import apptest_timeout_sec
 
 pytestmark = pytest.mark.integration
 
@@ -19,7 +26,7 @@ def chat_analysis_app_test(
     monkeypatch: pytest.MonkeyPatch,
     fake_job_manager,
     fake_job_owner_id,
-) -> AppTest:
+) -> Iterator[AppTest]:
     """Provides a configured AppTest environment for validating analysis modes.
 
     This fixture prepares a temporary environment for UI testing by redirecting
@@ -41,15 +48,72 @@ def chat_analysis_app_test(
     original_data_dir = app_settings.data_dir
     original_chat_path = app_settings.chat.sqlite_path
     original_db_path = app_settings.database.sqlite_db_path
+    original_autoload = app_settings.graphrag_cfg.autoload_policy
 
     app_settings.data_dir = tmp_path
     app_settings.chat.sqlite_path = tmp_path / "chat.db"
     app_settings.database.sqlite_db_path = tmp_path / "docmind.db"
+    app_settings.graphrag_cfg.autoload_policy = "ignore"
 
     uploads_dir = tmp_path / "uploads"
     uploads_dir.mkdir(parents=True, exist_ok=True)
     (uploads_dir / "a.txt").write_text("a", encoding="utf-8")
     (uploads_dir / "b.txt").write_text("b", encoding="utf-8")
+
+    # Stub coordinator and chat sessions; analysis UI wiring does not depend on
+    # coordinator graphs or chat DB state.
+    coord_mod: Any = ModuleType("src.agents.coordinator")
+
+    class _CoordStub:
+        """Minimal coordinator stub for the analysis UI integration test."""
+
+        def list_checkpoints(self, *_args, **_kwargs) -> list[object]:
+            """Return no checkpoints to keep UI rendering deterministic."""
+            return []
+
+    coord_mod.MultiAgentCoordinator = (  # type: ignore[attr-defined]
+        lambda *_, **__: _CoordStub()
+    )
+    monkeypatch.setitem(sys.modules, "src.agents.coordinator", coord_mod)
+
+    @dataclass(frozen=True, slots=True)
+    class _ChatSelection:
+        thread_id: str
+        user_id: str
+
+    chat_sessions_mod: Any = ModuleType("src.ui.chat_sessions")
+    chat_sessions_mod.ChatSelection = _ChatSelection
+    chat_sessions_mod.get_chat_db_conn = lambda: object()
+    chat_sessions_mod.render_session_sidebar = lambda _conn: _ChatSelection(
+        thread_id="t", user_id="local"
+    )
+    chat_sessions_mod.render_time_travel_sidebar = lambda *_, **__: None
+    monkeypatch.setitem(sys.modules, "src.ui.chat_sessions", chat_sessions_mod)
+
+    # Stub analysis service to keep UI test deterministic and fast under CI+cov.
+    import src.analysis.service as analysis_service
+
+    def _run_analysis_stub(*, documents, **_kwargs):  # type: ignore[no-untyped-def]
+        per_doc = [
+            PerDocResult(
+                doc_id=str(getattr(d, "doc_id", "")),
+                doc_name=str(getattr(d, "doc_name", "")),
+                answer=f"answer: {getattr(d, 'doc_name', '')}",
+                citations=[],
+                duration_ms=0.0,
+            )
+            for d in list(documents or [])
+        ]
+        return AnalysisResult(
+            mode="separate",
+            per_doc=per_doc,
+            combined=None,
+            reduce=None,
+            warnings=[],
+            auto_decision_reason="stubbed",
+        )
+
+    monkeypatch.setattr(analysis_service, "run_analysis", _run_analysis_stub)
 
     # Replace background job manager with a synchronous fake so results render
     # deterministically in the same AppTest run.
@@ -58,8 +122,7 @@ def chat_analysis_app_test(
 
     root = Path(__file__).resolve().parents[3]
     page_path = root / "src" / "pages" / "01_chat.py"
-    at = AppTest.from_file(str(page_path))
-    at.default_timeout = 6
+    at = AppTest.from_file(str(page_path), default_timeout=apptest_timeout_sec())
     at.session_state["vector_index"] = _FakeVectorIndex()
     try:
         yield at
@@ -67,6 +130,7 @@ def chat_analysis_app_test(
         app_settings.data_dir = original_data_dir
         app_settings.chat.sqlite_path = original_chat_path
         app_settings.database.sqlite_db_path = original_db_path
+        app_settings.graphrag_cfg.autoload_policy = original_autoload
 
 
 def test_analysis_separate_mode_renders_per_doc_outputs(

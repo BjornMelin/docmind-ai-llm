@@ -12,6 +12,7 @@ import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 import src.ui.background_jobs as bg
+from tests.helpers.apptest_utils import apptest_timeout_sec
 
 
 @pytest.fixture
@@ -120,8 +121,7 @@ def documents_ingest_app_test(
 
     root = Path(__file__).resolve().parents[3]
     page_path = root / "src" / "pages" / "02_documents.py"
-    at = AppTest.from_file(str(page_path))
-    at.default_timeout = 6
+    at = AppTest.from_file(str(page_path), default_timeout=apptest_timeout_sec())
 
     try:
         yield at

@@ -12,6 +12,7 @@ import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 from src.agents.models import AgentResponse
+from tests.helpers.apptest_utils import apptest_timeout_sec
 
 
 class _CoordinatorStub:
@@ -76,7 +77,7 @@ def test_app_entrypoint_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(st, "navigation", _navigation)
     root = Path(__file__).resolve().parents[3]
     app = AppTest.from_file(str(root / "app.py"))
-    app.default_timeout = 6
+    app.default_timeout = apptest_timeout_sec()
     app = app.run()
 
     assert not app.exception
@@ -115,7 +116,7 @@ def chat_app_smoke(
     root = Path(__file__).resolve().parents[3]
     page_path = root / "src" / "pages" / "01_chat.py"
     app = AppTest.from_file(str(page_path))
-    app.default_timeout = 8
+    app.default_timeout = max(8, apptest_timeout_sec())
 
     try:
         yield app
@@ -189,7 +190,7 @@ def _build_page_app(
     root = Path(__file__).resolve().parents[3]
     page_path = root / "src" / "pages" / page_name
     app = AppTest.from_file(str(page_path))
-    app.default_timeout = 6
+    app.default_timeout = apptest_timeout_sec()
 
     try:
         yield app
