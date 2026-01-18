@@ -25,14 +25,21 @@ def _install_stub(module_name: str, **attrs) -> None:
 
 @dataclass(slots=True)
 class DocumentsAppHarness:
-    """Test harness bundling the AppTest instance with stub state."""
+    """Test harness bundling the AppTest instance with stub state.
+
+    Attributes:
+        app: AppTest instance for the Documents page harness.
+        rebuild_calls: List of snapshot rebuild paths requested by the UI.
+    """
 
     app: AppTest
     rebuild_calls: list[Path]
 
 
 @pytest.fixture
-def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[DocumentsAppHarness]:
+def documents_app_test(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[DocumentsAppHarness]:
     """Create an AppTest instance for the Documents page with stubs for side effects.
 
     Args:

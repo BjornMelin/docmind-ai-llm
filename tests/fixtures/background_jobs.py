@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from typing import Any
 
 import pytest
 
@@ -10,7 +11,7 @@ import src.ui.background_jobs as bg
 
 
 class _State:
-    def __init__(self, *, owner_id: str, status: str, result, error: str | None):
+    def __init__(self, *, owner_id: str, status: str, result: Any, error: str | None):
         self.owner_id = owner_id
         self.status = status
         self.result = result

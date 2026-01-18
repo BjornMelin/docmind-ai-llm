@@ -103,6 +103,11 @@ def test_coordinator_semantic_cache_hit_short_circuits(
 
     first = coord.process_query("hello", thread_id="t", user_id="u")
     assert first.content == "fresh"
+    assert isinstance(first.metadata, dict)
+    assert (
+        first.metadata.get("semantic_cache", {}).get("hit") is False
+        or "semantic_cache" not in first.metadata
+    )
 
     # Second call should hit cache and bypass workflow execution.
     def _fail_if_called(*_a, **_k):  # type: ignore[no-untyped-def]

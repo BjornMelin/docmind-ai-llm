@@ -6,7 +6,7 @@ import atexit
 import contextlib
 import sqlite3
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 import streamlit as st
 
@@ -41,6 +41,14 @@ class ChatSelection:
 
     thread_id: str
     user_id: str
+
+
+class ForkableCoordinator(Protocol):
+    """Protocol for coordinators supporting checkpoint forking."""
+
+    def fork_from_checkpoint(
+        self, *, thread_id: str, user_id: str, checkpoint_id: str
+    ) -> str | None: ...
 
 
 @st.cache_resource(show_spinner=False)
@@ -301,7 +309,7 @@ def _handle_purge(conn: sqlite3.Connection, active: ChatSession) -> None:
 
 def render_time_travel_sidebar(
     *,
-    coord: Any,
+    coord: ForkableCoordinator,
     conn: sqlite3.Connection,
     thread_id: str,
     user_id: str,

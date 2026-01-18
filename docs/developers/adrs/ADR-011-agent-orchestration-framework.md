@@ -107,7 +107,7 @@ graph TD
 
 ### Architecture Overview
 
-- Five roles implemented with prebuilt agents; early exits where applicable
+- Five roles implemented with LangChain v1 `create_agent`; early exits where applicable
 - Minimal prompts; rely on Supervisor primitives
 
 ### Implementation Details
