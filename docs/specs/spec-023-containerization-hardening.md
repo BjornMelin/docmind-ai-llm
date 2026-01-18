@@ -131,7 +131,8 @@ Add `.dockerignore` to exclude:
 - Do not copy `.env` into images by default.
 - Avoid `latest` tags for base images; pin to Python 3.13.11 slim variant.
 - Add a healthcheck:
-  - Prefer Streamlit’s health endpoint (`/_stcore/health`) when available.
+  - Use a socket probe on port 8501 (e.g.,
+    `python -c "import socket; s = socket.create_connection(('127.0.0.1', 8501), timeout=3); s.close()"`).
 - Keep optional GPU backend internal-only by default (no public ports).
 
 ## Testing strategy

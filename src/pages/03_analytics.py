@@ -29,7 +29,7 @@ def _load_query_metrics(
     """Load and aggregate query performance metrics from DuckDB.
 
     Args:
-        db_path: Path to the SQLite/DuckDB database file.
+        db_path: Path to the DuckDB database file.
 
     Returns:
         tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]: DataFrames containing

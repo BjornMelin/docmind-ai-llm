@@ -195,7 +195,7 @@ all-specs-adrs.xml
 opensrc/
 .codex/
 .opencode/
-agent_audit*
+/agent_audit*
 migration_plan.md
 
 # Snapshot persistence artifacts

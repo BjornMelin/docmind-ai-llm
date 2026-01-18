@@ -25,7 +25,7 @@ from src.analysis.models import (
 )
 from src.config.settings import DocMindSettings, settings
 from src.processing.ingestion_api import generate_stable_id
-from src.utils.log_safety import build_pii_log_entry
+from src.utils.log_safety import build_pii_log_entry, redact_pii
 from src.utils.telemetry import log_jsonl
 
 
@@ -329,7 +329,9 @@ def _run_separate_mode(
                             "event": "analysis_doc_failed",
                             "mode": "separate",
                             "doc_id": doc.doc_id,
-                            "doc_name": doc.doc_name,
+                            "doc_name": redact_pii(
+                                str(doc.doc_name), key_id="analysis.doc_name"
+                            ),
                             "error_type": type(exc).__name__,
                         },
                         key_id="analysis.doc_failed",

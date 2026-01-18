@@ -201,7 +201,10 @@ def test_supervisor_boots_with_agents(supervisor_app):
 
 ### Dependencies
 
-- Python: `langgraph==1.0.6`, `langchain>=1.2.2`, `langchain-core>=1.2.6`
+- Python: See `pyproject.toml` `[project].dependencies` for authoritative
+  versions/pins. Current constraints include `langgraph==1.0.6`,
+  `langgraph-checkpoint-sqlite==3.0.2`, `langchain>=1.2.2,<2.0.0`,
+  `langchain-core>=1.2.6,<2.0.0`, and `langchain-openai>=1.1.6,<2.0.0`.
 
 ### Ongoing Maintenance & Considerations
 
@@ -211,10 +214,14 @@ def test_supervisor_boots_with_agents(supervisor_app):
 
 ## Changelog
 
+- 7.1 (2026‑01‑18): Clarified handoff option deprecations and aligned dependency
+  references with `pyproject.toml` as the source of truth.
+- 7.0 (2026‑01‑17): Migrate orchestration to graph-native LangGraph `StateGraph`;
+  remove legacy third‑party supervisor wrapper due to deprecated prebuilt agent
+  dependency.
 - 6.2 (2025‑09‑04): Restored explicit agent role list and supervisor configuration details (output_mode, create_forward_message_tool, handoff messages) with hook notes and prompt
 - 6.1 (2025‑09‑04): Standardized to template; added diagram, PR/IR, config/tests
 - 6.0 (2025‑08‑19): Accepted Supervisor implementation; integrates ADR‑003/004/010
-- 7.0 (2026‑01‑17): Migrate orchestration to graph-native LangGraph `StateGraph`; remove legacy third‑party supervisor wrapper due to deprecated prebuilt agent dependency.
 
 ## Supervisor Configuration Updates
 

@@ -895,6 +895,10 @@ def _render_analysis_results() -> None:
         with st.expander("Summary", expanded=True):
             st.markdown(result.reduce)
 
+    if not result.per_doc:
+        st.caption("No per-document results available.")
+        return
+
     tabs = st.tabs([r.doc_name for r in result.per_doc])
     for tab, doc_res in zip(tabs, result.per_doc, strict=False):
         with tab:

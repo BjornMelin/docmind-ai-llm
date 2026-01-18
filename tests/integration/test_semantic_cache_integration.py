@@ -71,6 +71,25 @@ def test_coordinator_semantic_cache_hit_short_circuits(
     monkeypatch.setattr(coord, "_schedule_memory_consolidation", lambda *_a, **_k: None)
     monkeypatch.setattr(coord, "_record_query_metrics", lambda *_a, **_k: None)
 
+    from src.utils.semantic_cache import SemanticCache
+
+    def _store_sync(  # type: ignore[no-untyped-def]
+        *, semantic_cache_key, query, response_text
+    ) -> None:
+        cache = SemanticCache(
+            client=client,
+            cfg=settings.semantic_cache,
+            vector_dim=int(settings.embedding.dimension),
+            embed_query=LlamaIndexEmbeddingsAdapter().embed_query,
+        )
+        cache.store(
+            key=semantic_cache_key,
+            query=str(query),
+            response_text=str(response_text),
+        )
+
+    monkeypatch.setattr(coord, "_maybe_semantic_cache_store", _store_sync)
+
     def _handle_workflow_result(_result, _query, _context, _start, _coord_time):  # type: ignore[no-untyped-def]
         return (
             AgentResponse(

@@ -33,7 +33,15 @@ class DocumentsAppHarness:
 
 @pytest.fixture
 def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[DocumentsAppHarness]:
-    """Create an AppTest instance for the Documents page with stubs for side effects."""
+    """Create an AppTest instance for the Documents page with stubs for side effects.
+
+    Args:
+        tmp_path: Temporary directory for test data.
+        monkeypatch: Pytest monkeypatch fixture.
+
+    Returns:
+        Generator yielding a DocumentsAppHarness instance.
+    """
     from src.config.settings import settings as app_settings
 
     monkeypatch.setenv("DOCMIND_DATA_DIR", str(tmp_path))

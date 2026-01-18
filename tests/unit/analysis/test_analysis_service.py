@@ -9,7 +9,7 @@ import pytest
 from src.analysis.models import DocumentRef
 from src.analysis.service import AnalysisCancelledError, auto_select_mode, run_analysis
 from tests.fixtures.test_settings import create_test_settings
-from tests.fixtures.vector_index import _FakeVectorIndex
+from tests.fixtures.vector_index import FakeVectorIndex
 
 pytestmark = pytest.mark.unit
 
@@ -42,7 +42,7 @@ def test_run_analysis_combined_mode() -> None:
     result = run_analysis(
         query="q",
         mode="combined",
-        vector_index=_FakeVectorIndex(),
+        vector_index=FakeVectorIndex(),
         documents=[],
         cfg=cfg,
     )
@@ -69,7 +69,7 @@ def test_run_analysis_separate_mode() -> None:
     result = run_analysis(
         query="q",
         mode="separate",
-        vector_index=_FakeVectorIndex(),
+        vector_index=FakeVectorIndex(),
         documents=docs,
         cfg=cfg,
     )
@@ -96,7 +96,7 @@ def test_run_analysis_respects_cancellation() -> None:
         run_analysis(
             query="q",
             mode="combined",
-            vector_index=_FakeVectorIndex(),
+            vector_index=FakeVectorIndex(),
             documents=[],
             cfg=cfg,
             cancel_event=cancel,

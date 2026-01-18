@@ -13,24 +13,32 @@ pytestmark = pytest.mark.unit
 
 
 class _Node:
+    """Stub node for testing router injection path."""
+
     def __init__(self, text: str, metadata: dict[str, object]) -> None:
         self.text = text
         self.metadata = metadata
 
 
 class _NodeWithScore:
+    """Stub scored node wrapper for testing."""
+
     def __init__(self, node: _Node, score: float) -> None:
         self.node = node
         self.score = score
 
 
 class _Resp:
+    """Stub router response containing source nodes."""
+
     def __init__(self) -> None:
         node = _Node("doc-1", {"source": "a.txt"})
         self.source_nodes = [_NodeWithScore(node, 0.42)]
 
 
 class _Router:
+    """Stub router engine that records query calls."""
+
     def __init__(self) -> None:
         self.calls: list[str] = []
 
@@ -56,22 +64,12 @@ def test_retrieve_documents_uses_router_engine_when_enabled(
     """
     monkeypatch.setattr(settings.agents, "enable_router_injection", True)
     router = _Router()
-
-    from langgraph.prebuilt import ToolRuntime
-
-    runtime = ToolRuntime(
-        state={},
-        context={"router_engine": router},
-        config={},
-        stream_writer=lambda _chunk: None,
-        tool_call_id=None,
-        store=None,
-    )
+    state = {"tools_data": {"router_engine": router}}
 
     out = retrieve_documents.func(
         query="q",
-        state={},
-        runtime=runtime,
+        state=state,
+        runtime=None,
         strategy="hybrid",
         use_dspy=True,
         use_graphrag=False,

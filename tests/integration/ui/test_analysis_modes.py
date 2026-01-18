@@ -14,7 +14,7 @@ from streamlit.testing.v1 import AppTest
 
 import src.ui.background_jobs as bg
 from src.analysis.models import AnalysisResult, PerDocResult
-from tests.fixtures.vector_index import _FakeVectorIndex
+from tests.fixtures.vector_index import FakeVectorIndex
 from tests.helpers.apptest_utils import apptest_timeout_sec
 
 pytestmark = pytest.mark.integration
@@ -123,7 +123,7 @@ def chat_analysis_app_test(
     root = Path(__file__).resolve().parents[3]
     page_path = root / "src" / "pages" / "01_chat.py"
     at = AppTest.from_file(str(page_path), default_timeout=apptest_timeout_sec())
-    at.session_state["vector_index"] = _FakeVectorIndex()
+    at.session_state["vector_index"] = FakeVectorIndex()
     try:
         yield at
     finally:

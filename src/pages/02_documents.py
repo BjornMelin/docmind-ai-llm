@@ -154,19 +154,50 @@ def _handle_ingest_submission(
 
         saved_inputs: list[IngestionInput] = []
         for file_obj in files:
-            stored_path, digest = save_uploaded_file(file_obj)
+            if file_obj is None:
+                logger.warning("Skipping file (missing upload object).")
+                continue
+            file_name = getattr(file_obj, "name", None)
+            file_size = getattr(file_obj, "size", None)
+            if file_name is None:
+                logger.warning("Skipping file (missing name attribute).")
+                continue
+            if isinstance(file_size, int) and file_size <= 0:
+                logger.warning("Skipping file (empty upload).")
+                continue
+            try:
+                stored_path, digest = save_uploaded_file(file_obj)
+            except Exception as exc:
+                from src.utils.log_safety import build_pii_log_entry
+
+                error_redaction = build_pii_log_entry(
+                    str(exc), key_id="documents.save_file"
+                )
+                name_redaction = build_pii_log_entry(
+                    str(file_name), key_id="documents.upload_name"
+                )
+                logger.warning(
+                    "Skipping file (name={} error_type={} error={})",
+                    name_redaction.redacted,
+                    type(exc).__name__,
+                    error_redaction.redacted,
+                )
+                continue
             saved_inputs.append(
                 IngestionInput(
                     document_id=f"doc-{digest[:16]}",
                     source_path=stored_path,
                     metadata={
-                        "source_filename": getattr(file_obj, "name", stored_path.name),
+                        "source_filename": file_name,
                         "uploaded_at": datetime.now(UTC).isoformat(),
                         "sha256": digest,
                     },
                     encrypt_images=bool(encrypt_images),
                 )
             )
+        if not saved_inputs:
+            st.warning("No valid files to ingest.")
+            return
 
         job_manager = get_job_manager(settings.cache_version)
 
@@ -346,7 +377,17 @@ def _render_ingest_terminal_state(
     elif state.status == "failed":
         st.session_state[completed_key] = job_id
         st.session_state.pop("ingest_job_id", None)
-        st.error(f"Ingestion failed: {state.error or 'unknown error'}")
+        from src.utils.log_safety import build_pii_log_entry
+
+        err_msg = str(state.error) if state.error else "unknown error"
+        redaction = build_pii_log_entry(err_msg, key_id="documents.ingest_failed")
+        logger.error(
+            "Ingestion failed (error_type={} error={})",
+            type(state.error).__name__ if state.error else "Error",
+            redaction.redacted,
+        )
+        st.error("Ingestion failed. Please try again.")
+        st.caption(f"Error reference: {redaction.redacted}")
 
     elif state.status == "canceled":
         st.session_state[completed_key] = job_id

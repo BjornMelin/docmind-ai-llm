@@ -28,6 +28,13 @@ from src.config.settings import DocMindSettings, OpenAIConfig
 _DEFAULT_OPENAI_BASE_URL = OpenAIConfig().base_url
 
 
+def _resolve_api_key(settings: DocMindSettings) -> str:
+    """Resolve the OpenAI-compatible API key from settings."""
+    if settings.openai.api_key is not None:
+        return settings.openai.api_key.get_secret_value()
+    return "not-needed"
+
+
 def build_llm(settings: DocMindSettings) -> Any:
     """Construct the appropriate LLM from settings.
 
@@ -70,14 +77,11 @@ def build_llm(settings: DocMindSettings) -> Any:
         if not api_base:
             raise ValueError("No OpenAI-compatible base URL configured")
 
-        api_key = (
-            settings.openai.api_key.get_secret_value()
-            if settings.openai.api_key is not None
-            else "not-needed"
-        )
+        api_key = _resolve_api_key(settings)
         if settings.openai.api_mode == "responses":
             from llama_index.llms.openai import OpenAIResponses  # type: ignore
 
+            # OpenAIResponses supports these parameters in llama-index-llms-openai.
             llm = OpenAIResponses(
                 model=model_name,
                 api_base=api_base,
@@ -105,11 +109,7 @@ def build_llm(settings: DocMindSettings) -> Any:
         llm = OpenAILike(
             model=model_name,
             api_base=settings.backend_base_url_normalized,
-            api_key=(
-                settings.openai.api_key.get_secret_value()
-                if settings.openai.api_key is not None
-                else "not-needed"
-            ),
+            api_key=_resolve_api_key(settings),
             is_chat_model=True,
             is_function_calling_model=False,
             context_window=context_window,
@@ -127,11 +127,7 @@ def build_llm(settings: DocMindSettings) -> Any:
             llm = OpenAILike(
                 model=model_name,
                 api_base=settings.backend_base_url_normalized,
-                api_key=(
-                    settings.openai.api_key.get_secret_value()
-                    if settings.openai.api_key is not None
-                    else "not-needed"
-                ),
+                api_key=_resolve_api_key(settings),
                 is_chat_model=True,
                 is_function_calling_model=False,
                 context_window=context_window,

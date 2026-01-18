@@ -9,7 +9,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 
-class _FakeQueryEngine:
+class FakeQueryEngine:
     """Fake query engine for testing vector index interactions.
 
     Simulates LlamaIndex query engine behavior by returning deterministic
@@ -46,14 +46,14 @@ class _FakeQueryEngine:
         return SimpleNamespace(response=f"answer:{self._doc_id}", source_nodes=[src])
 
 
-class _FakeVectorIndex:
+class FakeVectorIndex:
     """Fake vector index for testing analysis flows.
 
     Simulates LlamaIndex VectorIndex behavior by extracting document filters
     from query engine parameters and returning corresponding query engines.
     """
 
-    def as_query_engine(self, **kwargs: object) -> _FakeQueryEngine:
+    def as_query_engine(self, **kwargs: object) -> FakeQueryEngine:
         """Create a query engine configured with the given parameters.
 
         Extracts a stable doc_id hint from the filters parameter when present,
@@ -64,7 +64,7 @@ class _FakeVectorIndex:
                       containing LlamaIndex filter metadata.
 
         Returns:
-            A _FakeQueryEngine configured with an appropriate doc_id.
+            A FakeQueryEngine configured with an appropriate doc_id.
         """
         doc_id = "combined"
         filters = kwargs.get("filters")
@@ -73,7 +73,7 @@ class _FakeVectorIndex:
             value = getattr(parts[0], "value", None)
             if value is not None:
                 doc_id = str(value)
-        return _FakeQueryEngine(doc_id=doc_id)
+        return FakeQueryEngine(doc_id=doc_id)
 
 
-__all__ = ["_FakeQueryEngine", "_FakeVectorIndex"]
+__all__ = ["FakeQueryEngine", "FakeVectorIndex"]

@@ -21,9 +21,11 @@ class _FakeJobManager:
     def __init__(self) -> None:
         self._events: dict[str, list[bg.ProgressEvent]] = {}
         self._states: dict[str, _State] = {}
+        self._counter = 0
 
     def start_job(self, *, owner_id: str, fn):  # type: ignore[no-untyped-def]
-        job_id = "job-1"
+        self._counter += 1
+        job_id = f"job-{self._counter}"
         events: list[bg.ProgressEvent] = []
 
         def _report(evt: bg.ProgressEvent) -> None:

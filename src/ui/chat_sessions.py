@@ -23,6 +23,9 @@ from src.persistence.chat_db import (
     touch_session,
 )
 
+# Streamlit runs the UI in a single-threaded model and open_chat_db sets
+# check_same_thread=False, so a single cached connection is acceptable. Revisit
+# if the app ever runs with concurrent threads/processes.
 _chat_db_conn: sqlite3.Connection | None = None
 _chat_db_conn_cleanup_registered: bool = False
 

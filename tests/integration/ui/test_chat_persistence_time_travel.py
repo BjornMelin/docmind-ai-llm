@@ -290,6 +290,14 @@ def test_chat_time_travel_fork_drops_future_messages(
 
 @pytest.mark.integration
 def test_chat_echoes_assistant_response(chat_app: AppTest) -> None:
+    """Verify the assistant echoes user input via the coordinator stub.
+
+    Args:
+        chat_app: AppTest fixture with coordinator stub.
+
+    Returns:
+        None.
+    """
     app = chat_app.run()
     assert not app.exception
 

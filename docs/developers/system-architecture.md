@@ -89,6 +89,7 @@ DocMind AI is architected with a strict **local-first** mandate (ADR-058):
 2. **No Cloud Leakage**: Remote LLM endpoints are disabled by default. Embeddings (BGE-M3/SigLIP) run locally on the user's GPU/CPU.
 3. **Fail-open Multimodal**: If GPU acceleration or specialized libraries (e.g., `sqlite-vec`) are unavailable, the system fallbacks to basic text-only RAG without crashing.
 4. **Content-Addressed Artifacts**: Large binary blobs (images, thumbnails) are never stored in databases. They are stored as `ArtifactRef` (SHA-256) in a local filesystem store.
+| Component               | Purpose                                                  | Technology                     | Performance Target   |
 | ----------------------- | -------------------------------------------------------- | ------------------------------ | -------------------- |
 | **Frontend**            | Document uploads, configuration, results, chat interface | Streamlit                      | Real-time streaming  |
 | **Multi-Agent System**  | 5-agent coordination for complex queries                 | LangGraph Supervisor           | <200ms coordination  |
