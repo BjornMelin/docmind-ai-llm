@@ -21,6 +21,8 @@ from typing import Any, Final, cast
 
 from loguru import logger
 
+from src.utils.log_safety import build_pii_log_entry
+
 try:  # pragma: no cover - optional dependency guard
     import portalocker
     from portalocker.exceptions import LockException
@@ -129,8 +131,8 @@ class SnapshotLock:
         self._use_portalocker = portalocker is not None
         if not self._use_portalocker:
             logger.warning(
-                "portalocker is unavailable; using fallback O_EXCL file lock at %s",
-                self.path,
+                "portalocker is unavailable; using fallback O_EXCL file lock at {}",
+                self.path.name,
             )
 
     def __enter__(self) -> SnapshotLock:
@@ -188,7 +190,7 @@ class SnapshotLock:
                 )
                 self._write_metadata()
                 self._start_heartbeat()
-                logger.debug("Acquired snapshot lock %s", self.path)
+                logger.debug("Acquired snapshot lock {}", self.path.name)
                 return
             except LockException:  # pragma: no cover - depends on timing
                 time.sleep(min(_DEFAULT_SLEEP, max(0.0, remaining)))
@@ -222,7 +224,7 @@ class SnapshotLock:
             self._hb_thread = None
             _remove_if_exists(self._metadata_path())
             _remove_if_exists(self.path)
-            logger.debug("Released snapshot lock %s", self.path)
+            logger.debug("Released snapshot lock {}", self.path.name)
 
     def _start_heartbeat(self) -> None:
         """Start a background thread that periodically refreshes the lock."""
@@ -264,7 +266,13 @@ class SnapshotLock:
             data = json.loads(metadata_path.read_text(encoding="utf-8"))
             metadata = _LockMetadata.from_json(data)
         except SnapshotLockError as exc:
-            logger.warning("Lock metadata corrupted at %s: %s", metadata_path, exc)
+            redaction = build_pii_log_entry(str(exc), key_id="snapshot_lock.metadata")
+            logger.warning(
+                "Lock metadata corrupted at {} (error_type={}, error={})",
+                metadata_path.name,
+                type(exc).__name__,
+                redaction.redacted,
+            )
             _remove_if_exists(metadata_path)
             _remove_if_exists(self.path)
             return 0, False
@@ -274,8 +282,9 @@ class SnapshotLock:
         if elapsed <= effective_ttl:
             return metadata.takeover_count, True
         logger.warning(
-            "Evicting stale snapshot lock %s held by %s (elapsed %.1fs > TTL %.1fs)",
-            self.path,
+            "Evicting stale snapshot lock {} held by {} "
+            "(elapsed {:.1f}s > TTL {:.1f}s)",
+            self.path.name,
             metadata.owner_id,
             elapsed,
             metadata.ttl_seconds,

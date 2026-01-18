@@ -132,18 +132,27 @@ def startup_init(cfg: "DocMindSettings" = settings) -> None:
             try:
                 cfg.chat.sqlite_path.parent.mkdir(parents=True, exist_ok=True)
             except OSError as exc:
+                from src.utils.log_safety import build_pii_log_entry
+
+                redaction = build_pii_log_entry(str(exc), key_id="startup.chat_db_dir")
                 logger.warning(
-                    "Chat DB directory creation failed (non-blocking) for {}: {}",
-                    cfg.chat.sqlite_path,
-                    exc,
+                    "Chat DB directory creation failed (non-blocking) for {} "
+                    "(error_type={} error={})",
+                    cfg.chat.sqlite_path.name,
+                    type(exc).__name__,
+                    redaction.redacted,
                 )
 
         # Observability: log config highlights
         try:
+            from src.utils.log_safety import safe_url_for_log
+
+            base_url = getattr(cfg, "backend_base_url_normalized", None)
+            safe_base_url = safe_url_for_log(str(base_url)) if base_url else ""
             logger.info(
-                "Startup: backend=%s base_url=%s timeout=%s hybrid=%s fusion=%s",
+                "Startup: backend={} base_url={} timeout={} hybrid={} fusion={}",
                 cfg.llm_backend,
-                getattr(cfg, "backend_base_url_normalized", None),
+                safe_base_url,
                 getattr(cfg, "llm_request_timeout_seconds", None),
                 bool(getattr(cfg.retrieval, "enable_server_hybrid", False)),
                 str(getattr(cfg.retrieval, "fusion_mode", "rrf")),
@@ -153,15 +162,28 @@ def startup_init(cfg: "DocMindSettings" = settings) -> None:
             TypeError,
             ValueError,
         ) as exc:  # pragma: no cover - logging must not fail
-            logger.debug("Startup logging failed: {}", exc)
+            from src.utils.log_safety import build_pii_log_entry
+
+            redaction = build_pii_log_entry(str(exc), key_id="startup.logging")
+            logger.debug(
+                "Startup logging failed (error_type={} error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
     except (
         OSError,
         AttributeError,
         TypeError,
         ValueError,
     ) as exc:  # pragma: no cover - defensive
-        # Do not crash app on startup side-effects; callers may retry/log
-        logger.warning("startup_init encountered error: {}", exc)
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="startup.startup_init")
+        logger.warning(
+            "startup_init encountered error (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
         return
 
     setup_tracing(cfg)
@@ -258,7 +280,14 @@ def _configure_llm() -> None:
     try:
         settings._validate_endpoints_security()
     except ValueError as err:
-        logger.warning("LLM configuration blocked by security policy: {}", err)
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(err), key_id="integrations.llm_security")
+        logger.warning(
+            "LLM configuration blocked by security policy (error_type={} error={})",
+            type(err).__name__,
+            redaction.redacted,
+        )
         Settings.llm = None
         return
 
@@ -266,17 +295,27 @@ def _configure_llm() -> None:
         Settings.llm = build_llm(settings)
         provider = settings.llm_backend
         model_name = settings.model or settings.vllm.model
+        from src.utils.log_safety import safe_url_for_log
+
         base_url = getattr(settings, "backend_base_url_normalized", None)
+        safe_base_url = safe_url_for_log(str(base_url)) if base_url else ""
         streaming = bool(getattr(settings, "llm_streaming_enabled", True))
         logger.info(
             "LLM configured via factory: provider={} model={} base_url={} streaming={}",
             provider,
             model_name,
-            base_url,
+            safe_base_url,
             streaming,
         )
     except (ImportError, RuntimeError, ValueError, OSError) as exc:
-        logger.opt(exception=True).warning("Could not configure LLM: {}", exc)
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="integrations.configure_llm")
+        logger.warning(
+            "Could not configure LLM (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
         Settings.llm = None
 
 
@@ -333,7 +372,14 @@ def _configure_embeddings() -> None:
             device,
         )
     except (ImportError, RuntimeError, ValueError, OSError) as exc:
-        logger.opt(exception=True).warning("Could not configure embeddings: {}", exc)
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="integrations.configure_embed")
+        logger.warning(
+            "Could not configure embeddings (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
         Settings.embed_model = None
 
 
@@ -350,8 +396,13 @@ def _configure_context_settings() -> None:
             int(Settings.num_output),
         )
     except (AttributeError, ValueError) as exc:
-        logger.opt(exception=True).warning(
-            "Could not set context configuration: {}", exc
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="integrations.context_cfg")
+        logger.warning(
+            "Could not set context configuration (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
         )
 
 

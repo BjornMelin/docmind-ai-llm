@@ -669,9 +669,19 @@ def main() -> int:
         exit_code = max(
             exit_code, _report_failures_and_warnings(analyzer, args.fail_under)
         )
-    except (OSError, ValueError, subprocess.TimeoutExpired) as e:
-        logger.exception("Unexpected error during coverage checking")
-        print(f"ERROR: Unexpected error: {e}")
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="scripts.check_coverage")
+        logger.error(
+            "Unexpected error during coverage checking (error_type=%s error=%s)",
+            type(exc).__name__,
+            redaction.redacted,
+        )
+        print(
+            "ERROR: Unexpected error during coverage checking "
+            f"(error_type={type(exc).__name__} error={redaction.redacted})"
+        )
         exit_code = 2
 
     return exit_code

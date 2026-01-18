@@ -2,6 +2,9 @@
 
 All UI pages live under `src/pages/`. This module is intentionally kept as a
 thin multipage shell with no business logic or helper wrappers.
+
+This module is launched via the repository root `app.py`. Running `src/app.py`
+directly is not a supported entrypoint.
 """
 
 from __future__ import annotations
@@ -48,7 +51,3 @@ def main() -> None:  # pragma: no cover - Streamlit entrypoint
     )
 
     st.navigation([chat, docs, analytics, settings_page]).run()
-
-
-if __name__ == "__main__":  # pragma: no cover
-    main()

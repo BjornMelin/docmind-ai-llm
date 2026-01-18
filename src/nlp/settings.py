@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 from enum import StrEnum
-from typing import TypeAlias
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -22,7 +21,7 @@ class SpacyDevice(StrEnum):
     APPLE = "apple"
 
 
-SpacyCacheKey: TypeAlias = tuple[
+type SpacyCacheKey = tuple[
     bool, str, str, int, tuple[str, ...], int, int, int
 ]  # (enabled, model, device, gpu_id, disable_pipes, batch_size, n_process, max_chars)
 

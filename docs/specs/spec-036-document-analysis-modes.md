@@ -124,6 +124,4 @@ Never log raw prompts or document text.
 
 ## RTM Updates
 
-Update `docs/specs/traceability.md`:
-
-- Add row `FR-028` with code + tests once implemented.
+`FR-028` is tracked in `docs/specs/traceability.md` with code + test coverage.

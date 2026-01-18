@@ -100,6 +100,8 @@ class MultiAgentGraphState(AgentState[Any]):
     remaining_steps: NotRequired[int]
     timed_out: NotRequired[bool]
     deadline_s: NotRequired[float]
+    deadline_ts: NotRequired[float]
+    cancel_reason: NotRequired[str]
 
 
 class MultiAgentState(BaseModel):
@@ -132,7 +134,9 @@ class MultiAgentState(BaseModel):
         fallback_used: Whether fallback RAG mode was used
         remaining_steps: Remaining steps for LangGraph supervisor
         timed_out: Whether the workflow timed out
-        deadline_s: Absolute workflow deadline in seconds
+        deadline_s: Decision timeout budget in seconds
+        deadline_ts: Absolute deadline timestamp (time.monotonic)
+        cancel_reason: Cancellation reason string, when applicable
     """
 
     # Core state
@@ -170,3 +174,5 @@ class MultiAgentState(BaseModel):
     )
     timed_out: bool = Field(default=False)
     deadline_s: float = Field(default=0.0)
+    deadline_ts: float | None = Field(default=None)
+    cancel_reason: str | None = Field(default=None)

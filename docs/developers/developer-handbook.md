@@ -32,12 +32,12 @@ This comprehensive handbook provides practical implementation guidance for devel
 
 ```bash
 # Format and lint (run before commits)
-ruff format . && ruff check . --fix
+uv run ruff format . && uv run ruff check . --fix
 
 # Configuration in pyproject.toml
 [tool.ruff]
 line-length = 88
-target-version = "py311"
+target-version = "py313"
 select = ["E", "F", "I", "UP", "N", "S", "B", "A", "C4", "PT", "SIM", "TID", "D"]
 ignore = ["D203", "D213", "S301", "S603", "S607", "S108"]
 ```
@@ -178,35 +178,15 @@ else:
 ### Error Handling Patterns
 
 ```python
-# Comprehensive error handling with fallbacks
-class RetrievalAgent:
-    async def retrieve_documents(
-        self, 
-        query: str, 
-        strategy: str = "hybrid"
-    ) -> List[Document]:
-        """Retrieve documents with fallback strategies."""
-        
-        try:
-            # Primary strategy
-            if strategy == "hybrid":
-                return await self._hybrid_search(query)
-            elif strategy == "dense":
-                return await self._dense_search(query)
-            else:
-                return await self._sparse_search(query)
-                
-        except QdrantConnectionError as e:
-            logger.warning(f"Qdrant connection failed: {e}, using cache")
-            return await self._fallback_cache_search(query)
-            
-        except EmbeddingGenerationError as e:
-            logger.warning(f"Embedding generation failed: {e}, using keyword search")
-            return await self._fallback_keyword_search(query)
-            
-        except Exception as e:
-            logger.error(f"All retrieval strategies failed: {e}")
-            raise RetrievalError(f"Retrieval failed: {e}")
+# DocMind tools are fail-open: tools should return a structured payload even when
+# the underlying integration fails, rather than raising and aborting the run.
+#
+# Example: src/agents/tools/retrieval.py returns a JSON string on both success
+# and error paths.
+from src.agents.tools.retrieval import retrieve_documents
+
+payload_json = retrieve_documents("find docs about embeddings", strategy="hybrid")
+print(payload_json)  # {"documents": [...], ...} or {"documents": [], "error": "...", ...}
 ```
 
 ### Tool Creation Pattern
@@ -1248,14 +1228,14 @@ async def debug_agent_execution(self, query: str) -> str:
 
 ```bash
 # Debug configuration loading
-python -c "
+uv run python -c "
 from src.config import settings
 import pprint
 pprint.pprint(settings.model_dump())
 "
 
 # Validate specific configuration sections
-python -c "
+uv run python -c "
 from src.config import settings
 print('vLLM Config:', settings.vllm.model_dump())
 print('Agent Config:', settings.agents.model_dump())
@@ -1307,7 +1287,8 @@ def memory_profile_processing():
 # GPU diagnostics
 def diagnose_gpu_setup():
     """Comprehensive GPU setup diagnostics."""
-    
+    import os
+
     print("=== GPU DIAGNOSTICS ===")
     
     # CUDA availability
@@ -1328,33 +1309,13 @@ def diagnose_gpu_setup():
         print(f"Reserved: {memory_reserved:.1f}GB")
         print(f"Available: {memory_total - memory_reserved:.1f}GB")
     
-    # vLLM diagnostics
-    try:
-        import vllm
-        print(f"vLLM Version: {vllm.__version__}")
-        # Report configured backend from env (if any)
-        backend = os.environ.get('VLLM_ATTENTION_BACKEND', '').upper() or 'DEFAULT'
-        print(f"vLLM Attention Backend (env): {backend}")
-
-        # Robust FlashInfer availability checks
-        # 1) Python package presence (flashinfer/flashinfer_torch)
-        try:
-            from importlib.util import find_spec
-            fi_installed = (find_spec('flashinfer') is not None) or (find_spec('flashinfer_torch') is not None)
-        except Exception:
-            fi_installed = False
-
-        # 2) vLLM compiled backend importability
-        try:
-            from vllm.attention.backends import flashinfer as _fi  # type: ignore
-            fi_backend_available = True
-        except Exception:
-            fi_backend_available = False
-
-        print(f"FlashInfer Installed: {fi_installed}")
-        print(f"FlashInfer Backend Available: {fi_backend_available}")
-    except ImportError:
-        print("vLLM not installed")
+    # vLLM diagnostics (external server)
+    base_url = os.environ.get("DOCMIND_OPENAI__BASE_URL") or os.environ.get("DOCMIND_VLLM__VLLM_BASE_URL")
+    if base_url:
+        print(f"vLLM Base URL (configured): {base_url}")
+        print("Tip: validate the server with: curl --fail --silent \"$DOCMIND_OPENAI__BASE_URL/models\"")
+    else:
+        print("vLLM Base URL not configured")
     
     # Environment variables
     print("\n=== RELEVANT ENV VARS ===")

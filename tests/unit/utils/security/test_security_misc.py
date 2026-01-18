@@ -14,7 +14,7 @@ def test_decrypt_file_passthrough_when_not_enc():
 
 def test_redact_pii_performs_redaction():
     """redact_pii should not return raw input and should mask PII-like content."""
-    from src.utils.security import redact_pii
+    from src.utils.log_safety import redact_pii
 
     s = "no pii here"
     redacted = redact_pii(s)

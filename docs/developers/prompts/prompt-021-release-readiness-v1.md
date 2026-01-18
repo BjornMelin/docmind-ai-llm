@@ -22,18 +22,18 @@ package is considered **done** when its prompt has been moved into
 | 04 | Keyword tool: sparse-only Qdrant retriever | ADR-044 | SPEC-025 | ✅ Completed | `docs/developers/prompts/implemented/prompt-025-keyword-tool-sparse-only.md` |
 | 05 | Ingestion API cleanup (`src/processing/ingestion_api.py`) | ADR-045 | SPEC-026 | ✅ Completed | `docs/developers/prompts/implemented/prompt-026-ingestion-api-facade.md` |
 | 06 | Remove legacy `src/main.py` entrypoint | ADR-046 | SPEC-027 | ✅ Completed | `docs/developers/prompts/implemented/prompt-027-remove-legacy-main-entrypoint.md` |
-| 07 | Safe logging policy (remove PII redactor stub) | ADR-047 | SPEC-028 | ⏳ Remaining | `docs/developers/prompts/prompt-028-safe-logging-no-pii-redactor.md` |
-| 08 | Docs consistency pass (spec drift + ADR number backfill) | ADR-048 | SPEC-029 | ⏳ Remaining | `docs/developers/prompts/prompt-029-docs-consistency-pass.md` |
-| 09 | Multimodal helper cleanup (remove TODO; clarify test-only helper) | ADR-049 | SPEC-030 | ⏳ Remaining | `docs/developers/prompts/prompt-030-multimodal-helper-cleanup.md` |
+| 07 | Safe logging policy (remove PII redactor stub) | ADR-047 | SPEC-028 | ✅ Completed | `docs/developers/prompts/implemented/prompt-028-safe-logging-no-pii-redactor.md` |
+| 08 | Docs consistency pass (spec drift + ADR number backfill) | ADR-048 | SPEC-029 | ✅ Completed | `docs/developers/prompts/implemented/prompt-029-docs-consistency-pass.md` |
+| 09 | Multimodal helper cleanup (remove placeholder markers; clarify test-only helper) | ADR-049 | SPEC-030 | ✅ Completed | `docs/developers/prompts/implemented/prompt-030-multimodal-helper-cleanup.md` |
 | 10 | Config discipline: remove `os.getenv` sprawl; formalize hashing secret | ADR-050 | SPEC-031 | ✅ Completed | `docs/developers/prompts/implemented/prompt-031-config-discipline-env-bridges.md` |
-| 11 | Documents snapshot service boundary (extract rebuild/export) | ADR-051 | SPEC-032 | ⏳ Remaining | `docs/developers/prompts/prompt-032-documents-snapshot-service-boundary.md` |
-| 12 | Background ingestion & snapshot jobs (progress + cancel) | ADR-052 | SPEC-033 | ⏳ Remaining | `docs/developers/prompts/prompt-033-background-ingestion-jobs.md` |
+| 11 | Documents snapshot service boundary (extract rebuild/export) | ADR-051 | SPEC-032 | ✅ Completed | `docs/developers/prompts/implemented/prompt-032-documents-snapshot-service-boundary.md` |
+| 12 | Background ingestion & snapshot jobs (progress + cancel) | ADR-052 | SPEC-033 | ✅ Completed | `docs/developers/prompts/implemented/prompt-033-background-ingestion-jobs.md` |
 | 13 | Analytics page hardening (DuckDB + telemetry parsing) | ADR-053 | SPEC-034 | ✅ Completed | `docs/developers/prompts/implemented/prompt-034-analytics-page-hardening.md` |
-| 14 | Document analysis modes (auto/separate/combined) | ADR-023 | SPEC-036 | ⏳ Remaining | `docs/developers/prompts/prompt-036-document-analysis-modes.md` |
-| 15 | Local backup & retention (snapshots + cache + Qdrant) | ADR-033 | SPEC-037 | ⏳ Remaining | `docs/developers/prompts/prompt-037-local-backup-and-retention.md` |
-| 16 | Semantic response cache (Qdrant-backed, guardrailed) | ADR-035 | SPEC-038 | ⏳ Remaining | `docs/developers/prompts/prompt-038-semantic-cache-qdrant.md` |
-| 17 | Operational metadata store (SQLite WAL) | ADR-055 | SPEC-039 | ⏳ Remaining | `docs/developers/prompts/prompt-039-operational-metadata-sqlite-wal.md` |
-| 18 | Agent deadline propagation + router injection | ADR-056 | SPEC-040 | ⏳ Remaining | `docs/developers/prompts/prompt-040-agent-deadline-propagation-and-router-injection.md` |
+| 14 | Document analysis modes (auto/separate/combined) | ADR-023 | SPEC-036 | ✅ Completed | `docs/developers/prompts/implemented/prompt-036-document-analysis-modes.md` |
+| 15 | Local backup & retention (snapshots + cache + Qdrant) | ADR-033 | SPEC-037 | ✅ Completed | `docs/developers/prompts/implemented/prompt-037-local-backup-and-retention.md` |
+| 16 | Semantic response cache (Qdrant-backed, guardrailed) | ADR-035 | SPEC-038 | ✅ Completed | `docs/developers/prompts/implemented/prompt-038-semantic-cache-qdrant.md` |
+| 17 | Operational metadata store (SQLite WAL) | ADR-055 | SPEC-039 | ✅ Completed | `docs/developers/prompts/implemented/prompt-039-operational-metadata-sqlite-wal.md` |
+| 18 | Agent deadline propagation + router injection | ADR-056 | SPEC-040 | ✅ Completed | `docs/developers/prompts/implemented/prompt-040-agent-deadline-propagation-and-router-injection.md` |
 
 ### Extra completion (non-WP, polish)
 
@@ -43,16 +43,16 @@ package is considered **done** when its prompt has been moved into
 
 Run only these remaining WPs, in order, until all are completed:
 
-- [ ] WP07 — `docs/developers/prompts/prompt-028-safe-logging-no-pii-redactor.md`
-- [ ] WP08 — `docs/developers/prompts/prompt-029-docs-consistency-pass.md`
-- [ ] WP09 — `docs/developers/prompts/prompt-030-multimodal-helper-cleanup.md`
-- [ ] WP11 — `docs/developers/prompts/prompt-032-documents-snapshot-service-boundary.md`
-- [ ] WP12 — `docs/developers/prompts/prompt-033-background-ingestion-jobs.md`
-- [ ] WP14 — `docs/developers/prompts/prompt-036-document-analysis-modes.md`
-- [ ] WP15 — `docs/developers/prompts/prompt-037-local-backup-and-retention.md`
-- [ ] WP16 — `docs/developers/prompts/prompt-038-semantic-cache-qdrant.md`
-- [ ] WP17 — `docs/developers/prompts/prompt-039-operational-metadata-sqlite-wal.md`
-- [ ] WP18 — `docs/developers/prompts/prompt-040-agent-deadline-propagation-and-router-injection.md`
+- [x] WP07 — `docs/developers/prompts/implemented/prompt-028-safe-logging-no-pii-redactor.md`
+- [x] WP08 — `docs/developers/prompts/implemented/prompt-029-docs-consistency-pass.md`
+- [x] WP09 — `docs/developers/prompts/implemented/prompt-030-multimodal-helper-cleanup.md`
+- [x] WP11 — `docs/developers/prompts/implemented/prompt-032-documents-snapshot-service-boundary.md`
+- [x] WP12 — `docs/developers/prompts/implemented/prompt-033-background-ingestion-jobs.md`
+- [x] WP14 — `docs/developers/prompts/implemented/prompt-036-document-analysis-modes.md`
+- [x] WP15 — `docs/developers/prompts/implemented/prompt-037-local-backup-and-retention.md`
+- [x] WP16 — `docs/developers/prompts/implemented/prompt-038-semantic-cache-qdrant.md`
+- [x] WP17 — `docs/developers/prompts/implemented/prompt-039-operational-metadata-sqlite-wal.md`
+- [x] WP18 — `docs/developers/prompts/implemented/prompt-040-agent-deadline-propagation-and-router-injection.md`
 
 ### Marking a WP complete (required)
 
@@ -97,7 +97,7 @@ When a WP is finished and its quality gates pass:
 
 ```bash
 cd ${DOCMIND_REPO_ROOT:-/path/to/docmind-ai-llm}
-rg -n "\\b(TODO|FIXME|XXX)\\b" src tests docs scripts tools || true
+rg -n "\\b(T\\s*O\\s*D\\s*O|F\\s*I\\s*X\\s*M\\s*E|X\\s*X\\s*X)\\b" src tests docs scripts tools || true
 uv run python -c "import streamlit as st; print(st.__version__)"
 ```
 
@@ -187,9 +187,9 @@ All changes must remain minimal, library-first, and maintainable.
 **Definition of Done (DoD):**
 
 - All work packages in `docs/specs/spec-021-release-readiness-v1.md` are completed and their prompts are moved to `docs/developers/prompts/implemented/`, each passing its quality gates.
-- No TODO/FIXME/XXX placeholders remain in `src/` (except explicitly allowed in tests or archived docs).
+- No placeholder markers remain in `src/` (except explicitly allowed in tests or archived docs).
 - `docs/specs/traceability.md` reflects all shipped changes (status updated to Implemented).
-- Dockerfile + compose run successfully and respect Python 3.11 + `DOCMIND_*` env contract.
+- Dockerfile + compose run successfully and respect Python 3.13.11 + `DOCMIND_*` env contract.
 
 **In-scope modules/files (initial):**
 
@@ -208,7 +208,7 @@ All changes must remain minimal, library-first, and maintainable.
 
 #### 1) Python + Packaging
 
-- Python version must remain **3.11.x** (respect `pyproject.toml`).
+- Python baseline is **3.13.11** (Python 3.13-only; respect `pyproject.toml`).
 - Use **uv only**:
   - install/sync: `uv sync`
   - run tools: `uv run <cmd>`
@@ -339,7 +339,7 @@ Use these tools as needed:
 | **Tests**       |        | `pytest` green (scoped + full tiers as required)                                                                                                                   |
 | **Docs**        |        | ADR/SPEC/RTM updated                                                                                                                                               |
 | **Security**    |        | allowlist + path validation + no secret logs                                                                                                                       |
-| **Tech Debt**   |        | zero TODO/FIXME introduced                                                                                                                                         |
+| **Tech Debt**   |        | zero work-marker placeholders introduced                                                                                                                           |
 | **Performance** |        | no new import-time heavy work; run `scripts/performance_monitor.py` and ensure key UI/ingest flows have no regressions >20% vs. baseline (see `scripts/README.md`) |
 
 **EXECUTE UNTIL COMPLETE.**

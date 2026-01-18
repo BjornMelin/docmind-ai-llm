@@ -1,7 +1,7 @@
 ---
 ADR: 047
 Title: Safe Logging Policy — Metadata-only + Keyed Fingerprints + Redaction Backstop
-Status: Proposed
+Status: Implemented
 Version: 1.1
 Date: 2026-01-10
 Supersedes:

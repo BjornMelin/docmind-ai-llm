@@ -161,7 +161,7 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Tests**       |        | settings-prune tests green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | config reference + ADR links updated; RTM NFR-MAINT-003 updated                                                |
 | **Security**    |        | no security/egress knobs removed without docs/tests; startup remains tolerant to unknown env vars              |
-| **Tech Debt**   |        | zero TODO/FIXME introduced                                                                                     |
+| **Tech Debt**   |        | zero work-marker placeholders introduced                                                                        |
 | **Performance** |        | settings load remains fast (no heavy validators)                                                               |
 
 **EXECUTE UNTIL COMPLETE.**

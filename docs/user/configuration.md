@@ -8,6 +8,24 @@ This page summarizes common runtime configuration for DocMind AI. For a full dev
 - Context window and timeouts
 - GPU acceleration (CUDA) and memory utilization
 
+### OpenAI-compatible providers (cloud/gateways/local servers)
+
+DocMind supports any OpenAI-compatible endpoint via:
+
+```bash
+DOCMIND_LLM_BACKEND=openai_compatible
+DOCMIND_OPENAI__BASE_URL=http://localhost:1234/v1   # or a cloud/gateway URL
+DOCMIND_OPENAI__API_KEY=not-needed                  # or a real key for cloud
+```
+
+Optional advanced knobs:
+
+```bash
+DOCMIND_OPENAI__API_MODE=chat_completions  # or responses (only when supported)
+DOCMIND_OPENAI__REQUIRE_V1=true            # disable for LiteLLM Proxy default root
+DOCMIND_OPENAI__DEFAULT_HEADERS='{"HTTP-Referer":"","X-Title":""}'
+```
+
 ## Avoid Global API Keys (Optional)
 
 By default, exported environment variables take precedence over `.env`.

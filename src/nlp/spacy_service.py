@@ -152,7 +152,14 @@ def _load_nlp_cached(cache_key: SpacyCacheKey) -> Language:
             cfg.model,
             type(exc).__name__,
         )
-        logger.debug("spaCy load error detail: {}", str(exc))
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="nlp.spacy_load")
+        logger.debug(
+            "spaCy load error detail (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
         nlp = spacy.blank("en")
 
     _ensure_sentence_component(nlp)

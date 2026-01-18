@@ -197,7 +197,14 @@ def build_ingestion_pipeline(
         extractor = TitleExtractor(show_progress=False)
         transformations.append(extractor)
     except (ImportError, ValueError, RuntimeError) as exc:  # pragma: no cover
-        logger.debug("TitleExtractor unavailable: {}", exc)
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="ingestion.title_extractor")
+        logger.debug(
+            "TitleExtractor unavailable (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
 
     if embedding is not None:
         transformations.append(embedding)
@@ -235,8 +242,16 @@ def _resolve_embedding(embedding: BaseEmbedding | None) -> BaseEmbedding | None:
         ValueError,
         ImportError,
     ) as exc:  # pragma: no cover - defensive
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(
+            str(exc), key_id="ingestion.embedding_autosetup"
+        )
         logger.warning(
-            "Embedding auto-setup failed; continuing without embedding: {}", exc
+            "Embedding auto-setup failed; continuing without embedding "
+            "(error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
         )
         return get_settings_embed_model()
 
@@ -392,7 +407,14 @@ def _store_image_artifact(
         thumb_ref = store.put_file(Path(thumb_local))
         thumb_path = store.resolve_path(thumb_ref)
     except Exception as exc:
-        logger.debug("Thumbnail generation failed: {}", exc)
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="ingestion.thumbnail")
+        logger.debug(
+            "Thumbnail generation failed (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
         thumb_ref = None
         thumb_path = None
     return img_ref, img_path, thumb_ref, thumb_path
@@ -426,7 +448,14 @@ def _build_page_image_records(
                 store, export, settings
             )
         except (OSError, ValueError) as exc:
-            logger.debug("ArtifactStore put failed: {}", exc)
+            from src.utils.log_safety import build_pii_log_entry
+
+            redaction = build_pii_log_entry(str(exc), key_id="ingestion.artifact_store")
+            logger.debug(
+                "ArtifactStore put failed (error_type={} error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
             skipped += 1
             continue
 
@@ -461,7 +490,16 @@ def _build_page_image_records(
                 )
             )
         except Exception as exc:  # pragma: no cover
-            logger.debug("PageImageRecord build failed: {}", exc)
+            from src.utils.log_safety import build_pii_log_entry
+
+            redaction = build_pii_log_entry(
+                str(exc), key_id="ingestion.page_image_record"
+            )
+            logger.debug(
+                "PageImageRecord build failed (error_type={} error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
             skipped += 1
     return records, skipped
 
@@ -560,8 +598,15 @@ def _index_page_images(
             **orchestration,
         }
     except Exception as exc:  # pragma: no cover - fail open
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="ingestion.image_indexing")
         logger.info("Image indexing skipped: {}", type(exc).__name__)
-        logger.debug("Image indexing error: {}", exc)
+        logger.debug(
+            "Image indexing error (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
         return {
             "image_index.enabled": True,
             "image_index.indexed": 0,

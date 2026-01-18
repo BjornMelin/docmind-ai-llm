@@ -4,7 +4,7 @@ title: Documentation Consistency Pass (Specs, Handbook, RTM)
 version: 1.0.0
 date: 2026-01-09
 owners: ["ai-arch"]
-status: Draft
+status: Implemented
 related_requirements:
   - NFR-MAINT-003: Docs must match shipped code/APIs.
 related_adrs: ["ADR-048"]

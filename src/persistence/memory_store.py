@@ -31,6 +31,7 @@ from loguru import logger
 
 from src.config.settings import DocMindSettings, settings
 from src.persistence.path_utils import resolve_path_under_data_dir
+from src.utils.log_safety import build_pii_log_entry
 from src.utils.time import now_ms
 
 try:  # pragma: no cover - optional native dependency
@@ -488,7 +489,13 @@ class DocMindSqliteStore(BaseStore):
             self._conn.enable_load_extension(True)
             sqlite_vec.load(self._conn)
         except Exception as exc:  # pragma: no cover - depends on platform
-            logger.warning("sqlite-vec load failed; semantic search disabled: %s", exc)
+            redaction = build_pii_log_entry(str(exc), key_id="memory_store.sqlite_vec")
+            logger.warning(
+                "sqlite-vec load failed; semantic search disabled "
+                "(error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
             self._vec_enabled = False
             return
         finally:
@@ -673,9 +680,24 @@ class DocMindSqliteStore(BaseStore):
                     item_id=item_id, ns_cols=ns_cols, embedding=embedding
                 )
             except ValueError as exc:  # pragma: no cover - fail-open
-                logger.warning("Memory embedding dimension mismatch: {}", exc)
+                redaction = build_pii_log_entry(
+                    str(exc), key_id="memory_store.embed_dim"
+                )
+                logger.warning(
+                    "Memory embedding dimension mismatch (error_type={} error={})",
+                    type(exc).__name__,
+                    redaction.redacted,
+                )
             except Exception as exc:  # pragma: no cover - fail-open
-                logger.warning("Memory embedding update failed; continuing: {}", exc)
+                redaction = build_pii_log_entry(
+                    str(exc), key_id="memory_store.embed_update"
+                )
+                logger.warning(
+                    "Memory embedding update failed; continuing "
+                    "(error_type={} error={})",
+                    type(exc).__name__,
+                    redaction.redacted,
+                )
 
         if not self._in_batch:
             self._conn.commit()

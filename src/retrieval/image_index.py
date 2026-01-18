@@ -24,6 +24,7 @@ from qdrant_client.http.models import Distance
 
 from src.persistence.artifacts import ArtifactRef
 from src.utils.images import open_image_encrypted
+from src.utils.log_safety import build_pii_log_entry
 from src.utils.qdrant_utils import get_collection_params
 
 _SIGLIP_VECTOR_NAME = "siglip"
@@ -67,7 +68,7 @@ def ensure_siglip_image_collection(
                 ),
             },
         )
-        logger.info("Created image collection '%s' (dim=%d)", collection_name, dim)
+        logger.info("Created image collection '{}' (dim={})", collection_name, int(dim))
         return
 
     # Patch missing vector head if needed (idempotent).
@@ -83,8 +84,8 @@ def ensure_siglip_image_collection(
             # expected vector, the safest path is to ask the operator to
             # recreate it.
             logger.warning(
-                "Image collection '%s' is missing vector head '%s'; "
-                "recreate the collection to enable image indexing",
+                "Image collection '{}' is missing vector head '{}'; recreate the "
+                "collection to enable image indexing",
                 collection_name,
                 vector_name,
             )
@@ -96,7 +97,7 @@ def ensure_siglip_image_collection(
             existing_dim = vec_params.get("size")
         if existing_dim is not None and int(existing_dim) != int(dim):
             logger.error(
-                "Image collection '%s' vector '%s' has dim=%d but expected dim=%d; "
+                "Image collection '{}' vector '{}' has dim={} but expected dim={}; "
                 "recreate the collection to enable image indexing",
                 collection_name,
                 vector_name,
@@ -111,7 +112,14 @@ def ensure_siglip_image_collection(
     except ValueError:
         raise
     except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("ensure_siglip_image_collection skipped: %s", exc)
+        redaction = build_pii_log_entry(
+            str(exc), key_id="image_index.ensure_siglip_image_collection"
+        )
+        logger.warning(
+            "ensure_siglip_image_collection skipped (error_type={}, error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
 
 
 def _siglip_expected_dim(embedder: Any) -> int:

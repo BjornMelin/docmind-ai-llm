@@ -44,6 +44,7 @@ from qdrant_client.http.models import (
 )
 
 from src.config import settings
+from src.utils.log_safety import build_pii_log_entry, safe_url_for_log
 from src.utils.qdrant_exceptions import (
     QDRANT_SCHEMA_EXCEPTIONS,
     QDRANT_TRANSPORT_EXCEPTIONS,
@@ -79,7 +80,7 @@ def ensure_sparse_idf_modifier(client: QdrantClient, collection_name: str) -> No
             cur_mod = getattr(cur, "modifier", None)
             if cur_mod is None or cur_mod != qmodels.Modifier.IDF:
                 logger.info(
-                    "Updating sparse modifier to IDF for collection '%s'",
+                    "Updating sparse modifier to IDF for collection '{}'",
                     collection_name,
                 )
                 client.update_collection(
@@ -96,7 +97,12 @@ def ensure_sparse_idf_modifier(client: QdrantClient, collection_name: str) -> No
         RuntimeError,
         ValueError,
     ) as e:  # pragma: no cover - defensive path
-        logger.warning("ensure_sparse_idf_modifier skipped: %s", e)
+        redaction = build_pii_log_entry(str(e), key_id="storage.sparse_idf_modifier")
+        logger.warning(
+            "ensure_sparse_idf_modifier skipped (error_type={}, error={})",
+            type(e).__name__,
+            redaction.redacted,
+        )
 
 
 def _safe_collection_exists(client: QdrantClient, name: str) -> bool:
@@ -116,7 +122,12 @@ def _safe_collection_exists(client: QdrantClient, name: str) -> bool:
         *QDRANT_TRANSPORT_EXCEPTIONS,
         ValueError,
     ) as exc:  # pragma: no cover - defensive
-        logger.warning("collection_exists check failed: %s", exc)
+        redaction = build_pii_log_entry(str(exc), key_id="storage.collection_exists")
+        logger.warning(
+            "collection_exists check failed (error_type={}, error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
         return False
 
 
@@ -154,7 +165,7 @@ def _create_hybrid_collection(client: QdrantClient, name: str, dense_dim: int) -
             ),
         },
     )
-    logger.info("Created hybrid collection '%s' (dense=%d)", name, dense_dim)
+    logger.info("Created hybrid collection '{}' (dense={})", name, dense_dim)
 
 
 def _compute_hybrid_patches(
@@ -235,8 +246,14 @@ def ensure_hybrid_collection(
             *QDRANT_TRANSPORT_EXCEPTIONS,
             ValueError,
         ) as exc:  # pragma: no cover - defensive
+            redaction = build_pii_log_entry(
+                str(exc), key_id="storage.create_collection"
+            )
             logger.warning(
-                "create_collection failed for '%s': %s", collection_name, exc
+                "create_collection failed for '{}' (error_type={}, error={})",
+                collection_name,
+                type(exc).__name__,
+                redaction.redacted,
             )
         return
 
@@ -256,7 +273,7 @@ def ensure_hybrid_collection(
                 cur_size = int(getattr(dense_cfg["text-dense"], "size", dense_dim))
                 if cur_size != dense_dim:
                     logger.warning(
-                        "Collection '%s' text-dense size mismatch (have=%d, want=%d)",
+                        "Collection '{}' text-dense size mismatch (have={}, want={})",
                         collection_name,
                         cur_size,
                         dense_dim,
@@ -267,22 +284,36 @@ def ensure_hybrid_collection(
             ValueError,
             KeyError,
         ) as exc:  # pragma: no cover - defensive
-            logger.debug("dense size verify skipped: %s", exc)
+            redaction = build_pii_log_entry(
+                str(exc), key_id="storage.dense_size_verify"
+            )
+            logger.debug(
+                "dense size verify skipped (error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
 
         patch_vecs, patch_sprs = _compute_hybrid_patches(
             dense_cfg, sparse_cfg, dense_dim
         )
         if patch_vecs or patch_sprs:
-            logger.info("Updating collection '%s' schema", collection_name)
+            logger.info("Updating collection '{}' schema", collection_name)
             client.update_collection(
                 collection_name=collection_name,
                 vectors_config=patch_vecs,
                 sparse_vectors_config=patch_sprs,
             )
         else:
-            logger.debug("Hybrid schema already present for '%s'", collection_name)
+            logger.debug("Hybrid schema already present for '{}'", collection_name)
     except QDRANT_SCHEMA_EXCEPTIONS as exc:  # pragma: no cover - defensive
-        logger.warning("ensure_hybrid_collection skipped: %s", exc)
+        redaction = build_pii_log_entry(
+            str(exc), key_id="storage.ensure_hybrid_collection"
+        )
+        logger.warning(
+            "ensure_hybrid_collection skipped (error_type={}, error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
 
 
 # =============================================================================
@@ -296,15 +327,23 @@ def get_client_config() -> dict[str, Any]:
     Returns:
         Dictionary with client configuration
     """
-    return {
+    timeout_s = float(settings.database.qdrant_timeout)
+    if settings.agents.enable_deadline_propagation:
+        timeout_s = min(timeout_s, float(settings.agents.decision_timeout))
+    config: dict[str, Any] = {
         "url": settings.database.qdrant_url,
-        "timeout": settings.database.qdrant_timeout,
+        "timeout": timeout_s,
         "prefer_grpc": True,
     }
+    if settings.database.qdrant_api_key is not None:
+        api_key = settings.database.qdrant_api_key.get_secret_value().strip()
+        if api_key:
+            config["api_key"] = api_key
+    return config
 
 
 @contextmanager
-def create_sync_client() -> Generator[QdrantClient, None, None]:
+def create_sync_client() -> Generator[QdrantClient]:
     """Create sync Qdrant client with proper cleanup.
 
     Yields:
@@ -314,7 +353,9 @@ def create_sync_client() -> Generator[QdrantClient, None, None]:
     try:
         config = get_client_config()
         client = QdrantClient(**config)
-        logger.debug("Created sync Qdrant client: %s", config["url"])
+        logger.debug(
+            "Created sync Qdrant client {}", safe_url_for_log(str(config["url"]))
+        )
         yield client
     except (
         ResponseHandlingException,
@@ -322,18 +363,30 @@ def create_sync_client() -> Generator[QdrantClient, None, None]:
         ConnectionError,
         TimeoutError,
     ) as e:
-        logger.error("Failed to create sync Qdrant client: %s", e)
+        redaction = build_pii_log_entry(str(e), key_id="storage.qdrant_sync_client")
+        logger.error(
+            "Failed to create sync Qdrant client (error_type={}, error={})",
+            type(e).__name__,
+            redaction.redacted,
+        )
         raise
     finally:
         if client is not None:
             try:
                 client.close()
             except (ResponseHandlingException, ConnectionError) as e:
-                logger.warning("Error closing sync client: %s", e)
+                redaction = build_pii_log_entry(
+                    str(e), key_id="storage.qdrant_sync_close"
+                )
+                logger.warning(
+                    "Error closing sync client (error_type={}, error={})",
+                    type(e).__name__,
+                    redaction.redacted,
+                )
 
 
 @asynccontextmanager
-async def create_async_client() -> AsyncGenerator[AsyncQdrantClient, None]:
+async def create_async_client() -> AsyncGenerator[AsyncQdrantClient]:
     """Create async Qdrant client with proper cleanup.
 
     Yields:
@@ -343,7 +396,9 @@ async def create_async_client() -> AsyncGenerator[AsyncQdrantClient, None]:
     try:
         config = get_client_config()
         client = AsyncQdrantClient(**config)
-        logger.debug("Created async Qdrant client: %s", config["url"])
+        logger.debug(
+            "Created async Qdrant client {}", safe_url_for_log(str(config["url"]))
+        )
         yield client
     except (
         ResponseHandlingException,
@@ -351,14 +406,26 @@ async def create_async_client() -> AsyncGenerator[AsyncQdrantClient, None]:
         ConnectionError,
         TimeoutError,
     ) as e:
-        logger.error("Failed to create async Qdrant client: %s", e)
+        redaction = build_pii_log_entry(str(e), key_id="storage.qdrant_async_client")
+        logger.error(
+            "Failed to create async Qdrant client (error_type={}, error={})",
+            type(e).__name__,
+            redaction.redacted,
+        )
         raise
     finally:
         if client is not None:
             try:
                 await client.close()
             except (ResponseHandlingException, ConnectionError) as e:
-                logger.warning("Error closing async client: %s", e)
+                redaction = build_pii_log_entry(
+                    str(e), key_id="storage.qdrant_async_close"
+                )
+                logger.warning(
+                    "Error closing async client (error_type={}, error={})",
+                    type(e).__name__,
+                    redaction.redacted,
+                )
 
 
 async def setup_hybrid_collection_async(
@@ -378,11 +445,11 @@ async def setup_hybrid_collection_async(
     Returns:
         QdrantVectorStore configured for hybrid search
     """
-    logger.info("Setting up hybrid collection: %s", collection_name)
+    logger.info("Setting up hybrid collection: {}", collection_name)
 
     if recreate and await client.collection_exists(collection_name):
         await client.delete_collection(collection_name)
-        logger.info("Deleted existing collection: %s", collection_name)
+        logger.info("Deleted existing collection: {}", collection_name)
 
     if not await client.collection_exists(collection_name):
         # Create collection with both dense and sparse vectors
@@ -401,9 +468,9 @@ async def setup_hybrid_collection_async(
                 )
             },
         )
-        logger.success("Created hybrid collection: %s", collection_name)
+        logger.success("Created hybrid collection: {}", collection_name)
         logger.info(
-            "Sparse model preference: %s (fallback %s)",
+            "Sparse model preference: {} (fallback {})",
             PREFERRED_SPARSE_MODEL,
             FALLBACK_SPARSE_MODEL,
         )
@@ -422,9 +489,12 @@ async def setup_hybrid_collection_async(
             batch_size=settings.monitoring.default_batch_size,
         )
     except ImportError as e:  # fastembed optional for hybrid sparse
+        redaction = build_pii_log_entry(str(e), key_id="storage.fastembed_async")
         logger.warning(
-            "Hybrid vector store requires FastEmbed; falling back to dense-only: %s",
-            e,
+            "Hybrid vector store requires FastEmbed; falling back to dense-only "
+            "(error_type={}, error={})",
+            type(e).__name__,
+            redaction.redacted,
         )
         return QdrantVectorStore(
             client=sync_client,
@@ -451,11 +521,11 @@ def setup_hybrid_collection(
     Returns:
         QdrantVectorStore configured for hybrid search
     """
-    logger.info("Setting up hybrid collection: %s", collection_name)
+    logger.info("Setting up hybrid collection: {}", collection_name)
 
     if recreate and client.collection_exists(collection_name):
         client.delete_collection(collection_name)
-        logger.info("Deleted existing collection: %s", collection_name)
+        logger.info("Deleted existing collection: {}", collection_name)
 
     if not client.collection_exists(collection_name):
         # Create collection with both dense and sparse vectors
@@ -474,9 +544,9 @@ def setup_hybrid_collection(
                 )
             },
         )
-        logger.success("Created hybrid collection: %s", collection_name)
+        logger.success("Created hybrid collection: {}", collection_name)
         logger.info(
-            "Sparse model preference: %s (fallback %s)",
+            "Sparse model preference: {} (fallback {})",
             PREFERRED_SPARSE_MODEL,
             FALLBACK_SPARSE_MODEL,
         )
@@ -491,9 +561,12 @@ def setup_hybrid_collection(
             batch_size=settings.monitoring.default_batch_size,
         )
     except ImportError as e:  # fastembed optional for hybrid sparse
+        redaction = build_pii_log_entry(str(e), key_id="storage.fastembed_sync")
         logger.warning(
-            "Hybrid vector store requires FastEmbed; falling back to dense-only: %s",
-            e,
+            "Hybrid vector store requires FastEmbed; falling back to dense-only "
+            "(error_type={}, error={})",
+            type(e).__name__,
+            redaction.redacted,
         )
         return QdrantVectorStore(
             client=client,
@@ -544,9 +617,12 @@ def create_vector_store(
             ensure_sparse_idf_modifier(client, collection_name)
         return store
     except ImportError as e:  # fastembed optional for hybrid sparse
+        redaction = build_pii_log_entry(str(e), key_id="storage.fastembed_store")
         logger.warning(
-            "Hybrid vector store requires FastEmbed; falling back to dense-only: %s",
-            e,
+            "Hybrid vector store requires FastEmbed; falling back to dense-only "
+            "(error_type={}, error={})",
+            type(e).__name__,
+            redaction.redacted,
         )
         return QdrantVectorStore(
             client=client,
@@ -582,7 +658,15 @@ def persist_image_metadata(
         )
         return True
     except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover - defensive
-        logger.warning("persist_image_metadata failed for %s: %s", point_id, exc)
+        redaction = build_pii_log_entry(
+            str(exc), key_id="storage.persist_image_metadata"
+        )
+        logger.warning(
+            "persist_image_metadata failed (point_id={} error_type={} error={})",
+            point_id,
+            type(exc).__name__,
+            redaction.redacted,
+        )
         return False
 
 
@@ -614,8 +698,18 @@ def get_collection_info(collection_name: str) -> dict[str, Any]:
         ConnectionError,
         TimeoutError,
     ) as e:
-        logger.error("Failed to get collection info for %s: %s", collection_name, e)
-        return {"exists": False, "error": str(e)}
+        redaction = build_pii_log_entry(str(e), key_id="storage.get_collection_info")
+        logger.error(
+            "Failed to get collection info for {} (error_type={} error={})",
+            collection_name,
+            type(e).__name__,
+            redaction.redacted,
+        )
+        return {
+            "exists": False,
+            "error_type": type(e).__name__,
+            "error": redaction.redacted,
+        }
 
 
 def test_connection() -> dict[str, Any]:
@@ -639,11 +733,17 @@ def test_connection() -> dict[str, Any]:
         ConnectionError,
         TimeoutError,
     ) as e:
-        logger.error("Qdrant connection test failed: %s", e)
+        redaction = build_pii_log_entry(str(e), key_id="storage.test_connection")
+        logger.error(
+            "Qdrant connection test failed (error_type={} error={})",
+            type(e).__name__,
+            redaction.redacted,
+        )
         return {
             "connected": False,
             "url": settings.database.qdrant_url,
-            "error": str(e),
+            "error_type": type(e).__name__,
+            "error": redaction.redacted,
         }
 
 
@@ -659,7 +759,7 @@ def clear_collection(collection_name: str) -> bool:
     try:
         with create_sync_client() as client:
             if not client.collection_exists(collection_name):
-                logger.warning("Collection %s does not exist", collection_name)
+                logger.warning("Collection {} does not exist", collection_name)
                 return False
 
             # Delete and recreate collection (fastest way to clear)
@@ -673,7 +773,7 @@ def clear_collection(collection_name: str) -> bool:
                 sparse_vectors_config=info.config.params.sparse_vectors,
             )
 
-            logger.success("Cleared collection: %s", collection_name)
+            logger.success("Cleared collection: {}", collection_name)
             return True
 
     except (
@@ -682,7 +782,13 @@ def clear_collection(collection_name: str) -> bool:
         ConnectionError,
         TimeoutError,
     ) as e:
-        logger.error("Failed to clear collection %s: %s", collection_name, e)
+        redaction = build_pii_log_entry(str(e), key_id="storage.clear_collection")
+        logger.error(
+            "Failed to clear collection {} (error_type={} error={})",
+            collection_name,
+            type(e).__name__,
+            redaction.redacted,
+        )
         return False
 
 
@@ -692,7 +798,7 @@ def clear_collection(collection_name: str) -> bool:
 
 
 @contextmanager
-def gpu_memory_context() -> Generator[None, None, None]:
+def gpu_memory_context() -> Generator[None]:
     """Context manager for GPU memory cleanup.
 
     Automatically synchronizes and clears GPU cache on exit, regardless
@@ -719,14 +825,19 @@ def gpu_memory_context() -> Generator[None, None, None]:
                 _torch.cuda.synchronize()
                 _torch.cuda.empty_cache()
         except (ImportError, RuntimeError, AttributeError) as e:
-            logger.warning("GPU cleanup failed during context exit: %s", e)
+            redaction = build_pii_log_entry(str(e), key_id="storage.gpu_cleanup")
+            logger.warning(
+                "GPU cleanup failed during context exit (error_type={} error={})",
+                type(e).__name__,
+                redaction.redacted,
+            )
         finally:
             # Always run garbage collection
             gc.collect()
 
 
 @asynccontextmanager
-async def async_gpu_memory_context() -> AsyncGenerator[None, None]:
+async def async_gpu_memory_context() -> AsyncGenerator[None]:
     """Async context manager for GPU memory cleanup.
 
     Async version of gpu_memory_context() for use with async operations.
@@ -752,7 +863,12 @@ async def async_gpu_memory_context() -> AsyncGenerator[None, None]:
                 _torch.cuda.synchronize()
                 _torch.cuda.empty_cache()
         except (ImportError, RuntimeError, AttributeError) as e:
-            logger.warning("GPU cleanup failed during async context exit: %s", e)
+            redaction = build_pii_log_entry(str(e), key_id="storage.gpu_cleanup_async")
+            logger.warning(
+                "GPU cleanup failed during async context exit (error_type={} error={})",
+                type(e).__name__,
+                redaction.redacted,
+            )
         finally:
             # Always run garbage collection
             gc.collect()
@@ -763,7 +879,7 @@ async def model_context(
     model_factory: Callable[..., Any],
     cleanup_method: str | None = None,
     **kwargs: Any,
-) -> AsyncGenerator[Any, None]:
+) -> AsyncGenerator[Any]:
     """Generic model context manager with automatic cleanup.
 
     Manages model lifecycle including creation, usage, and cleanup.
@@ -805,7 +921,7 @@ def sync_model_context(
     model_factory: Callable[..., Any],
     cleanup_method: str | None = None,
     **kwargs: Any,
-) -> Generator[Any, None, None]:
+) -> Generator[Any]:
     """Synchronous model context manager with automatic cleanup.
 
     Sync version of model_context() for non-async workflows.
@@ -838,7 +954,7 @@ def cuda_error_context(
     operation_name: str = "CUDA operation",
     reraise: bool = True,
     default_return: Any = None,
-) -> Generator[dict[str, Any], None, None]:
+) -> Generator[dict[str, Any]]:
     """Context manager for robust CUDA error handling.
 
     Provides comprehensive error handling for CUDA operations with
@@ -867,31 +983,63 @@ def cuda_error_context(
     try:
         yield result_dict
     except RuntimeError as e:
+        redaction = build_pii_log_entry(
+            str(e), key_id=f"storage.cuda_error_context:{operation_name}"
+        )
         if "CUDA" in str(e).upper():
-            logger.warning("%s failed with CUDA error: %s", operation_name, e)
+            logger.warning(
+                "{} failed with CUDA error (error_type={} error={})",
+                operation_name,
+                type(e).__name__,
+                redaction.redacted,
+            )
         else:
-            logger.warning("%s failed with runtime error: %s", operation_name, e)
+            logger.warning(
+                "{} failed with runtime error (error_type={} error={})",
+                operation_name,
+                type(e).__name__,
+                redaction.redacted,
+            )
 
         if reraise:
             raise
         result_dict["result"] = default_return
-        result_dict["error"] = str(e)
+        result_dict["error_type"] = type(e).__name__
+        result_dict["error"] = redaction.redacted
 
     except (OSError, AttributeError) as e:
-        logger.warning("%s failed with system error: %s", operation_name, e)
+        redaction = build_pii_log_entry(
+            str(e), key_id=f"storage.cuda_error_context:{operation_name}"
+        )
+        logger.warning(
+            "{} failed with system error (error_type={} error={})",
+            operation_name,
+            type(e).__name__,
+            redaction.redacted,
+        )
 
         if reraise:
             raise
         result_dict["result"] = default_return
-        result_dict["error"] = str(e)
+        result_dict["error_type"] = type(e).__name__
+        result_dict["error"] = redaction.redacted
 
     except (ImportError, ModuleNotFoundError) as e:
-        logger.error("%s failed with import error: %s", operation_name, e)
+        redaction = build_pii_log_entry(
+            str(e), key_id=f"storage.cuda_error_context:{operation_name}"
+        )
+        logger.error(
+            "{} failed with import error (error_type={} error={})",
+            operation_name,
+            type(e).__name__,
+            redaction.redacted,
+        )
 
         if reraise:
             raise
         result_dict["result"] = default_return
-        result_dict["error"] = str(e)
+        result_dict["error_type"] = type(e).__name__
+        result_dict["error"] = redaction.redacted
 
 
 def safe_cuda_operation(
@@ -924,18 +1072,47 @@ def safe_cuda_operation(
         return operation()
     except RuntimeError as e:
         if log_errors:
+            redaction = build_pii_log_entry(
+                str(e), key_id=f"storage.safe_cuda_operation:{operation_name}"
+            )
             if "CUDA" in str(e).upper():
-                logger.warning("%s failed with CUDA error: %s", operation_name, e)
+                logger.warning(
+                    "{} failed with CUDA error (error_type={} error={})",
+                    operation_name,
+                    type(e).__name__,
+                    redaction.redacted,
+                )
             else:
-                logger.warning("%s failed with runtime error: %s", operation_name, e)
+                logger.warning(
+                    "{} failed with runtime error (error_type={} error={})",
+                    operation_name,
+                    type(e).__name__,
+                    redaction.redacted,
+                )
         return default_return
     except (OSError, AttributeError) as e:
         if log_errors:
-            logger.warning("%s failed with system error: %s", operation_name, e)
+            redaction = build_pii_log_entry(
+                str(e), key_id=f"storage.safe_cuda_operation:{operation_name}"
+            )
+            logger.warning(
+                "{} failed with system error (error_type={} error={})",
+                operation_name,
+                type(e).__name__,
+                redaction.redacted,
+            )
         return default_return
     except (ImportError, ModuleNotFoundError) as e:
         if log_errors:
-            logger.error("%s failed with import error: %s", operation_name, e)
+            redaction = build_pii_log_entry(
+                str(e), key_id=f"storage.safe_cuda_operation:{operation_name}"
+            )
+            logger.error(
+                "{} failed with import error (error_type={} error={})",
+                operation_name,
+                type(e).__name__,
+                redaction.redacted,
+            )
         return default_return
 
 
@@ -1014,7 +1191,12 @@ def get_safe_gpu_info() -> dict[str, Any]:
                 )
 
     except (RuntimeError, OSError) as e:
-        logger.warning("Failed to get GPU info: %s", e)
+        redaction = build_pii_log_entry(str(e), key_id="storage.gpu_info")
+        logger.warning(
+            "Failed to get GPU info (error_type={} error={})",
+            type(e).__name__,
+            redaction.redacted,
+        )
 
     return info
 
@@ -1046,9 +1228,14 @@ async def _cleanup_model(model: Any, cleanup_method: str | None) -> None:
             else:
                 cleanup_func()
         else:
-            logger.debug("Model has no cleanup method: %s", cleanup_method)
+            logger.debug("Model has no cleanup method: {}", cleanup_method)
     except (AttributeError, TypeError) as e:
-        logger.warning("Model cleanup failed: %s", e)
+        redaction = build_pii_log_entry(str(e), key_id="storage.model_cleanup")
+        logger.warning(
+            "Model cleanup failed (error_type={} error={})",
+            type(e).__name__,
+            redaction.redacted,
+        )
 
 
 def _sync_cleanup_model(model: Any, cleanup_method: str | None) -> None:
@@ -1070,6 +1257,11 @@ def _sync_cleanup_model(model: Any, cleanup_method: str | None) -> None:
             cleanup_func = getattr(model, cleanup_method)
             cleanup_func()
         else:
-            logger.debug("Model has no cleanup method: %s", cleanup_method)
+            logger.debug("Model has no cleanup method: {}", cleanup_method)
     except (AttributeError, TypeError) as e:
-        logger.warning("Model cleanup failed: %s", e)
+        redaction = build_pii_log_entry(str(e), key_id="storage.model_cleanup_sync")
+        logger.warning(
+            "Model cleanup failed (error_type={} error={})",
+            type(e).__name__,
+            redaction.redacted,
+        )

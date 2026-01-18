@@ -2,8 +2,8 @@
 ADR: 010
 Title: Performance Optimization Strategy
 Status: Implemented
-Version: 9.0
-Date: 2025-08-26
+Version: 9.1
+Date: 2026-01-18
 Supersedes:
 Superseded-by:
 Related: 004, 011, 024, 030
@@ -102,6 +102,15 @@ SUPERVISOR_TUNING = {
 }
 ```
 
+Notes:
+
+- Prefer expressing parallelism at the orchestration layer (LangGraph tool execution)
+  using bounded concurrency (e.g., `RunnableConfig.max_concurrency` / supervisor
+  settings). Avoid hiding `asyncio.gather(...)` inside tool implementations.
+- Keep tools sync-callable (`BaseTool.invoke(...)`) unless the full orchestration is
+  migrated end-to-end to async. This preserves compatibility with the current
+  `agent.invoke(...)` execution model (ADR-011).
+
 ### Configuration
 
 ```env
@@ -134,7 +143,10 @@ def test_engine_args_compose(settings):
 
 ### Dependencies
 
-- Python: `vllm`, `flashinfer`
+- Server-side (recommended): vLLM with FlashInfer attention backend (Linux + NVIDIA GPU).
+- Python app: no vLLM/FlashInfer deps; uses OpenAI-compatible HTTP via
+  `DOCMIND_OPENAI__BASE_URL` with standard app libraries (openai, llama-index,
+  langgraph, langchain).
 
 ## Changelog
 

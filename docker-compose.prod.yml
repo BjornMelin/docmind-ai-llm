@@ -3,3 +3,9 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=256M
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s = socket.create_connection(('127.0.0.1', 8501), timeout=3); s.close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

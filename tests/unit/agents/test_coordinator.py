@@ -248,7 +248,9 @@ class TestMultiAgentCoordinator:
             patch("src.agents.coordinator.is_dspy_available", return_value=True),
             patch("src.agents.coordinator.DSPyLlamaIndexRetriever") as mock_dspy,
             patch("src.agents.coordinator.create_agent") as mock_agent_factory,
-            patch("src.agents.coordinator.create_supervisor") as mock_supervisor,
+            patch(
+                "src.agents.coordinator.build_multi_agent_supervisor_graph"
+            ) as mock_supervisor,
             patch(
                 "src.agents.coordinator.create_forward_message_tool",
                 return_value=Mock(),
@@ -304,7 +306,7 @@ class TestMultiAgentCoordinator:
         assert result is True
 
     @patch("src.agents.coordinator.create_agent")
-    @patch("src.agents.coordinator.create_supervisor")
+    @patch("src.agents.coordinator.build_multi_agent_supervisor_graph")
     @patch("src.agents.coordinator.create_forward_message_tool")
     def test_setup_agent_graph_success(
         self, mock_forward_tool, mock_supervisor, mock_agent_factory, mock_llm
@@ -348,28 +350,30 @@ class TestMultiAgentCoordinator:
         for agent_name in expected_agents:
             assert agent_name in coordinator.agents
 
-    @patch("src.agents.coordinator.create_supervisor")
+    @patch("src.agents.coordinator.build_multi_agent_supervisor_graph")
     @patch("src.agents.coordinator.create_forward_message_tool")
     @patch("src.agents.coordinator.create_agent")
     def test_supervisor_parameters_adr_011(
-        self, mock_agent_factory, mock_forward_tool, mock_create_supervisor, mock_llm
+        self, mock_agent_factory, mock_forward_tool, mock_build_supervisor, mock_llm
     ):
         """Supervisor is created with modern ADR-011 parameters."""
         mock_graph = Mock()
         mock_graph.compile.return_value = Mock()
-        mock_create_supervisor.return_value = mock_graph
+        mock_build_supervisor.return_value = mock_graph
 
         coordinator = MultiAgentCoordinator()
         coordinator.llm = mock_llm
         coordinator._setup_agent_graph()
 
-        # Validate create_supervisor was called with ADR-011 flags
-        _, kwargs = mock_create_supervisor.call_args
-        assert kwargs.get("parallel_tool_calls") is True
-        assert kwargs.get("output_mode") == "last_message"
-        assert kwargs.get("add_handoff_messages") is True
-        assert "pre_model_hook" in kwargs
-        assert "post_model_hook" in kwargs
+        # Validate graph builder is wired with ADR-011 flags.
+        _, kwargs = mock_build_supervisor.call_args
+        params = kwargs.get("params")
+        assert params is not None
+        assert params.output_mode == "last_message"
+        assert params.add_handoff_messages is True
+        assert params.add_handoff_back_messages is True
+        assert kwargs.get("state_schema") is not None
+        assert kwargs.get("middleware")
 
     @patch(
         "src.agents.coordinator.create_agent",
@@ -773,13 +777,9 @@ class TestConstants:
 
     def test_import_constants(self):
         """Test that all expected constants can be imported."""
-        from src.agents.coordinator import (
-            CONTEXT_TRIM_STRATEGY,
-            PARALLEL_TOOL_CALLS_ENABLED,
-        )
+        from src.agents.coordinator import CONTEXT_TRIM_STRATEGY
 
         assert isinstance(CONTEXT_TRIM_STRATEGY, str)
-        assert isinstance(PARALLEL_TOOL_CALLS_ENABLED, bool)
 
         # Test specific value
         assert CONTEXT_TRIM_STRATEGY == "last"

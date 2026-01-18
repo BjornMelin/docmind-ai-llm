@@ -75,6 +75,23 @@ We will implement an **operational metadata store** backed by **SQLite in WAL mo
 
 The ops DB will store **metadata only** (no raw document text, no raw prompts) and will be used by background job orchestration and UI pages that need durable state.
 
+## Implementation Status (2026-01-17)
+
+Current codebase coverage:
+
+- **WAL configuration exists** for SQLite connections in `src/persistence/chat_db.py` and `src/persistence/memory_store.py`.
+- **Settings are present** for `settings.database.sqlite_db_path` and `settings.database.enable_wal_mode`.
+- **Startup directory initialization exists** in `src/config/integrations.py` for the ops DB path.
+
+Missing for this ADR to be truly implemented:
+
+- **Ops DB schema** (tables `jobs`, `snapshots`, `ui_state`) and foreign key constraints.
+- **Migration logic** via `PRAGMA user_version` (v0 → v1) with transactional upgrades.
+- **Ops DB initializer** that opens the DB, enables WAL/foreign keys/busy_timeout, runs migrations, and persists `user_version`.
+- **Unit/integration tests** validating migrations and basic read/write flows.
+
+Until the missing items are implemented, this ADR remains **Proposed**.
+
 ## High-Level Architecture
 
 ```mermaid

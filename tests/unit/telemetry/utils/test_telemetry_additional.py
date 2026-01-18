@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -61,30 +60,17 @@ def test_rotation_rename_error_is_debug_logged(monkeypatch, tmp_path):
     from src.config.settings import settings
     from src.utils import telemetry as t
 
-    class _Stat:
-        st_size = 999
-
-    class _P(Path):
-        # Path subclass to override methods used
-        _flavour = Path(".")._flavour  # type: ignore[attr-defined]
-
-        def exists(self):
-            return True
-
-        def stat(self):
-            return _Stat()
-
-        def with_suffix(self, sfx: str):
-            return _P(str(self) + sfx)
-
-        def rename(self, _dst):
-            raise OSError("nope")
-
-    tp = _P(str(tmp_path / "telemetry.jsonl"))
+    tp = tmp_path / "telemetry.jsonl"
+    tp.write_bytes(b"x" * 10)
+    monkeypatch.setattr(settings.telemetry, "jsonl_path", tp)
     monkeypatch.setattr(settings.telemetry, "rotate_bytes", 1)
     monkeypatch.setattr(settings.telemetry, "sample", 1.0)
     monkeypatch.setattr(settings.telemetry, "disabled", False)
-    monkeypatch.setattr(t, "get_telemetry_jsonl_path", lambda: tp, raising=False)
+
+    def _rename(_self, _dst):
+        raise OSError("nope")
+
+    monkeypatch.setattr(type(tp), "rename", _rename, raising=True)
 
     calls: list[str] = []
 

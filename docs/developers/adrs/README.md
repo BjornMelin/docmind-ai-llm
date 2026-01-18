@@ -6,97 +6,103 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
 
 ## Architecture & Agents
 
-- **[ADR-001 — Modern Agentic RAG Architecture](ADR-001-modern-agentic-rag-architecture.md)**<br>
+- **[ADR-001 — Modern Agentic RAG Architecture](ADR-001-modern-agentic-rag-architecture.md)**  
   Scope: Multi-agent, modern RAG architecture and capabilities
-- **[ADR-011 — Agent Orchestration Framework](ADR-011-agent-orchestration-framework.md)**<br>
+- **[ADR-011 — Agent Orchestration Framework](ADR-011-agent-orchestration-framework.md)**  
   Scope: Supervisor/orchestration patterns and agent tool integration
-- **[ADR-056 — Agent Deadline Propagation + Router Injection](ADR-056-agent-deadline-propagation-and-router-injection.md)**<br>
+- **[ADR-056 — Agent Deadline Propagation + Router Injection](ADR-056-agent-deadline-propagation-and-router-injection.md)**  
   Scope: Cooperative time budgets, injected router engines, and retrieval contract correctness
-- **[ADR-027 — Implementation Experience (meta)](ADR-027-implementation-experience.md)**<br>
+- **[ADR-027 — Implementation Experience (meta)](ADR-027-implementation-experience.md)**  
   Scope: Cross-ADR integration learnings and validation
 
 ## Retrieval, Embeddings & Graph
 
-- **[ADR-002 — Unified Embedding Strategy with BGE-M3](ADR-002-unified-embedding-strategy.md)**<br>
+- **[ADR-002 — Unified Embedding Strategy with BGE-M3](ADR-002-unified-embedding-strategy.md)**  
   Scope: Unified dense/sparse embeddings centered on BGE-M3
-- **[ADR-003 — Adaptive Retrieval Pipeline](ADR-003-adaptive-retrieval-pipeline.md)**<br>
+- **[ADR-003 — Adaptive Retrieval Pipeline](ADR-003-adaptive-retrieval-pipeline.md)**  
   Scope: Router/strategy selection and hierarchical retrieval
-- **[ADR-037 — Multimodal Reranking with ColPali (visual) and BGE v2‑m3 (text)](ADR-037-multimodal-reranking-architecture.md)**<br>
+- **[ADR-037 — Multimodal Reranking with ColPali (visual) and BGE v2‑m3 (text)](ADR-037-multimodal-reranking-architecture.md)**  
   Scope: Modality-aware reranking; ColPali for visuals, BGE v2‑m3 for text
-- **[ADR-019 — Optional GraphRAG Module](ADR-019-optional-graphrag.md)**<br>
+- **[ADR-019 — Optional GraphRAG Module](ADR-019-optional-graphrag.md)**  
   Scope: Property graph/graph retrieval integrations
-- **[ADR-038 — GraphRAG Persistence and Router Integration](ADR-038-graphrag-persistence-and-router.md)**<br>
+- **[ADR-038 — GraphRAG Persistence and Router Integration](ADR-038-graphrag-persistence-and-router.md)**  
   Scope: Router composition (vector+graph), snapshot persistence, exports, and UI staleness
-- **[ADR-034 — Idempotent Indexing & Embedding Reuse](ADR-034-idempotent-indexing-and-embedding-reuse.md)**<br>
+- **[ADR-034 — Idempotent Indexing & Embedding Reuse](ADR-034-idempotent-indexing-and-embedding-reuse.md)**  
   Scope: Idempotent ingestion and reusable embeddings
 
 ## UI & State
 
-- **[ADR-013 — User Interface Architecture](ADR-013-user-interface-architecture.md)**<br>
+- **[ADR-013 — User Interface Architecture](ADR-013-user-interface-architecture.md)**  
   Scope: Streamlit multipage architecture and native component usage
-- **[ADR-016 — Streamlit Native State Management](ADR-016-ui-state-management.md)**<br>
+- **[ADR-016 — Streamlit Native State Management](ADR-016-ui-state-management.md)**  
   Scope: Session state and cache primitives without custom layers
-- **[ADR-023 — Document Analysis Modes (Separate / Combined / Auto)](ADR-023-analysis-mode-strategy.md)**<br>
+- **[ADR-023 — Document Analysis Modes (Separate / Combined / Auto)](ADR-023-analysis-mode-strategy.md)**  
   Scope: User-visible analysis modes and domain-layer routing/aggregation
 
 ## Configuration
 
-- **[ADR-024 — Unified Settings Architecture](ADR-024-configuration-architecture.md)**<br>
+- **[ADR-024 — Unified Settings Architecture](ADR-024-configuration-architecture.md)**  
   Scope: Pydantic BaseSettings + LlamaIndex Settings integration
+- **[ADR-064 — Python 3.13-Only Baseline (Primary 3.13.11)](ADR-064-python-313-only-baseline.md)**  
+  Scope: Single-version Python baseline and tooling targeting
+- **[ADR-062 — Python 3.13.11 Baseline + External vLLM Policy (Superseded)](superseded/ADR-062-python-313-baseline-and-external-vllm-policy.md)**  
+  Scope: Historical multi-version baseline + vLLM policy (superseded by ADR-064)
+- **[ADR-063 — LLM Provider Architecture (OpenAI-Compatible Core + Open Responses Alignment)](ADR-063-llm-provider-architecture-openai-compatible-core.md)**  
+  Scope: Multi-provider configuration via OpenAI-compatible endpoints, Responses API opt-in, and gateway strategy
 
 ## Caching & Persistence
 
-- **[ADR-030 — Cache Unification via LlamaIndex IngestionCache (DuckDBKVStore)](ADR-030-cache-unification-ingestioncache-duckdbkvstore.md)**<br>
+- **[ADR-030 — Cache Unification via LlamaIndex IngestionCache (DuckDBKVStore)](ADR-030-cache-unification-ingestioncache-duckdbkvstore.md)**  
   Scope: Document-processing cache, single-file DuckDB KV store
-- **[ADR-031 — Local-First Persistence Architecture (Vectors, Cache, Operational Data)](ADR-031-local-first-persistence-architecture.md)**<br>
+- **[ADR-031 — Local-First Persistence Architecture (Vectors, Cache, Operational Data)](ADR-031-local-first-persistence-architecture.md)**  
   Scope: Separation of vectors (Qdrant), processing cache (DuckDB), ops data (SQLite)
-- **[ADR-055 — Operational Metadata Store (SQLite WAL)](ADR-055-operational-metadata-sqlite-wal.md)**<br>
+- **[ADR-055 — Operational Metadata Store (SQLite WAL)](ADR-055-operational-metadata-sqlite-wal.md)**  
   Scope: Transactional, local-only ops state for background jobs and snapshot events
-- **[ADR-035 — Application-Level Semantic Cache](ADR-035-semantic-cache-qdrant.md)**<br>
+- **[ADR-035 — Application-Level Semantic Cache](ADR-035-semantic-cache-qdrant.md)**  
   Scope: Optional semantic response caching (backend pluggable; offline-first)
-- **[ADR-058 — Final Multimodal Pipeline + Cognitive Persistence](ADR-058-final-multimodal-pipeline-and-persistence.md)**<br>
+- **[ADR-058 — Final Multimodal Pipeline + Cognitive Persistence](ADR-058-final-multimodal-pipeline-and-persistence.md)**  
   Scope: End-to-end multimodal (PDF images → retrieval → UI) + durability invariants (no blobs/paths in durable stores)
 
 ## Document Processing
 
-- **[ADR-061 — Centralized spaCy NLP Subsystem (Runtime Selection + Ingestion Enrichment)](ADR-061-spacy-nlp-subsystem.md)**<br>
+- **[ADR-061 — Centralized spaCy NLP Subsystem (Runtime Selection + Ingestion Enrichment)](ADR-061-spacy-nlp-subsystem.md)**  
   Scope: Typed spaCy runtime, cross-platform device selection, ingestion-time enrichment, UI preview
-- **[ADR-009 — Document Processing Pipeline (Superseded by ADR-058)](superseded/ADR-009-document-processing-pipeline.md)**<br>
+- **[ADR-009 — Document Processing Pipeline (Superseded by ADR-058)](superseded/ADR-009-document-processing-pipeline.md)**  
   Scope: Historical (superseded by ADR-058)
 
 ## Performance
 
-- **[ADR-010 — Performance Optimization Strategy](ADR-010-performance-optimization-strategy.md)**<br>
+- **[ADR-010 — Performance Optimization Strategy](ADR-010-performance-optimization-strategy.md)**  
   Scope: FP8/vLLM optimizations and latency targets
 
 ## Testing & Quality
 
-- **[ADR-014 — Testing and Quality Validation Framework](ADR-014-testing-quality-validation.md)**<br>
+- **[ADR-014 — Testing and Quality Validation Framework](ADR-014-testing-quality-validation.md)**  
   Scope: DeepEval + pytest strategy and CI integration
-- **[ADR-029 — Boundary‑First Testing Strategy](ADR-029-testing-strategy.md)**<br>
+- **[ADR-029 — Boundary‑First Testing Strategy](ADR-029-testing-strategy.md)**  
   Scope: Unit/integration boundary tests and coverage focus (see ADR‑014 for gates)
 
 ## Prompt & LLM Optimization
 
-- **[ADR-018 — Automatic Prompt Optimization with DSPy](ADR-018-prompt-optimization-dspy.md)**<br>
+- **[ADR-018 — Automatic Prompt Optimization with DSPy](ADR-018-prompt-optimization-dspy.md)**  
   Scope: DSPy-based prompt optimization patterns
-- **[ADR-020 — Dynamic Prompt Template & Response Configuration](ADR-020-prompt-template-system.md)**<br>
+- **[ADR-020 — Dynamic Prompt Template & Response Configuration](ADR-020-prompt-template-system.md)**  
   Scope: Template system, response shaping and configuration
-- **[ADR-004 — Local-First LLM Strategy](ADR-004-local-first-llm-strategy.md)**<br>
+- **[ADR-004 — Local-First LLM Strategy](ADR-004-local-first-llm-strategy.md)**  
   Scope: Local-first backends and performance principles
-- **[ADR-059 — Ollama Native Capabilities and Cloud Gating](ADR-059-ollama-native-capabilities-and-cloud-gating.md)**<br>
+- **[ADR-059 — Ollama Native Capabilities and Cloud Gating](ADR-059-ollama-native-capabilities-and-cloud-gating.md)**  
   Scope: Ollama-native `/api/*` capabilities, cloud web tools gating, and explicit streaming semantics
 
 ## Export & Output
 
-- **[ADR-022 — Export & Structured Output System](ADR-022-export-output-formatting.md)**<br>
+- **[ADR-022 — Export & Structured Output System](ADR-022-export-output-formatting.md)**  
   Scope: Structured output/export patterns
 
 ## Analytics & Backup
 
-- **[ADR-032 — Local Analytics & Metrics (DuckDB)](ADR-032-local-analytics-and-metrics.md)**<br>
+- **[ADR-032 — Local Analytics & Metrics (DuckDB)](ADR-032-local-analytics-and-metrics.md)**  
   Scope: Local analytics DB and retention
-- **[ADR-033 — Local Backup & Retention](ADR-033-local-backup-and-retention.md)**<br>
+- **[ADR-033 — Local Backup & Retention](ADR-033-local-backup-and-retention.md)**  
   Scope: Manual backups with rotation (local-only)
 
 ## Superseded ADRs

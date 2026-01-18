@@ -193,7 +193,8 @@ async def test_latency_smoke(async_llm_client):
 ### Dependencies
 
 - System: NVIDIA driver + CUDA/cuDNN compatible with vLLM; RTX 4090 Laptop (16GB VRAM).
-- Python: `llama-index-core>=0.12`, `vllm>=0.10.1`, `torch>=2.4`, `tenacity>=8.2`.
+- Python (app env): `llama-index-core>=0.14.12,<0.15.0`, `torch==2.8.0`, `tenacity>=9.1.2,<10.0.0`.
+- vLLM: external OpenAI-compatible server process (installed and managed separately from the app env).
 - Removed: Custom LLM wrappers; prefer LlamaIndex official integrations.
 
 ## Addendum — Ollama Native Capabilities (ADR-059)

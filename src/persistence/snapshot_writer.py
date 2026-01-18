@@ -67,7 +67,7 @@ def start_workspace(base_dir: Path) -> SnapshotWorkspace:
     workspace.mkdir(parents=True, exist_ok=False)
     (workspace / "vector").mkdir(parents=True, exist_ok=True)
     (workspace / "graph").mkdir(parents=True, exist_ok=True)
-    logger.debug("Created snapshot workspace at %s", workspace)
+    logger.debug("Created snapshot workspace {}", workspace.name)
     return SnapshotWorkspace(workspace)
 
 
@@ -162,7 +162,9 @@ def load_manifest_entries(snapshot_dir: Path) -> list[dict[str, Any]]:
             try:
                 entries.append(json.loads(line))
             except json.JSONDecodeError:
-                logger.warning("Skipping malformed manifest entry in %s", manifest_path)
+                logger.warning(
+                    "Skipping malformed manifest entry in {}", manifest_path.name
+                )
     return entries
 
 

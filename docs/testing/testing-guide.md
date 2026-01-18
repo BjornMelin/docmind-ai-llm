@@ -826,15 +826,15 @@ def test_gpu_functionality():
 The testing framework integrates with CI/CD through quality gates:
 
 ```yaml
-# .github/workflows/pr-validation.yml
+# .github/workflows/ci.yml
 - name: Run tests with coverage
   run: |
-    uv run python scripts/run_tests.py --unit --integration
+    uv run python scripts/run_tests.py --coverage
     
 - name: Quality gate check
   run: |
     # Coverage enforcement
-    COVERAGE=$(python -c "import xml.etree.ElementTree as ET; tree = ET.parse('coverage.xml'); print(float(tree.getroot().get('line-rate', 0)) * 100)")
+    COVERAGE=$(uv run python -c "import xml.etree.ElementTree as ET; tree = ET.parse('coverage.xml'); print(float(tree.getroot().get('line-rate', 0)) * 100)")
     if (( $(echo "${COVERAGE} >= 80.0" | bc -l) )); then
       echo "✓ Coverage threshold met (${COVERAGE}% >= 80.0%)"
     else

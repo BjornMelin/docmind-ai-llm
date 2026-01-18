@@ -8,7 +8,7 @@ date: 2026-01-16
 
 This guide covers optional GPU acceleration for:
 
-- **LLM serving** (vLLM)
+- **LLM serving** (external vLLM server)
 - **Embeddings** (fastembed-gpu)
 - **NLP enrichment** (spaCy via Thinc)
 
@@ -25,7 +25,6 @@ For baseline CPU install, see `docs/user/getting-started.md`.
 
 Use the project’s GPU extras. This installs:
 
-- `vllm` + `flashinfer-python` (LLM serving acceleration)
 - `fastembed-gpu` (embedding acceleration)
 - `cupy-cuda12x>=13` (spaCy/Thinc GPU acceleration for CUDA 12.x)
 
@@ -33,6 +32,13 @@ Use the project’s GPU extras. This installs:
 uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 uv run python -m spacy download en_core_web_sm
 ```
+
+### vLLM serving (external)
+
+DocMind integrates with vLLM via the OpenAI-compatible HTTP API. Run vLLM in a separate environment (or container) and configure:
+
+- `DOCMIND_LLM_BACKEND=vllm`
+- `DOCMIND_OPENAI__BASE_URL=http://localhost:8000/v1`
 
 ### Runtime selection (spaCy / CUDA)
 

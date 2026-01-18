@@ -21,6 +21,7 @@ from PIL.Image import Resampling  # type: ignore
 
 from src.config import settings
 from src.persistence.artifacts import ArtifactStore
+from src.utils.log_safety import build_pii_log_entry
 from src.utils.security import encrypt_file, get_image_kid
 
 _PAGE_TEXT_MAX_CHARS = 8000
@@ -244,16 +245,19 @@ def pdf_pages_to_image_documents(
             step = "resolve_path"
             resolved_path = store.resolve_path(ref)
         except (OSError, ValueError) as exc:
-            logger.exception(
+            redaction = build_pii_log_entry(str(exc), key_id=f"pdf_pages:{step}")
+            logger.error(
                 "ArtifactStore.{} failed for PDF page image "
-                "(page={}, path={}, phash={}, ref={})",
+                "(page={}, file={}, phash={}, ref_sha256={}, error_type={}, error={})",
                 step,
                 i,
-                path,
+                path.name,
                 phash,
-                ref,
+                getattr(ref, "sha256", "") if ref is not None else "",
+                type(exc).__name__,
+                redaction.redacted,
             )
-            failed_pages.append((i, f"{step}: {exc}"))
+            failed_pages.append((i, step))
             continue
 
         meta: dict[str, Any] = {
@@ -288,8 +292,13 @@ def pdf_pages_to_image_documents(
         docs.append(ImageDocument(image_path=str(resolved_path), metadata=meta))
 
     if failed_pages:
+        pages = [page for page, _step in failed_pages]
+        steps = sorted({step for _page, step in failed_pages})
         logger.warning(
-            "Failed to store {} page(s): {}", len(failed_pages), failed_pages
+            "Failed to store {} page(s) (pages={}, steps={})",
+            len(failed_pages),
+            pages,
+            steps,
         )
     return docs, out_dir
 

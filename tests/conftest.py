@@ -13,6 +13,7 @@ import pytest
 
 pytest_plugins = [
     "tests.shared_fixtures",
+    "tests.fixtures.background_jobs",
 ]
 
 _REQUIRE_REAL_LLAMA = os.getenv("REQUIRE_REAL_LLAMA", "").lower() in {
@@ -53,7 +54,7 @@ def pytest_runtest_setup(item) -> None:  # type: ignore[no-untyped-def]
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _streamlit_disable_repl_detection() -> Generator[None, None, None]:
+def _streamlit_disable_repl_detection() -> Generator[None]:
     """Avoid slow `inspect.stack()`-based REPL detection in Streamlit tests.
 
     Streamlit's `env_util.is_repl()` can be surprisingly expensive in large
@@ -77,6 +78,26 @@ def _streamlit_disable_repl_detection() -> Generator[None, None, None]:
 
 
 @pytest.fixture(autouse=True)
+def _reset_docmind_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep tests deterministic even when a developer `.env` exists.
+
+    Pytest runs in the developer's working tree. Some environments or tools may
+    populate `os.environ` with `DOCMIND_*` keys. Resetting the settings singleton
+    and clearing DocMind-specific env vars prevents cross-test contamination and
+    avoids surprising failures in config tests.
+    """
+    for key in list(os.environ.keys()):
+        if key.upper().startswith("DOCMIND_"):
+            monkeypatch.delenv(key, raising=False)
+
+    from src.config.settings import reset_bootstrap_state
+    from src.config.settings import settings as app_settings
+
+    reset_bootstrap_state()
+    app_settings.__init__(_env_file=None)  # type: ignore[arg-type]
+
+
+@pytest.fixture(autouse=True)
 def _reset_otel_providers() -> None:
     """Ensure OpenTelemetry providers reset between tests."""
     from src.telemetry import opentelemetry as otel_module
@@ -86,7 +107,10 @@ def _reset_otel_providers() -> None:
 
 
 @pytest.fixture(autouse=True)
-def _reset_telemetry_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+def _reset_telemetry_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+    _reset_docmind_settings: None,
+) -> None:
     """Reset telemetry globals and environment overrides between tests."""
     from src.config.settings import settings as app_settings
     from src.utils import telemetry as telem
@@ -264,7 +288,7 @@ def _stub_llm_builder(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture(autouse=True)
 def _router_factory_stubs(
     request: pytest.FixtureRequest,
-) -> Generator[None, None, None]:
+) -> Generator[None]:
     """Inject a stub llama-index adapter unless the test requests the real one."""
     from src.retrieval.llama_index_adapter import set_llama_index_adapter
 

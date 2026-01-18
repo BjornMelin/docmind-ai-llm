@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Literal, overload
+from urllib.parse import urlsplit
 
 from src.config import settings
 from src.utils.canonicalization import CanonicalizationConfig, compute_hashes
@@ -101,4 +103,89 @@ def build_pii_log_entry(value: str, key_id: str | None = None) -> RedactionResul
     )
 
 
-__all__ = ["RedactionResult", "build_pii_log_entry", "redact_pii"]
+def fingerprint_text(value: str, key_id: str | None = None) -> dict[str, str | int]:
+    """Return fingerprint metadata for logging without emitting raw content.
+
+    Args:
+        value: Raw text to fingerprint.
+        key_id: Optional key identifier to namespace the fingerprint.
+
+    Returns:
+        Mapping with length and fingerprint metadata fields.
+    """
+    fingerprint, canon_version, secret_version = _fingerprint_value(value, key_id)
+    return {
+        "len": len(value),
+        "hmac_sha256_12": fingerprint[:12],
+        "canonicalization_version": canon_version,
+        "hmac_secret_version": secret_version,
+    }
+
+
+def safe_url_for_log(url: str) -> str:
+    """Return origin-only URL (scheme://host[:port]) for logs or telemetry.
+
+    Args:
+        url: Candidate URL to sanitize for logging.
+
+    Returns:
+        Origin-only URL or an empty string when invalid or missing scheme/host.
+    """
+    try:
+        parts = urlsplit(str(url))
+    except Exception:
+        return ""
+    if not parts.scheme:
+        return ""
+
+    hostname = parts.hostname
+    if not hostname:
+        return ""
+
+    host_for_origin = hostname
+    if ":" in host_for_origin and not host_for_origin.startswith("["):
+        host_for_origin = f"[{host_for_origin}]"
+
+    try:
+        port = parts.port
+    except ValueError:
+        port = None
+
+    if port is None:
+        return f"{parts.scheme}://{host_for_origin}"
+    return f"{parts.scheme}://{host_for_origin}:{port}"
+
+
+_BACKSTOP_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"sk-[A-Za-z0-9]{10,}"), "[redacted:sk]"),
+    (re.compile(r"Bearer\s+[-A-Za-z0-9._+/=]{10,}"), "Bearer [redacted]"),
+    (
+        re.compile(r"(?i)authorization:\s*bearer\s+[-A-Za-z0-9._+/=]{10,}"),
+        "authorization: Bearer [redacted]",
+    ),
+)
+
+
+def redact_text_backstop(text: str) -> str:
+    """Deterministic regex redaction for rare strings that may reach logs.
+
+    Args:
+        text: Candidate text to apply backstop redactions to.
+
+    Returns:
+        Redacted text string.
+    """
+    out = str(text)
+    for pattern, repl in _BACKSTOP_PATTERNS:
+        out = pattern.sub(repl, out)
+    return out
+
+
+__all__ = [
+    "RedactionResult",
+    "build_pii_log_entry",
+    "fingerprint_text",
+    "redact_pii",
+    "redact_text_backstop",
+    "safe_url_for_log",
+]

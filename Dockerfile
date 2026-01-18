@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1.7
 
-FROM python:3.11-slim-bookworm AS builder
+FROM python:3.13.11-slim-bookworm AS builder
 
 WORKDIR /app
 
-ARG TORCH_VERSION=2.7.1
+ARG TORCH_VERSION=2.8.0
 ARG TORCH_WHEEL_URL=""
 ARG TORCH_WHEEL_SHA256=""
 
@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libmupdf-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install uv==0.9.8
+RUN pip install uv==0.9.24
 
 ENV UV_HTTP_TIMEOUT=3600 \
     UV_HTTP_RETRIES=20 \
@@ -36,6 +36,7 @@ ENV UV_HTTP_TIMEOUT=3600 \
     TORCH_WHEEL_SHA256=${TORCH_WHEEL_SHA256}
 
 COPY pyproject.toml uv.lock README.md ./
+COPY app.py ./app.py
 COPY scripts/docker_fetch_torch_wheel.py /usr/local/bin/docker_fetch_torch_wheel.py
 
 RUN --mount=type=cache,target=/root/.cache/torch \
@@ -69,7 +70,7 @@ COPY src ./src
 COPY templates ./templates
 
 
-FROM python:3.11-slim-bookworm AS runtime
+FROM python:3.13.11-slim-bookworm AS runtime
 
 WORKDIR /app
 
@@ -80,7 +81,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl \
         libmagic1 \
         libmupdf-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -96,6 +96,6 @@ USER docmind
 EXPOSE 8501
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD ["curl", "--silent", "--fail", "http://localhost:8501/_stcore/health"]
+    CMD ["python", "-c", "import socket; s = socket.create_connection(('127.0.0.1', 8501), timeout=3); s.close()"]
 
-CMD ["streamlit", "run", "src/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+CMD ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501"]

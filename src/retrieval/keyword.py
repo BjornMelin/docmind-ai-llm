@@ -24,6 +24,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.common.client_exceptions import ResourceExhaustedResponse
 
 from src.retrieval.sparse_query import encode_to_qdrant
+from src.utils.log_safety import build_pii_log_entry
 from src.utils.qdrant_exceptions import QDRANT_SCHEMA_EXCEPTIONS
 from src.utils.qdrant_utils import QDRANT_PAYLOAD_FIELDS, nodes_from_query_result
 from src.utils.storage import get_client_config
@@ -201,7 +202,12 @@ class KeywordSparseRetriever:
                 ev["retrieval.error_type"] = error_type
             log_jsonl(ev)
         except (OSError, ValueError, RuntimeError) as exc:
-            logger.debug("Keyword telemetry emit skipped: %s", exc)
+            redaction = build_pii_log_entry(str(exc), key_id="keyword.telemetry.emit")
+            logger.debug(
+                "Keyword telemetry emit skipped (error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
 
 
 __all__ = ["KeywordParams", "KeywordSparseRetriever"]

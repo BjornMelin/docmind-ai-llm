@@ -515,9 +515,19 @@ def main() -> int:
         if args.report or not overall_success:
             _print_report(runner)
         _print_final_status(runner, overall_success)
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        logger.exception("Unexpected error during quality gate execution")
-        print(f"\nERROR: Unexpected error: {e}")
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="scripts.run_quality_gates")
+        logger.error(
+            "Unexpected error during quality gate execution (error_type=%s error=%s)",
+            type(exc).__name__,
+            redaction.redacted,
+        )
+        print(
+            "\nERROR: Unexpected error during quality gate execution "
+            f"(error_type={type(exc).__name__} error={redaction.redacted})"
+        )
         return 2
 
     return 0 if overall_success else 1

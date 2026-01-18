@@ -124,7 +124,9 @@ def test_handle_ingest_submission_no_files(monkeypatch, streamlit_calls) -> None
     import importlib
 
     page = importlib.import_module("src.pages.02_documents")
-    page._handle_ingest_submission(None, use_graphrag=False, encrypt_images=False)  # type: ignore[attr-defined]
+    page._handle_ingest_submission(  # type: ignore[attr-defined]
+        None, use_graphrag=False, encrypt_images=False, owner_id="owner"
+    )
     assert streamlit_calls["warnings"] == ["No files selected."]
 
 
@@ -147,56 +149,41 @@ def test_render_ingest_form_smoke(monkeypatch) -> None:
     assert submitted is True
 
 
-def test_handle_ingest_submission_success_calls_helpers(monkeypatch) -> None:
+def test_handle_ingest_submission_starts_job(monkeypatch) -> None:
     import importlib
+
+    import streamlit as st  # type: ignore
 
     page = importlib.import_module("src.pages.02_documents")
 
-    seen: dict[str, object] = {}
+    st.session_state.clear()
+
+    calls: dict[str, object] = {}
+
+    class _DummyJobManager:
+        def start_job(self, *, owner_id: str, fn):  # type: ignore[no-untyped-def]
+            calls["owner_id"] = owner_id
+            calls["fn"] = fn
+            return "job-1"
+
+    monkeypatch.setattr(page, "get_job_manager", lambda *_a, **_k: _DummyJobManager())
     monkeypatch.setattr(
         page,
-        "ingest_files",
-        lambda *_a, **_k: {"count": 1, "vector_index": "V", "pg_index": None},
+        "save_uploaded_file",
+        lambda file_obj: (Path("/tmp/doc.txt"), "a" * 64),
     )
-    monkeypatch.setattr(
-        page,
-        "_render_ingest_results",
-        lambda result, use_graphrag: seen.__setitem__("render", (result, use_graphrag)),
-    )
-    monkeypatch.setattr(
-        page,
-        "_handle_snapshot_rebuild",
-        lambda vector_index, pg_index: seen.__setitem__(
-            "snapshot", (vector_index, pg_index)
-        ),
+    monkeypatch.setattr(page, "_get_spacy_service", lambda *_a, **_k: None)
+
+    page._handle_ingest_submission(  # type: ignore[attr-defined]
+        [type("F", (), {"name": "doc.txt"})()],
+        use_graphrag=False,
+        encrypt_images=False,
+        owner_id="owner",
     )
 
-    page._handle_ingest_submission([object()], use_graphrag=False, encrypt_images=False)  # type: ignore[attr-defined]
-    assert "render" in seen
-    assert "snapshot" in seen
-
-
-def test_handle_ingest_submission_snapshot_lock(monkeypatch, streamlit_calls) -> None:
-    import importlib
-
-    page = importlib.import_module("src.pages.02_documents")
-
-    monkeypatch.setattr(
-        page,
-        "ingest_files",
-        lambda *_a, **_k: {"count": 1, "vector_index": "V", "pg_index": None},
-    )
-    monkeypatch.setattr(page, "_render_ingest_results", lambda *_a, **_k: None)
-    monkeypatch.setattr(
-        page,
-        "_handle_snapshot_rebuild",
-        lambda *_a, **_k: (_ for _ in ()).throw(page.SnapshotLockTimeout()),
-    )
-
-    page._handle_ingest_submission([object()], use_graphrag=False, encrypt_images=False)  # type: ignore[attr-defined]
-    assert any(
-        "Snapshot rebuild already in progress" in w for w in streamlit_calls["warnings"]
-    )
+    assert st.session_state.get("ingest_job_id") == "job-1"
+    assert calls.get("owner_id") == "owner"
+    assert callable(calls.get("fn"))
 
 
 def test_render_ingest_results_sets_session_state(monkeypatch, tmp_path: Path) -> None:

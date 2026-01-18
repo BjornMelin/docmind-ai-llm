@@ -4,7 +4,7 @@ title: Background Ingestion & Snapshot Jobs (Progress + Cancellation)
 version: 1.0.0
 date: 2026-01-09
 owners: ["ai-arch"]
-status: Draft
+status: Implemented
 related_requirements:
   - FR-025: Background ingestion jobs (progress + cancel)
   - FR-010: Streamlit multipage UI

@@ -39,4 +39,5 @@
 - [spec-041-chat-persistence-agentic-memory-langgraph-sqlite.md](./spec-041-chat-persistence-agentic-memory-langgraph-sqlite.md)
 - [spec-042-final-multimodal-pipeline-and-persistence.md](./spec-042-final-multimodal-pipeline-and-persistence.md)
 - [spec-043-ollama-native-capabilities.md](./spec-043-ollama-native-capabilities.md)
+- [spec-044-runtime-toolchain-baseline.md](./spec-044-runtime-toolchain-baseline.md)
 - [superseded/](./superseded/index.md)

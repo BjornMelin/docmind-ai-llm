@@ -93,7 +93,7 @@ def router_build_span(
     adapter_name: str,
     kg_requested: bool,
     hybrid_requested: bool,
-) -> Generator[Span, None, None]:
+) -> Generator[Span]:
     """Yield a span describing router construction."""
     tracer = trace.get_tracer(__name__)
     with tracer.start_as_current_span("router_factory.build_router_engine") as span:
@@ -287,7 +287,7 @@ def graph_export_span(
     fmt: str,
     depth: int,
     seed_count: int,
-) -> Generator[Span, None, None]:
+) -> Generator[Span]:
     """Yield a span to instrument GraphRAG export operations."""
     tracer = trace.get_tracer(__name__)
     with tracer.start_as_current_span(f"graph_export.{fmt}") as span:

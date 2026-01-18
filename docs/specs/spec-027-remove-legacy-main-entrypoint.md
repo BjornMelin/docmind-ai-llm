@@ -13,7 +13,7 @@ related_adrs: ["ADR-046", "ADR-013", "ADR-024"]
 
 ## Objective
 
-Remove the dead/legacy Python entrypoint (`src/main.py`) so that the only supported runtime entrypoint is the Streamlit multipage UI (`src/app.py`) and documented scripts.
+Remove the dead/legacy Python entrypoint (`src/main.py`) so that the only supported runtime entrypoint is the Streamlit multipage UI (`app.py`) and documented scripts.
 
 ## Non-goals
 
@@ -34,10 +34,10 @@ Remove the dead/legacy Python entrypoint (`src/main.py`) so that the only suppor
    - coverage omit list (`pyproject.toml`)
    - docs that mention running `python src/main.py`
 
-3. Ensure README and scripts continue to use:
+3. Ensure README and scripts continue to use the supported Streamlit entrypoint:
 
 ```bash
-streamlit run src/app.py
+uv run streamlit run app.py
 ```
 
 ## Security

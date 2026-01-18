@@ -15,6 +15,7 @@ from typing import Any, cast
 from loguru import logger
 
 from src.models.processing import ProcessingStrategy
+from src.utils.log_safety import build_pii_log_entry
 
 _TEXT_EXTENSIONS = {".txt", ".md", ".rtf", ".html", ".htm"}
 _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tiff", ".bmp"}
@@ -145,7 +146,13 @@ class OcrController:
             ValueError,
             OSError,
         ) as exc:  # pragma: no cover - fallback path
-            logger.debug("native text probe failed for %s: %s", file_path, exc)
+            redaction = build_pii_log_entry(str(exc), key_id="ocr.native_text_probe")
+            logger.debug(
+                "native text probe failed (file={}, error_type={}, error={})",
+                file_path.name,
+                type(exc).__name__,
+                redaction.redacted,
+            )
         return False
 
     @staticmethod
@@ -169,5 +176,11 @@ class OcrController:
             ValueError,
             OSError,
         ) as exc:  # pragma: no cover - fallback path
-            logger.debug("page count probe failed for %s: %s", file_path, exc)
+            redaction = build_pii_log_entry(str(exc), key_id="ocr.page_count_probe")
+            logger.debug(
+                "page count probe failed (file={}, error_type={}, error={})",
+                file_path.name,
+                type(exc).__name__,
+                redaction.redacted,
+            )
             return None

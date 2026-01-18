@@ -228,7 +228,7 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Tests**       |        | mapping tests green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | RTM updated                                                                                             |
 | **Security**    |        | no secret logs; egress surfaces remain gated/off by default                                             |
-| **Tech Debt**   |        | zero TODO/FIXME introduced                                                                              |
+| **Tech Debt**   |        | zero work-marker placeholders introduced                                                                |
 | **Performance** |        | no new import-time heavy work; settings load remains fast                                               |
 
 **EXECUTE UNTIL COMPLETE.**

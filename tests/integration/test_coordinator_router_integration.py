@@ -1,6 +1,6 @@
 """Integration test: coordinator + router_tool + InjectedState overrides.
 
-Uses the deterministic supervisor_stream_shim fixture (langgraph-supervisor)
+Uses the deterministic supervisor_stream_shim fixture (repo-local supervisor graph shim)
 to validate that tools_data overrides are present in the final state seen by
 the coordinator's _extract_response seam.
 """

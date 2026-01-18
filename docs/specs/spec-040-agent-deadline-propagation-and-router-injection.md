@@ -1,10 +1,10 @@
 ---
 spec: SPEC-040
 title: Agent Deadline Propagation + Router Injection (Cooperative Cancellation)
-version: 1.0.0
-date: 2026-01-09
+date: 2026-01-18
+version: 1.0.1
 owners: ["ai-arch"]
-status: Draft
+status: Implemented
 related_requirements:
   - FR-014: LangGraph-supervised multi-agent flow.
   - FR-029: Agent deadline propagation/cooperative cancellation.
@@ -85,6 +85,26 @@ Enhance `retrieve_documents` to support router injection:
     - `documents`, `strategy_used`, `processing_time_ms`, etc.
 - Otherwise:
   - use the existing explicit hybrid/vector/GraphRAG tool paths.
+
+### Tool Invocation Model (Sync-first)
+
+DocMind's supervisor graph executes subagents synchronously via `agent.invoke(...)`
+(see `src/agents/supervisor_graph.py`). To preserve compatibility:
+
+- Tools MUST support synchronous invocation (`BaseTool.invoke(...)`), even if they
+  are safe to call via `ainvoke(...)` in unit tests.
+- Avoid defining async-only tools (e.g., `@tool` on `async def`) unless the
+  orchestration is migrated end-to-end to async (`ainvoke`/`astream`), because
+  async-only tools can break sync `invoke` execution paths.
+- Parallelism SHOULD be expressed at the orchestration layer (e.g., multiple tool
+  calls executed by the agent/tool runner with bounded concurrency), not by hiding
+  internal `asyncio.gather(...)` inside a tool implementation.
+- Orchestration-level parallelism is gated by `DOCMIND_AGENTS__ENABLE_PARALLEL_TOOL_EXECUTION`.
+  Supervisors using `agent.invoke(...)` (see `src/agents/supervisor_graph.py`) and tools
+  implementing `BaseTool.invoke(...)` MUST remain sync-compatible; enabling
+  `DOCMIND_AGENTS__ENABLE_PARALLEL_TOOL_EXECUTION` is the supported path for parallel
+  tool execution instead of embedding `asyncio.gather(...)` inside tools or switching
+  to async-only `ainvoke`/`astream` codepaths.
 
 ### Observability
 

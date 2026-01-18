@@ -11,6 +11,8 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 from loguru import logger
 
+from src.utils.monitoring import log_error_with_context
+
 from .constants import (
     COMPLEX_CONFIDENCE,
     COMPLEX_QUERY_WORD_THRESHOLD,
@@ -72,8 +74,8 @@ def route_query(
         logger.info("Query routed: {} complexity, {} strategy", complexity, strategy)
         return json.dumps(decision)
 
-    except Exception as e:
-        logger.error("Query routing failed: {}", e)
+    except Exception as exc:
+        log_error_with_context(exc, operation="route_query")
         raise
 
 
@@ -264,14 +266,15 @@ def plan_query(
         )
         return json.dumps(plan)
 
-    except (RuntimeError, ValueError, AttributeError) as e:
-        logger.error("Query planning failed: {}", e)
+    except Exception as exc:
+        log_error_with_context(exc, operation="plan_query")
         # Fallback plan
         fallback = {
             "original_query": query,
             "sub_tasks": [query],
             "execution_order": "sequential",
             "estimated_complexity": "medium",
-            "error": str(e),
+            "error_type": type(exc).__name__,
+            "error": "planning failed",
         }
         return json.dumps(fallback)

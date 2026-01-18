@@ -18,7 +18,8 @@ Implements SPEC-041 as integrated by ADR-058:
 
 ## Notes
 
-- `langgraph-supervisor==0.0.31` still uses deprecated `create_react_agent` internally; warnings are suppressed at the coordinator call site until an upstream release removes it.
+- Multi-agent orchestration uses a repo-local, graph-native supervisor (`src/agents/supervisor_graph.py`),
+  eliminating reliance on deprecated prebuilt agent helpers and any warning suppression.
 
 ## Verification
 

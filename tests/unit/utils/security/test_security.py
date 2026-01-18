@@ -1,6 +1,6 @@
 """Unit tests for security utilities.
 
-Covers redact_pii basic behavior and safe export path validation.
+Covers safe export path validation and log-safety helpers.
 """
 
 from __future__ import annotations
@@ -11,12 +11,7 @@ import pytest
 
 from src.utils import log_safety, security
 
-
-def test_redact_pii_returns_string() -> None:
-    """redact_pii should return a deterministic redaction string."""
-    redacted = security.redact_pii("hello@example.com")
-    assert isinstance(redacted, str)
-    assert "hello@example.com" not in redacted
+pytestmark = pytest.mark.unit
 
 
 def test_log_safety_redaction_is_deterministic() -> None:
