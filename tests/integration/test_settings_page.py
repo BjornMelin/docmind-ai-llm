@@ -127,7 +127,11 @@ def test_settings_apply_runtime_calls_initialize_integrations(
     from src.config.settings import settings as _settings
 
     assert calls == [
-        {"force_llm": True, "force_embed": False, "backend": _settings.llm_backend}
+        {
+            "force_llm": True,
+            "force_embed": False,
+            "backend": _settings.llm_backend,
+        }
     ], f"Unexpected initialize_integrations calls: {calls}"
 
 
