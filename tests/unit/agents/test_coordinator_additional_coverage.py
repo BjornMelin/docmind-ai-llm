@@ -6,6 +6,8 @@ to test internal behavior and state transitions.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from types import SimpleNamespace
 from typing import ClassVar
 from unittest.mock import Mock, patch
@@ -14,6 +16,9 @@ import pytest
 
 from src.agents.coordinator import (
     MultiAgentCoordinator,
+    _as_state_dict,
+    _coerce_deadline_ts,
+    _ensure_event_loop,
     _supports_native_llamaindex_retries,
 )
 from src.agents.models import AgentResponse
@@ -30,6 +35,8 @@ def _make_langchain_model() -> Mock:
 
 
 def test_supports_native_llamaindex_retries_detects_field_maps() -> None:
+    """Test that _supports_native_llamaindex_retries detects field maps."""
+
     class _LLM:
         model_fields: ClassVar[dict[str, object]] = {"max_retries": object()}
 
@@ -49,6 +56,8 @@ def test_supports_native_llamaindex_retries_detects_field_maps() -> None:
 def test_ensure_setup_configures_native_retry_when_supported(
     mock_settings: Mock, mock_setup: Mock
 ) -> None:
+    """Test that _ensure_setup configures native retry when supported."""
+
     class _LLM:
         model_fields: ClassVar[dict[str, object]] = {"max_retries": object()}
 
@@ -127,6 +136,7 @@ def workflow_result_fixture() -> dict[str, object]:
 def test_run_agent_workflow_marks_timeout_and_handles_model_dump(
     monkeypatch, workflow_result_fixture
 ) -> None:
+    """Test that _run_agent_workflow marks timeout and handles model dump."""
     coord = MultiAgentCoordinator(max_agent_timeout=1.0)
 
     class _State:
@@ -216,6 +226,87 @@ def test_process_query_timeout_uses_fallback_once(monkeypatch) -> None:
     assert resp.metadata.get("fallback_used") is True
     assert resp.metadata.get("reason") == "timeout"
     assert coord.fallback_queries == 1
+
+
+def test_ensure_event_loop_creates_loop_when_missing() -> None:
+    """_ensure_event_loop should set a loop when none is present."""
+    import threading
+
+    errors: list[Exception] = []
+
+    def _worker() -> None:
+        try:
+            with contextlib.suppress(RuntimeError):
+                asyncio.set_event_loop(None)
+            _ensure_event_loop()
+            loop = asyncio.get_event_loop_policy().get_event_loop()
+            assert loop is not None
+            loop.close()
+            with contextlib.suppress(RuntimeError):
+                asyncio.set_event_loop(None)
+        except Exception as exc:  # pragma: no cover - surfaced by main thread
+            errors.append(exc)
+
+    thread = threading.Thread(target=_worker)
+    thread.start()
+    thread.join()
+    assert not errors
+
+
+def test_as_state_dict_normalizes_inputs() -> None:
+    """_as_state_dict handles dicts, model_dump, and fallbacks."""
+    assert _as_state_dict({"a": 1}) == {"a": 1}
+
+    class _State:
+        def model_dump(self):  # type: ignore[no-untyped-def]
+            return {"b": 2}
+
+    class _BadState:
+        def model_dump(self):  # type: ignore[no-untyped-def]
+            return ["nope"]
+
+    assert _as_state_dict(_State()) == {"b": 2}
+    assert _as_state_dict(_BadState()) == {}
+
+
+def test_coerce_deadline_ts_handles_invalid_values() -> None:
+    """_coerce_deadline_ts returns valid floats or None."""
+    assert _coerce_deadline_ts({"deadline_ts": "12.5"}) == 12.5
+    assert _coerce_deadline_ts({"deadline_ts": None}) is None
+    assert _coerce_deadline_ts({"deadline_ts": "bad"}) is None
+
+
+def test_record_query_metrics_emits_histogram_and_counter(monkeypatch) -> None:
+    """_record_query_metrics uses OTEL meter to record data."""
+    import src.agents.coordinator as coord
+
+    calls = {"record": 0, "add": 0}
+
+    class _Hist:
+        def record(self, _val, attributes=None):  # type: ignore[no-untyped-def]
+            assert attributes is not None
+            calls["record"] += 1
+
+    class _Counter:
+        def add(self, _val, attributes=None):  # type: ignore[no-untyped-def]
+            assert attributes is not None
+            calls["add"] += 1
+
+    class _Meter:
+        def create_histogram(self, *_a, **_k):  # type: ignore[no-untyped-def]
+            return _Hist()
+
+        def create_counter(self, *_a, **_k):  # type: ignore[no-untyped-def]
+            return _Counter()
+
+    monkeypatch.setattr(coord, "_COORDINATOR_LATENCY", None, raising=False)
+    monkeypatch.setattr(coord, "_COORDINATOR_COUNTER", None, raising=False)
+    monkeypatch.setattr(coord.metrics, "get_meter", lambda *_a, **_k: _Meter())
+
+    inst = MultiAgentCoordinator()
+    inst._record_query_metrics(0.12, success=True)
+    assert calls["record"] == 1
+    assert calls["add"] == 1
 
 
 def test_get_state_values_and_list_checkpoints_use_compiled_graph(monkeypatch) -> None:
