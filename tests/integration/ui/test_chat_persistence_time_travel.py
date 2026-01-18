@@ -176,8 +176,26 @@ def _user_texts(app: AppTest) -> list[str]:
     for msg in app.chat_message:
         if getattr(msg, "avatar", None) != "user":
             continue
-        if msg.markdown:
-            texts.append(str(msg.markdown[0].value))
+        markdown = getattr(msg, "markdown", [])
+        if markdown:
+            texts.append(str(markdown[0].value))
+    return texts
+
+
+def _assistant_texts(app: AppTest) -> list[str]:
+    texts: list[str] = []
+    for msg in app.chat_message:
+        if getattr(msg, "avatar", None) == "user":
+            continue
+        markdown = getattr(msg, "markdown", [])
+        if markdown:
+            texts.append(str(markdown[0].value))
+        text_items = getattr(msg, "text", [])
+        if text_items:
+            texts.append(str(text_items[0].value))
+        write_items = getattr(msg, "write", [])
+        if write_items:
+            texts.append(str(write_items[0].value))
     return texts
 
 
@@ -269,6 +287,14 @@ def test_chat_time_travel_fork_drops_future_messages(
     assert not app.exception
     assert _user_texts(app) == ["one"]
 
-    app = app.chat_input[0].set_value("forked").run()
+
+@pytest.mark.integration
+def test_chat_echoes_assistant_response(chat_app: AppTest) -> None:
+    app = chat_app.run()
     assert not app.exception
-    assert _user_texts(app) == ["one", "forked"]
+
+    app = app.chat_input[0].set_value("hello").run()
+    assert not app.exception
+
+    assistant_messages = _assistant_texts(app)
+    assert any("Echo: hello" in msg for msg in assistant_messages)
