@@ -67,7 +67,12 @@ class BackupResult:
 
 
 def _utc_timestamp_compact() -> str:
-    """Return a compact UTC timestamp for backup directories."""
+    """Return a compact UTC timestamp for backup directories.
+
+    Returns:
+        A compact UTC timestamp string in YYYYMMDD_HHMMSS format. This
+        function does not raise exceptions.
+    """
     return datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
 
@@ -231,7 +236,15 @@ def _download_qdrant_snapshot(
         timeout_s: Timeout in seconds.
 
     Returns:
-        Size of the downloaded snapshot in bytes.
+        The total size of the downloaded snapshot in bytes.
+
+    Raises:
+        urllib.error.URLError: If the network request fails or the server
+            returns a non-success HTTP status code.
+        OSError: If there is a failure creating the destination directory
+            or writing the snapshot file to disk.
+        ValueError: If a symlink blocks the destination path or the Qdrant
+            URL is invalid.
     """
     base = qdrant_url.rstrip("/")
     url = (
@@ -302,32 +315,54 @@ def _create_qdrant_snapshots(
             if collection not in collections:
                 warnings.append(f"qdrant: collection not found: {collection}")
                 continue
-            desc = client.create_snapshot(collection_name=collection)
-            if not isinstance(desc, qmodels.SnapshotDescription):
-                warnings.append(
-                    f"qdrant: snapshot create returned no description: {collection}"
-                )
-                continue
 
-            filename = str(desc.name)
-            dest_file = dest_dir / "qdrant" / collection / filename
-            bytes_written += _download_qdrant_snapshot(
-                qdrant_url=qdrant_url,
-                api_key=api_key,
-                collection=collection,
-                snapshot_name=str(desc.name),
-                dest_file=dest_file,
-                timeout_s=timeout_s,
-            )
-            snapshots.append(
-                QdrantSnapshotFile(
+            desc = None
+            try:
+                desc = client.create_snapshot(collection_name=collection)
+                if not isinstance(desc, qmodels.SnapshotDescription):
+                    warnings.append(
+                        f"qdrant: snapshot create returned no description: {collection}"
+                    )
+                    continue
+
+                filename = str(desc.name)
+                dest_file = dest_dir / "qdrant" / collection / filename
+                snapshot_bytes = _download_qdrant_snapshot(
+                    qdrant_url=qdrant_url,
+                    api_key=api_key,
                     collection=collection,
                     snapshot_name=str(desc.name),
-                    filename=str(dest_file.relative_to(dest_dir)),
-                    size_bytes=int(desc.size),
-                    checksum=str(desc.checksum) if desc.checksum else None,
+                    dest_file=dest_file,
+                    timeout_s=timeout_s,
                 )
-            )
+                bytes_written += snapshot_bytes
+                snapshots.append(
+                    QdrantSnapshotFile(
+                        collection=collection,
+                        snapshot_name=str(desc.name),
+                        filename=str(dest_file.relative_to(dest_dir)),
+                        size_bytes=int(desc.size),
+                        checksum=str(desc.checksum) if desc.checksum else None,
+                    )
+                )
+            except Exception as exc:
+                warnings.append(
+                    f"qdrant: snapshot/download failed: {collection}: {exc}"
+                )
+            finally:
+                if desc and hasattr(desc, "name"):
+                    try:
+                        client.delete_snapshot(
+                            collection_name=collection,
+                            snapshot_name=str(desc.name),
+                        )
+                    except Exception as exc:  # pragma: no cover
+                        logger.warning(
+                            "qdrant: failed to delete server-side snapshot: "
+                            "collection={}, error={}",
+                            collection,
+                            exc,
+                        )
     return snapshots, bytes_written
 
 
@@ -353,6 +388,14 @@ def _safe_log_jsonl(payload: dict[str, Any], *, key_id: str) -> None:
     Args:
         payload: JSON-serializable event payload.
         key_id: Fingerprint namespace for exception redaction.
+
+    Returns:
+        None.
+
+    Raises:
+        None. This function internally catches and logs all exceptions
+        (including IOError/OSError, TypeError, and json.JSONDecodeError)
+        to ensure telemetry failures do not crash the caller.
     """
     try:
         log_jsonl(payload)

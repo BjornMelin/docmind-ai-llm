@@ -289,6 +289,132 @@ def test_settings_save_persists_openai_compatible_env(
     )
 
 
+def test_settings_connectivity_test_shows_for_openai_compatible(
+    settings_app_test: AppTest,
+    reset_settings_after_test: None,
+) -> None:
+    """Connectivity test should render for OpenAI-compatible backends."""
+    app = settings_app_test.run()
+    assert not app.exception
+
+    providers = [w for w in app.selectbox if getattr(w, "label", "") == "LLM Provider"]
+    assert providers, "LLM Provider selectbox not found"
+    app = providers[0].set_value("openai_compatible").run()
+    assert not app.exception
+
+    text_inputs = list(app.text_input)
+    base_url_inputs = [w for w in text_inputs if getattr(w, "label", "") == "Base URL"]
+    assert base_url_inputs, "OpenAI-compatible Base URL input not found"
+    app = base_url_inputs[0].set_value("http://localhost:1234/v1").run()
+    assert not app.exception
+
+    test_buttons = [b for b in app.button if getattr(b, "label", "") == "Test endpoint"]
+    assert test_buttons, "Connectivity test button not found for OpenAI-compatible"
+
+
+def test_settings_connectivity_test_timeout_shows_error(
+    settings_app_test: AppTest,
+    monkeypatch: pytest.MonkeyPatch,
+    reset_settings_after_test: None,
+) -> None:
+    """Connectivity test timeout should surface a UI error."""
+    import httpx
+
+    class _TimeoutClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def get(self, url: str, headers: dict[str, str] | None = None) -> None:
+            raise httpx.TimeoutException("timeout")
+
+    monkeypatch.setattr(httpx, "Client", _TimeoutClient)
+
+    app = settings_app_test.run()
+    assert not app.exception
+
+    providers = [w for w in app.selectbox if getattr(w, "label", "") == "LLM Provider"]
+    assert providers, "LLM Provider selectbox not found"
+    app = providers[0].set_value("openai_compatible").run()
+    assert not app.exception
+
+    text_inputs = list(app.text_input)
+    base_url_inputs = [w for w in text_inputs if getattr(w, "label", "") == "Base URL"]
+    assert base_url_inputs, "OpenAI-compatible Base URL input not found"
+    app = base_url_inputs[0].set_value("http://localhost:1234/v1").run()
+    assert not app.exception
+
+    test_buttons = [b for b in app.button if getattr(b, "label", "") == "Test endpoint"]
+    assert test_buttons, "Connectivity test button not found for OpenAI-compatible"
+    app = test_buttons[0].click().run()
+
+    assert any(
+        "Endpoint test failed" in str(getattr(err, "value", "")) for err in app.error
+    ), "Expected timeout error message not found"
+
+
+def test_settings_connectivity_test_cooldown_disables_button(
+    settings_app_test: AppTest,
+    monkeypatch: pytest.MonkeyPatch,
+    reset_settings_after_test: None,
+) -> None:
+    """Connectivity test button should be disabled during cooldown."""
+    import time
+
+    import httpx
+
+    class _OkResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, list[object]]:
+            return {"data": []}
+
+    class _OkClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def get(self, url: str, headers: dict[str, str] | None = None) -> _OkResponse:
+            return _OkResponse()
+
+    monkeypatch.setattr(httpx, "Client", _OkClient)
+    monkeypatch.setattr(time, "monotonic", lambda: 100.0)
+
+    app = settings_app_test.run()
+    assert not app.exception
+
+    providers = [w for w in app.selectbox if getattr(w, "label", "") == "LLM Provider"]
+    assert providers, "LLM Provider selectbox not found"
+    app = providers[0].set_value("openai_compatible").run()
+    assert not app.exception
+
+    text_inputs = list(app.text_input)
+    base_url_inputs = [w for w in text_inputs if getattr(w, "label", "") == "Base URL"]
+    assert base_url_inputs, "OpenAI-compatible Base URL input not found"
+    app = base_url_inputs[0].set_value("http://localhost:1234/v1").run()
+    assert not app.exception
+
+    test_buttons = [b for b in app.button if getattr(b, "label", "") == "Test endpoint"]
+    assert test_buttons, "Connectivity test button not found for OpenAI-compatible"
+    app = test_buttons[0].click().run()
+    assert not app.exception
+
+    app = app.run()
+    test_buttons = [b for b in app.button if getattr(b, "label", "") == "Test endpoint"]
+    assert test_buttons, "Connectivity test button missing after click"
+    assert test_buttons[0].disabled is True
+
+
 def test_settings_save_normalizes_lmstudio_url(
     settings_app_test: AppTest,
     tmp_path: Path,

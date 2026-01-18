@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from collections.abc import Sequence
 from pathlib import Path, PurePath
 from typing import Any, TypedDict
@@ -1121,16 +1122,8 @@ def _render_endpoint_test(validated: DocMindSettings | None) -> None:
     base_url = getattr(validated, "backend_base_url_normalized", None)
     if not base_url:
         return
-    backend_type = getattr(validated, "llm_backend", None)
-    openai_cfg = validated.openai
-    openai_compatible = bool(
-        getattr(validated, "openai_compatible", False)
-        or getattr(openai_cfg, "openai_compatible", False)
-    )
-    if not (
-        openai_compatible
-        or backend_type in ("openai_compatible", "vllm", "lmstudio", "llamacpp")
-    ):
+    backend_type = validated.llm_backend
+    if backend_type not in ("openai_compatible", "vllm", "lmstudio", "llamacpp"):
         st.info(
             "Connectivity test is only available for OpenAI-compatible backends "
             "(OpenAI-compatible, vLLM, LM Studio, llama.cpp)."
@@ -1139,13 +1132,27 @@ def _render_endpoint_test(validated: DocMindSettings | None) -> None:
 
     st.subheader("Connectivity Test")
     st.caption("Sends a lightweight `GET /models` request to the configured endpoint.")
-    if not st.button("Test endpoint", use_container_width=True):
+    cooldown_key = "docmind_endpoint_test_last_ts"
+    cooldown_s = 3.0
+    now = time.monotonic()
+    last_ts = float(st.session_state.get(cooldown_key, 0.0) or 0.0)
+    remaining = cooldown_s - (now - last_ts)
+    cooldown_active = remaining > 0
+    if cooldown_active:
+        st.caption(f"Cooldown: {remaining:.1f}s")
+    if not st.button(
+        "Test endpoint",
+        use_container_width=True,
+        disabled=cooldown_active,
+    ):
         return
+    st.session_state[cooldown_key] = now
 
     try:
         import httpx
 
-        url = str(base_url).rstrip("/") + "/models"
+        base = httpx.URL(str(base_url))
+        url = str(base.copy_with(path=base.path.rstrip("/") + "/models"))
         headers: dict[str, str] = {"Accept": "application/json"}
         if validated.openai.api_key is not None:
             headers["Authorization"] = (
@@ -1154,16 +1161,7 @@ def _render_endpoint_test(validated: DocMindSettings | None) -> None:
         if validated.openai.default_headers:
             headers.update(validated.openai.default_headers)
 
-        timeout_s = min(
-            30.0,
-            float(
-                getattr(
-                    validated,
-                    "llm_request_timeout_seconds",
-                    getattr(validated.ui, "request_timeout_seconds", 30),
-                )
-            ),
-        )
+        timeout_s = min(30.0, float(validated.llm_request_timeout_seconds))
         with httpx.Client(timeout=timeout_s) as client:
             resp = client.get(url, headers=headers)
         if resp.status_code >= 400:
@@ -1295,9 +1293,7 @@ def _persist_env_from_validated(validated: DocMindSettings) -> None:
             getattr(validated.openai, "api_mode", "chat_completions")
         ),
         "DOCMIND_OPENAI__DEFAULT_HEADERS": (
-            _safe_json_dumps_compact(default_headers)
-            if default_headers
-            else ""
+            _safe_json_dumps_compact(default_headers) if default_headers else ""
         ),
         "DOCMIND_OLLAMA_BASE_URL": str(validated.ollama_base_url).rstrip("/"),
         "DOCMIND_OLLAMA_API_KEY": (
