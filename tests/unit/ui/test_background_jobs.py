@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from src.ui.background_jobs import JobCanceledError, JobManager, ProgressEvent
+
 pytestmark = pytest.mark.unit
 
 
@@ -110,9 +111,8 @@ def test_job_manager_cancel_sets_status(default_timeout: float) -> None:
                 timestamp=datetime.now(UTC),
             )
         )
-        if cancel_event.is_set():
+        if cancel_event.wait(0.05):
             raise JobCanceledError()
-        time.sleep(0.05)
         return {"ok": True}
 
     owner_id = "owner"

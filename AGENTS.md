@@ -106,7 +106,7 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
 ## LLM backends
 
-- Backends: `ollama|vllm|lmstudio|llamacpp` via `DOCMIND_LLM_BACKEND`.
+- Backends: `ollama|vllm|lmstudio|llamacpp|openai_compatible` via `DOCMIND_LLM_BACKEND`.
 - OpenAI-compatible base URLs are normalized to a single `/v1` segment.
 - Prefer `DOCMIND_OPENAI__BASE_URL` + `DOCMIND_OPENAI__API_KEY` for OpenAI-like servers (local servers can use placeholder keys).
 - Backend-specific base URLs: `DOCMIND_LMSTUDIO_BASE_URL`, `DOCMIND_VLLM__VLLM_BASE_URL`, `DOCMIND_LLAMACPP_BASE_URL`.

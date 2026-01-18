@@ -316,14 +316,15 @@ def _create_qdrant_snapshots(
                 warnings.append(f"qdrant: collection not found: {collection}")
                 continue
 
-            desc = None
+            desc: qmodels.SnapshotDescription | None = None
             try:
-                desc = client.create_snapshot(collection_name=collection)
-                if not isinstance(desc, qmodels.SnapshotDescription):
+                created = client.create_snapshot(collection_name=collection)
+                if not isinstance(created, qmodels.SnapshotDescription):
                     warnings.append(
                         f"qdrant: snapshot create returned no description: {collection}"
                     )
                     continue
+                desc = created
 
                 filename = str(desc.name)
                 dest_file = dest_dir / "qdrant" / collection / filename
@@ -372,6 +373,9 @@ def _write_manifest(path: Path, payload: dict[str, Any]) -> None:
     Args:
         path: Destination file path.
         payload: JSON-serializable manifest data.
+
+    Returns:
+        None: No return value.
 
     Raises:
         TypeError: If the payload contains objects that are not JSON-serializable.

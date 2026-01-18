@@ -74,9 +74,11 @@ def _close_chat_db_conn(conn: sqlite3.Connection) -> None:
 
 def _close_current_chat_db_conn() -> None:
     """Close the currently cached chat DB connection on process exit."""
+    global _chat_db_conn
     if _chat_db_conn is None:
         return
     _close_chat_db_conn(_chat_db_conn)
+    _chat_db_conn = None
 
 
 def _get_or_init_user_id() -> str:

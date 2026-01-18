@@ -335,9 +335,7 @@ def test_settings_connectivity_test_timeout_shows_error(
         def __exit__(self, exc_type, exc, tb) -> bool | None:
             return False
 
-        def get(
-            self, url: str, headers: dict[str, str] | None = None
-        ) -> NoReturn:
+        def get(self, url: str, headers: dict[str, str] | None = None) -> NoReturn:
             raise httpx.TimeoutException("timeout")
 
     monkeypatch.setattr(httpx, "Client", _TimeoutClient)
