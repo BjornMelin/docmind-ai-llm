@@ -74,12 +74,12 @@ graph TB
 
 ### Core Components
 
-| Component               | Purpose                                                  | Technology                     | Performance Target   |
-| ----------------------- | -------------------------------------------------------- | ------------------------------ | -------------------- |
-| **Supervisor**          | LangGraph-based agent orchestration                      | LangGraph v1.0.6               | < 200ms overhead     |
-| **VLLM Backend**        | High-performance local inference (OpenAI-compatible)     | vLLM server (FP8 / FlashInfer, external) | 120-180 tok/s        |
-| **Vector Store**        | Multi-vector and hybrid retrieval                        | Qdrant                         | < 50ms query latency |
-| **Persistence**         | Durable chat sessions and multimodal artifacts           | SQLite WAL + ArtifactRef       | Zero-loss integrity  |
+| Component               | Purpose                                              | Technology                               | Performance Target   |
+| ----------------------- | ---------------------------------------------------- | ---------------------------------------- | -------------------- |
+| **Supervisor**          | LangGraph-based agent orchestration                  | LangGraph v1.0.6                         | < 200ms overhead     |
+| **VLLM Backend**        | High-performance local inference (OpenAI-compatible) | vLLM server (FP8 / FlashInfer, external) | 120-180 tok/s        |
+| **Vector Store**        | Multi-vector and hybrid retrieval                    | Qdrant                                   | < 50ms query latency |
+| **Persistence**         | Durable chat sessions and multimodal artifacts       | SQLite WAL + ArtifactRef                 | Zero-loss integrity  |
 
 ## Local-first Guarantees
 
@@ -89,13 +89,13 @@ DocMind AI is architected with a strict **local-first** mandate (ADR-058):
 2. **No Cloud Leakage**: Remote LLM endpoints are disabled by default. Embeddings (BGE-M3/SigLIP) run locally on the user's GPU/CPU.
 3. **Fail-open Multimodal**: If GPU acceleration or specialized libraries (e.g., `sqlite-vec`) are unavailable, the system fallbacks to basic text-only RAG without crashing.
 4. **Content-Addressed Artifacts**: Large binary blobs (images, thumbnails) are never stored in databases. They are stored as `ArtifactRef` (SHA-256) in a local filesystem store.
-| Component               | Purpose                                                  | Technology                     | Performance Target   |
-| ----------------------- | -------------------------------------------------------- | ------------------------------ | -------------------- |
-| **Frontend**            | Document uploads, configuration, results, chat interface | Streamlit                      | Real-time streaming  |
-| **Multi-Agent System**  | 5-agent coordination for complex queries                 | LangGraph Supervisor           | <200ms coordination  |
-| **LLM Backend**         | Language model inference with 128K context               | vLLM server + Qwen3-4B-FP8     | 120-180 tok/s decode |
-| **Vector Storage**      | Hybrid dense/sparse search with RRF fusion               | Qdrant                         | <100ms retrieval     |
-| **Document Processing** | Hi-res parsing with NLP enrichment (optional)            | Unstructured + spaCy           | <2s per document*    |
+| Component               | Purpose                                                  | Technology                                                                     | Performance Target   |
+| ----------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ | -------------------- |
+| **Frontend**            | Document uploads, configuration, results, chat interface | Streamlit                                                                      | Real-time streaming  |
+| **Multi-Agent System**  | 5-agent coordination for complex queries                 | LangGraph Supervisor                                                           | <200ms coordination  |
+| **LLM Backend**         | Language model inference with 128K context               | vLLM server + Qwen3-4B-FP8                                                     | 120-180 tok/s decode |
+| **Vector Storage**      | Hybrid dense/sparse search with RRF fusion               | Qdrant                                                                         | <100ms retrieval     |
+| **Document Processing** | Hi-res parsing with NLP enrichment (optional)            | Unstructured + spaCy                                                           | <2s per document*    |
 | **Performance Layer**   | FP8 quantization, parallel execution, CUDA optimization  | torch==2.8.0 + nvidia-cuda-runtime-cu12==12.8.90 + nvidia-cudnn-cu12==9.10.2.21 | 12–14 GB VRAM usage  |
 
 *Processing time may vary based on whether optional spaCy NLP enrichment is enabled.

@@ -6,7 +6,7 @@ import atexit
 import contextlib
 import sqlite3
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol
 
 import streamlit as st
 
@@ -48,7 +48,9 @@ class ForkableCoordinator(Protocol):
 
     def fork_from_checkpoint(
         self, *, thread_id: str, user_id: str, checkpoint_id: str
-    ) -> str | None: ...
+    ) -> str | None:
+        """Fork a thread from a checkpoint and return the new checkpoint id."""
+        ...
 
 
 @st.cache_resource(show_spinner=False)
