@@ -8,8 +8,6 @@ related_adrs: ["ADR-023"]
 related_specs: ["SPEC-036"]
 ---
 
-# Implementation Prompt — Document Analysis Modes (Separate / Combined / Auto)
-
 Implements `ADR-023` + `SPEC-036`.
 
 **Read first (repo truth):**

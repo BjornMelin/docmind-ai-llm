@@ -8,8 +8,6 @@ related_adrs: ["ADR-051"]
 related_specs: ["SPEC-032"]
 ---
 
-# Implementation Prompt — Documents Snapshot Service Boundary
-
 Implements `ADR-051` + `SPEC-032`.
 
 **Read first (repo truth):**

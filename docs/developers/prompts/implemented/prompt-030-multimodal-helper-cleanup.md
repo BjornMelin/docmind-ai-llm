@@ -8,8 +8,6 @@ related_adrs: ["ADR-049"]
 related_specs: ["SPEC-030"]
 ---
 
-# Implementation Prompt — Multimodal Helper Cleanup
-
 Implements `ADR-049` + `SPEC-030` (final-release hygiene; no placeholder multimodal “toy pipeline” in `src/`).
 
 **Read first (repo truth):**

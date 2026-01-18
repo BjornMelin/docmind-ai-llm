@@ -8,8 +8,6 @@ related_adrs: ["ADR-046"]
 related_specs: ["SPEC-027"]
 ---
 
-## Implementation Prompt — Remove Legacy `src/main.py` Entrypoint
-
 Implements `ADR-046` + `SPEC-027`.
 
 **Read first (repo truth):**

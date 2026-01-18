@@ -8,8 +8,6 @@ related_adrs: ["ADR-048"]
 related_specs: ["SPEC-029"]
 ---
 
-# Implementation Prompt — Docs Consistency Pass (Specs/Handbook/RTM)
-
 Implements `ADR-048` + `SPEC-029`.
 
 **Read first (repo truth):**

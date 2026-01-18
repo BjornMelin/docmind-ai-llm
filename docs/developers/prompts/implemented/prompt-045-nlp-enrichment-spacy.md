@@ -1,14 +1,12 @@
 ---
 prompt: PROMPT-045
 title: NLP Enrichment (spaCy 3.8.11) — Runtime Selection + Ingestion Transform + UI Preview
-status: Implemented
+status: Completed
 date: 2026-01-16
 version: 1.0
 related_adrs: ["ADR-061"]
 related_specs: ["SPEC-015"]
 ---
-
-## Implementation Prompt — 0045: NLP Enrichment (spaCy 3.8.11)
 
 **Purpose:** Ship a centralized spaCy subsystem for optional ingestion-time enrichment (sentences + entities) with cross-platform device selection (`cpu|cuda|apple|auto`) and Streamlit-safe caching.
 

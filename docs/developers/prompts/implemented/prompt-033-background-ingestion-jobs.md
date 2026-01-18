@@ -8,8 +8,6 @@ related_adrs: ["ADR-052"]
 related_specs: ["SPEC-033"]
 ---
 
-# Implementation Prompt — Background Ingestion & Snapshot Jobs
-
 Implements `ADR-052` + `SPEC-033`.
 
 **Read first (repo truth):**

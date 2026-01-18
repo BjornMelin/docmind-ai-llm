@@ -8,8 +8,6 @@ related_adrs: ["ADR-033"]
 related_specs: ["SPEC-037"]
 ---
 
-# Implementation Prompt — Local Backup & Retention (Snapshots, Cache, Analytics, Qdrant)
-
 Implements `ADR-033` + `SPEC-037`.
 
 **Read first (repo truth):**

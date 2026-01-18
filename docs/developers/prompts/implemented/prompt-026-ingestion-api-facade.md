@@ -1,18 +1,12 @@
 ---
 prompt: PROMPT-026
 title: Ingestion API Cleanup
+status: Completed
 date: 2026-01-15
 version: 2.0
 related_adrs: ["ADR-045"]
 related_specs: ["SPEC-026"]
 ---
-<!--
-Implemented-by: DocMind Agent
-Date: 2026-01-15
-Version: 2.0
--->
-
-## Implementation Prompt — Unified Ingestion API (Refactor)
 
 Implements `ADR-045` + `SPEC-026`.
 
