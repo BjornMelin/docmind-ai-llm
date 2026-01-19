@@ -1,6 +1,6 @@
 [project]
 name = "docmind_ai_llm"
-version = "0.6.0"
+version = "0.7.0"
 description = "Local LLM for AI-Powered Document Analysis"
 authors = [{ name = "Bjorn Melin" }]
 license-files = ["LICENSE"]

@@ -4,6 +4,85 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [0.7.0](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.6.0...v0.7.0) (2026-01-19)
+
+
+### Features
+
+* Add `openai_compatible` LLM backend option, fix chat session connection cleanup, and refine analysis service variable names and documentation. ([25f2580](https://github.com/BjornMelin/docmind-ai-llm/commit/25f25808db984629ef4e1a39c10040d822685fc1))
+* Add agent stack audit report, migration plan, and audit data. ([265e93b](https://github.com/BjornMelin/docmind-ai-llm/commit/265e93b139377578c6f6b68cc996184cdec8cf36))
+* Add chat UI integration tests, refactor retrieval test helper, and enhance L2 normalization robustness with non-finite norm checks. ([86afcfa](https://github.com/BjornMelin/docmind-ai-llm/commit/86afcfa5c8652397a449bada289ee7597c079d25))
+* Add Qdrant API key support for backups, include `.env` in backups, and refine path handling. ([c8b8dee](https://github.com/BjornMelin/docmind-ai-llm/commit/c8b8dee150004295c4e0c43dc4bd2f67288c8002))
+* **analysis:** implement document analysis service and models ([a0ece7e](https://github.com/BjornMelin/docmind-ai-llm/commit/a0ece7e62f16b8d5c8530bc39c22c85982d27c65))
+* **analytics, settings:** enhance error handling and logging, add OpenAI provider support ([a16f2bf](https://github.com/BjornMelin/docmind-ai-llm/commit/a16f2bf86bb32673ebe624be447833fc5999a9bc))
+* **app, dspy_integration, tests:** enhance error handling and logging with PII redaction ([08243f5](https://github.com/BjornMelin/docmind-ai-llm/commit/08243f5ffd41e800693586948281d6bac6215730))
+* **backup:** add manual local backup script with rotation and pruning functionality ([7eb27f1](https://github.com/BjornMelin/docmind-ai-llm/commit/7eb27f11656be21087a2f4ec206e5d2111e30a87))
+* Clarify and enforce the sync-first tool invocation model in documentation and tests, and add comprehensive docstrings to backup service functions. ([e40582a](https://github.com/BjornMelin/docmind-ai-llm/commit/e40582a34432d7fba6af49b5d3891ce9b4b0a744))
+* **docker, docs:** update Dockerfile and user documentation for app integration and OpenAI compatibility ([95d058d](https://github.com/BjornMelin/docmind-ai-llm/commit/95d058dc2639086536c7f8354f8162c0d8eb3af7))
+* Enhance `safe_url_for_log` to strip userinfo and handle IPv6/invalid ports, and update logging documentation. ([8d997e1](https://github.com/BjornMelin/docmind-ai-llm/commit/8d997e14773ffb6cde7f27ed3df1d74ebeb21b6d))
+* Enhance ingestion API path validation and symlink security, and refine test setups for tool factories and UI integration. ([3431589](https://github.com/BjornMelin/docmind-ai-llm/commit/3431589491a8a771a1813830abfd230b3606eb1f))
+* enhance LLM connectivity test logic and error reporting, add integration tests, and improve Qdrant backup robustness. ([ba9e044](https://github.com/BjornMelin/docmind-ai-llm/commit/ba9e044d71bbe25e72a4d3e126512bc15fbd81a2))
+* **env:** add new OpenAI configuration options and update backend documentation ([06b3f83](https://github.com/BjornMelin/docmind-ai-llm/commit/06b3f8326e893fc20dc4b781d502a2faa1540a02))
+* Establish Python 3.13 baseline and external vLLM policy, introduce a new runtime toolchain specification, and update various developer documentation, specifications, and CI/CD workflows. ([46ae631](https://github.com/BjornMelin/docmind-ai-llm/commit/46ae631aaf086baa525ec2e7be6c2378345b0104))
+* **evaluation:** enhance metrics handling and error reporting in RAGAS evaluation ([4cbd14b](https://github.com/BjornMelin/docmind-ai-llm/commit/4cbd14bf2dcbb163e5746cef4c3d9cbc1d90022e))
+* Implement agent audit and evaluation infrastructure, improve chat session docstrings, and ensure database connection cleanup. ([a879c6c](https://github.com/BjornMelin/docmind-ai-llm/commit/a879c6c090efe908bd6cd49495cd6edb9a3dac7e))
+* Include temperature in semantic cache key, refactor UI test imports, and add agent audit and migration plan documents. ([08253b0](https://github.com/BjornMelin/docmind-ai-llm/commit/08253b0fdd1ffb7deb7df7229630cfda0dde71fc))
+* **ingestion:** refactor ingestion process and add background job management ([6de2941](https://github.com/BjornMelin/docmind-ai-llm/commit/6de294107dbd52479de42a28127238991f5aef5f))
+* Initiate agent orchestration migration with a new LangGraph supervisor, audit, and detailed migration plan. ([9ce143f](https://github.com/BjornMelin/docmind-ai-llm/commit/9ce143f7d78c2354475fc6961031d0d9a95a24af))
+* Integrate comprehensive LLM providers and OpenResponses API, refactor application entry point, and update related documentation. ([792d06b](https://github.com/BjornMelin/docmind-ai-llm/commit/792d06bb37f3869e542fbab3ef09d22bf58bed20))
+* **integrations:** enhance error logging with PII redaction and improve timeout handling for OpenAI-compatible backend ([3fe74d8](https://github.com/BjornMelin/docmind-ai-llm/commit/3fe74d82bb00e5a6aa315a576241157898fff425))
+* Introduce a configurable test timeout fixture and apply it to background job tests. ([5fedbe3](https://github.com/BjornMelin/docmind-ai-llm/commit/5fedbe34db906d8c0d23560d312f36c15628ab1c))
+* Introduce agent stack audit report and refactor telemetry file rotation test mocking. ([a0e78e6](https://github.com/BjornMelin/docmind-ai-llm/commit/a0e78e651ee35fc21f72e00e2ac6fdc0183a4ae0))
+* Introduce analysis service, semantic cache, backup functionality, and new ADRs, alongside extensive updates to agents, UI, retrieval, persistence, and documentation. ([e4265c8](https://github.com/BjornMelin/docmind-ai-llm/commit/e4265c81f2daef1d5b2651befdc7b52b1d357924))
+* Introduce and integrate a supervisor graph for multi-agent orchestration, replacing previous supervisor creation logic and adding related audit and migration documentation. ([e8ef6ff](https://github.com/BjornMelin/docmind-ai-llm/commit/e8ef6ff897dc03b396092eb2a000503ad2e0dd1d))
+* introduce multi-agent supervisor graph and related unit tests, alongside an agent framework audit. ([e6d148a](https://github.com/BjornMelin/docmind-ai-llm/commit/e6d148a7c212e6363d919f496ac442acde4414bb))
+* **logging:** enhance error logging with PII redaction across multiple modules ([a786605](https://github.com/BjornMelin/docmind-ai-llm/commit/a786605ac79c0fa99c886a856146171007a18d6d))
+* **logging:** enhance error logging with PII redaction across multiple modules ([9d033dd](https://github.com/BjornMelin/docmind-ai-llm/commit/9d033dd5627a128bfa69b74ed375db6cdebc4d77))
+* **logging:** enhance error logging with PII redaction in ingestion and OCR processes ([9602b73](https://github.com/BjornMelin/docmind-ai-llm/commit/9602b73066cef0f2c18bed31d57c29e40f418a3a))
+* **logging:** enhance spaCy load error logging with PII redaction ([9fe4976](https://github.com/BjornMelin/docmind-ai-llm/commit/9fe4976244b1dcded1d2a3b790505dca5815bc5a))
+* Migrate orchestration to LangGraph StateGraph, removing deprecated langgraph-supervisor dependency ([c435e2f](https://github.com/BjornMelin/docmind-ai-llm/commit/c435e2ff0178a6f956c870f764f8a5da82a0ff07))
+* Migrate retrieval tool tests to asyncio and enhance dataclass documentation and test clarity. ([cc2a209](https://github.com/BjornMelin/docmind-ai-llm/commit/cc2a209dd06360fbfcc6d7fda3af4887f0824868))
+* refactor agent supervisor creation to use `build_multi_agent_supervisor_graph` with updated ADR-011 parameters, remove the old retrieval agent, and add audit and migration documentation. ([1821ca9](https://github.com/BjornMelin/docmind-ai-llm/commit/1821ca9b4b44d997daf19d6c1cbe2da3849512f3))
+* Refactor Streamlit entrypoint to `app.py`, improve chat snapshot loading, update Python version and worklog documentation, and supersede ADR-062. ([ed64660](https://github.com/BjornMelin/docmind-ai-llm/commit/ed64660949611684a968ced120bb14b513755328))
+* Replace the multi-agent supervisor with a new graph-native implementation using LangGraph's StateGraph, including tests and updated documentation. ([2d52303](https://github.com/BjornMelin/docmind-ai-llm/commit/2d52303363d0ec011dc17ffd55b8cde8e58e813c))
+* **retrieval:** integrate router injection and enhance error logging ([5cd33c0](https://github.com/BjornMelin/docmind-ai-llm/commit/5cd33c0cf547bb40197267ec56e1a1bf42a068a4))
+* **scripts:** enhance error logging in coverage, performance, quality gates, and health monitoring scripts ([7eb27f1](https://github.com/BjornMelin/docmind-ai-llm/commit/7eb27f11656be21087a2f4ec206e5d2111e30a87))
+* **semantic-cache:** implement Qdrant-backed semantic cache with strict invalidation ([a0b6dd9](https://github.com/BjornMelin/docmind-ai-llm/commit/a0b6dd9d72a996ddb176cddeb1a70f808f9f3429))
+* **tests:** add backup service tests for manifest creation and rotation ([562404e](https://github.com/BjornMelin/docmind-ai-llm/commit/562404e681ea0c52c8e45ae6939b723a85bc9d42))
+* update documentation statuses, introduce worklogs, and refactor app entrypoint for Python 3.13 baseline ([a2119ed](https://github.com/BjornMelin/docmind-ai-llm/commit/a2119ed30cf9251fb66553cdde501647b540d585))
+* update Python baseline to 3.13.11, refresh documentation, and add a new runtime toolchain specification. ([7e84d11](https://github.com/BjornMelin/docmind-ai-llm/commit/7e84d112ad370ff4bdfedfb03bf086b96a3ba92b))
+
+
+### Bug Fixes
+
+* address lint failures ([81f369e](https://github.com/BjornMelin/docmind-ai-llm/commit/81f369e265a5e42eb046109fabc7c6e996034bb2))
+* address PR review comments ([9b830ac](https://github.com/BjornMelin/docmind-ai-llm/commit/9b830ac4679ff7a0655a6a35c7e69bd6adfe6247))
+* address PR review comments ([7556e43](https://github.com/BjornMelin/docmind-ai-llm/commit/7556e43840cc914db8c1d19ba537a1203c2432a0))
+* address PR review feedback ([ec0bf7e](https://github.com/BjornMelin/docmind-ai-llm/commit/ec0bf7ea45e1f1aa826d451c5054e8e3de133746))
+* Improve numerical stability in vector normalization and enhance test isolation through dependency mocking. ([37c930b](https://github.com/BjornMelin/docmind-ai-llm/commit/37c930ba8bfde126a88aeb1bdd2900f01417146f))
+* resolve PR review comments ([e9de4b5](https://github.com/BjornMelin/docmind-ai-llm/commit/e9de4b58259cc088c70234082fab6f873b8a5e34))
+* resolve review comments for backups and UI tests ([3a92c7a](https://github.com/BjornMelin/docmind-ai-llm/commit/3a92c7aa221340a7c4bd608d34a7f206e9e9f58c))
+* **siglip_adapter:** improve error logging for image and text embeddings ([a0b6dd9](https://github.com/BjornMelin/docmind-ai-llm/commit/a0b6dd9d72a996ddb176cddeb1a70f808f9f3429))
+* **storage:** improve error logging for Qdrant operations ([a0b6dd9](https://github.com/BjornMelin/docmind-ai-llm/commit/a0b6dd9d72a996ddb176cddeb1a70f808f9f3429))
+* **telemetry:** correct generator return type in router_build_span and graph_export_span functions ([261aeed](https://github.com/BjornMelin/docmind-ai-llm/commit/261aeeda65965bb7e6dc4f85ae4c68d006e8abff))
+* Update status of ADR-055 and SPEC-039 to Proposed, add implementation status and missing items for completion ([050169a](https://github.com/BjornMelin/docmind-ai-llm/commit/050169a7f39a2af9fb7af3b63dd7a03d2d1093f3))
+
+
+### Documentation
+
+* Add agent stack audit report and update various developer and user documentation. ([ad8ce77](https://github.com/BjornMelin/docmind-ai-llm/commit/ad8ce77d72bb7dd5c81f71bdc3955755aa24bcc9))
+* Add detailed Python style guidelines to `AGENTS.md` and reformat a test assertion for improved readability. ([4c7c94f](https://github.com/BjornMelin/docmind-ai-llm/commit/4c7c94fe3476391fcbdca17acb7831222a02849e))
+* Add developer worklog guidelines, update Streamlit entrypoint and run command, adjust Python version requirement, and move a superseded ADR. ([65e74ed](https://github.com/BjornMelin/docmind-ai-llm/commit/65e74eded78ff832e9cfeea8bca1f371bd361b64))
+* align architecture versions and typing ([ca679ff](https://github.com/BjornMelin/docmind-ai-llm/commit/ca679ff21d20c9dc5b4da28746106d3cd907cb28))
+* **ci:** add AppTest timeout troubleshooting ([c37259f](https://github.com/BjornMelin/docmind-ai-llm/commit/c37259ff9345670fc6bd7fb93250eecb065526f2))
+* fix markdownlint errors ([8008a1a](https://github.com/BjornMelin/docmind-ai-llm/commit/8008a1a05e64314e5676818f6a321ec0108fd871))
+* Introduce backup service and analysis module, add semantic caching, and expand testing across agents, UI, and utilities. ([fc39a00](https://github.com/BjornMelin/docmind-ai-llm/commit/fc39a0047583c31c753989eb8c81b1d440bd1ef1))
+* **specs:** align AppTest guidance and bump patch versions ([cb3727b](https://github.com/BjornMelin/docmind-ai-llm/commit/cb3727beb152e86d2fe3d37d374ca9065ee8643c))
+* **testing:** document AppTest timeout policy ([453c17b](https://github.com/BjornMelin/docmind-ai-llm/commit/453c17b67d237d33d88e3fdcde1b22322bb9b32e))
+* trim whitespace in superseded prompt ([9769d15](https://github.com/BjornMelin/docmind-ai-llm/commit/9769d15535fcd5d9eae561732b20b8f98aff92af))
+* Update agent orchestration ADR and spec, deprecate `add_handoff_back_messages`, rename router injection telemetry field, and refine test coverage report paths. ([ec7f8f1](https://github.com/BjornMelin/docmind-ai-llm/commit/ec7f8f1b68358789325807269919265a6009a8c5))
+* update and align reference prompt files ([d74409c](https://github.com/BjornMelin/docmind-ai-llm/commit/d74409c1a2e15df971065486921dc153f61ea6ba))
+
 ## [0.6.0](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.5.0...v0.6.0) (2026-01-16)
 
 
