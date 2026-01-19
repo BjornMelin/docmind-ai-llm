@@ -22,6 +22,7 @@ from langgraph.graph import StateGraph
 from streamlit.testing.v1 import AppTest
 
 from src.agents.models import AgentResponse, MultiAgentGraphState
+from tests.helpers.apptest_utils import apptest_timeout_sec
 
 
 def _build_echo_graph(*, checkpointer: SqliteSaver):
@@ -158,8 +159,7 @@ def chat_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[AppTes
 
     root = Path(__file__).resolve().parents[3]
     page_path = root / "src" / "pages" / "01_chat.py"
-    at = AppTest.from_file(str(page_path))
-    at.default_timeout = 8
+    at = AppTest.from_file(str(page_path), default_timeout=apptest_timeout_sec())
     try:
         yield at
     finally:
@@ -214,7 +214,10 @@ def test_chat_persists_history_across_restart(chat_app: AppTest) -> None:
     st.cache_data.clear()
     root = Path(__file__).resolve().parents[3]
     page_path = root / "src" / "pages" / "01_chat.py"
-    app2 = AppTest.from_file(str(page_path)).run(timeout=8)
+    app2 = AppTest.from_file(
+        str(page_path),
+        default_timeout=apptest_timeout_sec(),
+    ).run()
     assert not app2.exception
     assert "one" in _user_texts(app2)
 

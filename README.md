@@ -24,7 +24,7 @@ Design goals:
 ## ✨ Features of DocMind AI
 
 - **Privacy-focused, local-first:** Remote LLM endpoints are blocked by default; enable explicitly when needed.
-- **Library-first ingestion pipeline:** LlamaIndex `IngestionPipeline` with `UnstructuredReader` when installed (fallback to plain-text), `TokenTextSplitter`, and optional `TitleExtractor`.
+- **Library-first ingestion pipeline:** LlamaIndex `IngestionPipeline` with `UnstructuredReader` when installed (fallback to plain-text), `TokenTextSplitter`, optional spaCy enrichment, and optional `TitleExtractor`.
 - **Multi-format parsing:** Unstructured covers common formats (PDF, DOCX, PPTX, XLSX, HTML, Markdown, TXT, CSV, JSON, RTF, MSG, ODT, EPUB) when supported; unsupported types fall back to plain-text when possible.
 - **Hybrid retrieval with routing:** RouterQueryEngine with `semantic_search`, optional `hybrid_search` (Qdrant server-side fusion), and optional `knowledge_graph` (GraphRAG).
 - **Qdrant server-side fusion:** Query API RRF (default) or DBSF over named vectors `text-dense` and `text-sparse`; sparse queries use FastEmbed BM42/BM25 when available.
@@ -439,20 +439,20 @@ print(f"Processed {len(result.nodes)} nodes from {len(inputs)} files")
 
 ```mermaid
 flowchart TD
-    A[Documents page<br/>Upload files] --> B[Ingestion pipeline<br/>UnstructuredReader or text fallback]
-    B --> C[TokenTextSplitter + spaCy enrichment (optional) + TitleExtractor<br/>LlamaIndex IngestionPipeline]
-    C --> D[Nodes + metadata]
-    D --> E[VectorStoreIndex<br/>Qdrant named vectors]
-    C --> F[PDF page image exports<br/>PyMuPDF, optional AES-GCM]
-    D --> G[PropertyGraphIndex<br/>optional]
-    E --> H[RouterQueryEngine<br/>semantic_search / hybrid_search / knowledge_graph]
+    A["Documents page<br/>Upload files"] --> B["Ingestion pipeline<br/>UnstructuredReader or text fallback"]
+    B --> C["TokenTextSplitter, spaCy enrichment (optional),<br/>TitleExtractor (optional)<br/>LlamaIndex IngestionPipeline"]
+    C --> D["Nodes and metadata"]
+    D --> E["VectorStoreIndex<br/>Qdrant named vectors"]
+    C --> F["PDF page image exports<br/>PyMuPDF, optional AES-GCM"]
+    D --> G["PropertyGraphIndex<br/>optional"]
+    E --> H["RouterQueryEngine<br/>semantic_search / hybrid_search<br/>knowledge_graph"]
     G --> H
-    H --> I[MultiAgentCoordinator<br/>LangGraph supervisor - 5 agents]
-    I --> J[Chat page<br/>Responses]
+    H --> I["MultiAgentCoordinator<br/>LangGraph supervisor - 5 agents"]
+    I --> J["Chat page<br/>Responses"]
 
-    K[Snapshot manager<br/>data/storage] <--> E
+    K["Snapshot manager<br/>data/storage"] <--> E
     K <--> G
-    L[Ingestion cache<br/>DuckDB KV] <--> C
+    L["Ingestion cache<br/>DuckDB KV"] <--> C
 ```
 
 ## Implementation Details
