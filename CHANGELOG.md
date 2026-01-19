@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [0.7.1](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.7.0...v0.7.1) (2026-01-19)
+
+
+### Bug Fixes
+
+* resolve mermaid diagram parse error in README ([e5bd86f](https://github.com/BjornMelin/docmind-ai-llm/commit/e5bd86f588166f622e96eb822a50c5d30bcfac7d))
+* resolve mermaid diagram parse error in README ([5d97bf3](https://github.com/BjornMelin/docmind-ai-llm/commit/5d97bf3cbaef605adff154f5ebc3576ab9ba9563))
+
+
+### Documentation
+
+* clarify spaCy enrichment as optional in the ingestion pipeline description. ([9e7bfef](https://github.com/BjornMelin/docmind-ai-llm/commit/9e7bfefd5a86c8458af4675e7fe8dce53875d237))
+
 ## [0.7.0](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.6.0...v0.7.0) (2026-01-19)
 
 
