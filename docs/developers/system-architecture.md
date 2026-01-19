@@ -100,7 +100,7 @@ DocMind AI is architected with a strict **local-first** mandate (ADR-058):
 
 *Processing time may vary based on whether optional spaCy NLP enrichment is enabled.
 *Version source of truth: `pyproject.toml` (direct pins) and `uv.lock`
- (resolved CUDA runtime packages).
+(resolved CUDA runtime packages).
 
 ## Unified Configuration Architecture
 

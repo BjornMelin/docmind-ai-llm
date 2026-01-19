@@ -66,6 +66,7 @@ def get_chat_db_conn() -> sqlite3.Connection:
     global _chat_db_conn, _chat_db_conn_cleanup_registered
     if _chat_db_conn is not None:
         _close_chat_db_conn(_chat_db_conn)
+        _chat_db_conn = None
     conn = open_chat_db(settings.chat.sqlite_path, cfg=settings)
     ensure_session_registry(conn)
     _chat_db_conn = conn
@@ -322,7 +323,7 @@ def render_time_travel_sidebar(
     Allows users to resume conversation threads from historical state snapshots.
 
     Args:
-        coord: MultiAgentCoordinator instance for forking state.
+        coord: Coordinator instance supporting checkpoint forking.
         conn: SQLite connection for metadata updates.
         thread_id: Target thread identifier.
         user_id: User/tenant namespace.

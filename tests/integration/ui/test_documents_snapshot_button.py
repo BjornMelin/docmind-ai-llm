@@ -106,6 +106,9 @@ def documents_app_test(
 
     def _rebuild_snapshot(*_a, **_k) -> Path:
         snapshot_dir = storage_base / "snapshot-rebuild-test"
+        assert snapshot_dir not in rebuild_calls, (
+            "Rebuild should run once per test action."
+        )
         snapshot_dir.mkdir(parents=True, exist_ok=False)
         rebuild_calls.append(snapshot_dir)
         return snapshot_dir
