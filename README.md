@@ -439,20 +439,20 @@ print(f"Processed {len(result.nodes)} nodes from {len(inputs)} files")
 
 ```mermaid
 flowchart TD
-    A[Documents page<br/>Upload files] --> B[Ingestion pipeline<br/>UnstructuredReader or text fallback]
-    B --> C[TokenTextSplitter + spaCy enrichment (optional) + TitleExtractor<br/>LlamaIndex IngestionPipeline]
-    C --> D[Nodes + metadata]
-    D --> E[VectorStoreIndex<br/>Qdrant named vectors]
-    C --> F[PDF page image exports<br/>PyMuPDF, optional AES-GCM]
-    D --> G[PropertyGraphIndex<br/>optional]
-    E --> H[RouterQueryEngine<br/>semantic_search / hybrid_search / knowledge_graph]
+    A["Documents page<br/>Upload files"] --> B["Ingestion pipeline<br/>UnstructuredReader or text fallback"]
+    B --> C["TokenTextSplitter, spaCy enrichment,<br/>TitleExtractor (optional)<br/>LlamaIndex IngestionPipeline"]
+    C --> D["Nodes and metadata"]
+    D --> E["VectorStoreIndex<br/>Qdrant named vectors"]
+    C --> F["PDF page image exports<br/>PyMuPDF, optional AES-GCM"]
+    D --> G["PropertyGraphIndex<br/>optional"]
+    E --> H["RouterQueryEngine<br/>semantic_search / hybrid_search<br/>knowledge_graph"]
     G --> H
-    H --> I[MultiAgentCoordinator<br/>LangGraph supervisor - 5 agents]
-    I --> J[Chat page<br/>Responses]
+    H --> I["MultiAgentCoordinator<br/>LangGraph supervisor - 5 agents"]
+    I --> J["Chat page<br/>Responses"]
 
-    K[Snapshot manager<br/>data/storage] <--> E
+    K["Snapshot manager<br/>data/storage"] <--> E
     K <--> G
-    L[Ingestion cache<br/>DuckDB KV] <--> C
+    L["Ingestion cache<br/>DuckDB KV"] <--> C
 ```
 
 ## Implementation Details
