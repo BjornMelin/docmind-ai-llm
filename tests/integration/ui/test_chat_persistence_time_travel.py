@@ -214,7 +214,10 @@ def test_chat_persists_history_across_restart(chat_app: AppTest) -> None:
     st.cache_data.clear()
     root = Path(__file__).resolve().parents[3]
     page_path = root / "src" / "pages" / "01_chat.py"
-    app2 = AppTest.from_file(str(page_path)).run(timeout=apptest_timeout_sec())
+    app2 = AppTest.from_file(
+        str(page_path),
+        default_timeout=apptest_timeout_sec(),
+    ).run()
     assert not app2.exception
     assert "one" in _user_texts(app2)
 
