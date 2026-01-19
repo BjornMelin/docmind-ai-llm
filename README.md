@@ -24,7 +24,7 @@ Design goals:
 ## ✨ Features of DocMind AI
 
 - **Privacy-focused, local-first:** Remote LLM endpoints are blocked by default; enable explicitly when needed.
-- **Library-first ingestion pipeline:** LlamaIndex `IngestionPipeline` with `UnstructuredReader` when installed (fallback to plain-text), `TokenTextSplitter`, and optional `TitleExtractor`.
+- **Library-first ingestion pipeline:** LlamaIndex `IngestionPipeline` with `UnstructuredReader` when installed (fallback to plain-text), `TokenTextSplitter`, optional spaCy enrichment, and optional `TitleExtractor`.
 - **Multi-format parsing:** Unstructured covers common formats (PDF, DOCX, PPTX, XLSX, HTML, Markdown, TXT, CSV, JSON, RTF, MSG, ODT, EPUB) when supported; unsupported types fall back to plain-text when possible.
 - **Hybrid retrieval with routing:** RouterQueryEngine with `semantic_search`, optional `hybrid_search` (Qdrant server-side fusion), and optional `knowledge_graph` (GraphRAG).
 - **Qdrant server-side fusion:** Query API RRF (default) or DBSF over named vectors `text-dense` and `text-sparse`; sparse queries use FastEmbed BM42/BM25 when available.
@@ -440,7 +440,7 @@ print(f"Processed {len(result.nodes)} nodes from {len(inputs)} files")
 ```mermaid
 flowchart TD
     A["Documents page<br/>Upload files"] --> B["Ingestion pipeline<br/>UnstructuredReader or text fallback"]
-    B --> C["TokenTextSplitter, spaCy enrichment,<br/>TitleExtractor (optional)<br/>LlamaIndex IngestionPipeline"]
+    B --> C["TokenTextSplitter, spaCy enrichment (optional),<br/>TitleExtractor (optional)<br/>LlamaIndex IngestionPipeline"]
     C --> D["Nodes and metadata"]
     D --> E["VectorStoreIndex<br/>Qdrant named vectors"]
     C --> F["PDF page image exports<br/>PyMuPDF, optional AES-GCM"]
