@@ -6,6 +6,8 @@ to test internal behavior and state transitions.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from types import SimpleNamespace
 from typing import ClassVar
 from unittest.mock import Mock, patch
@@ -14,6 +16,9 @@ import pytest
 
 from src.agents.coordinator import (
     MultiAgentCoordinator,
+    _as_state_dict,
+    _coerce_deadline_ts,
+    _ensure_event_loop,
     _supports_native_llamaindex_retries,
 )
 from src.agents.models import AgentResponse
@@ -30,6 +35,8 @@ def _make_langchain_model() -> Mock:
 
 
 def test_supports_native_llamaindex_retries_detects_field_maps() -> None:
+    """Test that _supports_native_llamaindex_retries detects field maps."""
+
     class _LLM:
         model_fields: ClassVar[dict[str, object]] = {"max_retries": object()}
 
@@ -49,6 +56,16 @@ def test_supports_native_llamaindex_retries_detects_field_maps() -> None:
 def test_ensure_setup_configures_native_retry_when_supported(
     mock_settings: Mock, mock_setup: Mock
 ) -> None:
+    """Test that _ensure_setup configures native retry when supported.
+
+    Args:
+        mock_settings: Mocked llama_index Settings object.
+        mock_setup: Mocked setup_llamaindex callable.
+
+    Returns:
+        None.
+    """
+
     class _LLM:
         model_fields: ClassVar[dict[str, object]] = {"max_retries": object()}
 
@@ -127,6 +144,15 @@ def workflow_result_fixture() -> dict[str, object]:
 def test_run_agent_workflow_marks_timeout_and_handles_model_dump(
     monkeypatch, workflow_result_fixture
 ) -> None:
+    """Test that _run_agent_workflow marks timeout and handles model dump.
+
+    Args:
+        monkeypatch: Pytest fixture for patching and mocking.
+        workflow_result_fixture: Fixture providing base state dict for coordinator.
+
+    Returns:
+        None.
+    """
     coord = MultiAgentCoordinator(max_agent_timeout=1.0)
 
     class _State:
@@ -216,6 +242,191 @@ def test_process_query_timeout_uses_fallback_once(monkeypatch) -> None:
     assert resp.metadata.get("fallback_used") is True
     assert resp.metadata.get("reason") == "timeout"
     assert coord.fallback_queries == 1
+
+
+def test_ensure_event_loop_creates_loop_when_missing() -> None:
+    """_ensure_event_loop should set a loop when none is present."""
+    import threading
+
+    errors: list[Exception] = []
+
+    def _worker() -> None:
+        try:
+            with contextlib.suppress(RuntimeError):
+                asyncio.set_event_loop(None)
+            _ensure_event_loop()
+            loop = asyncio.get_event_loop_policy().get_event_loop()
+            assert loop is not None
+            loop.close()
+            with contextlib.suppress(RuntimeError):
+                asyncio.set_event_loop(None)
+        except Exception as exc:  # pragma: no cover - surfaced by main thread
+            errors.append(exc)
+
+    thread = threading.Thread(target=_worker)
+    thread.start()
+    thread.join(timeout=1)
+    assert not thread.is_alive()
+    assert not errors
+
+
+def test_as_state_dict_normalizes_inputs() -> None:
+    """_as_state_dict handles dicts, model_dump, and fallbacks."""
+    assert _as_state_dict({"a": 1}) == {"a": 1}
+
+    class _State:
+        def model_dump(self):  # type: ignore[no-untyped-def]
+            return {"b": 2}
+
+    class _BadState:
+        def model_dump(self):  # type: ignore[no-untyped-def]
+            return ["nope"]
+
+    assert _as_state_dict(_State()) == {"b": 2}
+    assert _as_state_dict(_BadState()) == {}
+
+
+def test_coerce_deadline_ts_handles_invalid_values() -> None:
+    """_coerce_deadline_ts returns valid floats or None."""
+    assert _coerce_deadline_ts({"deadline_ts": "12.5"}) == 12.5
+    assert _coerce_deadline_ts({"deadline_ts": None}) is None
+    assert _coerce_deadline_ts({"deadline_ts": "bad"}) is None
+
+
+def test_record_query_metrics_emits_histogram_and_counter(monkeypatch) -> None:
+    """_record_query_metrics uses OTEL meter to record data.
+
+    Args:
+        monkeypatch: Pytest fixture for patching and mocking.
+
+    Returns:
+        None.
+    """
+    calls = {"record": 0, "add": 0}
+
+    class _Hist:
+        def record(self, _val, attributes=None):  # type: ignore[no-untyped-def]
+            assert attributes is not None
+            calls["record"] += 1
+
+    class _Counter:
+        def add(self, _val, attributes=None):  # type: ignore[no-untyped-def]
+            assert attributes is not None
+            calls["add"] += 1
+
+    class _Meter:
+        def create_histogram(self, *_a, **_k):  # type: ignore[no-untyped-def]
+            return _Hist()
+
+        def create_counter(self, *_a, **_k):  # type: ignore[no-untyped-def]
+            return _Counter()
+
+    record_globals = MultiAgentCoordinator._record_query_metrics.__globals__
+    monkeypatch.setattr(
+        record_globals["metrics"], "get_meter", lambda *_a, **_k: _Meter()
+    )
+
+    with patch.dict(
+        record_globals,
+        {"_COORDINATOR_LATENCY": None, "_COORDINATOR_COUNTER": None},
+        clear=False,
+    ):
+        inst = MultiAgentCoordinator()
+        inst._record_query_metrics(0.12, success=True)
+        assert calls["record"] == 1
+        assert calls["add"] == 1
+
+
+def test_handle_timeout_response_without_fallback() -> None:
+    """_handle_timeout_response returns timeout response when fallback disabled."""
+    coord = MultiAgentCoordinator(enable_fallback=False)
+    response, used = coord._handle_timeout_response("q", context=None, start_time=0.0)
+    assert used is True
+    assert response.metadata.get("fallback_used") is True
+    assert response.metadata.get("reason") == "timeout"
+
+
+def test_semantic_cache_lookup_skips_when_disabled() -> None:
+    """_maybe_semantic_cache_lookup returns early when cache disabled."""
+    coord = MultiAgentCoordinator()
+    response, key = coord._maybe_semantic_cache_lookup(
+        query="q",
+        thread_id="t",
+        user_id="u",
+        checkpoint_id=None,
+        start_time=0.0,
+        span=Mock(),
+    )
+    assert response is None
+    assert key is None
+
+
+def test_semantic_cache_store_skips_when_disabled() -> None:
+    """_maybe_semantic_cache_store returns without side effects when disabled."""
+    coord = MultiAgentCoordinator()
+    coord._maybe_semantic_cache_store(
+        semantic_cache_key=Mock(), query="q", response_text="r"
+    )
+
+
+def test_handle_workflow_result_timeout_path(monkeypatch) -> None:
+    """_handle_workflow_result routes timeout results to fallback handler."""
+    coord = MultiAgentCoordinator()
+    monkeypatch.setattr(
+        coord,
+        "_handle_timeout_response",
+        lambda *_a, **_k: (AgentResponse(content="x"), True),
+    )
+    monkeypatch.setattr(coord, "_record_query_metrics", lambda *_a, **_k: None)
+    response, timed_out, used_fallback = coord._handle_workflow_result(
+        {"timed_out": True}, "q", None, 0.0, 0.0
+    )
+    assert timed_out is True
+    assert used_fallback is True
+    assert isinstance(response, AgentResponse)
+
+
+def test_handle_workflow_result_non_timeout(monkeypatch) -> None:
+    """_handle_workflow_result returns extracted response for non-timeout."""
+    coord = MultiAgentCoordinator()
+    fake = AgentResponse(content="ok")
+    monkeypatch.setattr(coord, "_extract_response", lambda *_a, **_k: fake)
+    response, timed_out, used_fallback = coord._handle_workflow_result(
+        {"messages": []}, "q", None, 0.0, 0.0
+    )
+    assert response is fake
+    assert timed_out is False
+    assert used_fallback is False
+
+
+def test_annotate_span_sets_attributes() -> None:
+    """_annotate_span records final status attributes on span."""
+    coord = MultiAgentCoordinator()
+    recorded: dict[str, object] = {}
+
+    class _Span:
+        def set_attribute(self, key: str, value: object) -> None:
+            recorded[key] = value
+
+    coord._annotate_span(
+        _Span(), workflow_timed_out=False, used_fallback=False, processing_time=0.5
+    )
+    assert recorded["coordinator.workflow_timeout"] is False
+    assert recorded["coordinator.success"] is True
+    assert "coordinator.processing_time_ms" in recorded
+
+
+def test_update_metrics_after_response_increments_success() -> None:
+    """_update_metrics_after_response increments success count on non-timeouts."""
+    coord = MultiAgentCoordinator()
+    coord.successful_queries = 0
+    coord._update_metrics_after_response(
+        workflow_timed_out=False,
+        used_fallback=False,
+        processing_time=0.1,
+        coordination_time=0.02,
+    )
+    assert coord.successful_queries == 1
 
 
 def test_get_state_values_and_list_checkpoints_use_compiled_graph(monkeypatch) -> None:

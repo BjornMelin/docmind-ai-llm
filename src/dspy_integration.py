@@ -19,6 +19,8 @@ from typing import Any, cast
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from src.utils.log_safety import build_pii_log_entry
+
 # DSPy Configuration Constants
 DEFAULT_MAX_VARIANTS = 2
 DEFAULT_NUM_BOOTSTRAP_EXAMPLES = 5
@@ -122,7 +124,12 @@ class DSPyLlamaIndexRetriever:
                 logger.info("DSPy integration initialized successfully")
 
             except (ImportError, AttributeError, RuntimeError) as e:
-                logger.warning("DSPy initialization failed: %s", e)
+                redaction = build_pii_log_entry(str(e), key_id="dspy.init")
+                logger.warning(
+                    "DSPy initialization failed (error_type={}, error={})",
+                    type(e).__name__,
+                    redaction.redacted,
+                )
                 self.optimization_enabled = False
         else:
             self.optimization_enabled = False
@@ -144,13 +151,23 @@ class DSPyLlamaIndexRetriever:
                         response = self.llm.complete(prompt)
                         return str(response)
                     except (RuntimeError, AttributeError, ValueError) as e:
-                        logger.error("LLM call failed in DSPy wrapper: %s", e)
+                        redaction = build_pii_log_entry(str(e), key_id="dspy.llm_call")
+                        logger.error(
+                            "LLM call failed in DSPy wrapper (error_type={}, error={})",
+                            type(e).__name__,
+                            redaction.redacted,
+                        )
                         return ""
 
             return DSPyLLMWrapper(llm)
 
         except (ImportError, AttributeError, RuntimeError) as e:
-            logger.error("Failed to wrap LLM for DSPy: %s", e)
+            redaction = build_pii_log_entry(str(e), key_id="dspy.wrap_llm")
+            logger.error(
+                "Failed to wrap LLM for DSPy (error_type={}, error={})",
+                type(e).__name__,
+                redaction.redacted,
+            )
             raise
 
     @classmethod
@@ -185,7 +202,13 @@ class DSPyLlamaIndexRetriever:
                 refined_result = instance.query_refiner(query=query)
                 refined_query = refined_result.refined_query
             except (AttributeError, RuntimeError, ValueError) as e:
-                logger.warning("Query refinement failed: %s", e)
+                redaction = build_pii_log_entry(str(e), key_id="dspy.refine")
+                logger.warning(
+                    "Query refinement failed; using original query "
+                    "(error_type={}, error={})",
+                    type(e).__name__,
+                    redaction.redacted,
+                )
                 refined_query = query
 
             # Generate variants if enabled
@@ -198,7 +221,12 @@ class DSPyLlamaIndexRetriever:
                     if hasattr(variant_result, "variant2") and variant_result.variant2:
                         variants.append(variant_result.variant2)
                 except (AttributeError, RuntimeError, ValueError) as e:
-                    logger.warning("Variant generation failed: %s", e)
+                    redaction = build_pii_log_entry(str(e), key_id="dspy.variants")
+                    logger.warning(
+                        "Variant generation failed (error_type={}, error={})",
+                        type(e).__name__,
+                        redaction.redacted,
+                    )
 
             # Calculate optimization time
             optimization_time = time.perf_counter() - start_time
@@ -217,11 +245,16 @@ class DSPyLlamaIndexRetriever:
                 "optimized": True,
             }
 
-            logger.debug("DSPy optimization completed in %.3fs", optimization_time)
+            logger.debug("DSPy optimization completed in {:.3f}s", optimization_time)
             return result
 
         except (ImportError, AttributeError, RuntimeError, ValueError) as e:
-            logger.error("DSPy optimization failed: %s", e)
+            redaction = build_pii_log_entry(str(e), key_id="dspy.optimize")
+            logger.error(
+                "DSPy optimization failed (error_type={}, error={})",
+                type(e).__name__,
+                redaction.redacted,
+            )
             return cls._fallback_optimization(query, start_time)
 
     @staticmethod
@@ -312,11 +345,16 @@ class DSPyLlamaIndexRetriever:
             # Update instance
             self.query_refiner = optimized_refiner
 
-            logger.info("Retrieval pipeline optimized with %d examples", len(examples))
+            logger.info("Retrieval pipeline optimized with {} examples", len(examples))
             return retriever
 
         except (ImportError, AttributeError, RuntimeError, ValueError) as e:
-            logger.error("Pipeline optimization failed: %s", e)
+            redaction = build_pii_log_entry(str(e), key_id="dspy.pipeline.optimize")
+            logger.error(
+                "Pipeline optimization failed (error_type={}, error={})",
+                type(e).__name__,
+                redaction.redacted,
+            )
             return retriever
 
 

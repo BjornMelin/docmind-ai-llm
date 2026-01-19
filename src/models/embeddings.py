@@ -94,16 +94,31 @@ class EmbeddingResult(BaseModel):
 def _l2_normalize(arr: np.ndarray, axis: int = -1) -> np.ndarray:
     """L2-normalize a numpy array, guarding zero-norm rows.
 
+    Non-finite norms (NaN/Inf) are detected via an explicit guard; if found,
+    a ValueError is raised to avoid silent zero-masking. Zero-norm rows
+    from all-zero inputs are returned as zeros.
+
     Args:
         arr: Input array.
         axis: Axis to normalize over.
 
     Returns:
         Normalized array with the same shape/dtype.
+
+    Raises:
+        ValueError: If any computed norm is non-finite (NaN or Inf).
     """
     norm = np.linalg.norm(arr, axis=axis, keepdims=True)
+
+    if not np.all(np.isfinite(norm)):
+        # Detect coordinates of non-finite norms for error context
+        coords = np.argwhere(~np.isfinite(norm))
+        msg = f"Non-finite norm(s) detected at indices: {coords.tolist()}"
+        raise ValueError(msg)
+
     # Avoid division by zero: only divide where norm > 0
-    safe = np.where(norm > 0, arr / norm, arr)
+    safe = np.zeros_like(arr)
+    np.divide(arr, norm, out=safe, where=norm > 0)
     return safe.astype(arr.dtype, copy=False)
 
 

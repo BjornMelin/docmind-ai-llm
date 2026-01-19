@@ -1,4 +1,12 @@
-# Implementation Prompt — Semantic Response Cache (Qdrant-backed, Guardrailed)
+---
+prompt: PROMPT-038
+title: Semantic Response Cache (Qdrant-backed, Guardrailed)
+status: Completed
+date: 2026-01-17
+version: 1.0
+related_adrs: ["ADR-035"]
+related_specs: ["SPEC-038"]
+---
 
 Implements `ADR-035` + `SPEC-038`.
 
@@ -123,7 +131,7 @@ Maintain changes as minimal, library-first, and maintainable.
 
 #### 1) Python + Packaging
 
-- Python version must remain **3.11.x** (respect `pyproject.toml`).
+- Python baseline is **3.13.11** (Python 3.13-only; respect `pyproject.toml`).
 - Use **uv only**:
   - install/sync: `uv sync`
   - run tools: `uv run <cmd>`

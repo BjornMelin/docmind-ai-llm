@@ -32,6 +32,7 @@ from src.retrieval.postprocessor_utils import (
     build_vector_query_engine,
 )
 from src.telemetry.opentelemetry import record_router_selection, router_build_span
+from src.utils.log_safety import build_pii_log_entry
 
 if TYPE_CHECKING:  # pragma: no cover - typing aid only
     from llama_index.core.query_engine import RouterQueryEngine as RouterQueryEngineType
@@ -93,9 +94,14 @@ def _build_vector_tool(
             similarity_top_k=int(getattr(cfg.retrieval, "top_k", 10)),
         )
     except (TypeError, AttributeError, ValueError) as exc:
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="router_factory.vector_engine")
         logger.warning(
-            "Vector query engine fallback: using default configuration ({exc})",
-            exc=exc,
+            "Vector query engine fallback: using default configuration "
+            "(error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
         )
         vector_engine = vector_index.as_query_engine()
 
@@ -294,7 +300,14 @@ def _maybe_add_graph_tool(
     except MissingGraphAdapterError as exc:
         _warn_once("graph", GRAPH_DEPENDENCY_HINT, reason=str(exc))
     except (ValueError, TypeError, AttributeError, ImportError) as exc:
-        logger.debug("Graph tool construction skipped: {exc}", exc=exc)
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="router_factory.graph_tool")
+        logger.debug(
+            "Graph tool construction skipped (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
 
 
 def _select_router(
@@ -335,11 +348,14 @@ def _select_router(
 
 def _warn_once(key: str, message: str, *, reason: str) -> None:
     """Emit a warning once, downgrade to debug on subsequent occurrences."""
+    reason_redacted = build_pii_log_entry(
+        str(reason), key_id=f"router_factory:{key}:reason"
+    ).redacted
     if not _WARNING_FLAGS.get(key):
-        logger.warning("{} (reason={})", message, reason)
+        logger.warning("{} (reason={})", message, reason_redacted)
         _WARNING_FLAGS[key] = True
     else:
-        logger.debug("{} (reason={})", message, reason)
+        logger.debug("{} (reason={})", message, reason_redacted)
 
 
 def _resolve_adapter(
@@ -388,7 +404,14 @@ def build_router_engine(
         except ImportError:
             logger.debug("LLM factory import failed; proceeding without LLM")
         except Exception as exc:  # pragma: no cover - best effort
-            logger.warning("LLM factory failed; proceeding without LLM: {}", exc)
+            from src.utils.log_safety import build_pii_log_entry
+
+            redaction = build_pii_log_entry(str(exc), key_id="router_factory.build_llm")
+            logger.warning(
+                "LLM factory failed; proceeding without LLM (error_type={} error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
 
     get_pp = _safe_get_postprocessors()
     tools: list[Any] = [
@@ -466,24 +489,18 @@ def build_router_engine(
             name = getattr(metadata, "name", None)
             if name:
                 tool_names.append(str(name))
-        record_router_selection(
-            span,
-            tool_names=tool_names,
-            kg_enabled="knowledge_graph" in tool_names,
-        )
+        kg_present = "knowledge_graph" in tool_names
+        record_router_selection(span, tool_names=tool_names, kg_enabled=kg_present)
 
     try:
         router.query_engine_tools = tools
-    except (AttributeError, TypeError):  # pragma: no cover - defensive
-        logger.debug("Router engine lacks public tool attribute", exc_info=True)
+    except (AttributeError, TypeError) as exc:  # pragma: no cover - defensive
+        logger.debug(
+            "Router engine lacks public tool attribute (error_type={})",
+            type(exc).__name__,
+        )
 
-    logger.info(
-        "Router engine built (kg_present=%s)",
-        any(
-            getattr(getattr(t, "metadata", None), "name", "") == "knowledge_graph"
-            for t in tools
-        ),
-    )
+    logger.info("Router engine built (kg_present={})", kg_present)
     return router
 
 

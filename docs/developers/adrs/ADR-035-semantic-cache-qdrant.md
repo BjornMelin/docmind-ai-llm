@@ -1,7 +1,7 @@
 ---
 ADR: 035
 Title: Application-Level Semantic Cache (Qdrant-backed, Guardrailed)
-Status: Proposed
+Status: Implemented
 Version: 3.0.0
 Date: 2026-01-09
 Supersedes: ADR-035-semantic-cache-gptcache-sqlite-faiss.md

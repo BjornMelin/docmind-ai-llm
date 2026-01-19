@@ -12,7 +12,9 @@ Key Components:
 """
 
 import asyncio
+import os
 import time
+import warnings
 from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
@@ -35,6 +37,21 @@ from src.config.settings import settings as app_settings
 from src.models.processing import IngestionConfig
 from src.processing.ingestion_pipeline import build_ingestion_pipeline
 from src.telemetry import opentelemetry as otel
+
+
+@pytest.fixture(name="default_timeout")
+def _default_timeout_fixture() -> float:
+    """Shared default timeout for CI consistency."""
+    raw_timeout = os.environ.get("TEST_TIMEOUT", "2.0")
+    try:
+        return float(raw_timeout)
+    except (TypeError, ValueError):
+        warnings.warn(
+            f"Invalid TEST_TIMEOUT value {raw_timeout!r}; defaulting to 2.0 seconds.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return 2.0
 
 
 @pytest.fixture
@@ -540,8 +557,15 @@ def supervisor_stream_shim() -> Mock:
     """
 
     class _Compiled:
-        def stream(self, initial_state, config=None, stream_mode: str | None = None):
-            del config, stream_mode
+        def stream(
+            self,
+            initial_state,
+            config=None,
+            context=None,
+            stream_mode: str | None = None,
+            **_kwargs,
+        ):
+            del config, context, stream_mode, _kwargs
             # Copy initial state and append a deterministic assistant message
             messages = list(initial_state.get("messages", []))
             messages.append(SimpleNamespace(content="Shim: processed successfully"))
@@ -551,7 +575,8 @@ def supervisor_stream_shim() -> Mock:
             yield final
 
     class _Graph:
-        def compile(self, checkpointer=None):
+        def compile(self, checkpointer=None, store=None, **_kwargs):
+            del checkpointer, store, _kwargs
             return _Compiled()
 
     return _Graph()

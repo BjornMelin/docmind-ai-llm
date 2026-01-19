@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 import json
 import re
@@ -9,11 +10,14 @@ import time
 from pathlib import Path
 from typing import Annotated, Any
 
-from langchain.tools import ToolRuntime
 from langchain_core.tools import tool
-from langgraph.prebuilt import InjectedState
+from langgraph.prebuilt import InjectedState, ToolRuntime
 from llama_index.core import Document
 from loguru import logger
+
+from src.config.settings import settings
+from src.utils.log_safety import build_pii_log_entry
+from src.utils.telemetry import log_jsonl
 
 from .constants import (
     CONTENT_KEY_LENGTH,
@@ -21,19 +25,133 @@ from .constants import (
     VARIANT_QUERY_LIMIT,
 )
 
-_LOG_QUERY_MAX_LEN = 160
 
+def _safe_query_for_log(query: str, *, max_len: int = 200) -> str:
+    """Return a compact query string for internal logging/debugging.
 
-def _safe_query_for_log(query: str, *, max_len: int = _LOG_QUERY_MAX_LEN) -> str:
-    """Return a normalized, truncated query string for logs.
+    The return value is intended for non-sensitive troubleshooting and must not
+    be used to log raw user content. It exists primarily to cap log sizes and
+    to support targeted unit tests that validate truncation behavior.
 
-    Queries can contain sensitive user content. Keep logs useful while reducing
-    exposure by collapsing whitespace and truncating to a bounded length.
+    Args:
+        query: Query string to truncate.
+        max_len: Maximum number of characters to keep before appending an
+            ellipsis. When the query exceeds this length, the returned string is
+            `max_len + 1` characters (including the ellipsis).
+
+    Returns:
+        A compact string. When truncated, it ends with the unicode ellipsis
+        character ("…").
     """
-    collapsed = " ".join(str(query).split())
-    if len(collapsed) <= max_len:
-        return collapsed
-    return f"{collapsed[:max_len]}…"
+    normalized = " ".join(str(query).split())
+    if max_len <= 0:
+        return "…" if normalized else ""
+    if len(normalized) <= max_len:
+        return normalized
+    return normalized[:max_len].rstrip() + "…"
+
+
+def _resolve_router_engine(
+    state: dict | None, runtime: ToolRuntime | None
+) -> Any | None:
+    """Resolves the router engine from either injected state or tool runtime.
+
+    Args:
+        state: The current graph state containing tool data.
+        runtime: The LangGraph ToolRuntime providing caller context.
+
+    Returns:
+        The router engine instance if found, otherwise None.
+    """
+    runtime_ctx = runtime.context if runtime is not None else None
+    if isinstance(runtime_ctx, dict):
+        router_engine = runtime_ctx.get("router_engine")
+        if router_engine is not None:
+            return router_engine
+
+    tools_data = state.get("tools_data") if isinstance(state, dict) else None
+    if isinstance(tools_data, dict):
+        router_engine = tools_data.get("router_engine")
+        if router_engine is not None:
+            return router_engine
+
+    return None
+
+
+def _emit_router_injection_event(*, used: bool, reason: str) -> None:
+    """Logs a telemetry event for router injection attempts.
+
+    Args:
+        used: Whether the router injection was successfully applied.
+        reason: Descriptive reason for the injection status.
+    """
+    with contextlib.suppress(Exception):  # pragma: no cover - telemetry
+        log_jsonl(
+            {
+                "router_injection_attempted": True,
+                "used": bool(used),
+                "reason": reason,
+            }
+        )
+
+
+def _maybe_router_injection_response(
+    *,
+    query: str,
+    state: dict | None,
+    runtime: ToolRuntime | None,
+    start_time: float,
+) -> str | None:
+    """Attempts to intercept the retrieval flow with a direct router response.
+
+    Args:
+        query: User input query.
+        state: Injected graph state.
+        runtime: Tool runtime context.
+        start_time: Wall-clock start time for latency calculation.
+
+    Returns:
+        JSON-encoded retrieval results if successful, otherwise None.
+    """
+    if not settings.agents.enable_router_injection:
+        return None
+
+    router_engine = _resolve_router_engine(state, runtime)
+    if router_engine is None:
+        _emit_router_injection_event(used=False, reason="router_engine_missing")
+        return None
+
+    try:
+        resp = router_engine.query(query)
+    except Exception as exc:  # pragma: no cover - fail open
+        _emit_router_injection_event(used=False, reason="router_query_failed")
+        redaction = build_pii_log_entry(
+            str(exc), key_id="retrieve_documents.router_injection"
+        )
+        logger.debug(
+            "router injection failed (error_type={}, error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
+        return None
+
+    documents = _parse_tool_result(resp)
+    _emit_router_injection_event(used=True, reason="router_engine_present")
+    processing_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    return json.dumps(
+        {
+            "documents": documents[:MAX_RETRIEVAL_RESULTS],
+            "strategy_used": "router_injection",
+            "query_original": query,
+            "query_optimized": query,
+            "document_count": len(documents),
+            "processing_time_ms": processing_time_ms,
+            "dspy_used": False,
+            "graphrag_used": False,
+            "router_injection": True,
+        },
+        default=str,
+    )
 
 
 @tool
@@ -45,11 +163,36 @@ def retrieve_documents(
     state: Annotated[dict, InjectedState] | None = None,
     runtime: ToolRuntime | None = None,
 ) -> str:
-    """Execute document retrieval using specified strategy and optimizations."""
+    """Executes multi-strategy document retrieval with query optimization.
+
+    Coordinates between vector search, knowledge graph (GraphRAG), and hybrid
+    fusion retrievers. Supports semantic query expansion via DSPy.
+
+    Args:
+        query: User input query string.
+        strategy: Retrieval strategy ('hybrid', 'vector', or 'graphrag').
+        use_dspy: Whether to enable DSPy-based query optimization.
+        use_graphrag: Whether to attempt GraphRAG retrieval if available.
+        state: Injected LangGraph state containing indexes.
+        runtime: LangGraph ToolRuntime for transient context access.
+
+    Returns:
+        JSON-encoded string containing retrieved documents and strategy metadata.
+    """
     try:
         start_time = time.perf_counter()
 
+        router_response = _maybe_router_injection_response(
+            query=query,
+            state=state,
+            runtime=runtime,
+            start_time=start_time,
+        )
+        if router_response is not None:
+            return router_response
+
         vector_index, kg_index, retriever = _extract_indexes(state, runtime)
+
         if vector_index is None and retriever is None and kg_index is None:
             return json.dumps(
                 {
@@ -63,22 +206,21 @@ def retrieve_documents(
 
         # Optional aggregator fast-path for resilience testing scenarios
         st = state if isinstance(state, dict) else {}
-        tool_count = sum(1 for x in (vector_index, kg_index, retriever) if x)
-        if st and (
-            any(
-                st.get(k)
-                for k in (
-                    "error_isolation_enabled",
-                    "continue_on_tool_failure",
-                    "resilience_mode_enabled",
-                    "partial_results_acceptable",
-                    "auto_cleanup_on_memory_pressure",
-                )
+        if st and any(
+            st.get(k)
+            for k in (
+                "error_isolation_enabled",
+                "continue_on_tool_failure",
+                "resilience_mode_enabled",
+                "partial_results_acceptable",
+                "auto_cleanup_on_memory_pressure",
             )
-            or tool_count >= 2
         ):
             collected = _collect_via_tool_factory(
-                query, vector_index, kg_index, retriever
+                query,
+                vector_index,
+                kg_index,
+                retriever,
             )
             if collected:
                 return json.dumps(
@@ -149,11 +291,18 @@ def retrieve_documents(
         return json.dumps(result_data, default=str)
 
     except (OSError, RuntimeError, ValueError, AttributeError) as e:
-        logger.error("Document retrieval failed: {}", e)
+        redaction = build_pii_log_entry(str(e), key_id="retrieve_documents.exception")
+        logger.error(
+            "Document retrieval failed (error_type={}, error={})",
+            type(e).__name__,
+            redaction.redacted,
+        )
         return json.dumps(
             {
                 "documents": [],
-                "error": str(e),
+                "error": "Document retrieval failed",
+                "error_type": type(e).__name__,
+                "error_fingerprint": redaction.fingerprint[:12],
                 "strategy_used": strategy,
                 "query_optimized": query,
             },
@@ -162,6 +311,15 @@ def retrieve_documents(
 
 
 def _extract_indexes(state: dict | None, runtime: ToolRuntime | None):
+    """Extracts search indexes from runtime context or persisted state.
+
+    Args:
+        state: Persisted graph state.
+        runtime: Transient tool runtime context.
+
+    Returns:
+        A tuple of (vector_index, kg_index, retriever).
+    """
     # Prefer runtime context (not persisted) for heavy objects like indexes.
     # Fall back to state.tools_data for any missing entries.
     runtime_ctx = runtime.context if runtime is not None else None
@@ -197,6 +355,15 @@ def _extract_indexes(state: dict | None, runtime: ToolRuntime | None):
 
 
 def _optimize_queries(query: str, use_dspy: bool) -> tuple[str, list[str]]:
+    """Generates optimized query variants for broader search recall.
+
+    Args:
+        query: The raw input query.
+        use_dspy: Whether to use the DSPy optimizer.
+
+    Returns:
+        A tuple containing the primary refined query and a list of variants.
+    """
     optimized = {"refined": query, "variants": []}
     if use_dspy:
         try:
@@ -204,9 +371,8 @@ def _optimize_queries(query: str, use_dspy: bool) -> tuple[str, list[str]]:
 
             optimized = DSPyLlamaIndexRetriever.optimize_query(query)
             logger.debug(
-                "DSPy optimization: '{}' -> '{}'",
-                _safe_query_for_log(query),
-                _safe_query_for_log(optimized["refined"]),
+                "DSPy optimization produced {} variants",
+                len(optimized.get("variants", [])),
             )
         except ImportError:
             logger.warning(
@@ -228,6 +394,15 @@ def _optimize_queries(query: str, use_dspy: bool) -> tuple[str, list[str]]:
 
 
 def _run_graphrag(kg_index: Any, queries: list[str]) -> tuple[list[dict], bool]:
+    """Executes knowledge graph retrieval across multiple query variants.
+
+    Args:
+        kg_index: Knowledge graph index instance.
+        queries: List of search queries to execute.
+
+    Returns:
+        A tuple of (retrieved_documents, fallback_required_flag).
+    """
     documents: list[dict] = []
     fallback = False
     for q in queries:
@@ -238,14 +413,13 @@ def _run_graphrag(kg_index: Any, queries: list[str]) -> tuple[list[dict], bool]:
             result = search_tool.call(q)
             new_docs = _parse_tool_result(result)
             documents.extend(new_docs)
-            logger.debug(
-                "GraphRAG retrieved {} documents for query: {}",
-                len(new_docs),
-                _safe_query_for_log(q),
-            )
+            logger.debug("GraphRAG retrieved {} documents", len(new_docs))
         except (OSError, RuntimeError, ValueError, AttributeError) as e:
+            redaction = build_pii_log_entry(str(e), key_id="graphrag.query.exception")
             logger.warning(
-                "GraphRAG failed for query '{}': {}", _safe_query_for_log(q), e
+                "GraphRAG query failed (error_type={}, error={})",
+                type(e).__name__,
+                redaction.redacted,
             )
             fallback = True
             break
@@ -259,6 +433,18 @@ def _run_vector_hybrid(
     queries: list[str],
     primary_query: str,
 ) -> tuple[list[dict], str | None, str | None]:
+    """Executes vector or hybrid search across multiple query variants.
+
+    Args:
+        strategy: Requested retrieval strategy.
+        retriever: Hybrid retriever instance.
+        vector_index: Vector search index instance.
+        queries: List of search queries to execute.
+        primary_query: The original non-expanded query for fallback.
+
+    Returns:
+        A tuple of (retrieved_documents, strategy_used, error_json).
+    """
     documents: list[dict] = []
     strategy_used: str | None = None
     for idx, q in enumerate(queries):
@@ -296,10 +482,9 @@ def _run_vector_hybrid(
             new_docs = _parse_tool_result(result)
             documents.extend(new_docs)
             logger.debug(
-                "{} retrieved {} documents for query: {}",
+                "{} retrieved {} documents",
                 strategy_used,
                 len(new_docs),
-                _safe_query_for_log(q),
             )
             # If this is the primary query and hybrid returned empty, fallback to vector
             if (
@@ -324,18 +509,36 @@ def _run_vector_hybrid(
                             log_event(
                                 "hybrid_fallback",
                                 reason="empty_results",
-                                query=_safe_query_for_log(primary_query),
+                                query_len=len(primary_query),
                             )
                 except (OSError, RuntimeError, ValueError, AttributeError) as fe:
-                    logger.warning("Vector fallback failed: {}", fe)
+                    redaction = build_pii_log_entry(
+                        str(fe), key_id="vector_fallback.exception"
+                    )
+                    logger.warning(
+                        "Vector fallback failed (error_type={}, error={})",
+                        type(fe).__name__,
+                        redaction.redacted,
+                    )
         except (OSError, RuntimeError, ValueError, AttributeError) as e:
+            redaction = build_pii_log_entry(str(e), key_id="vector_hybrid.exception")
             logger.error(
-                "Retrieval failed for query '{}': {}", _safe_query_for_log(q), e
+                "Retrieval failed (error_type={}, error={})",
+                type(e).__name__,
+                redaction.redacted,
             )
     return documents, strategy_used, None
 
 
 def _deduplicate_documents(documents: list[dict]) -> list[dict]:
+    """Removes redundant documents based on content snippets and stable IDs.
+
+    Args:
+        documents: Raw list of retrieved document dictionaries.
+
+    Returns:
+        A unique list of documents, capped by MAX_RETRIEVAL_RESULTS.
+    """
     if not documents:
         return []
     seen_content: dict[str, dict] = {}
@@ -358,6 +561,14 @@ def _deduplicate_documents(documents: list[dict]) -> list[dict]:
 
 
 def _looks_contextual(query: str) -> bool:
+    """Detects if a query refers to prior context or visual elements.
+
+    Args:
+        query: User input query.
+
+    Returns:
+        True if contextual keywords or pronouns are detected.
+    """
     # Intentionally broad: err on false-positives to trigger recall.
     pattern = (
         r"\b(this|that|they|them|above|previous|chart|figure|diagram|table|"
@@ -368,7 +579,14 @@ def _looks_contextual(query: str) -> bool:
 
 
 def _recall_recent_sources(state: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Extract the most recent persisted sources from prior turns (best-effort)."""
+    """Extracts recent document sources from the graph state for contextual recall.
+
+    Args:
+        state: The persisted graph state.
+
+    Returns:
+        A list of sanitized document dictionaries from prior turns.
+    """
     if not isinstance(state, dict):
         return []
     # Prefer synthesis_result documents (closest to what user saw).
@@ -391,13 +609,29 @@ def _recall_recent_sources(state: dict[str, Any] | None) -> list[dict[str, Any]]
 
 
 def _sanitize_metadata(metadata: object | None) -> dict[str, Any]:
-    """Sanitize metadata (paths/blobs) for agent-visible document sources."""
+    """Prepares document metadata for visibility in the LLM context window.
+
+    Removes sensitive paths, large binary blobs, and internal tracking fields.
+
+    Args:
+        metadata: Raw metadata object or dictionary.
+
+    Returns:
+        A sanitized dictionary containing only safe metadata fields.
+    """
     sanitized = _sanitize_document_dict({"metadata": metadata}).get("metadata")
     return sanitized if isinstance(sanitized, dict) else {}
 
 
 def _sanitize_document_dict(doc: dict[str, Any]) -> dict[str, Any]:
-    """Sanitize a persisted/recalled document dict for persistence invariants."""
+    """Applies security and size constraints to a document data structure.
+
+    Args:
+        doc: The document dictionary to sanitize.
+
+    Returns:
+        The sanitized document dictionary.
+    """
 
     def _sanitize_metadata_dict(meta: Any) -> dict[str, Any]:
         if not isinstance(meta, dict):
@@ -449,7 +683,16 @@ def _sanitize_document_dict(doc: dict[str, Any]) -> dict[str, Any]:
 
 
 def _parse_tool_result(result: Any) -> list[dict[str, Any]]:
-    """Parse tool result to extract document list."""
+    """Normalizes various tool output formats into a standard document list.
+
+    Handles LlamaIndex response objects, LangChain messages, and raw dictionaries.
+
+    Args:
+        result: The raw output from a retrieval tool.
+
+    Returns:
+        A list of dictionaries conforming to document schema.
+    """
     if isinstance(result, str):
         # Tool returned text response — create a minimal document entry
         return [
@@ -477,10 +720,13 @@ def _parse_tool_result(result: Any) -> list[dict[str, Any]]:
                     get_content = getattr(node, "get_content", None)
                     text = str(get_content()) if callable(get_content) else str(node)
             except Exception as exc:
-                logger.opt(exception=exc).debug(
+                redaction = build_pii_log_entry(str(exc), key_id="retrieval.parse_node")
+                logger.debug(
                     "Failed to extract text from node; falling back to str(node) "
-                    "(node_type={node_type})",
-                    node_type=type(node).__name__,
+                    "(node_type={} error_type={} error={})",
+                    type(node).__name__,
+                    type(exc).__name__,
+                    redaction.redacted,
                 )
                 text = str(node)
             meta = _sanitize_metadata(getattr(node, "metadata", None) or {})
@@ -517,30 +763,62 @@ def _parse_tool_result(result: Any) -> list[dict[str, Any]]:
 
 def _collect_via_tool_factory(
     query: str, vector_index: Any, kg_index: Any, retriever: Any
-) -> list[dict]:
+) -> list[dict[str, Any]]:
+    """Executes multiple retrieval tools sequentially via the tool factory.
+
+    Args:
+        query: Search query string.
+        vector_index: Optional vector index.
+        kg_index: Optional knowledge graph index.
+        retriever: Optional hybrid retriever.
+
+    Returns:
+        A consolidated list of retrieved document dictionaries.
+    """
     try:
         tool_list = _get_tool_factory().create_tools_from_indexes(
             vector_index=vector_index, kg_index=kg_index, retriever=retriever
         )
-        collected: list[dict] = []
-        for t in tool_list or []:
-            try:
-                res = t.invoke(query) if hasattr(t, "invoke") else t.call(query)
-                collected.extend(_parse_tool_result(res))
-            except Exception as te:
-                logger.error("Tool execution failed: {}", te)
-                logger.warning("Partial failure: continuing with other tools")
-                continue
-        return collected
-    except Exception:
-        logger.debug("Tool collection path failed; using detailed path", exc_info=True)
+    except Exception as exc:
+        redaction = build_pii_log_entry(str(exc), key_id="retrieval.tool_collect")
+        logger.debug(
+            "Tool collection path failed; using detailed path (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
         return []
+
+    if not tool_list:
+        return []
+
+    collected: list[dict[str, Any]] = []
+    for tool_obj in tool_list:
+        try:
+            if hasattr(tool_obj, "invoke"):
+                res = tool_obj.invoke(query)
+            elif hasattr(tool_obj, "call"):
+                res = tool_obj.call(query)
+            else:
+                raise TypeError(
+                    f"Unsupported tool interface: {type(tool_obj).__name__}"
+                )
+            collected.extend(_parse_tool_result(res))
+        except Exception as exc:
+            redaction = build_pii_log_entry(str(exc), key_id="retrieval.tool_execute")
+            logger.error(
+                "Tool execution failed (error_type={} error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
+            continue
+
+    return collected
 
 
 def _get_tool_factory():
-    """Return the canonical ToolFactory class.
+    """Retrieves the ToolFactory class for dynamic tool generation.
 
-    Production-only resolution: always import from src.agents.tool_factory.
-    Tests should patch `src.agents.tool_factory.ToolFactory` directly.
+    Returns:
+        The ToolFactory class from src.agents.tool_factory.
     """
     return importlib.import_module("src.agents.tool_factory").ToolFactory

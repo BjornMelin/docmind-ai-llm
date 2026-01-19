@@ -1,7 +1,7 @@
 ---
 ADR: 048
 Title: Docs Consistency Pass — Align Specs/Handbook With Code and Add Drift Checks
-Status: Proposed
+Status: Implemented
 Version: 1.0
 Date: 2026-01-09
 Supersedes:

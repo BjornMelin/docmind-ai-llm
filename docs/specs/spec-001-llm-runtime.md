@@ -1,29 +1,38 @@
 ---
 spec: SPEC-001
 title: Multi-provider LLM Runtime with UI Selection and Hardware-Aware Paths
-version: 1.0.0
-date: 2025-09-05
+version: 1.1.0
+date: 2026-01-17
 owners: ["ai-arch"]
-status: Completed
+status: Implemented
 related_requirements:
   - FR-LLM-001: Users SHALL select provider and model at runtime via UI.
   - FR-LLM-002: The app SHALL support llama.cpp, vLLM, Ollama, and LM Studio.
   - FR-LLM-003: Structured outputs SHALL be supported when provider allows.
   - NFR-PERF-001: p50 token throughput ≥ 20 tok/s on mid-GPU.
   - NFR-PORT-001: Windows, macOS, Linux support.
-related_adrs: ["ADR-001","ADR-004","ADR-009","ADR-010","ADR-024","ADR-059"]
+related_adrs: ["ADR-001","ADR-004","ADR-009","ADR-010","ADR-024","ADR-059","ADR-063"]
 ---
 
 
 ## Objective
 
-Provide a single, definitive LLM runtime with **four providers** selectable in the UI: **llama.cpp**, **vLLM**, **Ollama**, **LM Studio**. Persist selection to settings. Expose model id/path, context, kv cache hints, streaming. Enable schema-guided outputs when available.
+Provide a single, definitive LLM runtime with **five providers** selectable in the UI:
+
+- **Ollama** (default)
+- **llama.cpp** (local GGUF via library)
+- **vLLM** (external server; OpenAI-compatible HTTP)
+- **LM Studio** (external server; OpenAI-compatible HTTP)
+- **OpenAI-compatible** (generic provider for OpenAI/OpenRouter/xAI/Vercel AI Gateway/LiteLLM Proxy/any compatible endpoint)
+
+Persist selection to settings. Expose model id/path, context, streaming, and safe endpoint configuration. Enable schema-guided outputs when available.
 
 ## Architecture Notes
 
 - Use **LlamaIndex** official adapters:
   - `llama_index.llms.llama_cpp.LlamaCPP` for GGUF local models.
   - `llama_index.llms.openai_like.OpenAILike` for **vLLM**/**LM Studio**/**llama.cpp server** (OpenAI-compatible endpoints).
+  - `llama_index.llms.openai.OpenAIResponses` for providers that support the OpenAI Responses API (opt-in, OpenAI-compatible base URL).
   - `llama_index.llms.ollama.Ollama` for **Ollama**.
 - For Ollama-native `/api/*` capabilities, use the official Ollama SDK helpers defined in `src/config/ollama_client.py` and follow SPEC-043. Ollama-native capabilities include:
   - Structured outputs via the `format` parameter
@@ -42,6 +51,7 @@ Provide a single, definitive LLM runtime with **four providers** selectable in t
 from llama_index.core import Settings
 from llama_index.llms.llama_cpp import LlamaCPP
 from llama_index.llms.openai_like import OpenAILike
+from llama_index.llms.openai import OpenAIResponses
 from llama_index.llms.ollama import Ollama
 from src.config.settings import DocMindSettings
 from src.config.llm_factory import build_llm
@@ -97,6 +107,13 @@ Feature: LLM provider selection
     Then Settings.llm SHALL be OpenAILike
     And chat replies stream successfully
 
+  Scenario: OpenAI-compatible cloud endpoint (Responses API)
+    Given I select 'openai_compatible'
+    And I set base_url to https://api.openai.com/v1
+    And I set API mode to 'responses'
+    Then Settings.llm SHALL be OpenAIResponses
+    And chat replies successfully
+
   Scenario: Use llama.cpp with GGUF
     Given I select 'llamacpp' and model_path points to a GGUF file
     Then Settings.llm SHALL be LlamaCPP
@@ -110,7 +127,9 @@ Feature: LLM provider selection
 ## Detailed Checklist
 
 - [x] Add UI select for provider with options: ollama, vllm, lmstudio, llamacpp.
+- [x] Add UI select for provider option: openai_compatible (generic OpenAI-compatible endpoint).
 - [x] Validate base URLs: vLLM may be raw server or OpenAI-compatible; LM Studio requires `/v1`.
+- [x] Support opt-in Responses API mode for OpenAI-compatible endpoints.
 - [x] LlamaCPP uses `model_kwargs={"n_gpu_layers": -1 if GPU else 0}`.
 - [x] Hook `Settings.llm` inside `setup_llamaindex()` only if not already set (allow force rebind).
 - [x] Persist settings to `.env` via existing settings save util (minimal updater implemented).

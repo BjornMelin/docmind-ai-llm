@@ -1,7 +1,7 @@
 ---
 spec: SPEC-022
 title: Settings UI Hardening — Pre-validation, Safe Provider Badge, and .env Persistence
-version: 1.0.0
+version: 1.0.1
 date: 2026-01-09
 owners: ["ai-arch"]
 status: Implemented
@@ -111,6 +111,12 @@ Add/extend `tests/integration/test_settings_page.py` (or create a new file) to a
 - LM Studio base URL is normalized to include `/v1`; Save persists the normalized value to `.env`.
 - Remote URL when `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` renders an error and disables actions; also test `=true` case to confirm remote URLs are allowed.
 - Valid provider change persists to `.env` via `python-dotenv` and can be read back.
+- Use `tests/helpers/apptest_utils.py` (`apptest_timeout_sec()`) for
+  `AppTest.from_file(..., default_timeout=...)` and override with
+  `TEST_TIMEOUT=<seconds>` when reproducing CI slowness locally.
+- Keep UI tests offline and import-light: stub the provider badge health check
+  (`adapter_registry.get_default_adapter_health`) unless the adapter itself is
+  under test.
 
 ### Unit
 

@@ -17,9 +17,13 @@ import pytest
 def _reset_router_and_graph_modules() -> Iterator[None]:
     """Clear cached modules that these tests patch to avoid order sensitivity."""
     targets = [
+        "src.agents.coordinator",
+        "src.pages.01_chat",
+        "src.retrieval.multimodal_fusion",
         "src.retrieval.router_factory",
         "src.retrieval.graph_config",
         "src.ui.ingest_adapter",
+        "src.ui.chat_sessions",
         "src.utils.storage",
         "src.pages.02_documents",
     ]
@@ -37,3 +41,22 @@ def _reset_router_and_graph_modules() -> Iterator[None]:
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = original
+
+
+@pytest.fixture(autouse=True)
+def _stub_graphrag_health_badge(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Avoid heavy GraphRAG adapter discovery during AppTest UI runs.
+
+    The Chat/Settings provider badge calls `get_default_adapter_health()`, which
+    can register/load optional GraphRAG adapters. UI tests should remain fast
+    and offline; dedicated unit tests cover adapter discovery.
+    """
+    monkeypatch.setattr(
+        "src.retrieval.adapter_registry.get_default_adapter_health",
+        lambda *, force_refresh=False: (
+            False,
+            "unavailable",
+            "GraphRAG disabled for AppTest",
+        ),
+        raising=False,
+    )

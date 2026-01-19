@@ -63,7 +63,13 @@ def _maybe_rotate(path: Path) -> None:
             path.rename(rotated)
     except OSError as exc:
         # Never fail the app due to rotation; log at debug level
-        logger.debug(f"telemetry rotation skipped: {exc}")
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="telemetry.rotate")
+        logger.debug(
+            f"telemetry rotation skipped (error_type={type(exc).__name__} "
+            f"error={redaction.redacted})"
+        )
 
 
 def _sanitize_event(event: dict[str, Any]) -> dict[str, Any]:

@@ -1,4 +1,12 @@
-# Implementation Prompt — Background Ingestion & Snapshot Jobs
+---
+prompt: PROMPT-033
+title: Background Ingestion & Snapshot Jobs
+status: Completed
+date: 2026-01-17
+version: 1.0
+related_adrs: ["ADR-052"]
+related_specs: ["SPEC-033"]
+---
 
 Implements `ADR-052` + `SPEC-033`.
 
@@ -71,7 +79,7 @@ Skill references to consult (as needed):
 
 **Long-running verification (use native capabilities):**
 
-- If you run `streamlit run src/app.py`, keep it alive and use `functions.write_stdin` to fetch logs and avoid rerunning startup.
+- If you run `uv run streamlit run app.py`, keep it alive and use `functions.write_stdin` to fetch logs and avoid rerunning startup.
 - Attach screenshots of progress/cancel states with `functions.view_image` if verification is visual.
 - Optional E2E smoke: use the skill’s Playwright script referenced above.
 
@@ -220,7 +228,7 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Tests**       |        | JobManager + UI wiring green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | ADR/SPEC/RTM updated                                                                                             |
 | **Security**    |        | no Streamlit calls in threads; atomic finalize; no secret/content leaks                                          |
-| **Tech Debt**   |        | zero TODO/FIXME introduced                                                                                       |
+| **Tech Debt**   |        | zero work-marker placeholders introduced                                                                         |
 | **Performance** |        | bounded queues; fragments don’t leak UI elements on reruns                                                       |
 
 **EXECUTE UNTIL COMPLETE.**

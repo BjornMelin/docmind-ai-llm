@@ -54,8 +54,11 @@ class _KGIndexStub:
 
 
 @pytest.mark.unit
-def test_create_kg_search_tool() -> None:
+def test_create_kg_search_tool(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test knowledge graph search tool creation."""
+    import src.retrieval.reranking as rr
+
+    monkeypatch.setattr(rr, "get_postprocessors", lambda *_a, **_k: [], raising=True)
     kg = _KGIndexStub()
     tool = ToolFactory.create_kg_search_tool(kg)
     assert tool is not None

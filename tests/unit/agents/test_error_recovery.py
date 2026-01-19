@@ -171,7 +171,7 @@ class TestAgentErrorRecovery:
         assert result is not None
 
         # Verify partial failure was logged
-        mock_logger.warning.assert_called()
+        mock_logger.error.assert_called()
 
         # Verify result indicates partial success
         import json

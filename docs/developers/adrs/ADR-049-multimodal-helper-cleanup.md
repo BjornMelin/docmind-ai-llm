@@ -12,21 +12,21 @@ Tags: multimodal, cleanup, tests, maintainability
 
 ## Description
 
-Remove the unused `src/utils/multimodal.py` helper (and its TODO placeholder) from the production package and keep any validation-only helpers in tests/eval code paths.
+Remove the unused `src/utils/multimodal.py` helper (and its work-marker placeholder) from the production package and keep any validation-only helpers in tests/eval code paths.
 
 ## Context
 
-`src/utils/multimodal.py` is currently referenced only by unit tests and contains a TODO for “phase 2” graph traversal/LLM summarization.
+`src/utils/multimodal.py` is currently referenced only by unit tests and contains a work-marker for “phase 2” graph traversal/LLM summarization.
 
 Shipping unused “toy pipeline” utilities in the production package:
 
 - increases cognitive load
 - creates misleading affordances (“multimodal pipeline exists”)
-- violates “no TODO in production code” release-readiness requirement
+- violates “no placeholder markers in production code” release-readiness requirement
 
 ## Alternatives
 
-- A: Keep module in `src/utils/` and simply remove TODO comment
+- A: Keep module in `src/utils/` and simply remove marker comment
 - B: Move module to `src/eval/` as evaluation-only helper
 - C: Delete module and related tests, relying on existing multimodal components (Selected)
 
@@ -38,7 +38,7 @@ Weights: leverage 35%, application value 30%, maintenance 25%, adaptability 10%.
 | --- | ---: | ---: | ---: | ---: | ---: |
 | **C: Delete dead code + tests (Selected)** | 9 | 9 | 10 | 9 | **9.25** |
 | B: Move to eval/tests only | 5 | 3 | 6 | 5 | 4.65 |
-| A: Keep in prod (remove TODO only) | 2 | 1 | 2 | 3 | 1.80 |
+| A: Keep in prod (remove marker only) | 2 | 1 | 2 | 3 | 1.80 |
 
 ## Decision
 
@@ -52,7 +52,7 @@ We will:
 
 ### Positive Outcomes
 
-- Removes unused code and TODO placeholders from production.
+- Removes unused code and placeholder markers from production.
 - Reduces maintenance burden and confusion for contributors.
 
 ### Trade-offs

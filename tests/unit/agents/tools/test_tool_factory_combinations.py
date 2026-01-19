@@ -1,16 +1,22 @@
 """Tests for ToolFactory combinations and ordering."""
 
+from __future__ import annotations
+
+from types import ModuleType
+
 import pytest
 
 pytestmark = pytest.mark.unit
 
 
-def test_tool_factory_ordering_and_keyword(monkeypatch):
+def test_tool_factory_ordering_and_keyword(monkeypatch: pytest.MonkeyPatch):
     """Ensure ordering: hybrid (retriever or vector), KG optional, vector, keyword.
 
     Mocks a simple index that returns an object from `as_query_engine` and
     sets the keyword flag to True to include the keyword tool at the end.
     """
+    import sys
+
     from src.agents.tool_factory import ToolFactory
     from src.config import settings as app_settings
 
@@ -20,6 +26,18 @@ def test_tool_factory_ordering_and_keyword(monkeypatch):
 
     class _Retriever:
         pass
+
+    stub = ModuleType("src.retrieval.multimodal_fusion")
+
+    class _MultimodalFusionRetriever:
+        pass
+
+    stub.MultimodalFusionRetriever = _MultimodalFusionRetriever
+    monkeypatch.setitem(sys.modules, "src.retrieval.multimodal_fusion", stub)
+
+    import src.retrieval.reranking as rr
+
+    monkeypatch.setattr(rr, "get_postprocessors", lambda *_a, **_k: [], raising=True)
 
     # Enable keyword tool
     monkeypatch.setattr(

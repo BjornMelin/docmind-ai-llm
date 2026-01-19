@@ -1,4 +1,12 @@
-# Implementation Prompt — Operational Metadata Store (SQLite WAL)
+---
+prompt: PROMPT-039
+title: Operational Metadata Store (SQLite WAL)
+status: Completed
+date: 2026-01-17
+version: 1.0
+related_adrs: ["ADR-055"]
+related_specs: ["SPEC-039"]
+---
 
 Implements `ADR-055` + `SPEC-039`.
 
@@ -117,7 +125,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 #### 1) Python + Packaging
 
-- Python version must remain **3.11.x** (respect `pyproject.toml`).
+- Python baseline is **3.13.11** (Python 3.13-only; respect `pyproject.toml`).
 - Use **uv only**:
   - install/sync: `uv sync`
   - run tools: `uv run <cmd>`
@@ -172,15 +180,15 @@ You MUST produce a plan and keep exactly one step “in_progress” at a time.
 
 ### FINAL VERIFICATION CHECKLIST (MUST COMPLETE)
 
-| Requirement    | Status | Proof / Notes                         |
-| -------------- | ------ | ------------------------------------- |
-| **Packaging**  |        | `uv sync` clean                       |
-| **Formatting** |        | `ruff format`                         |
-| **Lint**       |        | `ruff check` clean                    |
-| **Types**      |        | `pyright` clean                       |
-| **Tests**      |        | `scripts/run_tests.py --fast` green   |
-| **Docs**       |        | ADR/SPEC/RTM updated                  |
-| **Security**   |        | WAL + path validation + metadata-only |
-| **Tech Debt**  |        | zero TODO/FIXME introduced            |
+| Requirement    | Status | Proof / Notes                            |
+| -------------- | ------ | ---------------------------------------- |
+| **Packaging**  |        | `uv sync` clean                          |
+| **Formatting** |        | `ruff format`                            |
+| **Lint**       |        | `ruff check` clean                       |
+| **Types**      |        | `pyright` clean                          |
+| **Tests**      |        | `scripts/run_tests.py --fast` green      |
+| **Docs**       |        | ADR/SPEC/RTM updated                     |
+| **Security**   |        | WAL + path validation + metadata-only    |
+| **Tech Debt**  |        | zero work-marker placeholders introduced |
 
 **EXECUTE UNTIL COMPLETE.**

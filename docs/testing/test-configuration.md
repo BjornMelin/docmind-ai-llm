@@ -189,6 +189,9 @@ without services or UI.
 - `DOCMIND_QDRANT_SCHEMA_SMOKE=1`
   - Enables Qdrant schema smoke in `tests/integration/retrieval/test_qdrant_named_vectors_schema.py`.
   - Default: skipped (requires a running local Qdrant instance).
+- `TEST_TIMEOUT=<seconds>`
+  - Overrides Streamlit AppTest timeouts used by UI integration tests (see
+    `tests/helpers/apptest_utils.py`). Useful to reproduce CI slowness locally.
 - Telemetry controls (unit tests verify these):
   - `DOCMIND_TELEMETRY_DISABLED=1` — disable telemetry writes entirely.
   - `DOCMIND_TELEMETRY_SAMPLE=0.0..1.0` — sample rate for event writes.

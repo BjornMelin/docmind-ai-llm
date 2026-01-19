@@ -29,6 +29,7 @@ from loguru import logger
 from pydantic import BaseModel, Field, ValidationError
 
 from src.config import settings
+from src.utils.log_safety import build_pii_log_entry
 from src.utils.telemetry import log_jsonl
 
 MAX_RECALL_LIMIT = 100
@@ -172,6 +173,12 @@ def remember(
         return json.dumps({"ok": False, "error": "memory store unavailable"})
     ns = _namespace_from_config(config, scope=scope)
     user_id, thread_id = _ids_from_config(config)
+    thread_redacted = build_pii_log_entry(
+        str(thread_id), key_id="telemetry.thread_id"
+    ).redacted
+    user_redacted = build_pii_log_entry(
+        str(user_id), key_id="telemetry.user_id"
+    ).redacted
     tags_value: list[str] | None = None
     if (
         tags is not None
@@ -197,24 +204,30 @@ def remember(
                     "scope": scope,
                     "count": 1,
                     "latency_ms": round(elapsed_ms, 2),
-                    "thread_id": thread_id,
-                    "user_id": user_id,
+                    "thread_id": thread_redacted,
+                    "user_id": user_redacted,
                 }
             )
         return json.dumps({"ok": True, "memory_id": mem_id})
     except Exception as e:
-        logger.debug("remember store.put failed: {}", e)
+        redaction = build_pii_log_entry(str(e), key_id="agents.tools.memory.remember")
+        logger.debug(
+            "remember store.put failed (error_type={} error={})",
+            type(e).__name__,
+            redaction.redacted,
+        )
         with _SuppressTelemetry():
             log_jsonl(
                 {
                     "chat.memory_saved": False,
                     "scope": scope,
-                    "error": str(e),
-                    "thread_id": thread_id,
-                    "user_id": user_id,
+                    "error_type": type(e).__name__,
+                    "error": redaction.redacted,
+                    "thread_id": thread_redacted,
+                    "user_id": user_redacted,
                 }
             )
-        return json.dumps({"ok": False, "error": str(e)})
+        return json.dumps({"ok": False, "error": "save failed"})
 
 
 @tool
@@ -238,6 +251,12 @@ def recall_memories(
         )
     ns = _namespace_from_config(config, scope=scope)
     user_id, thread_id = _ids_from_config(config)
+    thread_redacted = build_pii_log_entry(
+        str(thread_id), key_id="telemetry.thread_id"
+    ).redacted
+    user_redacted = build_pii_log_entry(
+        str(user_id), key_id="telemetry.user_id"
+    ).redacted
     safe_limit = max(1, min(MAX_RECALL_LIMIT, int(limit)))
     results = store.search(ns, query=str(query), limit=safe_limit)
     elapsed_ms = (time.perf_counter() - start) * 1000.0
@@ -249,8 +268,8 @@ def recall_memories(
                 "top_k": safe_limit,
                 "latency_ms": round(elapsed_ms, 2),
                 "result_count": len(results),
-                "thread_id": thread_id,
-                "user_id": user_id,
+                "thread_id": thread_redacted,
+                "user_id": user_redacted,
             }
         )
     # Return only structured memory content; do not include internal timings from store.
@@ -285,29 +304,41 @@ def forget_memory(
         return json.dumps({"ok": False, "error": "memory store unavailable"})
     ns = _namespace_from_config(config, scope=scope)
     user_id, thread_id = _ids_from_config(config)
+    thread_redacted = build_pii_log_entry(
+        str(thread_id), key_id="telemetry.thread_id"
+    ).redacted
+    user_redacted = build_pii_log_entry(
+        str(user_id), key_id="telemetry.user_id"
+    ).redacted
     try:
         store.delete(ns, str(memory_id))
     except (OSError, ValueError, RuntimeError) as exc:
-        logger.debug("forget_memory delete failed: {}", exc)
+        redaction = build_pii_log_entry(str(exc), key_id="agents.tools.memory.forget")
+        logger.debug(
+            "forget_memory delete failed (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
         with _SuppressTelemetry():
             log_jsonl(
                 {
                     "chat.memory_deleted": False,
                     "scope": scope,
-                    "error": str(exc),
-                    "thread_id": thread_id,
-                    "user_id": user_id,
+                    "error_type": type(exc).__name__,
+                    "error": redaction.redacted,
+                    "thread_id": thread_redacted,
+                    "user_id": user_redacted,
                 }
             )
-        return json.dumps({"ok": False, "error": f"delete failed: {exc}"})
+        return json.dumps({"ok": False, "error": "delete failed"})
 
     with _SuppressTelemetry():
         log_jsonl(
             {
                 "chat.memory_deleted": True,
                 "scope": scope,
-                "thread_id": thread_id,
-                "user_id": user_id,
+                "thread_id": thread_redacted,
+                "user_id": user_redacted,
             }
         )
     return json.dumps({"ok": True})
@@ -333,10 +364,13 @@ class _SuppressTelemetry:
         if exc_type is not None:
             is_expected = issubclass(exc_type, (OSError, RuntimeError, ValueError))
             log_func = logger.debug if is_expected else logger.warning
+            redaction = build_pii_log_entry(
+                str(exc), key_id="agents.tools.memory.telemetry"
+            )
             log_func(
-                "memory tool telemetry error: {exc_type}: {exc}",
-                exc_type=exc_type.__name__,
-                exc=exc,
+                "memory tool telemetry error (error_type={}, error={})",
+                exc_type.__name__,
+                redaction.redacted,
             )
             return True
         return False

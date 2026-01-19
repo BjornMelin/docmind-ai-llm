@@ -626,8 +626,9 @@ class TestEdgeCaseSimilarityComputations:
         inf_vector = np.full(1024, np.inf)
 
         # Test with normal vector
-        with_nan = np.dot(normal_vector, nan_vector)
-        with_inf = np.dot(normal_vector, inf_vector)
+        with np.errstate(invalid="ignore", over="ignore"):
+            with_nan = np.dot(normal_vector, nan_vector)
+            with_inf = np.dot(normal_vector, inf_vector)
 
         assert np.isnan(with_nan) or np.isinf(with_nan), (
             "Should handle NaN appropriately"

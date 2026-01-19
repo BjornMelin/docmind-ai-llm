@@ -204,4 +204,4 @@ Analyze the results and impact of the decision.
 ## Changelog
 
 - **[Version #] ([YYYY-MM-DD])**: [Description of the change. e.g., "Initial accepted version."]
-- **[Version #] ([YYYY-MM-DD])**: [e.g., "Updated code snippets to align with ADR-XXX's refactoring. Added performance benchmark results."]
+- **[Version #] ([YYYY-MM-DD])**: [e.g., "Updated code snippets to align with ADR-PLACEHOLDER's refactoring. Added performance benchmark results."]

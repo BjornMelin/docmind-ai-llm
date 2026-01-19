@@ -12,9 +12,9 @@ if ! command -v uv &> /dev/null; then
     exit 1
 fi
 
-# Check if src/app.py exists
-if [ ! -f "src/app.py" ]; then
-    echo "❌ Error: src/app.py not found. Please run from project root directory."
+# Check if entrypoint exists
+if [ ! -f "app.py" ]; then
+    echo "❌ Error: app.py not found. Please run from project root directory."
     exit 1
 fi
 
@@ -29,4 +29,4 @@ echo ""
 
 # Run the application with port configuration
 echo "✅ Launching DocMind AI on http://localhost:$PORT"
-uv run streamlit run src/app.py --server.port "$PORT"
+uv run streamlit run app.py --server.port "$PORT"

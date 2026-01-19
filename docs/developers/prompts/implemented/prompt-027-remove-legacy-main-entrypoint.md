@@ -8,8 +8,6 @@ related_adrs: ["ADR-046"]
 related_specs: ["SPEC-027"]
 ---
 
-## Implementation Prompt — Remove Legacy `src/main.py` Entrypoint
-
 Implements `ADR-046` + `SPEC-027`.
 
 **Read first (repo truth):**
@@ -83,7 +81,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 ### Feature Context (Filled)
 
-**Primary Task:** Delete `src/main.py` and remove all references so the supported entrypoint is only `streamlit run src/app.py`.
+**Primary Task:** Delete `src/main.py` and remove all references so the supported entrypoint is only `uv run streamlit run app.py`.
 
 **Why now:** `src/main.py` is dead code, contains misleading “phase 2” placeholders, and does import-time `.env` loading. It is a ship blocker for clarity and container correctness.
 
@@ -111,7 +109,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 #### 1) Python + Packaging
 
-- Python version must remain **3.11.x** (respect `pyproject.toml`).
+- Python **>=3.13,<3.14** (Python 3.13-only; respect `pyproject.toml`).
 - Use **uv only**:
   - install/sync: `uv sync`
   - run tools: `uv run <cmd>`
@@ -138,7 +136,7 @@ Must pass:
 1. [ ] Confirm nothing imports `src.main` (`rg "from src\\.main|import src\\.main"`).
 2. [ ] Delete `src/main.py`.
 3. [ ] Update `pyproject.toml` (coverage omit list) to remove `src/main.py`.
-4. [ ] Search docs for `src/main.py` references and replace with `streamlit run src/app.py`.
+4. [ ] Search docs for `src/main.py` references and replace with `uv run streamlit run app.py`.
 5. [ ] Update RTM row (NFR-MAINT-003 planned → implemented).
 6. [ ] Run quality gates.
 
@@ -188,9 +186,9 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Lint**        | ✅     | `uv run ruff check .` clean                                                        |
 | **Types**       | ✅     | `uv run pyright` clean                                                             |
 | **Tests**       | ✅     | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
-| **Docs**        | ✅     | docs/scripts reference only `streamlit run src/app.py`                             |
+| **Docs**        | ✅     | docs/scripts reference only `uv run streamlit run app.py`                          |
 | **Security**    | ✅     | no new config bypasses introduced                                                  |
-| **Tech Debt**   | ✅     | zero TODO/FIXME introduced                                                         |
+| **Tech Debt**   | ✅     | zero work-marker placeholders introduced                                           |
 | **Performance** | ✅     | no new import-time heavy work                                                      |
 
 **EXECUTE UNTIL COMPLETE.**

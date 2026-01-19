@@ -70,8 +70,9 @@ graph TD
 # RAG Framework + Orchestration
 llama-index = "*"                # Ingestion/retrieval primitives (see pyproject.toml)
 langgraph = "*"                  # Graph-based orchestration
-langgraph-supervisor = "*"       # Supervisor multi-agent wrapper
 langchain-core = "*"             # Runnable interfaces
+# Note: DocMind uses a repo-local graph-native supervisor in `src/agents/supervisor_graph.py`
+# (no external supervisor wrapper dependency).
 
 # Storage & Persistence
 qdrant-client = "*"              # Dense+sparse vectors and hybrid queries

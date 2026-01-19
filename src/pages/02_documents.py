@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import threading
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -13,6 +15,7 @@ import streamlit as st
 from loguru import logger
 
 from src.config import settings
+from src.models.processing import IngestionInput
 from src.persistence.artifacts import ArtifactRef, ArtifactStore
 from src.persistence.snapshot import SnapshotLockTimeout, load_manifest
 from src.persistence.snapshot_utils import timestamped_export_path
@@ -27,15 +30,35 @@ from src.telemetry.opentelemetry import (
     record_graph_export_metric,
 )
 from src.ui.artifacts import render_artifact_image
-from src.ui.ingest_adapter import ingest_files
+from src.ui.background_jobs import (
+    JobCanceledError,
+    ProgressEvent,
+    get_job_manager,
+    get_or_create_owner_id,
+)
+from src.ui.ingest_adapter import ingest_inputs, save_uploaded_file
 from src.utils.storage import create_vector_store
+
+ProgressReporter = Callable[[ProgressEvent], None]
+
 
 if TYPE_CHECKING:
     from src.nlp.spacy_service import SpacyNlpService
 
 
 @st.cache_resource(show_spinner=False)
-def _get_spacy_service(cache_version: int, cfg_dump: dict[str, Any]) -> SpacyNlpService:
+def _get_spacy_service(
+    cache_version: int, cfg_dump: dict[str, Any]
+) -> SpacyNlpService | None:
+    """Initialize and return the Spacy NLP service.
+
+    Args:
+        cache_version: Integer used to bust the Streamlit cache.
+        cfg_dump: Serialized configuration dictionary.
+
+    Returns:
+        SpacyNlpService | None: Initialized service or None if disabled/failed.
+    """
     from src.nlp.settings import SpacyNlpSettings
     from src.nlp.spacy_service import SpacyNlpService
 
@@ -49,11 +72,15 @@ def main() -> None:  # pragma: no cover - Streamlit page
     configure_observability(settings)
     st.title("Documents")
 
+    owner_id = get_or_create_owner_id()
     _render_latest_snapshot_summary()
 
     files, use_graphrag, encrypt_images, submitted = _render_ingest_form()
     if submitted:
-        _handle_ingest_submission(files, use_graphrag, encrypt_images)
+        _handle_ingest_submission(
+            files, use_graphrag, encrypt_images, owner_id=owner_id
+        )
+    _render_ingest_job_panel(owner_id=owner_id)
 
     _render_maintenance_controls()
 
@@ -92,54 +119,289 @@ def _render_ingest_form() -> tuple[list[Any] | None, bool, bool, bool]:
 
 
 def _handle_ingest_submission(
-    files: list[Any] | None, use_graphrag: bool, encrypt_images: bool
+    files: list[Any] | None,
+    use_graphrag: bool,
+    encrypt_images: bool,
+    *,
+    owner_id: str,
 ) -> None:
-    """Handle ingestion submission and rebuild snapshot."""
+    """Handle ingestion submission by starting a background job.
+
+    Args:
+        files: List of uploaded file objects from Streamlit.
+        use_graphrag: Whether to trigger GraphRAG snapshot rebuild.
+        encrypt_images: Whether to encrypt extracted images.
+        owner_id: Unique identifier for the job owner.
+    """
     if not files:
         st.warning("No files selected.")
         return
-    with st.status("Ingesting…", expanded=True) as status:
+    try:
+        nlp_service = None
         try:
-            nlp_service = None
-            try:
-                cfg_dump = settings.spacy.model_dump()  # type: ignore[attr-defined]
-                nlp_service = _get_spacy_service(settings.cache_version, cfg_dump)
-            except Exception:
-                logger.opt(exception=True).error("Failed to initialize SpacyNlpService")
-                nlp_service = None
+            cfg_dump = settings.spacy.model_dump()  # type: ignore[attr-defined]
+            nlp_service = _get_spacy_service(settings.cache_version, cfg_dump)
+        except Exception as exc:
+            from src.utils.log_safety import build_pii_log_entry
 
-            result = ingest_files(
-                files,
-                enable_graphrag=use_graphrag,
+            redaction = build_pii_log_entry(str(exc), key_id="documents.spacy_init")
+            logger.warning(
+                "Failed to initialize SpacyNlpService (error_type={} error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
+            nlp_service = None
+
+        saved_inputs: list[IngestionInput] = []
+        for file_obj in files:
+            if file_obj is None:
+                logger.warning("Skipping file (missing upload object).")
+                continue
+            file_name = getattr(file_obj, "name", None)
+            file_size = getattr(file_obj, "size", None)
+            if file_name is None:
+                logger.warning("Skipping file (missing name attribute).")
+                continue
+            if isinstance(file_size, int) and file_size <= 0:
+                logger.warning("Skipping file (empty upload).")
+                continue
+            try:
+                stored_path, digest = save_uploaded_file(file_obj)
+            except Exception as exc:
+                from src.utils.log_safety import build_pii_log_entry
+
+                error_redaction = build_pii_log_entry(
+                    str(exc), key_id="documents.save_file"
+                )
+                name_redaction = build_pii_log_entry(
+                    str(file_name), key_id="documents.upload_name"
+                )
+                logger.warning(
+                    "Skipping file (name={} error_type={} error={})",
+                    name_redaction.redacted,
+                    type(exc).__name__,
+                    error_redaction.redacted,
+                )
+                continue
+            saved_inputs.append(
+                IngestionInput(
+                    document_id=f"doc-{digest[:16]}",
+                    source_path=stored_path,
+                    metadata={
+                        "source_filename": file_name,
+                        "uploaded_at": datetime.now(UTC).isoformat(),
+                        "sha256": digest,
+                    },
+                    encrypt_images=bool(encrypt_images),
+                )
+            )
+        if not saved_inputs:
+            st.warning("No valid files to ingest.")
+            return
+
+        job_manager = get_job_manager(settings.cache_version)
+
+        def _work(
+            cancel_event: threading.Event, report: ProgressReporter
+        ) -> dict[str, Any]:
+            return _run_ingest_job(
+                saved_inputs,
+                use_graphrag=use_graphrag,
                 encrypt_images=encrypt_images,
                 nlp_service=nlp_service,
+                cancel_event=cancel_event,
+                report_progress=report,
             )
-            _render_ingest_results(result, use_graphrag)
-            resolved_vector_index = st.session_state.get("vector_index") or result.get(
-                "vector_index"
+
+        job_id = job_manager.start_job(owner_id=owner_id, fn=_work)
+        st.session_state["ingest_job_id"] = job_id
+        st.session_state["ingest_job_use_graphrag"] = bool(use_graphrag)
+        st.session_state["ingest_job_encrypt_images"] = bool(encrypt_images)
+        st.toast("Ingestion started", icon="⏳")
+    except Exception as exc:  # pragma: no cover - UX best effort
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="documents.ingest_start")
+        logger.warning(
+            "Failed to start ingestion job (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
+        st.error(f"Failed to start ingestion job ({type(exc).__name__}).")
+        st.caption(f"Error reference: {redaction.redacted}")
+
+
+def _run_ingest_job(
+    inputs: list[IngestionInput],
+    *,
+    use_graphrag: bool,
+    encrypt_images: bool,
+    nlp_service: SpacyNlpService | None,
+    cancel_event: threading.Event,
+    report_progress: ProgressReporter,
+) -> dict[str, Any]:
+    """Worker entrypoint for ingestion + snapshot rebuild (no Streamlit APIs).
+
+    Args:
+        inputs: List of ingestion input objects.
+        use_graphrag: Whether to perform GraphRAG indexing.
+        encrypt_images: Whether to encrypt image artifacts.
+        nlp_service: Optional NLP service for entity enrichment.
+        cancel_event: Event to monitor for cooperative cancellation.
+        report_progress: Function to emit progress events.
+
+    Returns:
+        dict[str, Any]: Mapping of document IDs to their respective results.
+
+    Raises:
+        JobCanceledError: If cancellation is requested.
+    """
+
+    def _emit(percent: int, phase: str, message: str) -> None:
+        evt = ProgressEvent(
+            percent=max(0, min(100, int(percent))),
+            phase=phase,  # type: ignore[arg-type]
+            message=str(message)[:200],
+            timestamp=datetime.now(UTC),
+        )
+        with contextlib.suppress(Exception):
+            report_progress(evt)
+
+    _emit(0, "save", f"Prepared {len(inputs)} file(s)")
+    if cancel_event.is_set():
+        raise JobCanceledError()
+
+    _emit(10, "ingest", "Ingesting documents")
+    ingest_result = ingest_inputs(
+        inputs,
+        enable_graphrag=use_graphrag,
+        encrypt_images=encrypt_images,
+        nlp_service=nlp_service,
+    )
+
+    _emit(70, "index", "Finalizing indices")
+    if cancel_event.is_set():
+        raise JobCanceledError()
+
+    vector_index = ingest_result.get("vector_index") or _create_vector_index_fallback()
+    if vector_index is None:
+        raise RuntimeError("Vector index unavailable after ingestion")
+    pg_index = ingest_result.get("pg_index") if use_graphrag else None
+
+    _emit(85, "snapshot", "Rebuilding snapshot")
+    final = rebuild_snapshot(vector_index, pg_index, settings)
+    _emit(100, "done", "Done")
+
+    return {
+        "ingest": ingest_result,
+        "snapshot_dir": str(final),
+        "use_graphrag": bool(use_graphrag),
+    }
+
+
+@st.fragment(run_every=float(settings.ui.progress_poll_interval_sec))
+def _render_ingest_job_panel(*, owner_id: str) -> None:
+    """Render background ingestion job progress (auto-refresh).
+
+    Args:
+        owner_id: Unique identifier for the job owner.
+    """
+    job_id = st.session_state.get("ingest_job_id")
+    if not isinstance(job_id, str) or not job_id:
+        return
+
+    job_manager = get_job_manager(settings.cache_version)
+    state = job_manager.get(job_id, owner_id=owner_id)
+    if state is None:
+        st.session_state.pop("ingest_job_id", None)
+        return
+
+    events = job_manager.drain_progress(job_id, owner_id=owner_id)
+    if events:
+        st.session_state["ingest_job_last_event"] = events[-1]
+
+    last: ProgressEvent | None = st.session_state.get("ingest_job_last_event")
+    pct = int(last.percent) if isinstance(last, ProgressEvent) else 0
+    phase = last.phase if isinstance(last, ProgressEvent) else "ingest"
+    message = last.message if isinstance(last, ProgressEvent) else ""
+
+    st.subheader("Ingestion job")
+    st.progress(max(0, min(100, pct)) / 100.0)
+    st.caption(f"{phase} · {pct}%")
+    if message:
+        st.write(message)
+
+    if state.status in ("queued", "running"):
+        if st.button("Cancel ingestion", type="secondary"):
+            job_manager.cancel(job_id, owner_id=owner_id)
+            st.session_state.pop("ingest_job_id", None)
+            st.warning("Ingestion cancelled.")
+
+    else:
+        # Terminal states: render result once, then clear job id.
+        completed_key = "ingest_job_completed_id"
+        if st.session_state.get(completed_key) != job_id:
+            _render_ingest_terminal_state(
+                state, job_id=job_id, completed_key=completed_key
             )
-            resolved_pg_index = (
-                st.session_state.get("graphrag_index") if use_graphrag else None
-            )
-            _handle_snapshot_rebuild(
-                resolved_vector_index,
-                resolved_pg_index,
-            )
-            status.update(label="Done", state="complete")
-            st.toast("Ingestion complete", icon="✅")
-        except SnapshotLockTimeout:
-            status.update(label="Locked", state="error")
-            st.warning(
-                "Snapshot rebuild already in progress. Please wait "
-                "and try again shortly."
-            )
-        except Exception as exc:  # pragma: no cover - UX best effort
-            status.update(label="Failed", state="error")
-            st.error(f"Ingestion failed: {exc}")
+
+
+def _render_ingest_terminal_state(
+    state: Any, *, job_id: str, completed_key: str
+) -> None:
+    """Render the results of a terminal ingestion job and clear session state.
+
+    Args:
+        state: Terminal job state.
+        job_id: Unique identifier for the job.
+        completed_key: Session state key to track job completion.
+    """
+    if state.status == "succeeded" and isinstance(state.result, dict):
+        st.session_state[completed_key] = job_id
+        st.session_state.pop("ingest_job_id", None)
+        payload = state.result
+        ingest_result = payload.get("ingest")
+        snapshot_dir = payload.get("snapshot_dir")
+        use_graphrag = bool(payload.get("use_graphrag", False))
+
+        if isinstance(ingest_result, dict):
+            _render_ingest_results(ingest_result, use_graphrag)
+        if isinstance(snapshot_dir, str) and snapshot_dir:
+            final = Path(snapshot_dir)
+            manifest = load_manifest(final)
+            _render_manifest_details(manifest, final)
+            st.session_state["latest_manifest"] = manifest
+            st.success(f"Snapshot created: {final.name}")
+        st.toast("Ingestion complete", icon="✅")
+
+    elif state.status == "failed":
+        st.session_state[completed_key] = job_id
+        st.session_state.pop("ingest_job_id", None)
+        from src.utils.log_safety import build_pii_log_entry
+
+        err_msg = str(state.error) if state.error else "unknown error"
+        redaction = build_pii_log_entry(err_msg, key_id="documents.ingest_failed")
+        logger.error(
+            "Ingestion failed (error_type={} error={})",
+            type(state.error).__name__ if state.error else "Error",
+            redaction.redacted,
+        )
+        st.error("Ingestion failed. Please try again.")
+        st.caption(f"Error reference: {redaction.redacted}")
+
+    elif state.status == "canceled":
+        st.session_state[completed_key] = job_id
+        st.session_state.pop("ingest_job_id", None)
+        st.warning("Ingestion cancelled.")
 
 
 def _render_ingest_results(result: dict[str, Any], use_graphrag: bool) -> None:
-    """Render ingestion results and hydrate session state indices."""
+    """Render ingestion results and hydrate session state indices.
+
+    Args:
+        result: Dictionary of document ingestion results.
+        use_graphrag: Whether GraphRAG was enabled for this run.
+    """
     count = int(result.get("count", 0))
     st.write(f"Ingested {count} documents.")
     _render_nlp_preview(result.get("nlp_preview") or {}, result.get("metadata") or {})
@@ -169,6 +431,12 @@ def _render_ingest_results(result: dict[str, Any], use_graphrag: bool) -> None:
 
 
 def _render_nlp_preview(preview: dict[str, Any], meta: dict[str, Any]) -> None:
+    """Render a visual preview of NLP enrichment results.
+
+    Args:
+        preview: NLP preview dictionary containing entities and sentences.
+        meta: Document metadata dictionary.
+    """
     enabled = bool(meta.get("nlp.enabled", False))
     if not enabled:
         st.caption("NLP enrichment: disabled")
@@ -207,13 +475,25 @@ def _set_multimodal_retriever() -> None:
         from src.retrieval.multimodal_fusion import MultimodalFusionRetriever
 
         st.session_state["hybrid_retriever"] = MultimodalFusionRetriever()
-    except Exception:  # pragma: no cover - UI best-effort
-        logger.opt(exception=True).debug("Multimodal retriever init failed")
+    except Exception as exc:  # pragma: no cover - UI best-effort
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="documents.multimodal_init")
+        logger.debug(
+            "Multimodal retriever init failed (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
         st.session_state.pop("hybrid_retriever", None)
 
 
 def _handle_snapshot_rebuild(vector_index: Any, pg_index: Any | None) -> None:
-    """Rebuild snapshot and render status feedback."""
+    """Rebuild snapshot and render status feedback.
+
+    Args:
+        vector_index: Processed vector index.
+        pg_index: Optional processed property graph index.
+    """
     try:
         final = rebuild_snapshot(vector_index, pg_index, settings)
         manifest = load_manifest(final)
@@ -225,7 +505,15 @@ def _handle_snapshot_rebuild(vector_index: Any, pg_index: Any | None) -> None:
             "Snapshot rebuild already in progress. Please wait and try again shortly."
         )
     except Exception as exc:  # pragma: no cover - UX best effort
-        st.warning(f"Snapshot failed: {exc}")
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="documents.snapshot_rebuild")
+        logger.warning(
+            "Snapshot rebuild failed (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
+        st.warning(f"Snapshot failed ({type(exc).__name__}). Check logs for details.")
 
 
 def _render_image_exports(exports: list[dict[str, Any]]) -> None:
@@ -461,7 +749,16 @@ def _render_maintenance_controls() -> None:
 
 @st.cache_data(show_spinner=False)
 def _sha256_for_file(path_str: str, _mtime_ns: int, _size: int) -> str:
-    """Compute file sha256 with cache invalidated by stat tuple."""
+    """Compute file sha256 with cache invalidated by stat tuple.
+
+    Args:
+        path_str: Path to the target file.
+        _mtime_ns: Modification time in nanoseconds (for cache busting).
+        _size: File size in bytes (for cache busting).
+
+    Returns:
+        str: Hexadecimal SHA-256 hash of the file content.
+    """
     p = Path(path_str)
     h = hashlib.sha256()
     with p.open("rb") as f:
@@ -506,7 +803,15 @@ def _handle_reindex_page_images(
         try:
             doc_id = _doc_id_for_upload(p)
         except Exception as exc:
-            logger.debug("sha256 compute skipped for {}: {}", p, exc)
+            from src.utils.log_safety import build_pii_log_entry
+
+            redaction = build_pii_log_entry(str(exc), key_id="documents.sha256")
+            logger.debug(
+                "sha256 compute skipped for {} (error_type={} error={})",
+                p.name,
+                type(exc).__name__,
+                redaction.redacted,
+            )
             continue
         inputs.append(
             IngestionInput(
@@ -734,7 +1039,18 @@ def _render_export_controls() -> None:
                 "Snapshot rebuild already in progress. Please wait and try again."
             )
         except Exception as exc:  # pragma: no cover - UX best effort
-            st.error(f"Snapshot manager error: {exc}")
+            from src.utils.log_safety import build_pii_log_entry
+
+            redaction = build_pii_log_entry(
+                str(exc), key_id="documents.snapshot_manager"
+            )
+            logger.warning(
+                "Snapshot manager error (error_type={} error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
+            st.error(f"Snapshot manager error ({type(exc).__name__}).")
+            st.caption(f"Error reference: {redaction.redacted}")
 
 
 def _handle_manual_export(out_dir: Path, extension: str) -> None:
@@ -779,7 +1095,17 @@ def _handle_manual_export(out_dir: Path, extension: str) -> None:
             context="manual",
         )
     except Exception as exc:  # pragma: no cover - UX best effort
-        st.warning(f"{extension.upper()} export failed: {exc}")
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="documents.graph_export")
+        logger.warning(
+            "Graph export failed (ext={} error_type={} error={})",
+            str(extension),
+            type(exc).__name__,
+            redaction.redacted,
+        )
+        st.warning(f"{extension.upper()} export failed ({type(exc).__name__}).")
+        st.caption(f"Error reference: {redaction.redacted}")
 
 
 # ---- Page helpers ----

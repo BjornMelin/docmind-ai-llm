@@ -6,7 +6,7 @@ date: 2026-01-12
 owners: ["ai-arch"]
 status: Completed
 related_requirements:
-  - NFR-MAINT-003: No TODO/dead code in production modules.
+  - NFR-MAINT-003: No placeholder markers or dead code in production modules.
 related_adrs: ["ADR-049"]
 ---
 

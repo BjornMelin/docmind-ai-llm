@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import importlib
 import sys
-import time
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 
 import pytest
 from streamlit.testing.v1 import AppTest
+
+from tests.helpers.apptest_utils import apptest_timeout_sec
 
 
 def _install_stub(module_name: str, **attrs) -> None:
@@ -21,9 +23,32 @@ def _install_stub(module_name: str, **attrs) -> None:
     sys.modules[module_name] = stub
 
 
+@dataclass(slots=True)
+class DocumentsAppHarness:
+    """Test harness bundling the AppTest instance with stub state.
+
+    Attributes:
+        app: AppTest instance for the Documents page harness.
+        rebuild_calls: List of snapshot rebuild paths requested by the UI.
+    """
+
+    app: AppTest
+    rebuild_calls: list[Path]
+
+
 @pytest.fixture
-def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[AppTest]:
-    """Create an AppTest instance for the Documents page with stubs for side effects."""
+def documents_app_test(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[DocumentsAppHarness]:
+    """Create an AppTest instance for the Documents page with stubs for side effects.
+
+    Args:
+        tmp_path: Temporary directory for test data.
+        monkeypatch: Pytest monkeypatch fixture.
+
+    Returns:
+        Generator yielding a DocumentsAppHarness instance.
+    """
     from src.config.settings import settings as app_settings
 
     monkeypatch.setenv("DOCMIND_DATA_DIR", str(tmp_path))
@@ -37,8 +62,33 @@ def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[AppTest]:
         for name in ("src.ui.ingest_adapter", "src.utils.storage")
     }
 
+    storage_base = tmp_path / "storage"
+
     # Stub ingestion adapter and storage helpers to avoid heavy imports.
-    _install_stub("src.ui.ingest_adapter", ingest_files=lambda *_, **__: {"count": 0})
+    def _empty_ingest_result() -> dict[str, object]:
+        return {
+            "count": 0,
+            "vector_index": None,
+            "pg_index": None,
+            "manifest": None,
+            "exports": [],
+            "duration_ms": 0.0,
+            "metadata": {},
+            "nlp_preview": None,
+            "documents": [],
+        }
+
+    def _save_uploaded_file(*_, **__) -> tuple[Path, str]:
+        dummy = tmp_path / "dummy"
+        dummy.write_text("", encoding="utf-8")
+        return dummy, "0"
+
+    _install_stub(
+        "src.ui.ingest_adapter",
+        ingest_files=lambda *_, **__: _empty_ingest_result(),
+        ingest_inputs=lambda *_, **__: _empty_ingest_result(),
+        save_uploaded_file=_save_uploaded_file,
+    )
     _install_stub(
         "src.utils.storage",
         create_vector_store=lambda *_, **__: object(),
@@ -46,6 +96,36 @@ def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[AppTest]:
         PREFERRED_SPARSE_MODEL="bm25",
         ensure_hybrid_collection=lambda *_, **__: None,
         get_client_config=lambda *_, **__: {},
+    )
+
+    # Stub snapshot rebuild boundary (UI wiring test).
+    import src.persistence.snapshot as snapshot_mod
+    import src.persistence.snapshot_service as snapshot_service
+
+    rebuild_calls: list[Path] = []
+
+    def _rebuild_snapshot(*_a, **_k) -> Path:
+        snapshot_dir = storage_base / "snapshot-rebuild-test"
+        assert snapshot_dir not in rebuild_calls, (
+            "Rebuild should run once per test action."
+        )
+        snapshot_dir.mkdir(parents=True, exist_ok=False)
+        rebuild_calls.append(snapshot_dir)
+        return snapshot_dir
+
+    monkeypatch.setattr(
+        snapshot_service,
+        "rebuild_snapshot",
+        _rebuild_snapshot,
+    )
+    monkeypatch.setattr(
+        snapshot_mod,
+        "load_manifest",
+        lambda *_a, **_k: {
+            "corpus_hash": "c" * 64,
+            "config_hash": "f" * 64,
+            "versions": {},
+        },
     )
 
     # Import the page module and patch runtime helpers.
@@ -81,12 +161,11 @@ def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[AppTest]:
 
     root = Path(__file__).resolve().parents[3]
     page_path = root / "src" / "pages" / "02_documents.py"
-    at = AppTest.from_file(str(page_path))
-    at.default_timeout = 6
+    at = AppTest.from_file(str(page_path), default_timeout=apptest_timeout_sec())
     at.session_state["vector_index"] = _VecIndex()
     at.session_state["graphrag_index"] = _PgIndex()
     try:
-        yield at
+        yield DocumentsAppHarness(app=at, rebuild_calls=rebuild_calls)
     finally:
         for name in ("src.ui.ingest_adapter", "src.utils.storage"):
             sys.modules.pop(name, None)
@@ -96,26 +175,26 @@ def documents_app_test(tmp_path: Path, monkeypatch) -> Iterator[AppTest]:
 
 
 @pytest.mark.integration
-def test_snapshot_rebuild_button(documents_app_test: AppTest) -> None:
+def test_snapshot_rebuild_button(documents_app_test: DocumentsAppHarness) -> None:
     """Click the rebuild button and assert the snapshot directory is created."""
-    app = documents_app_test.run()
+    app = documents_app_test.app.run()
     assert not app.exception
 
     rebuild_buttons = [b for b in app.button if "Rebuild GraphRAG Snapshot" in str(b)]
     assert rebuild_buttons, "Rebuild button not found"
 
+    from src.persistence.snapshot import latest_snapshot_dir
+
+    assert documents_app_test.rebuild_calls == []
+    assert latest_snapshot_dir() is None
+
     result = rebuild_buttons[0].click().run()
+    assert not result.exception
 
-    found = False
-    for _ in range(10):
-        from src.persistence.snapshot import latest_snapshot_dir
-
-        snap = latest_snapshot_dir()
-        if snap is not None and snap.is_dir() and not snap.name.startswith("_tmp-"):
-            found = True
-            break
-        time.sleep(0.05)
-
-    assert found, "final snapshot directory not created"
+    assert len(documents_app_test.rebuild_calls) == 1
+    snap = latest_snapshot_dir()
+    assert snap is not None
+    assert snap.is_dir()
+    assert snap == documents_app_test.rebuild_calls[0]
     success_messages = [msg.value for msg in result.success]
     assert any("Snapshot rebuilt" in value for value in success_messages)

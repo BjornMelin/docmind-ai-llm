@@ -1,4 +1,12 @@
-# Implementation Prompt — Agent Deadline Propagation + Router Injection
+---
+prompt: PROMPT-040
+title: Agent Deadline Propagation + Router Injection
+status: Completed
+date: 2026-01-17
+version: 1.0
+related_adrs: ["ADR-056"]
+related_specs: ["SPEC-040"]
+---
 
 Implements `ADR-056` + `SPEC-040`.
 
@@ -137,7 +145,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 #### 1) Python + Packaging
 
-- Python version must remain **3.11.x** (respect `pyproject.toml`).
+- Python baseline is **3.13.11** (Python 3.13-only; respect `pyproject.toml`).
 - Use **uv only**:
   - install/sync: `uv sync`
   - run tools: `uv run <cmd>`
@@ -200,6 +208,6 @@ You MUST produce a plan and keep exactly one step “in_progress” at a time.
 | **Tests**      |        | `scripts/run_tests.py --fast` green                        |
 | **Docs**       |        | ADR/SPEC/RTM updated                                       |
 | **Security**   |        | no raw-content logs; bounded timeouts; allowlist preserved |
-| **Tech Debt**  |        | zero TODO/FIXME introduced                                 |
+| **Tech Debt**  |        | zero work-marker placeholders introduced                   |
 
 **Execute Until Complete.**

@@ -18,7 +18,7 @@ Centralize runtime configuration in `src/config/settings.py` by:
 
 - removing direct `os.getenv` usage from core modules where settings already exist or should exist
 - adding missing settings groups for JSONL telemetry and image encryption toggles
-- fixing the `ADR-XXX` marker and formalizing the existing hashing secret so it can be used for keyed fingerprints (ADR-047)
+- fixing the ADR placeholder marker and formalizing the existing hashing secret so it can be used for keyed fingerprints (ADR-047)
 
 ## Context
 
@@ -30,7 +30,7 @@ DocMind’s configuration contract is:
 
 Current drift points:
 
-- hashing config still contains an `ADR-XXX` marker and needs a real ADR reference
+- hashing config still contains an ADR placeholder marker and needs a real ADR reference
 - `HashingConfig`’s validator error message references the wrong env var name (it should point to `DOCMIND_HASHING__HMAC_SECRET`)
 - `src/utils/canonicalization.py` implements HMAC-based canonical hashes and is test-covered, but is not yet wired to `DocMindSettings.hashing` (and the secret is required for keyed fingerprints in safe logging; ADR-047)
 
@@ -54,7 +54,7 @@ To hit ≥9.0, we keep the change minimal:
 
 - add only the missing settings groups that correspond to existing env variables
 - do not introduce new config surfaces or new env var names
-- replace the `ADR-XXX` marker with a real ADR reference and wire the existing hashing secret for safe fingerprints (ADR-047)
+- replace the ADR placeholder marker with a real ADR reference and wire the existing hashing secret for safe fingerprints (ADR-047)
 
 Re-scored:
 
@@ -72,7 +72,7 @@ Re-scored:
 
 1. Refactor modules to read from `settings` instead of `os.getenv`.
 
-2. Fix the `ADR-XXX` marker and validator error message for `HashingConfig.hmac_secret` and explicitly use it for keyed fingerprints (ADR-047).
+2. Fix the ADR placeholder marker and validator error message for `HashingConfig.hmac_secret` and explicitly use it for keyed fingerprints (ADR-047).
 
 ### Env contract (canonical vs derived)
 
@@ -96,7 +96,7 @@ To keep configuration ergonomic without adding bespoke wrappers:
 ### Positive Outcomes
 
 - One configuration source of truth.
-- Removes undocumented env behavior and ADR-XXX drift.
+- Removes undocumented env behavior and ADR placeholder drift.
 - Establishes a safe, local secret suitable for keyed fingerprints (correlation without content).
 
 ### Trade-offs

@@ -10,6 +10,12 @@ import pytest
 from src.retrieval import router_factory as rf
 
 
+def _pp(mode, *, use_reranking: bool, **kwargs):  # type: ignore[no-untyped-def]
+    """Shared postprocessor helper for hybrid tests."""
+    del mode, kwargs
+    return [] if use_reranking else None
+
+
 class _VecIndex:
     def as_query_engine(self, **_kwargs):  # type: ignore[no-untyped-def]
         return MagicMock(name="vector_qe")
@@ -38,6 +44,7 @@ def test_hybrid_params_respected(monkeypatch) -> None:  # type: ignore[no-untype
             captured["params"] = params
 
     monkeypatch.setattr("src.retrieval.hybrid.ServerHybridRetriever", _DummyHybrid)
+    monkeypatch.setattr(rf, "_safe_get_postprocessors", lambda: _pp)
 
     vec = _VecIndex()
     pg = _PgIndex()
@@ -83,6 +90,8 @@ def test_hybrid_rerank_flag_propagation(monkeypatch, use_rerank: bool) -> None: 
             return SimpleNamespace(qe=True, kwargs=kwargs)
 
     monkeypatch.setattr("src.retrieval.hybrid.ServerHybridRetriever", _DummyHybrid)
+    monkeypatch.setattr(rf, "_safe_get_postprocessors", lambda: _pp)
+
     monkeypatch.setattr(
         rf,
         "build_retriever_query_engine",

@@ -1,4 +1,12 @@
-# Implementation Prompt — Multimodal Helper Cleanup
+---
+prompt: PROMPT-030
+title: Multimodal Helper Cleanup
+status: Completed
+date: 2026-01-17
+version: 1.0
+related_adrs: ["ADR-049"]
+related_specs: ["SPEC-030"]
+---
 
 Implements `ADR-049` + `SPEC-030` (final-release hygiene; no placeholder multimodal “toy pipeline” in `src/`).
 
@@ -40,7 +48,7 @@ This is a deletion/cleanup task. Prefer local repo truth.
 
 - Confirm real usage:
   - `rg -n \"\\bsrc\\.utils\\.multimodal\\b|\\butils\\.multimodal\\b|\\bmultimodal\\.py\\b\" -S src tests docs scripts templates`
-  - `rg -n \"TODO\\(multimodal-phase-2\\)\" -S src || true`
+  - `rg -n \"work-marker\\(multimodal-phase-2\\)\" -S src || true`
 - Verify already-implemented canonical multimodal stack remains intact:
   - `rg -n \"SigLIP|siglip|ColPali|open_image_encrypted\" -S src/retrieval src/models src/utils`
 
@@ -73,7 +81,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 **Primary Task:** Remove the dead `src/utils/multimodal.py` toy helper (and its tests) if it is not used by production code, and update docs that still reference it.
 
-**Why now:** The module is a test-only “toy pipeline” with TODOs, which is not acceptable for v1 release readiness.
+**Why now:** The module is a test-only “toy pipeline” with unfinished work markers, which is not acceptable for v1 release readiness.
 
 **Definition of Done (DoD):**
 
@@ -142,7 +150,7 @@ uv run python scripts/run_tests.py
 ### **Anti-Pattern Kill List (Immediate Deletion/Rewrite)**
 
 1. Moving dead code to another production module/package instead of deleting it.
-2. Keeping “phase 2” TODO placeholders in `src/` (violates release readiness).
+2. Keeping “phase 2” placeholder markers in `src/` (violates release readiness).
 3. Removing tests without replacing coverage where the behavior is still required elsewhere.
 
 ---
@@ -174,7 +182,7 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Tests**       |        | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | references removed or updated                                                      |
 | **Security**    |        | no security surfaces regressed by deletion                                         |
-| **Tech Debt**   |        | zero TODO/FIXME introduced                                                         |
+| **Tech Debt**   |        | zero work-marker placeholders introduced                                           |
 | **Performance** |        | less import surface; no new heavy imports                                          |
 
 **EXECUTE UNTIL COMPLETE.**

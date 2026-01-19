@@ -54,9 +54,6 @@ def ingest_files(
     Returns:
         Mapping containing ingestion metadata and constructed indices.
     """
-    setup_llamaindex(force_embed=False)
-    embed_model_before = get_settings_embed_model()
-
     if not files:
         return {
             "count": 0,
@@ -70,14 +67,12 @@ def ingest_files(
             "documents": [],
         }
 
-    if embed_model_before is None:
-        _LOG.debug(
-            "Embedding missing before ingestion; deferring vector index decision"
-        )
-
-    configure_observability(settings)
-
     saved_inputs: list[IngestionInput] = []
+    default_encrypt = (
+        encrypt_images
+        if encrypt_images is not None
+        else settings.processing.encrypt_page_images
+    )
     for file_obj in files:
         stored_path, digest = save_uploaded_file(file_obj)
         metadata = {
@@ -90,12 +85,60 @@ def ingest_files(
                 document_id=f"doc-{digest[:16]}",
                 source_path=stored_path,
                 metadata=metadata,
-                encrypt_images=bool(encrypt_images),
+                encrypt_images=default_encrypt,
             )
         )
 
+    return ingest_inputs(
+        saved_inputs,
+        enable_graphrag=enable_graphrag,
+        nlp_service=nlp_service,
+    )
+
+
+def ingest_inputs(
+    inputs: Sequence[IngestionInput],
+    *,
+    enable_graphrag: bool = False,
+    encrypt_images: bool | None = None,
+    nlp_service: SpacyNlpService | None = None,
+) -> dict[str, Any]:
+    """Ingest pre-saved inputs using the canonical pipeline.
+
+    Args:
+        inputs: Normalized ingestion inputs (paths or payload bytes).
+        enable_graphrag: When ``True``, attempts to build a PropertyGraphIndex.
+        encrypt_images: Optional override for page-image encryption configuration.
+        nlp_service: Optional spaCy service used for NLP enrichment.
+
+    Returns:
+        Mapping containing ingestion metadata and constructed indices.
+    """
+    if not inputs:
+        return {
+            "count": 0,
+            "vector_index": None,
+            "pg_index": None,
+            "manifest": None,
+            "exports": [],
+            "duration_ms": 0.0,
+            "metadata": {},
+            "nlp_preview": None,
+            "documents": [],
+        }
+
+    setup_llamaindex(force_embed=False)
+    embed_model_before = get_settings_embed_model()
+
+    if embed_model_before is None:
+        _LOG.debug(
+            "Embedding missing before ingestion; deferring vector index decision"
+        )
+
+    configure_observability(settings)
+
     cfg = _build_ingestion_config(encrypt_images)
-    result = ingest_documents_sync(cfg, saved_inputs, nlp_service=nlp_service)
+    result = ingest_documents_sync(cfg, inputs, nlp_service=nlp_service)
 
     embed_model_after = get_settings_embed_model()
     if embed_model_after is None:
@@ -125,7 +168,7 @@ def ingest_files(
     nlp_preview = _build_nlp_preview(result.nodes) if nlp_enabled else None
 
     return {
-        "count": len(saved_inputs),
+        "count": len(inputs),
         "vector_index": vector_index,
         "pg_index": pg_index,
         "manifest": result.manifest.model_dump(),

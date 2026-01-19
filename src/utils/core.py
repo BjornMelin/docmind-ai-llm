@@ -28,6 +28,7 @@ from qdrant_client.http.exceptions import (
 
 from src.config import settings
 from src.config.settings import DocMindSettings
+from src.utils.log_safety import build_pii_log_entry
 
 
 def is_cuda_available() -> bool:
@@ -132,11 +133,26 @@ def detect_hardware() -> dict[str, Any]:
             hardware_info["vram_total_gb"] = vram
 
     except RuntimeError as e:
-        logger.warning("CUDA error during hardware detection: %s", e)
+        redaction = build_pii_log_entry(str(e), key_id="core.detect_hardware.cuda")
+        logger.warning(
+            "CUDA error during hardware detection (error_type={}, error={})",
+            type(e).__name__,
+            redaction.redacted,
+        )
     except (OSError, AttributeError) as e:
-        logger.warning("System error during hardware detection: %s", e)
+        redaction = build_pii_log_entry(str(e), key_id="core.detect_hardware.system")
+        logger.warning(
+            "System error during hardware detection (error_type={}, error={})",
+            type(e).__name__,
+            redaction.redacted,
+        )
     except (ImportError, ModuleNotFoundError) as e:
-        logger.error("Import error during hardware detection: %s", e)
+        redaction = build_pii_log_entry(str(e), key_id="core.detect_hardware.import")
+        logger.error(
+            "Import error during hardware detection (error_type={}, error={})",
+            type(e).__name__,
+            redaction.redacted,
+        )
 
     return hardware_info
 
@@ -254,7 +270,7 @@ def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, A
 
 
 @asynccontextmanager
-async def managed_gpu_operation() -> AsyncGenerator[None, None]:
+async def managed_gpu_operation() -> AsyncGenerator[None]:
     """Context manager for GPU operations with cleanup."""
     try:
         yield
@@ -265,18 +281,34 @@ async def managed_gpu_operation() -> AsyncGenerator[None, None]:
                 try:
                     cuda_mod.synchronize()
                 except RuntimeError as exc:
-                    logger.debug("GPU synchronize failed during cleanup: %s", exc)
+                    redaction = build_pii_log_entry(
+                        str(exc), key_id="core.gpu_cleanup.synchronize"
+                    )
+                    logger.debug(
+                        "GPU synchronize failed during cleanup "
+                        "(error_type={}, error={})",
+                        type(exc).__name__,
+                        redaction.redacted,
+                    )
                 try:
                     cuda_mod.empty_cache()
                 except RuntimeError as exc:
-                    logger.debug("GPU cache clear failed during cleanup: %s", exc)
+                    redaction = build_pii_log_entry(
+                        str(exc), key_id="core.gpu_cleanup.empty_cache"
+                    )
+                    logger.debug(
+                        "GPU cache clear failed during cleanup "
+                        "(error_type={}, error={})",
+                        type(exc).__name__,
+                        redaction.redacted,
+                    )
         gc.collect()
 
 
 @asynccontextmanager
 async def managed_async_qdrant_client(
     url: str,
-) -> AsyncGenerator[object, None]:
+) -> AsyncGenerator[object]:
     """Context manager for AsyncQdrantClient with proper cleanup.
 
     Args:
@@ -313,6 +345,6 @@ def async_timer(func: Callable) -> Callable:
         finally:
             end_time = time.perf_counter()
             duration = end_time - start_time
-            logger.info("%s completed in %.2fs", func.__name__, duration)
+            logger.info("{} completed in {:.2f}s", func.__name__, duration)
 
     return wrapper

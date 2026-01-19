@@ -1,4 +1,12 @@
-# Implementation Prompt — Documents Snapshot Service Boundary
+---
+prompt: PROMPT-032
+title: Documents Snapshot Service Boundary
+status: Completed
+date: 2026-01-17
+version: 1.0
+related_adrs: ["ADR-051"]
+related_specs: ["SPEC-032"]
+---
 
 Implements `ADR-051` + `SPEC-032`.
 
@@ -72,7 +80,7 @@ Skill references to consult (as needed):
 
 **Long-running UI validation (use native capabilities):**
 
-- If you run `streamlit run src/app.py`, keep it running and use `functions.write_stdin` to fetch logs.
+- If you run `uv run streamlit run app.py`, keep it running and use `functions.write_stdin` to fetch logs.
 - Attach screenshots of the Documents page state changes with `functions.view_image` if verification is visual.
 - Optional E2E smoke (skill script): `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/scripts/mcp/run_playwright_mcp_e2e.py`
 
@@ -199,7 +207,7 @@ All items below must be completed (Status = ✓) before the implementation is re
 | **Tests**       |        | Must pass | service + UI wiring tests; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py`                        |
 | **Docs**        |        | Must pass | ADR/SPEC/RTM updated; verify `scripts/performance_monitor.py` details in `scripts/README.md`                                         |
 | **Security**    |        | Must pass | snapshot writes remain atomic; no new write surfaces                                                                                 |
-| **Tech Debt**   |        | Must pass | zero TODO/FIXME introduced                                                                                                           |
+| **Tech Debt**   |        | Must pass | zero work-marker placeholders introduced                                                                                             |
 | **Performance** |        | Advisory  | service layer keeps Streamlit pages import-light; target ≤10% regression vs. baseline (measure via `scripts/performance_monitor.py`) |
 
 **EXECUTE UNTIL COMPLETE.**

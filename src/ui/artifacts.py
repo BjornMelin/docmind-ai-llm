@@ -6,6 +6,7 @@ import streamlit as st
 from loguru import logger
 
 from src.persistence.artifacts import ArtifactRef, ArtifactStore
+from src.utils.log_safety import build_pii_log_entry
 
 
 def render_artifact_image(
@@ -45,7 +46,13 @@ def render_artifact_image(
             str(img_path), caption=caption, use_container_width=use_container_width
         )
     except Exception as exc:
-        logger.exception("Failed to render image artifact")
+        redaction = build_pii_log_entry(str(exc), key_id="ui.artifacts.render_image")
+        logger.error(
+            "Failed to render image artifact (artifact_id={}, error_type={}, error={})",
+            ref.sha256,
+            type(exc).__name__,
+            redaction.redacted,
+        )
         st.caption(
             missing_caption or f"Image artifact unavailable ({type(exc).__name__})."
         )

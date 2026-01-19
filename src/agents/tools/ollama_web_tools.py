@@ -18,6 +18,7 @@ from ollama import Message, RequestError, ResponseError
 
 from src.config.ollama_client import get_ollama_web_tools, ollama_chat
 from src.config.settings import DocMindSettings, settings
+from src.utils.log_safety import build_pii_log_entry
 
 _MAX_TOOL_RESULT_CHARS = 8_000
 _MAX_ERROR_CHARS = 500
@@ -234,7 +235,16 @@ def _error_payload(*, msg: str, exc: Exception | None = None) -> str:
     if reason:
         payload["reason"] = reason
     if detail:
-        payload["detail"] = detail[:_MAX_ERROR_CHARS]
+        try:
+            redaction = build_pii_log_entry(detail, key_id=f"ollama_web_tools:{msg}")
+            payload["detail"] = redaction.redacted
+        except Exception as exc:  # pragma: no cover - defensive against settings issues
+            logger.debug(
+                "build_pii_log_entry failed (error_type={} error={})",
+                type(exc).__name__,
+                str(exc),
+            )
+            payload["detail"] = ""
     return _json_with_limit(payload, max_chars=_MAX_TOOL_RESULT_CHARS)
 
 
@@ -272,10 +282,15 @@ def _ollama_web_search_impl(
         OSError,
         RuntimeError,
     ) as exc:
-        logger.debug("ollama_web_search failed: %s", exc.__class__.__name__)
+        logger.debug("ollama_web_search failed (error_type={})", type(exc).__name__)
         return _error_payload(msg="Ollama web_search failed", exc=exc)
     except Exception as exc:  # pragma: no cover - defensive against SDK/runtime errors
-        logger.exception("ollama_web_search crashed: %s", exc.__class__.__name__)
+        redaction = build_pii_log_entry(str(exc), key_id="ollama_web_search.crashed")
+        logger.error(
+            "ollama_web_search crashed (error_type={}, error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
         return _error_payload(msg="Ollama web_search failed", exc=exc)
 
 
@@ -316,10 +331,15 @@ def _ollama_web_fetch_impl(*, url: str, cfg: DocMindSettings) -> str:
         OSError,
         RuntimeError,
     ) as exc:
-        logger.debug("ollama_web_fetch failed: %s", exc.__class__.__name__)
+        logger.debug("ollama_web_fetch failed (error_type={})", type(exc).__name__)
         return _error_payload(msg="Ollama web_fetch failed", exc=exc)
     except Exception as exc:  # pragma: no cover - defensive against SDK/runtime errors
-        logger.exception("ollama_web_fetch crashed: %s", exc.__class__.__name__)
+        redaction = build_pii_log_entry(str(exc), key_id="ollama_web_fetch.crashed")
+        logger.error(
+            "ollama_web_fetch crashed (error_type={}, error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
         return _error_payload(msg="Ollama web_fetch failed", exc=exc)
 
 
@@ -393,8 +413,13 @@ def get_langchain_web_tools(
     try:
         _ = get_ollama_web_tools(cfg)
     except Exception as e:
+        redaction = build_pii_log_entry(
+            str(e), key_id="ollama_web_tools.get_langchain_web_tools"
+        )
         logger.debug(
-            "failed to get ollama web tools for cfg=%s: %s", cfg, e, exc_info=True
+            "Failed to initialize Ollama web tools (error_type={}, error={})",
+            type(e).__name__,
+            redaction.redacted,
         )
         return []
     return _make_langchain_web_tools(cfg)
@@ -482,7 +507,14 @@ def run_web_search_agent(
                 try:
                     parsed_args = json.loads(raw_args)
                 except json.JSONDecodeError as exc:
-                    logger.debug("Failed to parse tool arguments: %s", exc)
+                    redaction = build_pii_log_entry(
+                        str(exc), key_id="ollama_web_tools.tool_args"
+                    )
+                    logger.debug(
+                        "Failed to parse tool arguments (error_type={}, error={})",
+                        type(exc).__name__,
+                        redaction.redacted,
+                    )
                     messages.append(
                         {
                             "role": "tool",
@@ -515,8 +547,13 @@ def run_web_search_agent(
             try:
                 result = fn(**args)
             except Exception as exc:  # pragma: no cover - defensive example loop
+                redaction = build_pii_log_entry(
+                    str(exc), key_id="ollama_web_tools.tool_call"
+                )
                 logger.debug(
-                    "Ollama tool call failed: %s", exc.__class__.__name__, exc_info=True
+                    "Ollama tool call failed (error_type={}, error={})",
+                    type(exc).__name__,
+                    redaction.redacted,
                 )
                 messages.append(
                     {
@@ -539,7 +576,7 @@ def run_web_search_agent(
                 }
             )
 
-    logger.warning("Ollama web search agent hit max_steps=%s", max_steps)
+    logger.warning("Ollama web search agent hit max_steps={}", max_steps)
     return ""
 
 

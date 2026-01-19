@@ -268,7 +268,7 @@ def configure_hardware_mocks(mock_detect: MagicMock, mock_validate: MagicMock) -
 
 
 @contextmanager
-def patch_async_workflow_dependencies() -> Generator[tuple[AsyncMock, Any], None, None]:
+def patch_async_workflow_dependencies() -> Generator[tuple[AsyncMock, Any]]:
     """Patch async workflow dependencies used across E2E tests."""
     with (
         patch(
@@ -285,7 +285,7 @@ def patch_async_workflow_dependencies() -> Generator[tuple[AsyncMock, Any], None
 
 
 @contextmanager
-def patch_document_loader() -> Generator[AsyncMock, None, None]:
+def patch_document_loader() -> Generator[AsyncMock]:
     """Patch the async document loader for E2E tests."""
     with patch(
         "src.processing.ingestion_api.load_documents",
@@ -296,7 +296,7 @@ def patch_document_loader() -> Generator[AsyncMock, None, None]:
 
 
 @contextmanager
-def patch_hardware_validation() -> Generator[tuple[MagicMock, MagicMock], None, None]:
+def patch_hardware_validation() -> Generator[tuple[MagicMock, MagicMock]]:
     """Patch hardware detection and startup validation."""
     with (
         patch("src.utils.core.detect_hardware", create=True) as mock_detect,

@@ -13,8 +13,10 @@ import duckdb
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from loguru import logger
 
 from src.config.settings import settings
+from src.utils.log_safety import build_pii_log_entry
 from src.utils.telemetry import (
     get_analytics_duckdb_path,
     parse_telemetry_jsonl_counts,
@@ -24,6 +26,15 @@ from src.utils.telemetry import (
 def _load_query_metrics(
     db_path: Path,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Load and aggregate query performance metrics from DuckDB.
+
+    Args:
+        db_path: Path to the DuckDB database file.
+
+    Returns:
+        tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]: DataFrames containing
+            strategy counts, daily average latency, and success/failure counts.
+    """
     con = duckdb.connect(str(db_path))
     try:
         df_strategy = con.execute(
@@ -74,7 +85,14 @@ def main() -> None:  # pragma: no cover - Streamlit page
     try:
         df_strategy, df_latency, df_success = _load_query_metrics(db_path)
     except Exception as exc:  # pragma: no cover - UX best effort
-        st.error(f"Failed to load analytics DB: {exc}")
+        redaction = build_pii_log_entry(str(exc), key_id="analytics.load_db")
+        logger.warning(
+            "Failed to load analytics DB (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
+        st.error(f"Failed to load analytics DB ({type(exc).__name__}).")
+        st.caption(f"Error reference: {redaction.redacted}")
         st.stop()
 
     st.subheader("Query volumes by strategy")

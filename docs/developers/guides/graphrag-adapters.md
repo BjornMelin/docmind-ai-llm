@@ -19,9 +19,9 @@ or adapters are unavailable.
 
 | Installation state | Available features | Behavior notes |
 | :--- | :--- | :--- |
-| **Baseline** (`uv sync` / `pip install docmind_ai_llm`) | Vector + hybrid retrieval | GraphRAG paths may be requested/configured, but the router will remain vector-only when the GraphRAG adapter cannot be registered (missing graph-store deps, health check failures). A single guidance warning is emitted when GraphRAG is requested but unavailable. |
-| **GraphRAG extra** (`uv sync --extra graph` / `pip install docmind_ai_llm[graph]`) | Property-graph retrieval (Kùzu-backed graph store) | The default GraphRAG adapter can register, enabling the `knowledge_graph` tool when a property graph index is present and healthy. |
-| **Multimodal extra** (`uv sync --extra multimodal` / `pip install docmind_ai_llm[multimodal]`) | ColPali reranker + vision deps | Optional lane for image-heavy workloads; behavior downgrades when absent. |
+| **Baseline** (`uv sync`) | Vector + hybrid retrieval | GraphRAG paths may be requested/configured, but the router will remain vector-only when the GraphRAG adapter cannot be registered (missing graph-store deps, health check failures). A single guidance warning is emitted when GraphRAG is requested but unavailable. |
+| **GraphRAG extra** (`uv sync --extra graph`) | Property-graph retrieval (Kùzu-backed graph store) | The default GraphRAG adapter can register, enabling the `knowledge_graph` tool when a property graph index is present and healthy. |
+| **Multimodal extra** (`uv sync --extra multimodal`) | ColPali reranker + vision deps | Optional lane for image-heavy workloads; behavior downgrades when absent. |
 
 ## Runtime behavior and signals
 

@@ -1,4 +1,12 @@
-# Implementation Prompt — Local Backup & Retention (Snapshots, Cache, Analytics, Qdrant)
+---
+prompt: PROMPT-037
+title: Local Backup & Retention (Snapshots, Cache, Analytics, Qdrant)
+status: Completed
+date: 2026-01-17
+version: 1.0
+related_adrs: ["ADR-033"]
+related_specs: ["SPEC-037"]
+---
 
 Implements `ADR-033` + `SPEC-037`.
 
@@ -103,12 +111,12 @@ You must keep changes minimal, library-first, and maintainable.
 - Docs updated and RTM includes `FR-027` mapping.
 
 **ADR-051 Integration Status:**
-ADR-051 (Documents Snapshot Service Boundary) is currently **Proposed**. Until it is accepted and `src/persistence/snapshot_service.py` exists, implement Qdrant snapshots using `qdrant_client` directly. Add a `# FIXME: refactor to snapshot_service.create_snapshot()` comment in the backup implementation (e.g., `scripts/backup.py`) where Qdrant snapshots are created to signal the future refactor.
+ADR-051 (Documents Snapshot Service Boundary) is currently **Proposed**. Until it is accepted and `src/persistence/snapshot_service.py` exists, implement Qdrant snapshots using `qdrant_client` directly. Add a `# refactor-marker: migrate to snapshot_service.create_snapshot()` comment in the backup implementation (e.g., `scripts/backup.py`) where Qdrant snapshots are created to signal the future refactor.
 
 **In-scope modules/files (initial):**
 
-- `scripts/backup.py` (new)
-- `src/utils/security.py` (reuse path validation helpers; no traversal/symlink escapes)
+- `scripts/backup.py`
+- `src/persistence/backup_service.py`
 - `src/config/settings.py` (only if new knobs required)
 - `tests/unit/scripts/test_backup_rotation.py` (new)
 - `tests/unit/scripts/test_backup_manifest.py` (new)
@@ -127,7 +135,7 @@ ADR-051 (Documents Snapshot Service Boundary) is currently **Proposed**. Until i
 
 #### 1) Python + Packaging
 
-- Python version must remain **3.11.x** (respect `pyproject.toml`).
+- Python baseline is **3.13.11** (Python 3.13-only; respect `pyproject.toml`).
 - Use **uv only**:
   - install/sync: `uv sync`
   - run tools: `uv run <cmd>`

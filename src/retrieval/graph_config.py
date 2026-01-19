@@ -119,8 +119,16 @@ def get_export_seed_ids(
                     return out
             if out:
                 return out
-    except (AttributeError, RuntimeError, TypeError, ValueError):  # pragma: no cover
-        logger.debug("Graph retriever failed to provide export seeds", exc_info=True)
+    except (
+        AttributeError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ) as exc:  # pragma: no cover
+        logger.debug(
+            "Graph retriever failed to provide export seeds (error_type={})",
+            type(exc).__name__,
+        )
 
     try:
         if vector_index is not None and hasattr(vector_index, "as_retriever"):
@@ -138,8 +146,16 @@ def get_export_seed_ids(
                     return out
             if out:
                 return out
-    except (AttributeError, RuntimeError, TypeError, ValueError):  # pragma: no cover
-        logger.debug("Vector retriever failed to provide export seeds", exc_info=True)
+    except (
+        AttributeError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ) as exc:  # pragma: no cover
+        logger.debug(
+            "Vector retriever failed to provide export seeds (error_type={})",
+            type(exc).__name__,
+        )
 
     return [str(i) for i in range(max(0, int(cap)))]
 
@@ -201,8 +217,16 @@ def _build_rel_map_rows(
     try:
         nodes = list(store.get(ids=list(seed_node_ids)))
         rel_paths = list(store.get_rel_map(nodes, depth=depth))
-    except (AttributeError, RuntimeError, TypeError, ValueError):  # pragma: no cover
-        logger.debug("get_rel_map(nodes, depth=...) failed", exc_info=True)
+    except (
+        AttributeError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ) as exc:  # pragma: no cover
+        logger.debug(
+            "get_rel_map(nodes, depth=...) failed (error_type={})",
+            type(exc).__name__,
+        )
         return []
 
     rows: list[dict[str, Any]] = []
@@ -311,8 +335,8 @@ def export_graph_parquet(
     try:
         import pyarrow as pa
         import pyarrow.parquet as pq
-    except ImportError as exc:  # pragma: no cover - optional dependency
-        logger.debug("PyArrow not installed, skipping Parquet export: {}", exc)
+    except ImportError:  # pragma: no cover - optional dependency
+        logger.debug("PyArrow not installed; skipping Parquet export")
         return
 
     rows = _build_rel_map_rows(store=store, seed_node_ids=node_ids, depth=int(depth))

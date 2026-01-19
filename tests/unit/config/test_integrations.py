@@ -115,7 +115,9 @@ def test_configure_embeddings_handles_failure(monkeypatch, fake_settings):
             loguru_logger.remove(sink_id)
 
         assert fake_settings.embed_model is None
-        assert any("embed error" in m for m in messages)
+        assert any("Could not configure embeddings" in m for m in messages)
+        assert any("[redacted:" in m for m in messages)
+        assert not any("embed error" in m for m in messages)
 
 
 @pytest.mark.unit

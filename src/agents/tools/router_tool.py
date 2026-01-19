@@ -13,6 +13,7 @@ from loguru import logger
 from opentelemetry import trace
 
 from src.config.settings import settings
+from src.utils.log_safety import build_pii_log_entry
 from src.utils.telemetry import log_jsonl
 
 _ROUTER_TRACER = trace.get_tracer("docmind.tools.router")
@@ -136,10 +137,20 @@ def router_tool(
             try:
                 resp = router_engine.query(query)
             except Exception as exc:
+                redaction = build_pii_log_entry(str(exc), key_id="router_tool.query")
                 span.set_attribute("router.success", False)
-                span.set_attribute("router.error", str(exc))
-                logger.error("router_tool query failed: {}", exc)
-                return json.dumps({"error": str(exc)})
+                span.set_attribute("router.error_type", type(exc).__name__)
+                span.set_attribute(
+                    "router.error_fingerprint", redaction.fingerprint[:12]
+                )
+                logger.error(
+                    "router_tool query failed (error_type={}, error={})",
+                    type(exc).__name__,
+                    redaction.redacted,
+                )
+                return json.dumps(
+                    {"error": redaction.redacted, "error_type": type(exc).__name__}
+                )
 
             response_text = _extract_response_text(resp)
             selected_strategy = _extract_selected_strategy(resp)
@@ -158,7 +169,15 @@ def router_tool(
             return json.dumps(payload)
 
         except Exception as exc:
+            redaction = build_pii_log_entry(str(exc), key_id="router_tool.unhandled")
             span.set_attribute("router.success", False)
-            span.set_attribute("router.error", str(exc))
-            logger.error("router_tool failed: {}", exc)
-            return json.dumps({"error": str(exc)})
+            span.set_attribute("router.error_type", type(exc).__name__)
+            span.set_attribute("router.error_fingerprint", redaction.fingerprint[:12])
+            logger.error(
+                "router_tool failed (error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
+            return json.dumps(
+                {"error": redaction.redacted, "error_type": type(exc).__name__}
+            )

@@ -1,18 +1,12 @@
 ---
 prompt: PROMPT-026
 title: Ingestion API Cleanup
+status: Completed
 date: 2026-01-15
 version: 2.0
 related_adrs: ["ADR-045"]
 related_specs: ["SPEC-026"]
 ---
-<!--
-Implemented-by: DocMind Agent
-Date: 2026-01-15
-Version: 2.0
--->
-
-## Implementation Prompt — Unified Ingestion API (Refactor)
 
 Implements `ADR-045` + `SPEC-026`.
 
@@ -124,7 +118,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 #### 1) Python + Packaging
 
-- Python version must remain **3.11.x**.
+- Python baseline is **3.13.11** (Python 3.13-only; respect `pyproject.toml`).
 - Use **uv only**:
   - `uv sync`
   - `uv run <cmd>`

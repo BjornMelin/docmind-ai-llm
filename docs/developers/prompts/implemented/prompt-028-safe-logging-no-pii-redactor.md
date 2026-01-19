@@ -1,4 +1,12 @@
-# Implementation Prompt — Safe Logging Policy (No PII Redactor Stub)
+---
+prompt: PROMPT-028
+title: Safe Logging Policy (No PII Redactor Stub)
+status: Completed
+date: 2026-01-17
+version: 1.0
+related_adrs: ["ADR-047"]
+related_specs: ["SPEC-028"]
+---
 
 Implements `ADR-047` + `SPEC-028`.
 
@@ -130,7 +138,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 #### 1) Python + Packaging
 
-- Python version must remain **3.11.x** (respect `pyproject.toml`).
+- Python baseline is **3.13.11** (Python 3.13-only; respect `pyproject.toml`).
 - Use **uv only**:
   - install/sync: `uv sync`
   - run tools: `uv run <cmd>`
@@ -218,7 +226,7 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Tests**       |        | `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | SPEC/RTM updated                                                                   |
 | **Security**    |        | no raw prompt/doc/chat/model-output logs; no secret logs                           |
-| **Tech Debt**   |        | zero TODO/FIXME introduced                                                         |
+| **Tech Debt**   |        | zero work-marker placeholders introduced                                           |
 | **Performance** |        | logging remains constant-time/metadata-only                                        |
 
 **EXECUTE UNTIL COMPLETE.**

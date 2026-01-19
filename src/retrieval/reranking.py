@@ -27,6 +27,7 @@ from src.config import settings
 from src.persistence.artifacts import ArtifactRef, ArtifactStore
 from src.retrieval.rrf import rrf_merge
 from src.utils.core import has_cuda_vram, resolve_device
+from src.utils.log_safety import build_pii_log_entry
 from src.utils.telemetry import log_jsonl
 
 
@@ -109,9 +110,14 @@ def _run_with_timeout(fn: Callable[[], Any], timeout_ms: int) -> Any | None:
                 RuntimeError,
                 ValueError,
             ) as exc:  # pragma: no cover - pickling/env edge cases
+                redaction = build_pii_log_entry(
+                    str(exc), key_id="reranking.executor.process"
+                )
                 logger.warning(
-                    "Process executor unsupported; falling back to thread: {}",
-                    exc,
+                    "Process executor unsupported; falling back to thread "
+                    "(error_type={}, error={})",
+                    type(exc).__name__,
+                    redaction.redacted,
                 )
                 executor = ThreadPoolExecutor(max_workers=1)
                 executors.append(executor)
@@ -125,8 +131,12 @@ def _run_with_timeout(fn: Callable[[], Any], timeout_ms: int) -> Any | None:
         RuntimeError,
         ValueError,
     ) as exc:  # defensive: ensure we have an executor
+        redaction = build_pii_log_entry(str(exc), key_id="reranking.executor.init")
         logger.warning(
-            "Executor initialization failed: {} — using thread fallback", exc
+            "Executor initialization failed; using thread fallback "
+            "(error_type={}, error={})",
+            type(exc).__name__,
+            redaction.redacted,
         )
         executor = ThreadPoolExecutor(max_workers=1)
         executors.append(executor)
@@ -331,7 +341,12 @@ def _siglip_rescore(
             prune_m = SIGLIP_PRUNE_M
         return nodes_sorted[: max(1, prune_m)]
     except (RuntimeError, ValueError, OSError, TypeError) as exc:
-        logger.warning("SigLIP rerank error: {} — fail-open", exc)
+        redaction = build_pii_log_entry(str(exc), key_id="reranking.siglip.fail_open")
+        logger.warning(
+            "SigLIP rerank error; fail-open (error_type={}, error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
         return nodes
     finally:
         # Always cleanup images
@@ -380,9 +395,20 @@ def build_text_reranker(top_n: int | str | None = None) -> SentenceTransformerRe
     try:
         return _build_text_reranker_cached(k)
     except OSError as exc:  # offline HF hub in CI or local
-        logger.warning("Text reranker offline; using NoOpTextReranker: {}", exc)
+        redaction = build_pii_log_entry(str(exc), key_id="reranking.text.offline")
+        logger.warning(
+            "Text reranker offline; using NoOpTextReranker (error_type={}, error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
     except (RuntimeError, ValueError) as exc:  # pragma: no cover - defensive
-        logger.warning("Text reranker init failed; using NoOpTextReranker: {}", exc)
+        redaction = build_pii_log_entry(str(exc), key_id="reranking.text.init")
+        logger.warning(
+            "Text reranker init failed; using NoOpTextReranker "
+            "(error_type={}, error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
 
     class NoOpTextReranker:  # minimal LlamaIndex-like interface
         """Fallback reranker that returns the first ``top_n`` nodes."""
@@ -504,7 +530,14 @@ class MultimodalReranker(BaseNodePostprocessor):
                 }
             )
         except (RuntimeError, ValueError, OSError, TypeError, ImportError) as exc:
-            logger.warning("SigLIP rerank error: {} — continue without", exc)
+            redaction = build_pii_log_entry(
+                str(exc), key_id="reranking.siglip.continue"
+            )
+            logger.warning(
+                "SigLIP rerank error; continuing without (error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
 
         try:
             if self._should_enable_colpali(visual_nodes, lists):
@@ -529,7 +562,14 @@ class MultimodalReranker(BaseNodePostprocessor):
                 else:
                     lists.append(cr)
         except (RuntimeError, ValueError) as exc:
-            logger.warning("ColPali rerank error: {} — continue without", exc)
+            redaction = build_pii_log_entry(
+                str(exc), key_id="reranking.colpali.continue"
+            )
+            logger.warning(
+                "ColPali rerank error; continuing without (error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
 
         if _now_ms() - v_start > (_siglip_timeout_ms() + _colpali_timeout_ms()):
             logger.warning("Visual rerank timeout; fail-open")
@@ -627,7 +667,13 @@ class MultimodalReranker(BaseNodePostprocessor):
                 }
             )
         except (RuntimeError, ValueError, OSError, TypeError) as exc:
-            logger.warning("Final rerank metrics error: {} — skipping telemetry", exc)
+            redaction = build_pii_log_entry(str(exc), key_id="reranking.metrics")
+            logger.warning(
+                "Final rerank metrics error; skipping telemetry "
+                "(error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
 
     def _postprocess_nodes(
         self, nodes: list[NodeWithScore], query_bundle: QueryBundle | None = None
@@ -654,7 +700,12 @@ class MultimodalReranker(BaseNodePostprocessor):
             if tr:
                 lists.append(tr)
         except (RuntimeError, ValueError, OSError, TypeError) as exc:
-            logger.warning("Text rerank error: {} — fail-open", exc)
+            redaction = build_pii_log_entry(str(exc), key_id="reranking.text.fail_open")
+            logger.warning(
+                "Text rerank error; fail-open (error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
 
         lists, timed_out = self._run_visual_stage(visual_nodes, query_bundle, lists)
         if timed_out:

@@ -217,7 +217,10 @@ class TestMultiAgentCoordinator:
             def get_vllm_env_vars(self):  # type: ignore[override]
                 return {"test_var": "test_value"}
 
-        with patch("src.agents.coordinator.settings", new=_OverrideSettings()):
+        settings_globals = MultiAgentCoordinator.__init__.__globals__
+        with patch.dict(
+            settings_globals, {"settings": _OverrideSettings()}, clear=False
+        ):
             coordinator = MultiAgentCoordinator()
 
             assert "model" in coordinator.vllm_config
@@ -243,23 +246,39 @@ class TestMultiAgentCoordinator:
         mock_llm = _make_llm_mock()
         mock_settings.llm = mock_llm
 
-        # Mock DSPy availability
+        mock_dspy = Mock()
+        mock_agent_factory = Mock(return_value=Mock())
+        mock_supervisor = Mock()
+        mock_forward_tool = Mock(return_value=Mock())
+
+        # Configure supervisor to return a mock graph with compile()
+        mock_graph = Mock()
+        mock_compiled = Mock()
+        mock_graph.compile.return_value = mock_compiled
+        mock_supervisor.return_value = mock_graph
+
+        ensure_globals = MultiAgentCoordinator._ensure_setup.__globals__
+        graph_globals = MultiAgentCoordinator._setup_agent_graph.__globals__
+
         with (
-            patch("src.agents.coordinator.is_dspy_available", return_value=True),
-            patch("src.agents.coordinator.DSPyLlamaIndexRetriever") as mock_dspy,
-            patch("src.agents.coordinator.create_agent") as mock_agent_factory,
-            patch("src.agents.coordinator.create_supervisor") as mock_supervisor,
-            patch(
-                "src.agents.coordinator.create_forward_message_tool",
-                return_value=Mock(),
+            patch.dict(
+                ensure_globals,
+                {
+                    "is_dspy_available": lambda: True,
+                    "DSPyLlamaIndexRetriever": mock_dspy,
+                },
+                clear=False,
+            ),
+            patch.dict(
+                graph_globals,
+                {
+                    "create_agent": mock_agent_factory,
+                    "build_multi_agent_supervisor_graph": mock_supervisor,
+                    "create_forward_message_tool": mock_forward_tool,
+                },
+                clear=False,
             ),
         ):
-            # Configure supervisor to return a mock graph with compile()
-            mock_graph = Mock()
-            mock_compiled = Mock()
-            mock_graph.compile.return_value = mock_compiled
-            mock_supervisor.return_value = mock_graph
-
             coordinator = MultiAgentCoordinator()
             result = coordinator._ensure_setup()
 
@@ -303,84 +322,101 @@ class TestMultiAgentCoordinator:
 
         assert result is True
 
-    @patch("src.agents.coordinator.create_agent")
-    @patch("src.agents.coordinator.create_supervisor")
-    @patch("src.agents.coordinator.create_forward_message_tool")
-    def test_setup_agent_graph_success(
-        self, mock_forward_tool, mock_supervisor, mock_agent_factory, mock_llm
-    ):
+    def test_setup_agent_graph_success(self, mock_llm):
         """Test successful agent graph setup."""
         # Setup mocks
-        mock_agent = Mock()
-        mock_agent_factory.return_value = mock_agent
-
+        mock_agent_factory = Mock(return_value=Mock())
         mock_graph = Mock()
-        mock_supervisor.return_value = mock_graph
+        mock_supervisor = Mock(return_value=mock_graph)
         mock_compiled_graph = Mock()
         mock_graph.compile.return_value = mock_compiled_graph
+        mock_forward_tool = Mock(return_value=Mock())
 
-        mock_forward_tool.return_value = Mock()
+        graph_globals = MultiAgentCoordinator._setup_agent_graph.__globals__
 
-        coordinator = MultiAgentCoordinator()
-        coordinator.llm = mock_llm
+        with patch.dict(
+            graph_globals,
+            {
+                "create_agent": mock_agent_factory,
+                "build_multi_agent_supervisor_graph": mock_supervisor,
+                "create_forward_message_tool": mock_forward_tool,
+            },
+            clear=False,
+        ):
+            coordinator = MultiAgentCoordinator()
+            coordinator.llm = mock_llm
 
-        coordinator._setup_agent_graph()
+            coordinator._setup_agent_graph()
 
-        # Verify all agents were created
-        assert mock_agent_factory.call_count == 5  # 5 agents
+            # Verify all agents were created
+            assert mock_agent_factory.call_count == 5  # 5 agents
 
-        # Verify supervisor was created
-        mock_supervisor.assert_called_once()
+            # Verify supervisor was created
+            mock_supervisor.assert_called_once()
 
-        # Verify graph was compiled
-        mock_graph.compile.assert_called_once()
-        assert coordinator.compiled_graph == mock_compiled_graph
+            # Verify graph was compiled
+            mock_graph.compile.assert_called_once()
+            assert coordinator.compiled_graph == mock_compiled_graph
 
-        # Verify agents dictionary was populated
-        assert len(coordinator.agents) == 5
-        expected_agents = [
-            "router_agent",
-            "planner_agent",
-            "retrieval_agent",
-            "synthesis_agent",
-            "validation_agent",
-        ]
-        for agent_name in expected_agents:
-            assert agent_name in coordinator.agents
+            # Verify agents dictionary was populated
+            assert len(coordinator.agents) == 5
+            expected_agents = [
+                "router_agent",
+                "planner_agent",
+                "retrieval_agent",
+                "synthesis_agent",
+                "validation_agent",
+            ]
+            for agent_name in expected_agents:
+                assert agent_name in coordinator.agents
 
-    @patch("src.agents.coordinator.create_supervisor")
-    @patch("src.agents.coordinator.create_forward_message_tool")
-    @patch("src.agents.coordinator.create_agent")
-    def test_supervisor_parameters_adr_011(
-        self, mock_agent_factory, mock_forward_tool, mock_create_supervisor, mock_llm
-    ):
+    def test_supervisor_parameters_adr_011(self, mock_llm):
         """Supervisor is created with modern ADR-011 parameters."""
         mock_graph = Mock()
         mock_graph.compile.return_value = Mock()
-        mock_create_supervisor.return_value = mock_graph
+        mock_build_supervisor = Mock(return_value=mock_graph)
+        mock_agent_factory = Mock(return_value=Mock())
+        mock_forward_tool = Mock(return_value=Mock())
 
-        coordinator = MultiAgentCoordinator()
-        coordinator.llm = mock_llm
-        coordinator._setup_agent_graph()
+        graph_globals = MultiAgentCoordinator._setup_agent_graph.__globals__
 
-        # Validate create_supervisor was called with ADR-011 flags
-        _, kwargs = mock_create_supervisor.call_args
-        assert kwargs.get("parallel_tool_calls") is True
-        assert kwargs.get("output_mode") == "last_message"
-        assert kwargs.get("add_handoff_messages") is True
-        assert "pre_model_hook" in kwargs
-        assert "post_model_hook" in kwargs
+        with patch.dict(
+            graph_globals,
+            {
+                "create_agent": mock_agent_factory,
+                "build_multi_agent_supervisor_graph": mock_build_supervisor,
+                "create_forward_message_tool": mock_forward_tool,
+            },
+            clear=False,
+        ):
+            coordinator = MultiAgentCoordinator()
+            coordinator.llm = mock_llm
+            coordinator._setup_agent_graph()
 
-    @patch(
-        "src.agents.coordinator.create_agent",
-        side_effect=RuntimeError("Agent creation failed"),
-    )
-    def test_setup_agent_graph_failure(self, mock_agent_factory, mock_llm):
+            # Validate graph builder is wired with ADR-011 flags.
+            _, kwargs = mock_build_supervisor.call_args
+            params = kwargs.get("params")
+            assert params is not None
+            assert params.output_mode == "last_message"
+            assert params.add_handoff_messages is True
+            assert params.add_handoff_back_messages is True
+            assert kwargs.get("state_schema") is not None
+            assert kwargs.get("middleware")
+
+    def test_setup_agent_graph_failure(self, mock_llm):
         """Test agent graph setup failure handling."""
         coordinator = MultiAgentCoordinator()
         coordinator.llm = mock_llm
 
-        with pytest.raises(RuntimeError, match="Agent graph initialization failed"):
+        graph_globals = MultiAgentCoordinator._setup_agent_graph.__globals__
+        failing_agent_factory = Mock(side_effect=RuntimeError("Agent creation failed"))
+
+        with (
+            patch.dict(
+                graph_globals, {"create_agent": failing_agent_factory}, clear=False
+            ),
+            pytest.raises(RuntimeError, match="Agent graph initialization failed"),
+        ):
             coordinator._setup_agent_graph()
 
     def test_create_supervisor_prompt(self):
@@ -723,10 +759,13 @@ class TestFactoryFunction:
 
     def test_create_multi_agent_coordinator_defaults(self):
         """Test factory function with default parameters."""
-        with patch("src.agents.coordinator.MultiAgentCoordinator") as mock_coordinator:
-            mock_instance = Mock()
-            mock_coordinator.return_value = mock_instance
+        mock_instance = Mock()
+        mock_coordinator = Mock(return_value=mock_instance)
+        globals_map = create_multi_agent_coordinator.__globals__
 
+        with patch.dict(
+            globals_map, {"MultiAgentCoordinator": mock_coordinator}, clear=False
+        ):
             result = create_multi_agent_coordinator()
 
             mock_coordinator.assert_called_once_with(
@@ -740,10 +779,13 @@ class TestFactoryFunction:
 
     def test_create_multi_agent_coordinator_custom_params(self):
         """Test factory function with custom parameters."""
-        with patch("src.agents.coordinator.MultiAgentCoordinator") as mock_coordinator:
-            mock_instance = Mock()
-            mock_coordinator.return_value = mock_instance
+        mock_instance = Mock()
+        mock_coordinator = Mock(return_value=mock_instance)
+        globals_map = create_multi_agent_coordinator.__globals__
 
+        with patch.dict(
+            globals_map, {"MultiAgentCoordinator": mock_coordinator}, clear=False
+        ):
             result = create_multi_agent_coordinator(
                 model_path="custom/model",
                 max_context_length=64000,
@@ -773,13 +815,9 @@ class TestConstants:
 
     def test_import_constants(self):
         """Test that all expected constants can be imported."""
-        from src.agents.coordinator import (
-            CONTEXT_TRIM_STRATEGY,
-            PARALLEL_TOOL_CALLS_ENABLED,
-        )
+        from src.agents.coordinator import CONTEXT_TRIM_STRATEGY
 
         assert isinstance(CONTEXT_TRIM_STRATEGY, str)
-        assert isinstance(PARALLEL_TOOL_CALLS_ENABLED, bool)
 
         # Test specific value
         assert CONTEXT_TRIM_STRATEGY == "last"

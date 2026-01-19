@@ -7,12 +7,13 @@ and docs under `docs/specs/` + `docs/developers/adrs/`.
 
 ## Layout
 
-- `src/app.py`: Streamlit entrypoint
+- `app.py`: Streamlit entrypoint
+- `src/app.py`: Streamlit app module (imported by `app.py`)
 - `src/pages/`: UI pages (chat/documents/analytics/settings)
 - `src/config/`: settings + integration wiring
 - `src/processing/`: ingestion, OCR, PDF page exports
 - `src/retrieval/`: router, hybrid retrieval, reranking, GraphRAG helpers
-- `src/agents/`: LangGraph coordinator (package name `langgraph-supervisor` stays)
+- `src/agents/`: LangGraph coordinator (graph-native supervisor via `StateGraph`)
 - `src/persistence/`: snapshots, hashing, locking, chat DB
 - `src/telemetry/` + `src/utils/telemetry.py`: OTEL + JSONL events
 - `templates/`: prompt templates/presets
@@ -22,7 +23,7 @@ and docs under `docs/specs/` + `docs/developers/adrs/`.
 ## Quick Commands (uv)
 
 - Setup: `uv sync && cp .env.example .env`
-- Run: `streamlit run src/app.py` (or `./scripts/run_app.sh`)
+- Run: `uv run streamlit run app.py` (or `./scripts/run_app.sh`)
 - Env: prefer `uv run ...` (uses the project env, typically `.venv`).
 - Verify (batch): after a batch of edits, run lint/type on touched paths + focused tests.
   - Lint (all): `uv run ruff format . && uv run ruff check . --fix`
@@ -38,7 +39,7 @@ and docs under `docs/specs/` + `docs/developers/adrs/`.
 - GPU check: `uv run python scripts/test_gpu.py --quick`
 - Prefetch models: `uv run python tools/models/pull.py --all --cache_dir ./models_cache`
 - spaCy model (opt): `uv run python -m spacy download en_core_web_sm`
-- Review triage: `python3 scripts/analyze_github_reviews.py --json-file <path>` (or set `DOCMIND_REVIEW_JSON`)
+- Review triage: `uv run python scripts/analyze_github_reviews.py --json-file <path>` (or set `DOCMIND_REVIEW_JSON`)
 
 ## Non-negotiables (CI + Security)
 
@@ -48,9 +49,34 @@ and docs under `docs/specs/` + `docs/developers/adrs/`.
 - Streamlit: no `unsafe_allow_html=True` for untrusted content.
 - Logging/telemetry: metadata-only; never log secrets or raw prompt/doc/model output (use `src/utils/log_safety.py`).
 
+## Compaction + continuity worklogs
+
+This repo uses a lightweight, compaction-resilient log so we can resume work without re-researching or re-deciding.
+
+Worklogs are **local-only** by default (gitignored) and should not be committed to the repo.
+
+After any material research, decisions, or implementation:
+
+1. Update `docs/developers/worklogs/CONTEXT.md` with:
+   - current status + next steps
+   - research notes (primary links)
+   - key decisions + rationale
+   - important quirks/constraints (no secrets)
+2. If you call any `mcp__zen__*` tool that returns a `continuation_id`, record it in:
+   - `docs/developers/worklogs/continuations.json`
+3. For normative changes (architecture/policy): add or update an ADR under `docs/developers/adrs/`.
+4. For behavior changes: update the owning spec under `docs/specs/` and keep `docs/specs/traceability.md` aligned.
+
+Timing rule: write ADRs/spec updates **immediately when finalized** (do not batch them at the end of a long session) to avoid losing decision context during auto-compaction.
+
+When resuming after compaction:
+
+1. Read `docs/developers/worklogs/CONTEXT.md` first.
+2. Read `docs/developers/worklogs/continuations.json` and reuse any stored `continuation_id` values when continuing `mcp__zen__*` threads.
+
 ## Optional extras
 
-- `uv sync --extra gpu` (vLLM, FlashInfer, fastembed-gpu)
+- `uv sync --extra gpu` (fastembed-gpu, CuPy CUDA wheels)
 - `uv sync --extra graph` (GraphRAG adapters)
 - `uv sync --extra multimodal` (ColPali reranker)
 - `uv sync --extra observability` (OTLP exporters + portalocker)
@@ -60,9 +86,9 @@ and docs under `docs/specs/` + `docs/developers/adrs/`.
 
 Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
-- Python: `>=3.11,<3.12`
+- Python: `>=3.13,<3.14` (primary dev/runtime: Python 3.13.11)
 - Keep these coupled:
-  - Torch 2.7.x ↔ vLLM 0.10.x ↔ Transformers `<4.58`
+  - Torch 2.8.x ↔ Transformers `<5.0` (vLLM is external-only via OpenAI-compatible HTTP)
   - DuckDB `<1.4.0` (LlamaIndex integrations cap it)
   - LlamaIndex packages stay `<0.15.0`
   - Streamlit `<2.0.0`
@@ -80,7 +106,7 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
 ## LLM backends
 
-- Backends: `ollama|vllm|lmstudio|llamacpp` via `DOCMIND_LLM_BACKEND`.
+- Backends: `ollama|vllm|lmstudio|llamacpp|openai_compatible` via `DOCMIND_LLM_BACKEND`.
 - OpenAI-compatible base URLs are normalized to a single `/v1` segment.
 - Prefer `DOCMIND_OPENAI__BASE_URL` + `DOCMIND_OPENAI__API_KEY` for OpenAI-like servers (local servers can use placeholder keys).
 - Backend-specific base URLs: `DOCMIND_LMSTUDIO_BASE_URL`, `DOCMIND_VLLM__VLLM_BASE_URL`, `DOCMIND_LLAMACPP_BASE_URL`.
@@ -96,7 +122,7 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
 ## Containerization (CI-enforced)
 
-- `Dockerfile`: Python 3.11 base; final `USER` non-root; `CMD`/`ENTRYPOINT` exec-form (no `sh -c`); no `:latest`.
+- `Dockerfile`: Python 3.13.11 base; final `USER` non-root; `CMD`/`ENTRYPOINT` exec-form (no `sh -c`); no `:latest`.
 - `.dockerignore`: ignore `.env` (`.env`, `.env.*`, or `.env*`); don’t bake `.env` into images.
 - Compose: use canonical `DOCMIND_*` env vars (no legacy `OLLAMA_BASE_URL`/`VLLM_BASE_URL`/`LMSTUDIO_BASE_URL`); prod override sets `read_only: true` and `tmpfs: /tmp`.
 
@@ -182,6 +208,14 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 - Use `loguru.logger`; avoid `print` in production code.
 - Use `pathlib.Path` and guard clauses; avoid `Any` unless isolated behind a narrow boundary.
 - Device/VRAM policy: use `src/utils/core.py` (`resolve_device`, `has_cuda_vram`) for business logic.
+- Python style (apply to all code; when editing a file, align the whole file):
+  4-space indent, 80-char lines; public docstrings use `"""` + 1-line summary
+  <=80 chars and include `Args:`, `Returns:`/`Yields:`, `Raises:` when needed
+  with 4-space hanging indents; absolute imports only, one per line, top of
+  file; None checks use `is (not) None`, booleans use `if not x` (add
+  `and x is not None` only to distinguish False vs None); always use context
+  managers (`with open(...)` or `contextlib.closing(...)`); prefer generator
+  expressions over materialized lists when possible.
 
 ## Testing
 

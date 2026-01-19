@@ -1,9 +1,0 @@
-# UV configuration for automated GPU dependencies
-# This enables the best-match index strategy for resolving GPU dependencies
-
-[pip]
-extra-index-url = [
-    "https://download.pytorch.org/whl/cu128",
-    "https://abetlen.github.io/llama-cpp-python/whl/cu128"
-]
-index-strategy = "unsafe-best-match"

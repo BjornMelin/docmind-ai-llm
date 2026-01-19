@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from functools import lru_cache
-from typing import Any, Literal, TypeVar, overload
+from typing import Any, Literal, overload
 from urllib.parse import urlparse
 
 import ollama
@@ -29,8 +29,6 @@ from src.config.settings_utils import (
     ensure_http_scheme,
     parse_endpoint_allowlist_hosts,
 )
-
-_TModel = TypeVar("_TModel", bound=BaseModel)
 
 
 def _normalize_url(url: str) -> str:
@@ -420,17 +418,17 @@ def get_ollama_web_tools(cfg: DocMindSettings = settings) -> list[Callable[..., 
     return [web_client.web_search, web_client.web_fetch]
 
 
-def ollama_chat_structured(
+def ollama_chat_structured[TModel: BaseModel](
     *,
     model: str,
     messages: Sequence[Mapping[str, Any] | Message],
-    output_model: type[_TModel],
+    output_model: type[TModel],
     think: bool | Literal["low", "medium", "high"] | None = None,
     options: Mapping[str, Any] | Options | None = None,
     keep_alive: float | str | None = None,
     client: ollama.Client | None = None,
     cfg: DocMindSettings = settings,
-) -> _TModel:
+) -> TModel:
     """Run a non-streaming structured output chat and validate with Pydantic.
 
     Args:
@@ -445,6 +443,9 @@ def ollama_chat_structured(
 
     Returns:
         Validated Pydantic model instance.
+
+    Raises:
+        ValueError: If structured output response is empty.
     """
     response = ollama_chat(
         model=model,

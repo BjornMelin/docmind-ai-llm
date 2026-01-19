@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+from types import SimpleNamespace
 
 import pytest
 
@@ -16,9 +17,17 @@ def test_get_postprocessors_disabled_returns_none():
 
 
 @pytest.mark.unit
-def test_get_postprocessors_vector_and_kg():
+def test_get_postprocessors_vector_and_kg(monkeypatch: pytest.MonkeyPatch):
     """Test that get_postprocessors returns proper rerankers for vector and KG modes."""
     rr = importlib.import_module("src.retrieval.reranking")
+    monkeypatch.setattr(
+        rr,
+        "build_text_reranker",
+        lambda top_n: SimpleNamespace(
+            top_n=top_n, postprocess_nodes=lambda *_a, **_k: []
+        ),
+        raising=True,
+    )
 
     vec_pp = rr.get_postprocessors("vector", use_reranking=True)
     assert isinstance(vec_pp, list)

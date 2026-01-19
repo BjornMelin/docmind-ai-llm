@@ -8,8 +8,6 @@ related_adrs: ["ADR-058"]
 related_specs: ["SPEC-042"]
 ---
 
-## Implementation Prompt — 0042: Multimodal Ingestion (PDF page images → ArtifactRef → Qdrant)
-
 **Purpose:** Final-release ingestion wiring for multimodal PDFs (page images).  
 **Source of truth:** ADR-058 + SPEC-042.  
 **Key constraints:** no base64 blobs in durable stores; no raw paths persisted; fail-open.

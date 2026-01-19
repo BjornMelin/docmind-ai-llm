@@ -189,11 +189,14 @@ agent-logs/
 docs/specs/.workflow/
 docs/specs/.archived/
 docs/specs/prompts/
+docs/developers/worklogs/
 all-specs-adrs.xml
 .cursorignore
 opensrc/
 .codex/
 .opencode/
+/agent_audit*
+migration_plan.md
 
 # Snapshot persistence artifacts
 storage/

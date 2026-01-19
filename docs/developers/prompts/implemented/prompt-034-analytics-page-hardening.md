@@ -8,8 +8,6 @@ related_adrs: ["ADR-053"]
 related_specs: ["SPEC-034"]
 ---
 
-## Implementation Prompt — Analytics Page Hardening
-
 Implements `ADR-053` + `SPEC-034`.
 
 **Read first (repo truth):**
@@ -78,7 +76,7 @@ rg -n "duckdb\\.connect|__import__\\(" src/pages/03_analytics.py
 
 **Long-running UI verification (use native capabilities):**
 
-- If you run `streamlit run src/app.py`, keep it alive and use `functions.write_stdin` for logs.
+- If you run `uv run streamlit run app.py`, keep it alive and use `functions.write_stdin` for logs.
 - Attach screenshots of analytics charts/tables with `functions.view_image` if needed.
 
 **Security gate (required):**
@@ -207,7 +205,7 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | **Tests**       |        | parsing tests green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | **Docs**        |        | ADR/SPEC/RTM updated                                                                                    |
 | **Security**    |        | bounded parsing; privacy-safe defaults; no secret logs                                                  |
-| **Tech Debt**   |        | zero TODO/FIXME introduced                                                                              |
+| **Tech Debt**   |        | zero work-marker placeholders introduced                                                                |
 | **Performance** |        | streaming JSONL parsing; DuckDB connections closed deterministically                                    |
 
 **EXECUTE UNTIL COMPLETE.**

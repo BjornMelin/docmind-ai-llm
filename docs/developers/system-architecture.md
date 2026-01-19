@@ -74,12 +74,12 @@ graph TB
 
 ### Core Components
 
-| Component               | Purpose                                                  | Technology                     | Performance Target   |
-| ----------------------- | -------------------------------------------------------- | ------------------------------ | -------------------- |
-| **Supervisor**          | LangGraph-based agent orchestration                      | LangGraph v0.2+                | < 200ms overhead     |
-| **VLLM Backend**        | High-performance local inference                         | vLLM (FP8 / FlashInfer)        | 120-180 tok/s        |
-| **Vector Store**        | Multi-vector and hybrid retrieval                        | Qdrant                         | < 50ms query latency |
-| **Persistence**         | Durable chat sessions and multimodal artifacts           | SQLite WAL + ArtifactRef       | Zero-loss integrity  |
+| Component               | Purpose                                              | Technology                               | Performance Target   |
+| ----------------------- | ---------------------------------------------------- | ---------------------------------------- | -------------------- |
+| **Supervisor**          | LangGraph-based agent orchestration                  | LangGraph v1.0.6                         | < 200ms overhead     |
+| **VLLM Backend**        | High-performance local inference (OpenAI-compatible) | vLLM server (FP8 / FlashInfer, external) | 120-180 tok/s        |
+| **Vector Store**        | Multi-vector and hybrid retrieval                    | Qdrant                                   | < 50ms query latency |
+| **Persistence**         | Durable chat sessions and multimodal artifacts       | SQLite WAL + ArtifactRef                 | Zero-loss integrity  |
 
 ## Local-first Guarantees
 
@@ -89,15 +89,18 @@ DocMind AI is architected with a strict **local-first** mandate (ADR-058):
 2. **No Cloud Leakage**: Remote LLM endpoints are disabled by default. Embeddings (BGE-M3/SigLIP) run locally on the user's GPU/CPU.
 3. **Fail-open Multimodal**: If GPU acceleration or specialized libraries (e.g., `sqlite-vec`) are unavailable, the system fallbacks to basic text-only RAG without crashing.
 4. **Content-Addressed Artifacts**: Large binary blobs (images, thumbnails) are never stored in databases. They are stored as `ArtifactRef` (SHA-256) in a local filesystem store.
-| ----------------------- | -------------------------------------------------------- | ------------------------------ | -------------------- |
-| **Frontend**            | Document uploads, configuration, results, chat interface | Streamlit                      | Real-time streaming  |
-| **Multi-Agent System**  | 5-agent coordination for complex queries                 | LangGraph Supervisor           | <200ms coordination  |
-| **LLM Backend**         | Language model inference with 128K context               | vLLM FlashInfer + Qwen3-4B-FP8 | 120-180 tok/s decode |
-| **Vector Storage**      | Hybrid dense/sparse search with RRF fusion               | Qdrant                         | <100ms retrieval     |
-| **Document Processing** | Hi-res parsing with NLP enrichment (optional)            | Unstructured + spaCy           | <2s per document*    |
-| **Performance Layer**   | FP8 quantization, parallel execution, CUDA optimization  | PyTorch 2.7.0 + CUDA 12.8      | 12–14 GB VRAM usage  |
+| Component               | Purpose                                                  | Technology                                                                     | Performance Target   |
+| ----------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ | -------------------- |
+| **Frontend**            | Document uploads, configuration, results, chat interface | Streamlit                                                                      | Real-time streaming  |
+| **Multi-Agent System**  | 5-agent coordination for complex queries                 | LangGraph Supervisor                                                           | <200ms coordination  |
+| **LLM Backend**         | Language model inference with 128K context               | vLLM server + Qwen3-4B-FP8                                                     | 120-180 tok/s decode |
+| **Vector Storage**      | Hybrid dense/sparse search with RRF fusion               | Qdrant                                                                         | <100ms retrieval     |
+| **Document Processing** | Hi-res parsing with NLP enrichment (optional)            | Unstructured + spaCy                                                           | <2s per document*    |
+| **Performance Layer**   | FP8 quantization, parallel execution, CUDA optimization  | torch==2.8.0 + nvidia-cuda-runtime-cu12==12.8.90 + nvidia-cudnn-cu12==9.10.2.21 | 12–14 GB VRAM usage  |
 
 *Processing time may vary based on whether optional spaCy NLP enrichment is enabled.
+*Version source of truth: `pyproject.toml` (direct pins) and `uv.lock`
+(resolved CUDA runtime packages).
 
 ## Unified Configuration Architecture
 
@@ -246,41 +249,32 @@ graph TD
 
 ### LangGraph Supervisor Implementation
 
-The implementation uses LangGraph's native supervisor pattern:
+DocMind uses a **repo-local**, graph-native supervisor implementation (no external
+supervisor wrapper dependency). The coordinator builds a parent `StateGraph`
+and uses **handoff tools** that return `langgraph.types.Command(graph=Command.PARENT, ...)`
+to route from the supervisor agent into subagent nodes.
+
+Key code paths:
+
+- `src/agents/coordinator.py` (wiring + compilation with checkpointer/store)
+- `src/agents/supervisor_graph.py` (handoff tools + `StateGraph` builder)
 
 ```python
-from langchain.agents import create_agent
-from langgraph.graph import MessagesState
-from langgraph.checkpoint.memory import InMemorySaver
+from src.agents.supervisor_graph import (
+    SupervisorBuildParams,
+    build_multi_agent_supervisor_graph,
+    create_forward_message_tool,
+)
 
-class MultiAgentCoordinator:
-    """5-agent coordination system with LangGraph supervisor."""
-
-    def __init__(self, llm, tools_data):
-        # Create specialized agents
-        self.agents = {
-            "router": create_agent(llm, tools=[route_query]),
-            "planner": create_agent(llm, tools=[plan_query]),
-            "retrieval": create_agent(llm, tools=[retrieve_documents]),
-            "synthesis": create_agent(llm, tools=[synthesize_results]),
-            "validator": create_agent(llm, tools=[validate_response])
-        }
-
-        # Create supervisor graph with memory
-        self.memory = InMemorySaver()
-        self.supervisor = langgraph_supervisor.create_supervisor(
-            agents=self.agents,
-            system_prompt="Coordinate multi-agent document analysis",
-            memory=self.memory
-        )
-
-    def process_query(self, query: str, context: Any | None = None) -> AgentResponse:
-        """Execute multi-agent coordination (synchronous public API)."""
-
-        # Internal async execution logic (wrapped in sync call)
-        result = self._run_agent_workflow(query, context)
-
-        return self._extract_response(result, query)
+graph = build_multi_agent_supervisor_graph(
+    [router_agent, planner_agent, retrieval_agent, synthesis_agent, validation_agent],
+    model=model,
+    prompt=system_prompt,
+    state_schema=MultiAgentGraphState,
+    extra_tools=[create_forward_message_tool(supervisor_name="supervisor")],
+    params=SupervisorBuildParams(output_mode="last_message"),
+)
+compiled = graph.compile(checkpointer=checkpointer, store=store)
 ```
 
 ### Shared Tool Functions
@@ -535,6 +529,7 @@ The following JSON block is used by `scripts/verify_structural_parity.py` to ens
   "version": "2.0.0",
   "canonical_src": [
     "agents",
+    "analysis",
     "config",
     "core",
     "eval",

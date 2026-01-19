@@ -43,8 +43,9 @@ def test_multimodal_fusion_dedups_by_key_and_prefers_best_score(monkeypatch) -> 
             return None
 
     # Force a deterministic fused list to exercise only this module's logic.
-    monkeypatch.setattr(
-        "src.retrieval.multimodal_fusion.rrf_merge",
+    monkeypatch.setitem(
+        MultimodalFusionRetriever.retrieve.__globals__,
+        "rrf_merge",
         lambda _xs, k_constant=60: fused,
     )
 
@@ -76,8 +77,9 @@ def test_image_siglip_retriever_queries_qdrant_and_wraps_results(monkeypatch) ->
         def get_text_embedding(self, _q: str):  # type: ignore[no-untyped-def]
             return np.asarray([0.1, 0.2], dtype=np.float32)
 
-    monkeypatch.setattr(
-        "src.retrieval.multimodal_fusion.nodes_from_query_result",
+    monkeypatch.setitem(
+        ImageSiglipRetriever.retrieve.__globals__,
+        "nodes_from_query_result",
         lambda _res, **_k: [_nws(node_id="n1", score=1.0, page_id="p1")],
     )
     monkeypatch.setattr(

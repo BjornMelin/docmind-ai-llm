@@ -8,8 +8,6 @@ related_adrs: ["ADR-041"]
 related_specs: ["SPEC-022"]
 ---
 
-## Implementation Prompt — Settings UI Hardening + Safe Provider Badge
-
 Implements `ADR-041` + `SPEC-022`.
 
 **Read first (repo truth):**
@@ -94,7 +92,7 @@ uv run python ${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architec
 
 **Long-running UI validation (use native capabilities):**
 
-- If you start `streamlit run src/app.py`, keep it running and use `functions.write_stdin` to fetch logs instead of restarting.
+- If you start `uv run streamlit run app.py`, keep it running and use `functions.write_stdin` to fetch logs instead of restarting.
 - If you capture UI screenshots during verification, attach them with `functions.view_image`.
 - For user-critical E2E smoke, use the skill’s Playwright flow:
   - `${CODEX_SKILLS_HOME:-$CODEX_HOME/skills}/streamlit-master-architect/scripts/mcp/run_playwright_mcp_e2e.py`
@@ -178,7 +176,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 #### 1) Python + Packaging
 
-- Python version must remain **3.11.x** (respect `pyproject.toml`).
+- Python baseline is **3.13.11** (Python 3.13-only; respect `pyproject.toml`).
 - Use **uv only**.
 
 #### 2) Style, Types, and Lint
@@ -280,7 +278,7 @@ Also use `functions.exec_command` + `multi_tool_use.parallel` for repo-local dis
 | Tests       |        | settings tests green; `uv run python scripts/run_tests.py --fast` + `uv run python scripts/run_tests.py` |
 | Docs        |        | ADR/SPEC/RTM updated                                                                                     |
 | Security    |        | no unsafe HTML; allowlist enforced                                                                       |
-| Tech Debt   |        | no TODO/FIXME introduced                                                                                 |
+| Tech Debt   |        | no work-marker placeholders introduced                                                                   |
 | Performance |        | no new import-time heavy work                                                                            |
 
 **EXECUTE UNTIL COMPLETE.**

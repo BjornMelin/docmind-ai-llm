@@ -323,19 +323,65 @@ class SemanticCacheConfig(BaseModel):
 class OpenAIConfig(BaseModel):
     """Settings for OpenAI-compatible servers.
 
-    Used for LM Studio, vLLM OpenAI-compatible server, and llama.cpp server.
-    Ensures idempotent normalization of base URLs to include a single "/v1".
+    Used for OpenAI-compatible endpoints (local servers, proxies, or cloud gateways).
+    Base URL normalization (optional `/v1`) is applied at selection time via
+    :meth:`DocMindSettings.backend_base_url_normalized`.
     """
 
+    model_config = ConfigDict(validate_assignment=True)
+
     base_url: AnyHttpUrl = Field(default=DEFAULT_OPENAI_BASE_URL)
-    api_key: str | None = Field(default=None, description="Optional API key")
+    api_key: SecretStr | None = Field(
+        default=None, description="Optional API key", repr=False
+    )
+    default_headers: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Optional HTTP headers for OpenAI-compatible providers "
+            "(e.g., OpenRouter HTTP-Referer/X-Title)."
+        ),
+    )
+    require_v1: bool = Field(
+        default=True,
+        description=(
+            "When True, normalize base_url to include a single '/v1' suffix. "
+            "Disable only for OpenAI-compatible endpoints rooted at '/' "
+            "(e.g., LiteLLM Proxy default)."
+        ),
+    )
+    api_mode: Literal["chat_completions", "responses"] = Field(
+        default="chat_completions",
+        description="Select OpenAI-compatible API mode (legacy chat vs /responses).",
+    )
 
     @field_validator("base_url", mode="before")
     @classmethod
-    def _ensure_v1_on_base(cls, v: object) -> str:
+    def _ensure_scheme_on_base(cls, v: object) -> str:
         candidate = ensure_http_scheme(v) or ""
-        normalized = ensure_v1(candidate) or candidate
-        return normalized
+        return candidate
+
+    @field_validator("default_headers", mode="after")
+    @classmethod
+    def _normalize_default_headers(
+        cls, v: dict[str, str] | None
+    ) -> dict[str, str] | None:
+        if v is None:
+            return None
+        out: dict[str, str] = {}
+        for raw_k, raw_val in v.items():
+            k = str(raw_k).strip()
+            if not k:
+                continue
+            val = str(raw_val).strip()
+            if not val:
+                continue
+            if re.search(r"[\x00-\x1f\x7f]", k) or re.search(r"[\x00-\x1f\x7f]", val):
+                raise ValueError(
+                    "DOCMIND_OPENAI__DEFAULT_HEADERS may not contain control "
+                    "characters or newlines"
+                )
+            out[k] = val
+        return out or None
 
 
 _DEFAULT_OPENAI_BASE_URL = DEFAULT_OPENAI_BASE_URL
@@ -777,6 +823,11 @@ class DatabaseConfig(BaseModel):
     # Vector Database
     vector_store_type: str = Field(default="qdrant")
     qdrant_url: str = Field(default="http://localhost:6333")
+    qdrant_api_key: SecretStr | None = Field(
+        default=None,
+        repr=False,
+        description="Optional API key for authenticated Qdrant endpoints.",
+    )
     qdrant_collection: str = Field(default="docmind_docs")
     qdrant_image_collection: str = Field(default="docmind_images")
     qdrant_timeout: int = Field(default=60, ge=10, le=300)
@@ -840,6 +891,12 @@ class UIConfig(BaseModel):
     enable_session_persistence: bool = Field(default=True)
     response_streaming: bool = Field(default=True)
     max_history_items: int = Field(default=100, ge=10, le=1000)
+    progress_poll_interval_sec: float = Field(
+        default=1.0,
+        ge=0.1,
+        le=10.0,
+        description="Polling interval for background job progress updates.",
+    )
 
     # User Interface Options
     context_size_options: list[int] = Field(
@@ -934,9 +991,13 @@ class DocMindSettings(BaseSettings):
     )
 
     # Backend Configuration (strict, supported only)
-    llm_backend: Literal["vllm", "ollama", "lmstudio", "llamacpp"] = Field(
-        default="ollama"
-    )
+    llm_backend: Literal[
+        "vllm",
+        "ollama",
+        "lmstudio",
+        "llamacpp",
+        "openai_compatible",
+    ] = Field(default="ollama")
     # Top-level model controls (mirrors nested vllm.* when provided)
     model: str | None = Field(
         default=None,
@@ -1248,7 +1309,11 @@ class DocMindSettings(BaseSettings):
     @computed_field
     @property
     def backend_base_url_normalized(self) -> str | None:
-        """Return backend-aware normalized base URL (OpenAI-like -> /v1)."""
+        """Return backend-aware base URL.
+
+        For OpenAI-compatible endpoints, `/v1` normalization is applied when
+        `openai.require_v1` is enabled.
+        """
         openai_fields_set = getattr(self.openai, "model_fields_set", set())
         openai_base_url = (
             self.openai.base_url
@@ -1259,6 +1324,9 @@ class DocMindSettings(BaseSettings):
         )
         if self.llm_backend == "ollama":
             return str(self.ollama_base_url).rstrip("/")
+        if self.llm_backend == "openai_compatible":
+            raw = str(self.openai.base_url).rstrip("/")
+            return ensure_v1(raw) if self.openai.require_v1 else raw
         if self.llm_backend == "lmstudio":
             # Prefer explicit OpenAI group only when customized
             return ensure_v1(openai_base_url or self.lmstudio_base_url)

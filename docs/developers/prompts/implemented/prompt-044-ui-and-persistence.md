@@ -8,8 +8,6 @@ related_adrs: ["ADR-058"]
 related_specs: ["SPEC-041", "SPEC-042"]
 ---
 
-## Implementation Prompt — 0044: UI + Persistence (Sessions, Time Travel, Memory, Multimodal Rendering)
-
 **Purpose:** Ship final-release Streamlit UX and durability for multimodal chat.  
 **Source of truth:** ADR-058 + SPEC-042 + SPEC-041.
 

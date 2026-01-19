@@ -1,5 +1,7 @@
 """Tests for LLM factory configuration and building functionality."""
 
+import sys
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -9,9 +11,31 @@ from src.config.settings import DocMindSettings
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("backend", ["ollama", "vllm", "lmstudio"])
-def test_build_llm_openai_like_and_ollama(backend):
-    """Test LLM building for OpenAI-like backends (vllm, lmstudio) and Ollama."""
+@pytest.mark.parametrize("backend", ["ollama", "openai_compatible", "vllm", "lmstudio"])
+def test_build_llm_openai_like_and_ollama(
+    backend: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test LLM building for OpenAI-like backends and Ollama."""
+    openai_like_mod = ModuleType("llama_index.llms.openai_like")
+    ollama_mod = ModuleType("llama_index.llms.ollama")
+
+    class _CaptureOpenAILike:
+        last_kwargs: dict[str, object] | None = None
+
+        def __init__(self, **kwargs: object) -> None:
+            type(self).last_kwargs = dict(kwargs)
+
+    class _CaptureOllama:
+        last_kwargs: dict[str, object] | None = None
+
+        def __init__(self, **kwargs: object) -> None:
+            type(self).last_kwargs = dict(kwargs)
+
+    openai_like_mod.OpenAILike = _CaptureOpenAILike  # type: ignore[attr-defined]
+    ollama_mod.Ollama = _CaptureOllama  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "llama_index.llms.openai_like", openai_like_mod)
+    monkeypatch.setitem(sys.modules, "llama_index.llms.ollama", ollama_mod)
+
     cfg = DocMindSettings()
     cfg.llm_backend = backend
     cfg.vllm.model = "qwen2.5-7b-instruct"
@@ -20,45 +44,63 @@ def test_build_llm_openai_like_and_ollama(backend):
     cfg.openai.api_key = "abc"
 
     if backend == "ollama":
-        with patch("llama_index.llms.ollama.Ollama", autospec=True) as p:
-            inst = MagicMock(name="OllamaInstance")
-            p.return_value = inst
-            out = build_llm(cfg)
-            assert out is inst
-            _, kwargs = p.call_args
-            assert kwargs["base_url"] == str(cfg.ollama_base_url).rstrip("/")
-            assert kwargs["model"] == cfg.vllm.model
-            assert float(kwargs["request_timeout"]) == float(
-                cfg.llm_request_timeout_seconds
-            )
+        out = build_llm(cfg)
+        kwargs = _CaptureOllama.last_kwargs or {}
+        assert isinstance(out, _CaptureOllama)
+        assert kwargs["base_url"] == str(cfg.ollama_base_url).rstrip("/")
+        assert kwargs["model"] == cfg.vllm.model
+        assert float(kwargs["request_timeout"]) == float(
+            cfg.llm_request_timeout_seconds
+        )
 
-    elif backend == "vllm":
-        with patch("llama_index.llms.openai_like.OpenAILike", autospec=True) as p:
-            inst = MagicMock(name="OpenAILikeVLLM")
-            p.return_value = inst
-            out = build_llm(cfg)
-            assert out is inst
-            _, kwargs = p.call_args
-            # Always normalized to include /v1
-            assert kwargs["api_base"].endswith("/v1")
-            assert kwargs["model"] == cfg.vllm.model
-            assert kwargs["api_key"] == cfg.openai.api_key
-            assert kwargs["is_chat_model"] is True
-            assert kwargs["is_function_calling_model"] is False
-            assert kwargs["context_window"] == cfg.vllm.context_window
-            assert float(kwargs["timeout"]) == float(cfg.llm_request_timeout_seconds)
+    elif backend in {"openai_compatible", "vllm"}:
+        out = build_llm(cfg)
+        kwargs = _CaptureOpenAILike.last_kwargs or {}
+        assert isinstance(out, _CaptureOpenAILike)
+        # Always normalized to include /v1
+        assert str(kwargs["api_base"]).endswith("/v1")
+        assert kwargs["model"] == cfg.vllm.model
+        assert kwargs["api_key"] == cfg.openai.api_key.get_secret_value()
+        assert kwargs["is_chat_model"] is True
+        assert kwargs["is_function_calling_model"] is False
+        assert kwargs["context_window"] == cfg.vllm.context_window
+        assert float(kwargs["timeout"]) == float(cfg.llm_request_timeout_seconds)
 
     elif backend == "lmstudio":
-        with patch("llama_index.llms.openai_like.OpenAILike", autospec=True) as p:
-            inst = MagicMock(name="OpenAILikeLMStudio")
-            p.return_value = inst
-            out = build_llm(cfg)
-            assert out is inst
-            _, kwargs = p.call_args
-            assert kwargs["api_base"].endswith("/v1")
-            assert kwargs["is_chat_model"] is True
-            assert kwargs["is_function_calling_model"] is False
-            assert kwargs["context_window"] == cfg.vllm.context_window
+        out = build_llm(cfg)
+        kwargs = _CaptureOpenAILike.last_kwargs or {}
+        assert isinstance(out, _CaptureOpenAILike)
+        assert str(kwargs["api_base"]).endswith("/v1")
+        assert kwargs["is_chat_model"] is True
+        assert kwargs["is_function_calling_model"] is False
+        assert kwargs["context_window"] == cfg.vllm.context_window
+
+
+@pytest.mark.unit
+def test_build_llm_openai_compatible_responses_uses_openai_responses() -> None:
+    """OpenAI-compatible backend uses OpenAIResponses when api_mode=responses."""
+    cfg = DocMindSettings()
+    cfg.llm_backend = "openai_compatible"
+    cfg.vllm.model = "qwen2.5-7b-instruct"
+    cfg.vllm.context_window = 8192
+    cfg.llm_request_timeout_seconds = 123
+    cfg.openai.base_url = "http://localhost:8000"
+    cfg.openai.api_key = "abc"
+    cfg.openai.api_mode = "responses"
+    cfg.openai.default_headers = {"X-Test": "1"}
+
+    with patch("llama_index.llms.openai.OpenAIResponses", autospec=True) as p:
+        inst = MagicMock(name="OpenAIResponses")
+        p.return_value = inst
+        out = build_llm(cfg)
+        assert out is inst
+        _, kwargs = p.call_args
+        assert str(kwargs["api_base"]).endswith("/v1")
+        assert kwargs["model"] == cfg.vllm.model
+        assert kwargs["api_key"] == cfg.openai.api_key.get_secret_value()
+        assert kwargs["default_headers"] == {"X-Test": "1"}
+        assert kwargs["context_window"] == cfg.vllm.context_window
+        assert float(kwargs["timeout"]) == float(cfg.llm_request_timeout_seconds)
 
 
 @pytest.mark.unit
