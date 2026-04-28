@@ -422,9 +422,9 @@ def _extract_prompt(text: str, policy: MemoryConsolidationPolicy) -> str:
 
 def _strip_code_fences(content: str) -> str:
     if "```json" in content:
-        return content.split("```json")[1].split("```")[0].strip()
+        return content.split("```json")[1].split("```", maxsplit=1)[0].strip()
     if "```" in content:
-        return content.split("```")[1].split("```")[0].strip()
+        return content.split("```")[1].split("```", maxsplit=1)[0].strip()
     return content
 
 
