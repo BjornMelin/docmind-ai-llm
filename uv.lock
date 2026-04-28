@@ -14,9 +14,6 @@ resolution-markers = [
     "python_full_version < '3.13' and platform_machine == 's390x' and sys_platform != 'darwin'",
 ]
 
-[options]
-prerelease-mode = "allow"
-
 [manifest]
 constraints = [
     { name = "aiohttp", specifier = ">=3.13.4" },
@@ -958,7 +955,7 @@ requires-dist = [
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.39.1,<2.0.0" },
     { name = "opentelemetry-sdk", specifier = ">=1.39.1,<2.0.0" },
     { name = "pandas", specifier = ">=2.2,<3.0" },
-    { name = "pillow", specifier = ">=12.2.0" },
+    { name = "pillow", specifier = ">=12.2.0,<13.0.0" },
     { name = "plotly", specifier = ">=5.22,<6.0" },
     { name = "portalocker", specifier = ">=3.2.0,<4.0.0" },
     { name = "pyarrow", specifier = ">=21.0.0,<22.0.0" },

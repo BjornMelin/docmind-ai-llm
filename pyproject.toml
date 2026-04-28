@@ -28,7 +28,7 @@ dependencies = [
     # Document Processing & NLP
     "unstructured[all-docs]>=0.18.26,<0.19.0",  # Multiformat parsing (PDF, DOCX, HTML, etc.)
     "pymupdf==1.26.4",                   # PDF rendering/text extraction
-    "pillow>=12.2.0",                    # Image handling
+    "pillow>=12.2.0,<13.0.0",            # Image handling
     "pyarrow>=21.0.0,<22.0.0",           # Columnar data interchange
     "spacy==3.8.11",                     # NLP pipeline (pinned for reproducibility)
     "typer==0.21.1",                     # spaCy CLI stability (ADR-061) – prevent typer/typer-slim import conflicts with GPU extras
@@ -124,8 +124,9 @@ Documentation = "https://github.com/BjornMelin/docmind-ai-llm/tree/main/docs"
 "GPU Setup Guide" = "https://github.com/BjornMelin/docmind-ai-llm/blob/main/docs/developers/gpu-setup.md"
 
 [tool.uv]
-# Transitive dep constraints: keep resolver away from known vulnerable/yanked ranges.
-prerelease = "allow"
+# Transitive dep constraints: keep resolver away from known vulnerable/yanked ranges,
+# while only permitting prereleases when they are explicitly requested or necessary.
+prerelease = "if-necessary-or-explicit"
 constraint-dependencies = [
     "aiohttp>=3.13.4",
     "gitpython>=3.1.47,<4.0.0",

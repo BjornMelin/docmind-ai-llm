@@ -205,7 +205,7 @@ def main() -> None:
             allowlist=settings.security.endpoint_allowlist,
         )
 
-    ui_errors = _validate_llamacpp_inputs(provider, llamacpp_url)
+    ui_errors = _validate_llamacpp_inputs(provider, llamacpp_url, openai_base_url)
     ui_errors.extend(openai_ui_errors)
     values: SettingsFormValues = {
         "provider": provider,
@@ -765,23 +765,29 @@ def _render_graphrag_section(
         st.info(hint)
 
 
-def _validate_llamacpp_inputs(provider: str, llamacpp_url: str) -> list[str]:
+def _validate_llamacpp_inputs(
+    provider: str,
+    llamacpp_url: str,
+    openai_base_url: str = "",
+) -> list[str]:
     """Validate llama.cpp server settings.
 
     Args:
         provider: Current provider name.
         llamacpp_url: The llama.cpp server URL.
+        openai_base_url: Shared OpenAI-compatible server URL fallback.
 
     Returns:
         list[str]: Human-readable validation messages.
     """
     ui_errors: list[str] = []
     clean_llamacpp_url = (llamacpp_url or "").strip()
+    clean_openai_base_url = (openai_base_url or "").strip()
     is_llamacpp = provider == "llamacpp"
     if not is_llamacpp:
         return ui_errors
 
-    if clean_llamacpp_url:
+    if clean_llamacpp_url or clean_openai_base_url:
         return ui_errors
 
     ui_errors.append("Provide a llama.cpp OpenAI-compatible server URL.")

@@ -12,9 +12,12 @@ import os
 from contextlib import contextmanager
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
+
+if TYPE_CHECKING:
+    from PIL.Image import Image as PILImage
 
 MAX_UNTRUSTED_IMAGE_PIXELS = 50_000_000
 
@@ -26,7 +29,7 @@ def _configure_pillow_limits(image_module: Any) -> None:
         image_module.MAX_IMAGE_PIXELS = MAX_UNTRUSTED_IMAGE_PIXELS
 
 
-def open_untrusted_image(upload: Any):
+def open_untrusted_image(upload: Any) -> PILImage:
     """Open and verify an untrusted uploaded image.
 
     Args:
@@ -43,22 +46,26 @@ def open_untrusted_image(upload: Any):
     """
     try:
         from PIL import Image  # type: ignore
-    except Exception as exc:  # pragma: no cover - optional dep
+    except ImportError as exc:  # pragma: no cover - optional dep
         raise ImportError("Pillow is required for image operations") from exc
 
+    previous_limit = Image.MAX_IMAGE_PIXELS
     _configure_pillow_limits(Image)
-    if hasattr(upload, "getvalue"):
-        data = bytes(upload.getvalue())
-    else:
-        if hasattr(upload, "seek"):
-            upload.seek(0)
-        data = bytes(upload.read())
+    try:
+        if hasattr(upload, "getvalue"):
+            data = bytes(upload.getvalue())
+        else:
+            if hasattr(upload, "seek"):
+                upload.seek(0)
+            data = bytes(upload.read())
 
-    with Image.open(BytesIO(data)) as probe:
-        probe.verify()
-    with Image.open(BytesIO(data)) as image:
-        image.load()
-        return image.copy()
+        with Image.open(BytesIO(data)) as probe:
+            probe.verify()
+        with Image.open(BytesIO(data)) as image:
+            image.load()
+            return image.copy()
+    finally:
+        Image.MAX_IMAGE_PIXELS = previous_limit
 
 
 @contextmanager
@@ -77,7 +84,7 @@ def open_image_encrypted(path: str):
     """
     try:
         from PIL import Image  # type: ignore
-    except Exception as exc:  # pragma: no cover - optional dep
+    except ImportError as exc:  # pragma: no cover - optional dep
         raise ImportError("Pillow is required for image operations") from exc
 
     tmp: str | None = None
@@ -123,7 +130,7 @@ def ensure_thumbnail(
     """
     try:
         from PIL.Image import Resampling  # type: ignore
-    except Exception as exc:  # pragma: no cover - optional dep
+    except ImportError as exc:  # pragma: no cover - optional dep
         raise ImportError("Pillow is required for image operations") from exc
 
     src = Path(image_path)

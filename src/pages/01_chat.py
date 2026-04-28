@@ -961,6 +961,9 @@ def _query_visual_search(upload: Any, top_k: int) -> list[Any]:
 
     try:
         img = open_untrusted_image(upload)
+    except ImportError:
+        st.warning("Pillow is required for visual search.")
+        return []
     except Exception:
         st.warning("Uploaded image could not be opened safely.")
         return []

@@ -9,7 +9,7 @@ Superseded-by:
 Related: ADR-042, ADR-063, ADR-064
 Tags: python, packaging, security, compatibility
 References:
-  - https://www.python.org/downloads/release/python-31212/
+  - https://www.python.org/downloads/release/python-31213/
   - https://devguide.python.org/versions/
 ---
 

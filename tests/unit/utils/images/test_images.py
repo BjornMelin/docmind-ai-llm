@@ -60,12 +60,28 @@ def test_open_untrusted_image_verifies_uploaded_bytes() -> None:
     buffer = BytesIO()
     Image.new("RGB", (8, 8), color=(0, 0, 255)).save(buffer, format="PNG")
     buffer.seek(0)
+    previous_limit = Image.MAX_IMAGE_PIXELS
 
     image = open_untrusted_image(buffer)
 
     assert image.size == (8, 8)
     assert image.mode == "RGB"
-    assert Image.MAX_IMAGE_PIXELS == MAX_UNTRUSTED_IMAGE_PIXELS
+    assert previous_limit == Image.MAX_IMAGE_PIXELS
+
+
+def test_open_untrusted_image_restores_pillow_pixel_limit() -> None:
+    """Untrusted validation should not leak Pillow pixel limits globally."""
+    buffer = BytesIO()
+    Image.new("RGB", (8, 8), color=(0, 0, 255)).save(buffer, format="PNG")
+    buffer.seek(0)
+    previous_limit = Image.MAX_IMAGE_PIXELS
+    Image.MAX_IMAGE_PIXELS = MAX_UNTRUSTED_IMAGE_PIXELS * 2
+    try:
+        open_untrusted_image(buffer)
+
+        assert Image.MAX_IMAGE_PIXELS == MAX_UNTRUSTED_IMAGE_PIXELS * 2
+    finally:
+        Image.MAX_IMAGE_PIXELS = previous_limit
 
 
 def test_open_untrusted_image_rejects_malformed_upload() -> None:
