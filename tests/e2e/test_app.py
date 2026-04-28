@@ -53,8 +53,6 @@ def _mock_heavy_ml(monkeypatch: pytest.MonkeyPatch) -> None:
     install_heavy_dependencies(
         monkeypatch,
         [
-            "llama_index.llms.llama_cpp",
-            "llama_cpp",
             "sentence_transformers",
             "transformers",
         ],

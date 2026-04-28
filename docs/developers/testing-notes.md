@@ -10,7 +10,6 @@ consumed by the app and pages:
 
 - LlamaIndex LLMs
   - `llama_index.llms.ollama.Ollama`
-  - `llama_index.llms.llama_cpp.LlamaCPP`
   - `llama_index.llms.openai_like.OpenAILike`
 - Vector stores / indexes
   - `llama_index.core.VectorStoreIndex`

@@ -158,7 +158,7 @@ def test_settings_save_persists_env(
     # Model field
     text_inputs = list(app.text_input)
     # Find model input by label
-    if model_inputs := [w for w in text_inputs if "Model (id or GGUF path)" in str(w)]:
+    if model_inputs := [w for w in text_inputs if "Model ID" in str(w)]:
         model_inputs[0].set_value("Hermes-2-Pro-Llama-3-8B").run()
 
     # LM Studio base URL (must end with /v1)
@@ -524,13 +524,6 @@ def test_settings_warns_when_ollama_allowlist_missing(
     assert any(msg.strip() == expected_warning for msg in warnings), warnings
 
 
-def _ensure_gguf_file() -> Path:
-    """Create a stub GGUF file for llama.cpp local validation."""
-    gguf_path = Path("model.gguf")
-    gguf_path.write_text("dummy", encoding="utf-8")
-    return gguf_path
-
-
 def _find_provider_select(app: AppTest):
     """Return the provider selectbox widget."""
     providers = [s for s in app.selectbox if "LLM Provider" in str(s)]
@@ -561,13 +554,10 @@ def _apply_provider(
     *,
     provider: str,
     inputs: dict[str, str],
-    allow_gguf_base: bool = False,
 ) -> None:
     """Select a provider, set inputs, and apply runtime."""
     app = settings_app_test.run()
     assert not app.exception
-    if allow_gguf_base:
-        app.session_state["docmind_allowed_gguf_base_dirs"] = [str(Path.cwd())]
     provider_sel = _find_provider_select(app)
     provider_sel.select(provider).run()
     for label, value in inputs.items():
@@ -606,7 +596,6 @@ def test_settings_toggle_providers_and_apply(
 ) -> None:
     """Toggle each provider and Apply runtime (offline)."""
     calls = _install_integrations_stub(monkeypatch)
-    gguf_path = _ensure_gguf_file()
 
     def _assert_last_call(expected_backend: str) -> None:
         assert calls, "Expected initialize_integrations to be called"
@@ -621,9 +610,8 @@ def test_settings_toggle_providers_and_apply(
         provider="ollama",
         inputs={
             "Ollama base URL": "http://localhost:11434",
-            "Model (id or GGUF path)": "test-ollama",
+            "Model ID": "test-ollama",
         },
-        allow_gguf_base=True,
     )
     from src.config.settings import settings as _settings
 
@@ -635,7 +623,7 @@ def test_settings_toggle_providers_and_apply(
         provider="vllm",
         inputs={
             "vLLM base URL": "http://localhost:8000",
-            "Model (id or GGUF path)": "test-vllm",
+            "Model ID": "test-vllm",
         },
     )
     assert _settings.llm_backend == "vllm"
@@ -646,7 +634,7 @@ def test_settings_toggle_providers_and_apply(
         provider="lmstudio",
         inputs={
             "LM Studio base URL": "http://localhost:1234/v1",
-            "Model (id or GGUF path)": "test-lms",
+            "Model ID": "test-lms",
         },
     )
     assert _settings.llm_backend == "lmstudio"
@@ -656,23 +644,11 @@ def test_settings_toggle_providers_and_apply(
         settings_app_test,
         provider="llamacpp",
         inputs={
-            "llama.cpp server URL (optional)": "http://localhost:8080/v1",
-            "Model (id or GGUF path)": "ignored-for-server",
+            "llama.cpp server URL": "http://localhost:8080/v1",
+            "Model ID": "llamacpp-server-model",
         },
     )
     assert _settings.llm_backend == "llamacpp"
     _assert_last_call("llamacpp")
 
-    _apply_provider(
-        settings_app_test,
-        provider="llamacpp",
-        inputs={
-            "llama.cpp server URL (optional)": "",
-            "GGUF model path (LlamaCPP local)": str(gguf_path),
-        },
-        allow_gguf_base=True,
-    )
-    assert _settings.llm_backend == "llamacpp"
-    _assert_last_call("llamacpp")
-
-    assert len(calls) == 5
+    assert len(calls) == 4

@@ -1,0 +1,30 @@
+{"advisory":"GHSA-x2qx-6953-8485","manifest":"uv.lock","number":89,"package":"GitPython","patched":"3.1.47","state":"open","vulnerable":"\u003c 3.1.47"}
+{"advisory":"GHSA-rpm5-65cw-6hj4","manifest":"uv.lock","number":88,"package":"GitPython","patched":"3.1.47","state":"open","vulnerable":"\u003e= 3.1.30, \u003c 3.1.47"}
+{"advisory":"GHSA-v4p8-mg3p-g94g","manifest":"uv.lock","number":87,"package":"litellm","patched":"1.83.7","state":"open","vulnerable":"\u003e= 1.74.2, \u003c 1.83.7"}
+{"advisory":"GHSA-95ww-475f-pr4f","manifest":"uv.lock","number":86,"package":"ragas","patched":null,"state":"open","vulnerable":"\u003e= 0.2.3, \u003c= 0.4.3"}
+{"advisory":"GHSA-vfmq-68hx-4jfw","manifest":"uv.lock","number":85,"package":"lxml","patched":"6.1.0","state":"open","vulnerable":"\u003c 6.1.0"}
+{"advisory":"GHSA-mf9w-mj56-hr94","manifest":"uv.lock","number":84,"package":"python-dotenv","patched":"1.2.2","state":"open","vulnerable":"\u003c 1.2.2"}
+{"advisory":"GHSA-h8wq-7xc4-p3qx","manifest":"uv.lock","number":83,"package":"nltk","patched":"3.9.3","state":"open","vulnerable":"\u003c 3.9.3"}
+{"advisory":"GHSA-r7w7-9xr2-qq2r","manifest":"uv.lock","number":82,"package":"langchain-openai","patched":"1.1.14","state":"open","vulnerable":"\u003c 1.1.14"}
+{"advisory":"GHSA-fv5p-p927-qmxr","manifest":"uv.lock","number":81,"package":"langchain-text-splitters","patched":"1.1.2","state":"open","vulnerable":"\u003c 1.1.2"}
+{"advisory":"GHSA-v92g-xgxw-vvmm","manifest":"uv.lock","number":80,"package":"Mako","patched":"1.3.11","state":"open","vulnerable":"\u003c= 1.3.10"}
+{"advisory":"GHSA-x284-j5p8-9c5p","manifest":"uv.lock","number":79,"package":"pypdf","patched":"6.10.2","state":"open","vulnerable":"\u003c 6.10.2"}
+{"advisory":"GHSA-7gw9-cf7v-778f","manifest":"uv.lock","number":78,"package":"pypdf","patched":"6.10.2","state":"open","vulnerable":"\u003c 6.10.2"}
+{"advisory":"GHSA-4pxv-j86v-mhcw","manifest":"uv.lock","number":77,"package":"pypdf","patched":"6.10.2","state":"open","vulnerable":"\u003c 6.10.2"}
+{"advisory":"GHSA-rr7j-v2q5-chgv","manifest":"uv.lock","number":76,"package":"langsmith","patched":"0.7.31","state":"open","vulnerable":"\u003c= 0.7.30"}
+{"advisory":"GHSA-mj87-hwqh-73pj","manifest":"uv.lock","number":75,"package":"python-multipart","patched":"0.0.26","state":"open","vulnerable":"\u003c 0.0.26"}
+{"advisory":"GHSA-jj6c-8h6c-hppx","manifest":"uv.lock","number":74,"package":"pypdf","patched":"6.10.1","state":"open","vulnerable":"\u003c 6.10.1"}
+{"advisory":"GHSA-6w46-j5rx-g56g","manifest":"uv.lock","number":73,"package":"pytest","patched":"9.0.3","state":"open","vulnerable":"\u003c 9.0.3"}
+{"advisory":"GHSA-whj4-6x5x-4v2j","manifest":"uv.lock","number":72,"package":"pillow","patched":"12.2.0","state":"open","vulnerable":"\u003e= 10.3.0, \u003c 12.2.0"}
+{"advisory":"GHSA-3crg-w4f6-42mx","manifest":"uv.lock","number":71,"package":"pypdf","patched":"6.10.0","state":"open","vulnerable":"\u003c 6.10.0"}
+{"advisory":"GHSA-926x-3r5x-gfhw","manifest":"uv.lock","number":70,"package":"langchain-core","patched":"1.2.28","state":"open","vulnerable":"\u003e= 1.0.0a1, \u003c 1.2.28"}
+{"advisory":"GHSA-p423-j2cm-9vmq","manifest":"uv.lock","number":69,"package":"cryptography","patched":"46.0.7","state":"open","vulnerable":"\u003e= 45.0.0, \u003c 46.0.7"}
+{"advisory":"GHSA-69w3-r845-3855","manifest":"uv.lock","number":68,"package":"transformers","patched":"5.0.0rc3","state":"open","vulnerable":"\u003c 5.0.0rc3"}
+{"advisory":"GHSA-69x8-hrgq-fjj8","manifest":"uv.lock","number":67,"package":"litellm","patched":"1.83.0","state":"open","vulnerable":"\u003c 1.83.0"}
+{"advisory":"GHSA-fqwm-6jpj-5wxc","manifest":"uv.lock","number":66,"package":"tornado","patched":"6.5.5","state":"open","vulnerable":"\u003c 6.5.5"}
+{"advisory":"GHSA-jjhc-v7c2-5hh6","manifest":"uv.lock","number":65,"package":"litellm","patched":"1.83.0","state":"open","vulnerable":"\u003c 1.83.0"}
+{"advisory":"GHSA-53mr-6c8q-9789","manifest":"uv.lock","number":64,"package":"litellm","patched":"1.83.0","state":"open","vulnerable":"\u003c 1.83.0"}
+{"advisory":"GHSA-q56x-g2fj-4rj6","manifest":"uv.lock","number":63,"package":"onnx","patched":"1.21.0","state":"open","vulnerable":"\u003c= 1.20.1"}
+{"advisory":"GHSA-c427-h43c-vf67","manifest":"uv.lock","number":62,"package":"aiohttp","patched":"3.13.4","state":"open","vulnerable":"\u003c= 3.13.3"}
+{"advisory":"GHSA-63hf-3vf5-4wqf","manifest":"uv.lock","number":61,"package":"aiohttp","patched":"3.13.4","state":"open","vulnerable":"\u003c= 3.13.3"}
+{"advisory":"GHSA-966j-vmvw-g2g9","manifest":"uv.lock","number":60,"package":"aiohttp","patched":"3.13.4","state":"open","vulnerable":"\u003c= 3.13.3"}

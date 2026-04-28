@@ -1,8 +1,8 @@
 ---
 spec: SPEC-001
 title: Multi-provider LLM Runtime with UI Selection and Hardware-Aware Paths
-version: 1.1.0
-date: 2026-01-17
+version: 1.2.0
+date: 2026-04-28
 owners: ["ai-arch"]
 status: Implemented
 related_requirements:
@@ -20,17 +20,16 @@ related_adrs: ["ADR-001","ADR-004","ADR-009","ADR-010","ADR-024","ADR-059","ADR-
 Provide a single, definitive LLM runtime with **five providers** selectable in the UI:
 
 - **Ollama** (default)
-- **llama.cpp** (local GGUF via library)
+- **llama.cpp** (OpenAI-compatible server)
 - **vLLM** (external server; OpenAI-compatible HTTP)
 - **LM Studio** (external server; OpenAI-compatible HTTP)
 - **OpenAI-compatible** (generic provider for OpenAI/OpenRouter/xAI/Vercel AI Gateway/LiteLLM Proxy/any compatible endpoint)
 
-Persist selection to settings. Expose model id/path, context, streaming, and safe endpoint configuration. Enable schema-guided outputs when available.
+Persist selection to settings. Expose model id, context, streaming, and safe endpoint configuration. Enable schema-guided outputs when available.
 
 ## Architecture Notes
 
 - Use **LlamaIndex** official adapters:
-  - `llama_index.llms.llama_cpp.LlamaCPP` for GGUF local models.
   - `llama_index.llms.openai_like.OpenAILike` for **vLLM**/**LM Studio**/**llama.cpp server** (OpenAI-compatible endpoints).
   - `llama_index.llms.openai.OpenAIResponses` for providers that support the OpenAI Responses API (opt-in, OpenAI-compatible base URL).
   - `llama_index.llms.ollama.Ollama` for **Ollama**.
@@ -49,7 +48,6 @@ Persist selection to settings. Expose model id/path, context, streaming, and saf
 
 ```python
 from llama_index.core import Settings
-from llama_index.llms.llama_cpp import LlamaCPP
 from llama_index.llms.openai_like import OpenAILike
 from llama_index.llms.openai import OpenAIResponses
 from llama_index.llms.ollama import Ollama
@@ -72,9 +70,9 @@ from src.config.llm_factory import build_llm
 ### UPDATE
 
 - `src/config/settings.py`: Add fields for all providers (urls, flags), validation, defaults.
-- `src/config/llm_factory.py`: Ensure correct backend mapping, timeouts, context_window handling, GPU offload for llama.cpp.
+- `src/config/llm_factory.py`: Ensure correct backend mapping, timeouts, and context_window handling.
 - `src/config/integrations.py`: Do not overwrite pre-set test LLMs. Set `Settings.context_window` and `Settings.num_output`.
-- `src/pages/04_settings.py`: Add controls to change provider, model id/path, URLs, and save.
+- `src/pages/04_settings.py`: Add controls to change provider, model id, URLs, and save.
 
 ### DELETE
 
@@ -114,9 +112,9 @@ Feature: LLM provider selection
     Then Settings.llm SHALL be OpenAIResponses
     And chat replies successfully
 
-  Scenario: Use llama.cpp with GGUF
-    Given I select 'llamacpp' and model_path points to a GGUF file
-    Then Settings.llm SHALL be LlamaCPP
+  Scenario: Use llama.cpp server
+    Given I select 'llamacpp' and set base_url to http://localhost:8080/v1
+    Then Settings.llm SHALL be OpenAILike
     And generation SHALL not raise exceptions
 
   Scenario: LM Studio endpoint
@@ -130,7 +128,7 @@ Feature: LLM provider selection
 - [x] Add UI select for provider option: openai_compatible (generic OpenAI-compatible endpoint).
 - [x] Validate base URLs: vLLM may be raw server or OpenAI-compatible; LM Studio requires `/v1`.
 - [x] Support opt-in Responses API mode for OpenAI-compatible endpoints.
-- [x] LlamaCPP uses `model_kwargs={"n_gpu_layers": -1 if GPU else 0}`.
+- [x] LlamaCPP uses OpenAI-compatible server mode via `OpenAILike`.
 - [x] Hook `Settings.llm` inside `setup_llamaindex()` only if not already set (allow force rebind).
 - [x] Persist settings to `.env` via existing settings save util (minimal updater implemented).
 

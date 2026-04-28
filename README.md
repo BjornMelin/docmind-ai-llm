@@ -108,7 +108,7 @@ Design goals:
 
 - One supported LLM backend running locally: [Ollama](https://ollama.com/) (default), vLLM OpenAI-compatible server, LM Studio, or a llama.cpp server.
 
-- Python 3.13.11 (see `pyproject.toml`)
+- Python 3.12.13 (see `pyproject.toml`)
 
 - (Optional) Docker and Docker Compose for containerized deployment.
 
@@ -594,7 +594,9 @@ DOCMIND_ENABLE_DSPY_BOOTSTRAPPING=true
 Notes:
 
 - DSPy runs in the agents layer and augments retrieval by refining the query; retrieval remains library-first (server-side hybrid via Qdrant + reranking).
-- DSPy ships with the default dependencies; if it is unavailable or the flag is false, the system falls back gracefully to standard retrieval.
+- DSPy is not installed by default while its dependency chain conflicts with
+  the project security floors. If it is unavailable or the flag is false, the
+  system falls back gracefully to standard retrieval.
 
 ### Additional Configuration
 

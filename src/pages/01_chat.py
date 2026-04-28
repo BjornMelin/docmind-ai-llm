@@ -954,12 +954,17 @@ def _query_visual_search(upload: Any, top_k: int) -> list[Any]:
         list[Any]: List of retrieved image nodes from Qdrant.
     """
     try:
-        from PIL import Image  # type: ignore
+        from src.utils.images import open_untrusted_image
     except ImportError:
         st.warning("Pillow is required for visual search.")
         return []
 
-    img = Image.open(upload)  # type: ignore[arg-type]
+    try:
+        img = open_untrusted_image(upload)
+    except Exception:
+        st.warning("Uploaded image could not be opened safely.")
+        return []
+
     retriever = _get_image_siglip_retriever()
     return retriever.retrieve_by_image(img, top_k=int(top_k))
 

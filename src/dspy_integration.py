@@ -35,8 +35,8 @@ VARIANT_BONUS_PER_ITEM = 0.1
 MAX_QUALITY_SCORE = 1.0
 
 try:
-    import dspy
-    from dspy.teleprompt import BootstrapFewShot
+    import dspy  # type: ignore[import-not-found]
+    from dspy.teleprompt import BootstrapFewShot  # type: ignore[import-not-found]
 
     DSPY_AVAILABLE = True
 except ImportError:

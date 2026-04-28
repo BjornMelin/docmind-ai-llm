@@ -9,7 +9,7 @@ DocMind AI is a pure Python project managed by `uv`.
 
 ### Prerequisites
 
-- **Python**: 3.13.11 (managed by `uv`)
+- **Python**: 3.12.13 (managed by `uv`)
 - **GPU**: NVIDIA RTX 4090 (16GB VRAM) recommended for vLLM/ColPali.
 - **System**: Linux / macOS / WSL2.
 
@@ -81,7 +81,7 @@ Choose the backend that fits your hardware and throughput needs.
 | :------------ | :----------------- | :--------------------- | :---------------------------------------- |
 | **vLLM**      | NVIDIA GPU (16GB+) | Production / High Load | Highest throughput; FlashInfer optimized. |
 | **Ollama**    | Mac / Linux / Win  | General / Easy Setup   | Zero-config; manages model lifecycle.     |
-| **LlamaCPP**  | Local Disk / CPU   | Low Resource / Edge    | Runs `.gguf` directly; low overhead.      |
+| **LlamaCPP**  | Local HTTP server   | Low Resource / Edge    | OpenAI-compatible llama.cpp server mode.  |
 | **LM Studio** | Desktop UI         | Research / Dev         | Visual parameter tuning.                  |
 
 ### Performance Tuning (vLLM)

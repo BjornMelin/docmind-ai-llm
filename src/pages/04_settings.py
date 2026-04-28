@@ -11,7 +11,6 @@ import json
 import re
 import time
 from collections.abc import Sequence
-from pathlib import Path, PurePath
 from typing import Any, TypedDict
 
 import streamlit as st
@@ -54,186 +53,6 @@ def _validate_candidate(
     return validated, []
 
 
-_GGUF_PATH_PATTERN = re.compile(r"^[A-Za-z0-9._ \-~/\\\\:]+$")
-
-
-def _get_resolved_home_dir() -> Path:
-    """Resolve the home directory with fallback to original on errors.
-
-    Returns:
-        Expanded and resolved home directory path, or original Path.home() if
-        resolution fails due to OS, runtime, or value errors.
-    """
-    home_dir = Path.home()
-    try:
-        return home_dir.expanduser().resolve(strict=False)
-    except (OSError, RuntimeError, ValueError):
-        return home_dir
-
-
-def _clean_gguf_path_text(path_text: str) -> str | None:
-    """Validate and normalize raw GGUF path input.
-
-    Args:
-        path_text: Raw path string from UI input.
-
-    Returns:
-        str | None: Trimmed and validated path string, or None if invalid.
-    """
-    clean = (path_text or "").strip()
-    if not clean:
-        return None
-    if clean.startswith("~") and not clean.startswith("~/"):
-        return None
-    if (
-        "\x00" in clean
-        or any(ord(ch) < 32 for ch in clean)
-        or _GGUF_PATH_PATTERN.fullmatch(clean) is None
-    ):
-        return None
-    return clean
-
-
-def _resolve_allowed_gguf_bases() -> list[Path]:
-    """Resolve allowed base directories for GGUF paths.
-
-    Returns:
-        list[Path]: List of absolute, resolved paths allowed as GGUF bases.
-    """
-    home_dir_resolved = _get_resolved_home_dir()
-
-    allowed_bases = [home_dir_resolved]
-    try:
-        extra_bases = st.session_state.get("docmind_allowed_gguf_base_dirs")
-    except Exception:  # pragma: no cover - defensive
-        extra_bases = None
-    if isinstance(extra_bases, (list, tuple)):
-        allowed_bases.extend(
-            [Path(str(base)) for base in extra_bases if str(base).strip()]
-        )
-
-    base_dirs: list[Path] = []
-    for base in allowed_bases:
-        try:
-            base_dir = Path(str(base)).expanduser().resolve(strict=False)
-        except (OSError, RuntimeError, ValueError):
-            continue
-        base_dirs.append(base_dir)
-    return base_dirs
-
-
-def _build_gguf_candidates(
-    clean: str, base_dirs: list[Path], home_dir_resolved: Path
-) -> list[tuple[Path, Path]]:
-    """Construct candidate GGUF paths under allowed bases.
-
-    Args:
-        clean: Normalized path string.
-        base_dirs: List of allowed base directories.
-        home_dir_resolved: The current user's resolved home directory.
-
-    Returns:
-        list[tuple[Path, Path]]: List of candidate (base_dir, candidate_path)
-            tuples to evaluate.
-    """
-    raw_text = clean
-    base_override: Path | None = None
-    if clean.startswith("~/"):
-        raw_text = clean[2:]
-        if not raw_text:
-            return []
-        base_override = home_dir_resolved
-
-    raw = PurePath(raw_text)
-    if any(part == ".." for part in raw.parts):
-        return []
-
-    candidates: list[tuple[Path, Path]] = []
-    if raw.is_absolute() and base_override is None:
-        for base_dir in base_dirs:
-            if raw.is_relative_to(base_dir):
-                candidates.append((base_dir, Path(raw)))
-                break
-        return candidates
-
-    for base_dir in base_dirs:
-        if base_override is not None and base_dir != base_override:
-            continue
-        candidates.append((base_dir, base_dir / raw))
-    return candidates
-
-
-def _is_valid_gguf_candidate(base_dir: Path, candidate: Path) -> Path | None:
-    """Return a resolved GGUF path if candidate passes safety checks.
-
-    Args:
-        base_dir: The base directory to check against.
-        candidate: The candidate path to validate.
-
-    Returns:
-        Path | None: Resolved Path if valid and safe, else None.
-    """
-    stop_at = base_dir
-    symlink_found = False
-    reached_base = False
-    try:
-        for part in (candidate, *candidate.parents):
-            if part.is_symlink():
-                symlink_found = True
-                break
-            if part == stop_at:
-                reached_base = True
-                break
-    except OSError:
-        return None
-
-    if symlink_found or not reached_base:
-        return None
-
-    try:
-        resolved = candidate.resolve(strict=False)
-        resolved.relative_to(base_dir)  # Validate path is within base
-        if resolved.is_file() and resolved.suffix.lower() == ".gguf":
-            return resolved
-    except (OSError, RuntimeError, ValueError):
-        return None
-    return None
-
-
-def resolve_valid_gguf_path(path_text: str) -> Path | None:
-    """Resolve and validate a GGUF model path.
-
-    Security: resolve once and enforce that the resolved path lives within one
-    of the allowed base directories (default: the current user home directory).
-
-    WARNING: This function is best-effort pre-validation only. Callers MUST
-    treat any subsequent file operations as untrusted and handle failures
-    defensively (including TOCTOU races, permission errors, and IO errors).
-
-    Args:
-        path_text: The raw path string from UI input.
-
-    Returns:
-        Path | None: The resolved and validated GGUF path, or None if invalid.
-    """
-    clean = _clean_gguf_path_text(path_text)
-    if clean is None:
-        return None
-
-    base_dirs = _resolve_allowed_gguf_bases()
-    if not base_dirs:
-        return None
-
-    home_dir_resolved = _get_resolved_home_dir()
-
-    candidates = _build_gguf_candidates(clean, base_dirs, home_dir_resolved)
-    for base_dir, candidate in candidates:
-        resolved = _is_valid_gguf_candidate(base_dir, candidate)
-        if resolved is not None:
-            return resolved
-    return None
-
-
 def _apply_validated_runtime(validated: DocMindSettings) -> None:
     """Apply runtime by updating settings then rebinding LlamaIndex Settings.llm.
 
@@ -257,11 +76,6 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
             "vllm_base_url": validated.vllm_base_url,
             "lmstudio_base_url": validated.lmstudio_base_url,
             "llamacpp_base_url": validated.llamacpp_base_url,
-            "vllm": settings.vllm.model_copy(
-                update={
-                    "llamacpp_model_path": validated.vllm.llamacpp_model_path,
-                }
-            ),
             "security": settings.security.model_copy(
                 update={
                     "allow_remote_endpoints": validated.security.allow_remote_endpoints,
@@ -381,7 +195,6 @@ def main() -> None:
         ollama_enable_logprobs,
         ollama_top_logprobs,
     ) = _render_ollama_advanced_section(provider)
-    gguf_path = _render_gguf_path(provider)
     allow_remote = _render_security_section()
     rrf_k, t_text, t_siglip, t_colpali, t_total = _render_retrieval_section()
     _render_graphrag_section(graphrag_health)
@@ -392,9 +205,7 @@ def main() -> None:
             allowlist=settings.security.endpoint_allowlist,
         )
 
-    ui_errors, resolved_gguf_path = _validate_gguf_inputs(
-        provider, llamacpp_url, gguf_path
-    )
+    ui_errors = _validate_llamacpp_inputs(provider, llamacpp_url)
     ui_errors.extend(openai_ui_errors)
     values: SettingsFormValues = {
         "provider": provider,
@@ -423,7 +234,7 @@ def main() -> None:
         "t_colpali": t_colpali,
         "t_total": t_total,
     }
-    candidate = _build_candidate_settings(values, resolved_gguf_path)
+    candidate = _build_candidate_settings(values)
     validated, validation_errors = _validate_candidate(candidate)
     _render_resolved_base_url(validated)
     _render_validation(ui_errors, validation_errors)
@@ -461,9 +272,9 @@ def _render_model_section() -> tuple[str, int, int, bool]:
     """
     st.subheader("Model & Context")
     model = st.text_input(
-        "Model (id or GGUF path)",
+        "Model ID",
         value=(settings.model or settings.vllm.model),
-        help=("Model identifier (Ollama/vLLM/LM Studio) or GGUF path (LlamaCPP)"),
+        help="Model identifier exposed by the selected provider.",
     )
     context_window = int(
         st.number_input(
@@ -736,7 +547,7 @@ def _render_provider_urls(provider: str) -> tuple[str, str, str, str]:
             help="OpenAI-compatible; normalized to end with /v1",
         )
         llamacpp_url = st.text_input(
-            "llama.cpp server URL (optional)",
+            "llama.cpp server URL",
             value=str(settings.llamacpp_base_url) if settings.llamacpp_base_url else "",
             placeholder="http://localhost:8080/v1",
         )
@@ -818,23 +629,6 @@ def _render_ollama_advanced_section(
     )
     embed_dimensions = int(embed_dim_raw) if embed_dim_raw > 0 else None
     return api_key, enable_web_search, embed_dimensions, enable_logprobs, top_logprobs
-
-
-def _render_gguf_path(provider: str) -> str:
-    """Render GGUF path input and return value.
-
-    Args:
-        provider: Current provider name.
-
-    Returns:
-        str: Normalized GGUF path string.
-    """
-    if provider != "llamacpp":
-        return str(settings.vllm.llamacpp_model_path)
-    return st.text_input(
-        "GGUF model path (LlamaCPP local)",
-        value=str(settings.vllm.llamacpp_model_path),
-    )
 
 
 def _render_security_section() -> bool:
@@ -971,48 +765,27 @@ def _render_graphrag_section(
         st.info(hint)
 
 
-def _validate_gguf_inputs(
-    provider: str, llamacpp_url: str, gguf_path: str
-) -> tuple[list[str], Path | None]:
-    """Validate GGUF path inputs for llama.cpp settings.
+def _validate_llamacpp_inputs(provider: str, llamacpp_url: str) -> list[str]:
+    """Validate llama.cpp server settings.
 
     Args:
         provider: Current provider name.
         llamacpp_url: The llama.cpp server URL.
-        gguf_path: The path to the GGUF model file.
 
     Returns:
-        tuple[list[str], Path | None]: A tuple of (ui_errors, resolved_gguf_path).
-            ui_errors is a list of human-readable error messages.
-            resolved_gguf_path is the validated and resolved Path object, or None.
+        list[str]: Human-readable validation messages.
     """
     ui_errors: list[str] = []
     clean_llamacpp_url = (llamacpp_url or "").strip()
-    clean_gguf_path = (gguf_path or "").strip()
     is_llamacpp = provider == "llamacpp"
     if not is_llamacpp:
-        return ui_errors, None
+        return ui_errors
 
-    # Server mode: base URL provided -> no local GGUF validation required.
     if clean_llamacpp_url:
-        return ui_errors, None
+        return ui_errors
 
-    # Local mode: require a valid GGUF path.
-    if not clean_gguf_path:
-        ui_errors.append(
-            "Provide either a llama.cpp base URL or a local GGUF model path."
-        )
-        return ui_errors, None
-
-    resolved_gguf_path = resolve_valid_gguf_path(clean_gguf_path)
-    if resolved_gguf_path is None:
-        ui_errors.append(
-            "Invalid GGUF model path. File must exist, have a .gguf extension, "
-            "and be under the allowed base directories."
-        )
-        return ui_errors, None
-
-    return ui_errors, resolved_gguf_path
+    ui_errors.append("Provide a llama.cpp OpenAI-compatible server URL.")
+    return ui_errors
 
 
 class SettingsFormValues(TypedDict):
@@ -1045,17 +818,9 @@ class SettingsFormValues(TypedDict):
     t_total: int
 
 
-def _build_candidate_settings(
-    values: SettingsFormValues, resolved_gguf_path: Path | None
-) -> dict[str, Any]:
+def _build_candidate_settings(values: SettingsFormValues) -> dict[str, Any]:
     """Build a settings payload for validation."""
     provider = str(values["provider"])
-    is_llamacpp = provider == "llamacpp"
-    llamacpp_model_path = (
-        str(resolved_gguf_path)
-        if is_llamacpp and resolved_gguf_path is not None
-        else str(settings.vllm.llamacpp_model_path)
-    )
     headers, _ = _parse_headers_json(values["openai_headers_json"])
     return {
         "llm_backend": provider,
@@ -1079,7 +844,6 @@ def _build_candidate_settings(
         "llamacpp_base_url": str(values["llamacpp_url"]).strip() or None,
         "llm_request_timeout_seconds": int(values["timeout_s"]),
         "enable_gpu_acceleration": bool(values["use_gpu"]),
-        "vllm": {"llamacpp_model_path": llamacpp_model_path},
         "security": {
             "allow_remote_endpoints": bool(values["allow_remote"]),
             "endpoint_allowlist": list(settings.security.endpoint_allowlist),
@@ -1320,7 +1084,6 @@ def _persist_env_from_validated(validated: DocMindSettings) -> None:
         "DOCMIND_LLAMACPP_BASE_URL": (
             str(validated.llamacpp_base_url) if validated.llamacpp_base_url else ""
         ),
-        "DOCMIND_VLLM__LLAMACPP_MODEL_PATH": str(validated.vllm.llamacpp_model_path),
         "DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS": (
             "true" if validated.security.allow_remote_endpoints else "false"
         ),

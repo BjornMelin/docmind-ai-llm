@@ -10,9 +10,55 @@ from __future__ import annotations
 import contextlib
 import os
 from contextlib import contextmanager
+from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
+
+MAX_UNTRUSTED_IMAGE_PIXELS = 50_000_000
+
+
+def _configure_pillow_limits(image_module: Any) -> None:
+    """Apply deliberate Pillow limits for untrusted image inputs."""
+    current_limit = image_module.MAX_IMAGE_PIXELS
+    if current_limit is None or current_limit > MAX_UNTRUSTED_IMAGE_PIXELS:
+        image_module.MAX_IMAGE_PIXELS = MAX_UNTRUSTED_IMAGE_PIXELS
+
+
+def open_untrusted_image(upload: Any):
+    """Open and verify an untrusted uploaded image.
+
+    Args:
+        upload: Streamlit uploaded file or another binary file-like object.
+
+    Returns:
+        PIL.Image.Image: Loaded image detached from the upload stream.
+
+    Raises:
+        ImportError: If Pillow is not installed.
+        PIL.UnidentifiedImageError: If Pillow cannot identify the image.
+        PIL.Image.DecompressionBombError: If the image exceeds configured
+            pixel limits.
+    """
+    try:
+        from PIL import Image  # type: ignore
+    except Exception as exc:  # pragma: no cover - optional dep
+        raise ImportError("Pillow is required for image operations") from exc
+
+    _configure_pillow_limits(Image)
+    if hasattr(upload, "getvalue"):
+        data = bytes(upload.getvalue())
+    else:
+        if hasattr(upload, "seek"):
+            upload.seek(0)
+        data = bytes(upload.read())
+
+    with Image.open(BytesIO(data)) as probe:
+        probe.verify()
+    with Image.open(BytesIO(data)) as image:
+        image.load()
+        return image.copy()
 
 
 @contextmanager
@@ -132,4 +178,4 @@ def ensure_thumbnail(
     return thumb_plain
 
 
-__all__ = ["ensure_thumbnail", "open_image_encrypted"]
+__all__ = ["ensure_thumbnail", "open_image_encrypted", "open_untrusted_image"]

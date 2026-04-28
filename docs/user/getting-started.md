@@ -4,7 +4,7 @@ DocMind AI is a local-first document analysis app. It runs offline after initial
 
 ## Prerequisites
 
-- **Python**: 3.13.11 (see `pyproject.toml`)
+- **Python**: 3.12.13 (see `pyproject.toml`)
 - **uv**: dependency manager used by this repo
 - **Docker** (optional but recommended): for running Qdrant locally
 - **One local LLM backend**:

@@ -10,22 +10,19 @@ Backends:
   :class:`llama_index.llms.openai.OpenAIResponses` when enabled)
 - ``vllm``     -> :class:`llama_index.llms.openai_like.OpenAILike`
 - ``lmstudio`` -> :class:`llama_index.llms.openai_like.OpenAILike`
-- ``llamacpp`` -> :class:`llama_index.llms.llama_cpp.LlamaCPP`
+- ``llamacpp`` -> :class:`llama_index.llms.openai_like.OpenAILike`
 
 Notes:
 - All OpenAI-compatible servers (LM Studio, vLLM OpenAI-compatible, llama.cpp server)
   are normalized to include a single "/v1" by default. Disable normalization via
   ``settings.openai.require_v1`` only for endpoints rooted at "/" (e.g., LiteLLM Proxy).
-- LlamaCPP GPU offload must be passed through ``model_kwargs={"n_gpu_layers": ...}``.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from src.config.settings import DocMindSettings, OpenAIConfig
-
-_DEFAULT_OPENAI_BASE_URL = OpenAIConfig().base_url
+from src.config.settings import DocMindSettings
 
 
 def _resolve_api_key(settings: DocMindSettings) -> str:
@@ -103,12 +100,16 @@ def build_llm(settings: DocMindSettings) -> Any:
                 timeout=timeout_s,
                 default_headers=settings.openai.default_headers,
             )
-    elif backend in {"vllm", "lmstudio"}:
+    elif backend in {"vllm", "lmstudio", "llamacpp"}:
         from llama_index.llms.openai_like import OpenAILike  # type: ignore
+
+        api_base = settings.backend_base_url_normalized
+        if not api_base:
+            raise ValueError(f"No OpenAI-compatible base URL configured for {backend}")
 
         llm = OpenAILike(
             model=model_name,
-            api_base=settings.backend_base_url_normalized,
+            api_base=api_base,
             api_key=_resolve_api_key(settings),
             is_chat_model=True,
             is_function_calling_model=False,
@@ -116,34 +117,6 @@ def build_llm(settings: DocMindSettings) -> Any:
             timeout=timeout_s,
             default_headers=settings.openai.default_headers,
         )
-    elif backend == "llamacpp":
-        openai_base_url = settings.openai.base_url
-        has_custom_openai_base = bool(
-            openai_base_url and openai_base_url != _DEFAULT_OPENAI_BASE_URL
-        )
-        if settings.llamacpp_base_url or has_custom_openai_base:
-            from llama_index.llms.openai_like import OpenAILike  # type: ignore
-
-            llm = OpenAILike(
-                model=model_name,
-                api_base=settings.backend_base_url_normalized,
-                api_key=_resolve_api_key(settings),
-                is_chat_model=True,
-                is_function_calling_model=False,
-                context_window=context_window,
-                timeout=timeout_s,
-                default_headers=settings.openai.default_headers,
-            )
-        else:
-            from llama_index.llms.llama_cpp import LlamaCPP  # type: ignore
-
-            llm = LlamaCPP(
-                model_path=str(settings.vllm.llamacpp_model_path),
-                context_window=context_window,
-                model_kwargs={
-                    "n_gpu_layers": -1 if settings.enable_gpu_acceleration else 0,
-                },
-            )
     else:
         raise ValueError(f"Unsupported llm_backend: {backend}")
 

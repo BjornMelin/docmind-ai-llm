@@ -1,11 +1,11 @@
 ---
 ADR: 064
 Title: Python 3.13-Only Baseline (Primary 3.13.11)
-Status: Accepted
+Status: Superseded
 Version: 1.0
 Date: 2026-01-17
 Supersedes: ADR-062
-Superseded-by:
+Superseded-by: ADR-065
 Related: ADR-042, ADR-062, ADR-063
 Tags: python, packaging, tooling, compatibility
 References:

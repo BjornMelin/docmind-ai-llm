@@ -80,13 +80,13 @@ When resuming after compaction:
 - `uv sync --extra graph` (GraphRAG adapters)
 - `uv sync --extra multimodal` (ColPali reranker)
 - `uv sync --extra observability` (OTLP exporters + portalocker)
-- `uv sync --extra eval` (ragas, beir)
+- `uv sync --extra eval` (beir)
 
 ## Dependency constraints (don’t drift)
 
 Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
-- Python: `>=3.13,<3.14` (primary dev/runtime: Python 3.13.11)
+- Python: `>=3.12,<3.14` (primary dev/runtime: Python 3.12.13)
 - Keep these coupled:
   - Torch 2.8.x ↔ Transformers `<5.0` (vLLM is external-only via OpenAI-compatible HTTP)
   - DuckDB `<1.4.0` (LlamaIndex integrations cap it)
@@ -122,7 +122,7 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
 ## Containerization (CI-enforced)
 
-- `Dockerfile`: Python 3.13.11 base; final `USER` non-root; `CMD`/`ENTRYPOINT` exec-form (no `sh -c`); no `:latest`.
+- `Dockerfile`: Python 3.12.13 base; final `USER` non-root; `CMD`/`ENTRYPOINT` exec-form (no `sh -c`); no `:latest`.
 - `.dockerignore`: ignore `.env` (`.env`, `.env.*`, or `.env*`); don’t bake `.env` into images.
 - Compose: use canonical `DOCMIND_*` env vars (no legacy `OLLAMA_BASE_URL`/`VLLM_BASE_URL`/`LMSTUDIO_BASE_URL`); prod override sets `read_only: true` and `tmpfs: /tmp`.
 
