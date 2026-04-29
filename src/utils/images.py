@@ -5,6 +5,8 @@ Provides a context manager to open images securely, handling optional
 cleaned up regardless of success or failure.
 """
 
+# ruff: noqa: I001
+
 from __future__ import annotations
 
 import contextlib
@@ -16,7 +18,9 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from io import BytesIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any
+from typing import TYPE_CHECKING
+from typing import cast
 
 from loguru import logger
 
