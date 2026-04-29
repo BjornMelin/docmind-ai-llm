@@ -287,6 +287,7 @@ def build_llm(settings: DocMindSettings):
             timeout=float(settings.llm_request_timeout_seconds),
         )
     if settings.llm_backend == "llamacpp":
+        from llama_index.llms.openai_like import OpenAILike
         return OpenAILike(
             model=settings.vllm.model,
             api_base=settings.backend_base_url_normalized,

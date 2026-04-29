@@ -18,9 +18,22 @@ from pydantic import ValidationError
 
 from src.config.env_persistence import persist_env
 from src.config.settings import DocMindSettings, settings
+from src.config.settings_utils import DEFAULT_OPENAI_BASE_URL, ensure_v1
 from src.retrieval import adapter_registry
 from src.ui.components.provider_badge import provider_badge
 from src.utils.telemetry import log_jsonl
+
+_LLAMACPP_DISALLOWED_SHARED_URLS = frozenset(
+    filter(
+        None,
+        {
+            str(DEFAULT_OPENAI_BASE_URL).rstrip("/"),
+            ensure_v1(DEFAULT_OPENAI_BASE_URL),
+            "https://api.openai.com",
+            "https://api.openai.com/v1",
+        },
+    )
+)
 
 
 def _validate_candidate(
@@ -787,7 +800,16 @@ def _validate_llamacpp_inputs(
     if not is_llamacpp:
         return ui_errors
 
-    if clean_llamacpp_url or clean_openai_base_url:
+    normalized_openai_base_url = (
+        ensure_v1(clean_openai_base_url) if clean_openai_base_url else None
+    )
+    has_llamacpp_url = bool(clean_llamacpp_url)
+    has_custom_shared_url = (
+        bool(clean_openai_base_url)
+        and clean_openai_base_url.rstrip("/") not in _LLAMACPP_DISALLOWED_SHARED_URLS
+        and normalized_openai_base_url not in _LLAMACPP_DISALLOWED_SHARED_URLS
+    )
+    if has_llamacpp_url or has_custom_shared_url:
         return ui_errors
 
     ui_errors.append("Provide a llama.cpp OpenAI-compatible server URL.")

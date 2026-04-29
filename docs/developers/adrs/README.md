@@ -132,6 +132,12 @@ Latest additions:
 - **ADR-041–ADR-053 (Proposed)** — Release Readiness work packages
 - **ADR-055–ADR-056 (Proposed)** — Ops metadata + agent deadline propagation work packages
 - **ADR-059 (Accepted)** — Ollama native capabilities + cloud gating
+- **ADR-060 (Accepted)** — Dotenv override modes and env overlay
+- **ADR-061 (Accepted)** — Centralized spaCy NLP subsystem
+- **ADR-062 (Superseded)** — Python 3.13.11 baseline + external vLLM policy
+- **ADR-063 (Accepted)** — LLM provider architecture
+- **ADR-064 (Superseded)** — Python 3.13-only baseline
+- **ADR-065 (Accepted)** — Python 3.12-Compatible Security Baseline
 
 ## Release Readiness (2026-01-09)
 

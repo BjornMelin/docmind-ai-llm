@@ -181,7 +181,7 @@ Manual Installation Steps (if needed):
    `diskcache`.
 
 4. Install remaining GPU dependencies (mirror [project.optional-dependencies].gpu):
-   uv pip install "fastembed-gpu>=0.7.4,<0.8.0"
+   uv pip install "fastembed-gpu>=0.8.0,<0.9.0"
 """
 
 [tool.ruff]

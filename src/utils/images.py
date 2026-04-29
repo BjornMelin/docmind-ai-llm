@@ -9,10 +9,13 @@ from __future__ import annotations
 
 import contextlib
 import os
+import tempfile
+import threading
+from collections.abc import Callable
 from contextlib import contextmanager
 from io import BytesIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from loguru import logger
 
@@ -20,6 +23,9 @@ if TYPE_CHECKING:
     from PIL.Image import Image as PILImage
 
 MAX_UNTRUSTED_IMAGE_PIXELS = 50_000_000
+MAX_IMAGE_BYTES = 25 * 1024 * 1024
+IMAGE_READ_CHUNK_BYTES = 1024 * 1024
+_PIL_MAX_PIXELS_LOCK = threading.Lock()
 
 
 def _configure_pillow_limits(image_module: Any) -> None:
@@ -27,6 +33,40 @@ def _configure_pillow_limits(image_module: Any) -> None:
     current_limit = image_module.MAX_IMAGE_PIXELS
     if current_limit is None or current_limit > MAX_UNTRUSTED_IMAGE_PIXELS:
         image_module.MAX_IMAGE_PIXELS = MAX_UNTRUSTED_IMAGE_PIXELS
+
+
+def _buffer_upload(upload: Any) -> BytesIO:
+    """Read an upload into a bounded buffer.
+
+    Args:
+        upload: Binary file-like object.
+
+    Returns:
+        BytesIO: In-memory copy of the uploaded bytes.
+
+    Raises:
+        ValueError: If the upload exceeds `MAX_IMAGE_BYTES`.
+        TypeError: If `upload` does not expose a binary `read` method.
+    """
+    read = getattr(upload, "read", None)
+    if not callable(read):
+        raise TypeError("Upload object must expose a binary read() method")
+    read_bytes = cast(Callable[[int], bytes], read)
+    if hasattr(upload, "seek"):
+        upload.seek(0)
+
+    total = 0
+    with tempfile.SpooledTemporaryFile(max_size=IMAGE_READ_CHUNK_BYTES) as buffer:
+        while True:
+            chunk = read_bytes(IMAGE_READ_CHUNK_BYTES)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_IMAGE_BYTES:
+                raise ValueError("Uploaded image exceeds the maximum allowed size")
+            buffer.write(chunk)
+        buffer.seek(0)
+        return BytesIO(buffer.read())
 
 
 def open_untrusted_image(upload: Any) -> PILImage:
@@ -43,29 +83,28 @@ def open_untrusted_image(upload: Any) -> PILImage:
         PIL.UnidentifiedImageError: If Pillow cannot identify the image.
         PIL.Image.DecompressionBombError: If the image exceeds configured
             pixel limits.
+        ValueError: If the upload exceeds `MAX_IMAGE_BYTES`.
     """
     try:
         from PIL import Image  # type: ignore
     except ImportError as exc:  # pragma: no cover - optional dep
         raise ImportError("Pillow is required for image operations") from exc
 
-    previous_limit = Image.MAX_IMAGE_PIXELS
-    _configure_pillow_limits(Image)
-    try:
-        if hasattr(upload, "getvalue"):
-            data = bytes(upload.getvalue())
-        else:
+    with _PIL_MAX_PIXELS_LOCK:
+        previous_limit = Image.MAX_IMAGE_PIXELS
+        _configure_pillow_limits(Image)
+        try:
+            data = _buffer_upload(upload)
+            with Image.open(data) as probe:
+                probe.verify()
+            data.seek(0)
+            with Image.open(data) as image:
+                image.load()
+                return image.copy()
+        finally:
+            Image.MAX_IMAGE_PIXELS = previous_limit
             if hasattr(upload, "seek"):
                 upload.seek(0)
-            data = bytes(upload.read())
-
-        with Image.open(BytesIO(data)) as probe:
-            probe.verify()
-        with Image.open(BytesIO(data)) as image:
-            image.load()
-            return image.copy()
-    finally:
-        Image.MAX_IMAGE_PIXELS = previous_limit
 
 
 @contextmanager

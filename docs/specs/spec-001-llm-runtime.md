@@ -149,7 +149,8 @@ Feature: LLM provider selection
 
 ## Settings Scope & Validation
 
-- The Settings page MUST include: provider selection (Ollama, vLLM, LM Studio, llama.cpp), model ID/path, context window, timeout, and GPU toggle.
+- The Settings page MUST include: provider selection (Ollama, vLLM, LM Studio, llama.cpp), model ID (or OpenAI-compatible model identifier), context window, timeout, and GPU toggle.
+- OpenAI-compatible endpoints MUST be configured with a server URL ending in `/v1` plus the provider's model identifier, for example LM Studio `http://localhost:1234/v1` with `local-model` or vLLM `http://localhost:8000/v1` with the served model name.
 - Retrieval/reranking/hybrid toggles MUST NOT appear in Settings; these remain environment‑only.
 - URL validation/allowlist:
   - LM Studio endpoints MUST end with `/v1`.
