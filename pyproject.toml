@@ -5,41 +5,41 @@ description = "Local LLM for AI-Powered Document Analysis"
 authors = [{ name = "Bjorn Melin" }]
 license-files = ["LICENSE"]
 readme = "README.md"
-requires-python = ">=3.13,<3.14" # Python 3.13-only baseline (ADR-064)
+requires-python = ">=3.12,<3.14" # Python 3.12-3.13 baseline (ADR-065)
 keywords = ["ai", "rag", "document-analysis", "llm", "hybrid-search"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
     # Application & Configuration (core runtime utilities)
-    "python-dotenv==1.2.1",
+    "python-dotenv==1.2.2",
     "loguru>=0.7.3,<1.0.0",
     "tenacity>=9.1.2,<10.0.0",
     "pydantic==2.12.5",
     "pydantic-settings==2.12.0",
-    "cryptography>=46.0.0",              # Image encryption at rest (ADR-058)
+    "cryptography>=46.0.7",              # Image encryption at rest (ADR-058)
     # UI / App Framework
     "streamlit>=1.52.2,<2.0.0",
     # Document Processing & NLP
     "unstructured[all-docs]>=0.18.26,<0.19.0",  # Multiformat parsing (PDF, DOCX, HTML, etc.)
     "pymupdf==1.26.4",                   # PDF rendering/text extraction
-    "pillow>=11.0.0,<12.0.0",            # Image handling
+    "pillow>=12.2.0,<13.0.0",            # Image handling
     "pyarrow>=21.0.0,<22.0.0",           # Columnar data interchange
     "spacy==3.8.11",                     # NLP pipeline (pinned for reproducibility)
     "typer==0.21.1",                     # spaCy CLI stability (ADR-061) – prevent typer/typer-slim import conflicts with GPU extras
     # ML/LLM Fundamentals
     "torch==2.8.0",                      # PyTorch runtime (CPU-first baseline; GPU via extras)
-    "transformers>=4.55.0,<5.0.0",       # HF model interfaces (Torch 2.8.x coupling; keep <5.0)
-    "tiktoken==0.11.0",
+    "transformers>=4.0.0,<5.0.0",        # HF model interfaces (Torch 2.8-compatible)
+    "tiktoken==0.12.0",
     "openai>=2.8.0,<3.0.0",
     "openai-whisper==20250625",          # Whisper speech-to-text (optional)
     # Local LLM Backends (CPU defaults; GPU in [gpu] extra)
     "ollama==0.6.1",
-    "llama-cpp-python>=0.3.16,<0.4.0",
     # Vector Databases & Clients
     "qdrant-client>=1.15.1,<2.0.0",
     # LlamaIndex (meta + selected integrations)
@@ -49,8 +49,7 @@ dependencies = [
     "llama-index-storage-kvstore-duckdb>=0.2.1,<0.3.0",
     "llama-index-llms-openai>=0.6.13,<0.7.0",
     "llama-index-llms-ollama>=0.9.1,<1.0.0",
-    "llama-index-llms-llama-cpp>=0.5.1,<0.6.0",
-    "llama-index-llms-openai-like>=0.5.1,<0.6.0",
+    "llama-index-llms-openai-like>=0.6.0,<0.7.0",
     "llama-index-embeddings-huggingface>=0.6.1,<0.7.0",
     "llama-index-embeddings-clip>=0.5.1,<0.6.0",
     "llama-index-embeddings-fastembed>=0.5.0,<0.6.0",
@@ -58,17 +57,17 @@ dependencies = [
     "fastembed>=0.5.1",                     # Sparse vectors (BM42) CPU support (FR-005)
     "llama-index-readers-file>=0.5.6,<0.6.0",
     # Agentic Orchestration
-    "langgraph==1.0.6",                     # Graph-based orchestration (pin to avoid ToolRuntime API churn)
-    "langgraph-checkpoint-sqlite==3.0.2",   # Durable checkpoints (ADR-058)
+    "langgraph>=1.0.10,<2.0.0",             # Graph-based orchestration
+    "langgraph-checkpoint-sqlite>=3.0.3,<4.0.0",  # Durable checkpoints (ADR-058)
     "sqlite-vec>=0.1.6",                    # Semantic search in agentic memory (SPEC-041)
     "langchain>=1.2.2,<2.0.0",              # Agent factory (create_agent) for LangGraph v1
-    "langchain-core>=1.2.6,<2.0.0",
-    "langchain-openai>=1.1.6,<2.0.0",
+    "langchain-core>=1.2.28,<2.0.0",
+    "langchain-openai>=1.1.14,<2.0.0",
     # Retrieval & Reranking Extras
     "FlagEmbedding>=1.3.5,<2.0.0",          # BGE-M3 unified embeddings
     "sentence-transformers>=5.2.0,<6.0.0",  # CrossEncoder reranking
-    # Prompt Optimization
-    "dspy-ai>=3.1.0,<4.0.0",
+    # Prompt Optimization (DSPy remains runtime-gated; install separately once
+    # its dependency chain is compatible with security floors).
     "pyyaml>=6.0.3,<7.0.0",                 # YAML parser for prompt templates
     # Storage (local analytical DB used for cache KV store)
     # Keep <1.4.0 because llama-index DuckDB integrations currently cap DuckDB <1.4.0.
@@ -86,7 +85,7 @@ dependencies = [
 # Optional runtime features published as extras (PEP 621).
 [project.optional-dependencies]
 gpu = [
-    "fastembed-gpu>=0.7.4,<0.8.0",        # GPU-accelerated embeddings
+    "fastembed-gpu>=0.8.0,<0.9.0",        # GPU-accelerated embeddings
     # spaCy GPU acceleration via CuPy (CUDA 12.x)
     "cupy-cuda12x>=13.0.0; sys_platform != 'darwin'",
 ]
@@ -109,7 +108,6 @@ multimodal = [
     "colpali-engine>=0.3.13,<0.4.0",
 ]
 eval = [
-    "ragas>=0.2.10,<0.4.0",              # RAG evaluation toolkit (Pydantic v2 compatible)
     "beir>=2.0.0,<3.0.0",                # IR benchmark datasets + evaluation
 ]
 
@@ -126,8 +124,24 @@ Documentation = "https://github.com/BjornMelin/docmind-ai-llm/tree/main/docs"
 "GPU Setup Guide" = "https://github.com/BjornMelin/docmind-ai-llm/blob/main/docs/developers/gpu-setup.md"
 
 [tool.uv]
-# Transitive dep override: rapidfuzz 3.14.0 was yanked for a debugpy crash; keep resolver away.
-constraint-dependencies = ["rapidfuzz>=3.14.1,<4.0.0"]
+# Transitive dep constraints: keep resolver away from known vulnerable/yanked ranges,
+# while only permitting prereleases when they are explicitly requested or necessary.
+prerelease = "if-necessary-or-explicit"
+constraint-dependencies = [
+    "aiohttp>=3.13.4",
+    "gitpython>=3.1.47,<4.0.0",
+    "langchain-text-splitters>=1.1.2,<2.0.0",
+    "langsmith>=0.7.31",
+    "lxml>=6.1.0",
+    "mako>=1.3.11",
+    "nltk>=3.9.4",
+    "onnx>=1.21.0",
+    "orjson>=3.11.8",
+    "pypdf>=6.10.2,<7.0.0",
+    "python-multipart>=0.0.26",
+    "rapidfuzz>=3.14.1,<4.0.0",
+    "tornado>=6.5.5",
+]
 
 
 
@@ -151,25 +165,28 @@ target_prefill_tps = [800, 1300]  # tokens per second
 # Installation Commands (documented in README.md)
 installation_notes = """
 Automated GPU Installation:
-uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128
 
 Manual Installation Steps (if needed):
 1. Install PyTorch with CUDA 12.8:
-   uv pip install torch==2.8.0 --extra-index-url https://download.pytorch.org/whl/cu128
+   uv pip install torch==2.8.0 --torch-backend cu128
 
 2. Use vLLM as an external server (OpenAI-compatible HTTP).
-   Configure `DOCMIND_OPENAI__BASE_URL` (or `DOCMIND_VLLM__VLLM_BASE_URL`) and `DOCMIND_LLM_BACKEND=vllm`.
+   Configure `DOCMIND_OPENAI__BASE_URL` (for example `https://host:port/v1`)
+   or `DOCMIND_VLLM__VLLM_BASE_URL`, and set `DOCMIND_LLM_BACKEND=vllm`.
 
-3. Install llama-cpp-python with CUDA (CUDA-enabled variant of core dependency):
-   uv pip install "llama-cpp-python>=0.3.16,<0.4.0" --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu128
+3. Use llama.cpp out-of-process behind an OpenAI-compatible HTTP endpoint.
+   The in-process `llama-cpp-python` dependency is intentionally excluded from
+   the locked app environment while its dependency chain pulls vulnerable
+   `diskcache`.
 
 4. Install remaining GPU dependencies (mirror [project.optional-dependencies].gpu):
-   uv pip install "fastembed-gpu>=0.7.4,<0.8.0"
+   uv pip install "fastembed-gpu>=0.8.0,<0.9.0"
 """
 
 [tool.ruff]
 line-length = 88
-target-version = "py313"
+target-version = "py312"
 extend-exclude = ["opensrc"]
 preview = false
 
@@ -302,7 +319,7 @@ filterwarnings = [
     "ignore::FutureWarning:httpx.*",
     "ignore:.*asyncio_default_fixture_loop_scope.*:pytest.PytestDeprecationWarning",
 ]
-minversion = "8.0"
+minversion = "9.0.3"
 markers = [
     # CI/CD Pipeline Tiers (Phase 5A Optimized)
     "unit: Fast unit tests with mocked dependencies (95%+ success rate, <0.1s avg)",
@@ -342,7 +359,7 @@ asyncio_default_fixture_loop_scope = "function"
 dev = [
     "ruff>=0.13.0,<0.15.0",
     "pyright[nodejs]>=1.1.407,<1.2.0",
-    "pytest>=8.3.1,<9.0.0",
+    "pytest>=9.0.3,<10.0.0",
     "pytest-asyncio>=1.3.0,<2.0.0",
     "pytest-cov>=7.0.0,<8.0.0",
     "pytest-benchmark>=5.2.3,<6.0.0",
@@ -357,10 +374,9 @@ dev = [
     "tomli>=2.2.1",
 ]
 test = [
-    "pytest>=8.3.1,<9.0.0",
+    "pytest>=9.0.3,<10.0.0",
     "pytest-asyncio>=1.3.0,<2.0.0",
     "pytest-cov>=7.0.0,<8.0.0",
-    "moviepy>=2.2.1,<3.0.0",  # Only needed for video processing tests
 ]
 performance = [
     "numba>=0.61.0",  # Optional JIT compilation for performance
@@ -487,7 +503,7 @@ exclude = [
     ".codex",
     "**/*.egg-info",
 ]
-pythonVersion = "3.13"
+pythonVersion = "3.12"
 venvPath = "."
 venv = ".venv"
 typeCheckingMode = "standard"

@@ -43,8 +43,6 @@ def setup_comprehensive_dependencies(monkeypatch):
 
     # Mock heavy external dependencies
     heavy_dependencies = [
-        "llama_index.llms.llama_cpp",
-        "llama_cpp",
         "transformers",
         "sentence_transformers",
         "FlagEmbedding",

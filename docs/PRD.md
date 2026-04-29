@@ -177,7 +177,7 @@ graph TD
 | RAG Framework    | llama-index                    | >=0.14.12,<0.15.0                      | Core pipelines, agent, native components |
 | Document Parsing | unstructured                   | >=0.18.26,<0.19.0                      | PDF/Office parsing                       |
 | Vector Database  | qdrant-client                  | >=1.15.1,<2.0.0                        | Hybrid vector storage                    |
-| LLM Backends     | ollama, llama-cpp-python, vllm | 0.6.1, >=0.3.16,<0.4.0, external-only  | Local LLM Inference                      |
+| LLM Backends     | ollama, OpenAI-compatible HTTP | 0.6.1, external-only                   | Local/cloud LLM inference                |
 | GPU Acceleration | torch                          | 2.8.x                                  | CUDA support & Quantization              |
 | Resilience       | tenacity                       | >=9.1.2,<10.0.0                        | Production-grade error handling          |
 | Web Interface    | streamlit                      | >=1.52.2,<2.0.0                        | User interface                           |

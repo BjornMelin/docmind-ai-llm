@@ -178,9 +178,11 @@ CLAUDE.md
 .claude/
 logs/
 docmind_ai.log
+.agents/
 repomix-output.*
 tests-output.md
 core-files-output.md
+skills-lock.json
 crawled/
 TODO.md.bak
 ai-research/
@@ -197,6 +199,13 @@ opensrc/
 .opencode/
 /agent_audit*
 migration_plan.md
+
+# Local Dependabot remediation evidence
+dependabot-alerts-after.json
+dependabot-alerts-before.json
+uv-tree-after-upgrades.txt
+uv-tree-before.txt
+uv-tree-final.txt
 
 # Snapshot persistence artifacts
 storage/

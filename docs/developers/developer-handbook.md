@@ -438,9 +438,9 @@ with `--extra` when needed.
 uv sync --group test
 
 # Run tests by tier
-pytest tests/unit/ -v                    # Tier 1: Fast unit tests (<5s each)
-pytest tests/integration/ -v             # Tier 2: Cross-component tests (<30s each)
-python scripts/run_tests.py --system     # Tier 3: Full system tests (<5min each)
+uv run pytest tests/unit/ -v             # Tier 1: Fast unit tests (<5s each)
+uv run pytest tests/integration/ -v      # Tier 2: Cross-component tests (<30s each)
+uv run python scripts/run_tests.py       # Tier 3: full runner including system tests
 ```
 
 ### Tier 1: Unit Tests (Fast, Mocked)
@@ -804,10 +804,10 @@ def sample_documents(tmp_path):
 
 ```bash
 # Run comprehensive quality checks
-ruff check . --fix          # Linting and auto-fix
-ruff format .               # Code formatting
-pytest --cov=src           # Test coverage
-mypy src/                   # Type checking
+uv run ruff check . --fix   # Linting and auto-fix
+uv run ruff format .        # Code formatting
+uv run pytest --cov=src     # Test coverage
+uv run pyright --threads 4  # Type checking
 ```
 
 #### Pre-commit Hooks

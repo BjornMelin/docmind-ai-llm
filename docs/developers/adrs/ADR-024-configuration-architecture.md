@@ -170,7 +170,7 @@ class VLLMConfig(BaseModel):
     max_num_seqs: int = Field(default=16)
     max_num_batched_tokens: int = Field(default=8192)
     vllm_base_url: str = Field(default="http://localhost:8000")
-    llamacpp_model_path: Path = Field(default=Path("./models/qwen3.gguf"))
+    # llama.cpp runs through its OpenAI-compatible HTTP server; no local model path.
 
 class AgentConfig(BaseModel):
     enable_multi_agent: bool = True
@@ -287,10 +287,14 @@ def build_llm(settings: DocMindSettings):
             timeout=float(settings.llm_request_timeout_seconds),
         )
     if settings.llm_backend == "llamacpp":
-        from llama_index.llms.llama_cpp import LlamaCPP
-        return LlamaCPP(model_path=str(settings.vllm.llamacpp_model_path),
-                        context_window=settings.vllm.context_window,
-                        model_kwargs={"n_gpu_layers": -1 if settings.enable_gpu_acceleration else 0})
+        from llama_index.llms.openai_like import OpenAILike
+        return OpenAILike(
+            model=settings.vllm.model,
+            api_base=settings.backend_base_url_normalized,
+            api_key="not-needed",
+            context_window=settings.vllm.context_window,
+            timeout=float(settings.llm_request_timeout_seconds),
+        )
     raise ValueError("Unsupported llm_backend")
 ```
 

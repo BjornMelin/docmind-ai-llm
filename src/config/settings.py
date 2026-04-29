@@ -294,10 +294,6 @@ class VLLMConfig(BaseModel):
     vllm_base_url: AnyHttpUrl = Field(
         default=DEFAULT_VLLM_BASE_URL, description="vLLM server endpoint"
     )
-    llamacpp_model_path: Path = Field(
-        default=Path("./models/qwen3.gguf"),
-        description="Path to GGUF model for llama.cpp backend",
-    )
 
     @field_validator("vllm_base_url", mode="before")
     @classmethod
@@ -1002,8 +998,8 @@ class DocMindSettings(BaseSettings):
     model: str | None = Field(
         default=None,
         description=(
-            "Preferred model identifier (or GGUF path for LlamaCPP). If set,"
-            " overrides nested vllm.model at runtime."
+            "Preferred model identifier. If set, overrides nested vllm.model "
+            "at runtime."
         ),
     )
     context_window: int | None = Field(

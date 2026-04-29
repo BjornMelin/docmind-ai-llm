@@ -17,7 +17,6 @@ REQUIRED_MODULAR_IMPORTS = {
     "llama_index.core",
     "llama_index.llms.openai",
     "llama_index.llms.ollama",
-    "llama_index.llms.llama_cpp",
     "llama_index.embeddings.openai",
     "llama_index.embeddings.huggingface",
     "llama_index.embeddings.fastembed",

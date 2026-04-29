@@ -2,8 +2,8 @@
 ADR: 042
 Title: Containerization Hardening (Dockerfile + Compose) with Optional GPU Backend (Ollama)
 Status: Implemented
-Version: 1.1
-Date: 2026-01-10
+Version: 1.2
+Date: 2026-04-29
 Supersedes: 015
 Superseded-by:
 Related: 015, 024
@@ -18,7 +18,7 @@ References:
 
 ## Description
 
-Replace the current broken/inconsistent Docker artifacts with a **Python 3.13.11** `uv`-based, multi-stage Dockerfile and a compose configuration that:
+Replace the current broken/inconsistent Docker artifacts with a **Python 3.12.13** `uv`-based, multi-stage Dockerfile and a compose configuration that:
 
 - uses canonical `DOCMIND_*` env vars
 - is secure-by-default (non-root, `.dockerignore`, no baked secrets)
@@ -35,6 +35,8 @@ The repository currently ships `Dockerfile` and `docker-compose.yml`, but they m
 
 Additionally, the “final release” posture requires a clear GPU story without forcing CUDA/PyTorch stacks into the app container. Bundling multiple GPU servers in-compose is high-maintenance; bundling none is a poor operator story.
 
+Minimum hardware baseline: RTX 4090 laptop with 12–14 GB VRAM, supporting 128K context using FP8 quantization. This FP8/128K capability is expected to be provided by the external vLLM path (vLLM launch flags or equivalent deployment settings), not by the bundled Ollama service itself.
+
 ## Decision Drivers
 
 - Correctness: containers must run out-of-the-box
@@ -42,6 +44,9 @@ Additionally, the “final release” posture requires a clear GPU story without
 - Security: non-root runtime, .dockerignore, avoid leaking `.env`
 - Maintainability: keep Docker artifacts minimal and aligned with repo config discipline
 - GPU capability: provide a supported local GPU path without coupling the app image to CUDA/toolkit churn
+
+For the FP8/128K profile specifically, configure the external vLLM deployment (`DOCMIND_LLM_BACKEND=vllm`,
+`DOCMIND_VLLM__*`) and keep Ollama config focused on its own service endpoint (`DOCMIND_OLLAMA_BASE_URL`).
 
 ## Alternatives
 
@@ -65,9 +70,11 @@ Weights: Complexity 40% · Perf/Size 30% · Alignment/Security 30% (10 = best)
 
 Implement a ship-ready container baseline:
 
+- Minimum hardware baseline: RTX 4090 laptop with 12–14 GB VRAM, supporting 128K context using FP8 quantization.
+
 - Add `.dockerignore`
 - Replace Dockerfile with:
-  - Python 3.13.11 base
+  - Python 3.12.13 base
   - multi-stage build with `uv sync --frozen`
   - `UV_PYTHON_DOWNLOADS=never` to force uv to use container Python
   - non-root runtime user

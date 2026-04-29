@@ -9,7 +9,7 @@ DocMind AI is a pure Python project managed by `uv`.
 
 ### Prerequisites
 
-- **Python**: 3.13.11 (managed by `uv`)
+- **Python**: 3.12.13 (managed by `uv`)
 - **GPU**: NVIDIA RTX 4090 (16GB VRAM) recommended for vLLM/ColPali.
 - **System**: Linux / macOS / WSL2.
 
@@ -53,8 +53,8 @@ To operate in air-gapped or restricted environments, you must pre-download artif
 
    Optional acceleration:
 
-   - NVIDIA CUDA (Linux/Windows): `uv sync --extra gpu` and set `SPACY_DEVICE=auto|cuda|cpu`
-   - Apple Silicon (macOS arm64): `uv sync --extra apple` and set `SPACY_DEVICE=auto|apple|cpu`
+   - NVIDIA CUDA (Linux/Windows): `uv sync --frozen --extra gpu` and set `DOCMIND_SPACY__DEVICE=auto|cuda|cpu`
+   - Apple Silicon (macOS arm64): `uv sync --frozen --extra apple` and set `DOCMIND_SPACY__DEVICE=auto|apple|cpu`
 
    See `docs/specs/spec-015-nlp-enrichment-spacy.md` and `docs/developers/gpu-setup.md`.
 
@@ -81,7 +81,7 @@ Choose the backend that fits your hardware and throughput needs.
 | :------------ | :----------------- | :--------------------- | :---------------------------------------- |
 | **vLLM**      | NVIDIA GPU (16GB+) | Production / High Load | Highest throughput; FlashInfer optimized. |
 | **Ollama**    | Mac / Linux / Win  | General / Easy Setup   | Zero-config; manages model lifecycle.     |
-| **LlamaCPP**  | Local Disk / CPU   | Low Resource / Edge    | Runs `.gguf` directly; low overhead.      |
+| **LlamaCPP**  | Local HTTP server  | Low Resource / Edge    | OpenAI-compatible llama.cpp server mode.  |
 | **LM Studio** | Desktop UI         | Research / Dev         | Visual parameter tuning.                  |
 
 ### Performance Tuning (vLLM)
@@ -183,4 +183,4 @@ Standard commands for repo maintenance.
 | **Lint/Format**  | `uv run ruff check .` / `uv run ruff format .` |
 | **Type Check**   | `uv run pyright`                               |
 | **Run Tests**    | `uv run python scripts/run_tests.py`           |
-| **Quality Gate** | `uv run scripts/run_quality_gates.py`          |
+| **Quality Gate** | `uv run python scripts/run_quality_gates.py`   |

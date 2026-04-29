@@ -3,12 +3,13 @@ from __future__ import annotations
 import importlib
 import sys
 import types
-from pathlib import Path
 
 import pytest
 
 
-def _load_settings_page_module(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
+def _load_settings_page_module(
+    monkeypatch: pytest.MonkeyPatch,
+) -> types.ModuleType:
     # Avoid importing heavy UI runtime init for unit tests.
     integrations = importlib.import_module("src.config.integrations")
     monkeypatch.setattr(integrations, "initialize_integrations", lambda **_: None)
@@ -62,57 +63,81 @@ def test_validate_candidate_formats_nested_error_locations(
 
 
 @pytest.mark.unit
-def test_resolve_valid_gguf_path_rejects_outside_home(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_validate_llamacpp_inputs_requires_server_url(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     page = _load_settings_page_module(monkeypatch)
 
-    fake_home = tmp_path / "home"
-    fake_home.mkdir()
-    monkeypatch.setattr(page.Path, "home", lambda: fake_home)
+    errors = page._validate_llamacpp_inputs("llamacpp", "")
 
-    external = tmp_path / "external.gguf"
-    external.write_text("dummy", encoding="utf-8")
-
-    assert page.resolve_valid_gguf_path(str(external)) is None
+    assert errors == ["Provide a llama.cpp OpenAI-compatible server URL."]
 
 
 @pytest.mark.unit
-def test_resolve_valid_gguf_path_accepts_outside_home_when_base_dirs_configured(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_validate_llamacpp_inputs_accepts_openai_base_url(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     page = _load_settings_page_module(monkeypatch)
 
-    fake_home = tmp_path / "home"
-    fake_home.mkdir()
-    monkeypatch.setattr(page.Path, "home", lambda: fake_home)
-
-    allowed = tmp_path / "models"
-    allowed.mkdir()
-    gguf = allowed / "external.gguf"
-    gguf.write_text("dummy", encoding="utf-8")
-
-    # session_state isn't a plain dict; set the key on the object.
-    monkeypatch.setitem(
-        page.st.session_state,
-        "docmind_allowed_gguf_base_dirs",
-        [str(allowed)],
+    errors = page._validate_llamacpp_inputs(
+        "llamacpp",
+        "",
+        "http://localhost:8080/v1",
     )
 
-    assert page.resolve_valid_gguf_path(str(gguf)) == gguf
+    assert errors == []
 
 
 @pytest.mark.unit
-def test_resolve_valid_gguf_path_accepts_under_home(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_validate_llamacpp_inputs_rejects_default_openai_base_url(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     page = _load_settings_page_module(monkeypatch)
 
-    fake_home = tmp_path / "home"
-    fake_home.mkdir()
-    monkeypatch.setattr(page.Path, "home", lambda: fake_home)
+    errors = page._validate_llamacpp_inputs(
+        "llamacpp",
+        "",
+        "https://api.openai.com/v1",
+    )
 
-    gguf = fake_home / "model.gguf"
-    gguf.write_text("dummy", encoding="utf-8")
+    assert errors == ["Provide a llama.cpp OpenAI-compatible server URL."]
 
-    assert page.resolve_valid_gguf_path(str(gguf)) == gguf
+
+@pytest.mark.unit
+def test_validate_llamacpp_inputs_accepts_explicit_default_llamacpp_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    page = _load_settings_page_module(monkeypatch)
+
+    errors = page._validate_llamacpp_inputs(
+        "llamacpp",
+        "https://api.openai.com/v1",
+    )
+
+    assert errors == []
+
+
+@pytest.mark.unit
+def test_build_endpoint_test_headers_includes_llamacpp_auth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    page = _load_settings_page_module(monkeypatch)
+
+    validated = page.DocMindSettings.model_validate(
+        {
+            "llm_backend": "llamacpp",
+            "llamacpp_base_url": "http://localhost:8080/v1",
+            "openai": {
+                "api_key": "local-token",
+                "default_headers": {"X-Provider": "llamacpp"},
+            },
+        }
+    )
+
+    headers = page._build_endpoint_test_headers(validated)
+
+    assert headers == {
+        "Accept": "application/json",
+        "Authorization": "Bearer local-token",
+        "X-Provider": "llamacpp",
+    }

@@ -104,22 +104,40 @@ def test_build_llm_openai_compatible_responses_uses_openai_responses() -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("gpu", [True, False])
-def test_build_llm_llamacpp_offload(gpu):
-    """Test LlamaCPP LLM building with GPU acceleration configuration."""
+def test_build_llm_llamacpp_server_uses_openai_like(monkeypatch: pytest.MonkeyPatch):
+    """llama.cpp backend uses the OpenAI-compatible server adapter."""
+    openai_like_mod = ModuleType("llama_index.llms.openai_like")
+
+    class _CaptureOpenAILike:
+        last_kwargs: dict[str, object] | None = None
+
+        def __init__(self, **kwargs: object) -> None:
+            type(self).last_kwargs = dict(kwargs)
+
+    openai_like_mod.OpenAILike = _CaptureOpenAILike  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "llama_index.llms.openai_like", openai_like_mod)
+
     cfg = DocMindSettings()
     cfg.llm_backend = "llamacpp"
-    cfg.enable_gpu_acceleration = gpu
+    cfg.llamacpp_base_url = "http://localhost:8080/v1"  # type: ignore[assignment]
 
-    with patch("llama_index.llms.llama_cpp.LlamaCPP", autospec=True) as p:
-        inst = MagicMock(name="LlamaCPP")
-        p.return_value = inst
-        out = build_llm(cfg)
-        assert out is inst
-        _, kwargs = p.call_args
-        assert kwargs["model_path"] == str(cfg.vllm.llamacpp_model_path)
-        assert kwargs["context_window"] == cfg.vllm.context_window
-        assert kwargs["model_kwargs"]["n_gpu_layers"] == (-1 if gpu else 0)
+    out = build_llm(cfg)
+    kwargs = _CaptureOpenAILike.last_kwargs or {}
+
+    assert isinstance(out, _CaptureOpenAILike)
+    assert kwargs["api_base"] == "http://localhost:8080/v1"
+    assert kwargs["is_chat_model"] is True
+    assert kwargs["is_function_calling_model"] is False
+
+
+@pytest.mark.unit
+def test_build_llm_llamacpp_requires_server_url() -> None:
+    """llama.cpp backend no longer constructs an in-process GGUF adapter."""
+    cfg = DocMindSettings()
+    cfg.llm_backend = "llamacpp"
+
+    with pytest.raises(ValueError, match="No OpenAI-compatible base URL"):
+        build_llm(cfg)
 
 
 def test_vllm_top_level_overrides_and_api_base_precedence(
@@ -184,51 +202,42 @@ def test_lmstudio_url_normalized_to_include_v1(
     assert str(settings.lmstudio_base_url).rstrip("/") == expected_url
 
 
-def test_llamacpp_local_uses_gpu_layers_and_context(
+def test_llamacpp_server_uses_context_and_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """llama.cpp path uses n_gpu_layers based on acceleration setting."""
+    """llama.cpp server path uses OpenAI-compatible context and timeout."""
 
-    class _LlamaCPP:
+    class _OpenAILike:
         def __init__(
             self,
             *,
-            model_path: str,
+            api_base: str,
             context_window: int | None = None,
-            model_kwargs: dict[str, object] | None = None,
+            timeout: float | int | None = None,
             **_: object,
         ) -> None:
-            self.model_path = model_path
+            self.api_base = api_base
             self.context_window = context_window
-            self.model_kwargs = model_kwargs or {}
+            self.timeout = timeout
 
     import types as _types
 
-    llama_cpp_mod = _types.ModuleType("llama_index.llms.llama_cpp")
-    llama_cpp_mod.LlamaCPP = _LlamaCPP  # type: ignore[attr-defined]
+    openai_like_mod = _types.ModuleType("llama_index.llms.openai_like")
+    openai_like_mod.OpenAILike = _OpenAILike  # type: ignore[attr-defined]
     monkeypatch.setitem(
-        __import__("sys").modules, "llama_index.llms.llama_cpp", llama_cpp_mod
+        __import__("sys").modules, "llama_index.llms.openai_like", openai_like_mod
     )
 
-    cfg1 = DocMindSettings(
+    cfg = DocMindSettings(
         llm_backend="llamacpp",
-        model="local-gguf-path",
+        llamacpp_base_url="http://localhost:8080",
         context_window=2048,
-        enable_gpu_acceleration=True,
+        llm_request_timeout_seconds=17,
     )
-    llm1 = build_llm(cfg1)
-    assert getattr(llm1, "context_window", None) == 2048
-    assert getattr(llm1, "model_kwargs", {}).get("n_gpu_layers") == -1
-
-    cfg2 = DocMindSettings(
-        llm_backend="llamacpp",
-        model="local-gguf-path",
-        context_window=1024,
-        enable_gpu_acceleration=False,
-    )
-    llm2 = build_llm(cfg2)
-    assert getattr(llm2, "context_window", None) == 1024
-    assert getattr(llm2, "model_kwargs", {}).get("n_gpu_layers") == 0
+    llm = build_llm(cfg)
+    assert getattr(llm, "api_base", None) == "http://localhost:8080/v1"
+    assert getattr(llm, "context_window", None) == 2048
+    assert getattr(llm, "timeout", None) == 17.0
 
 
 def test_invalid_context_window_raises_value_error() -> None:

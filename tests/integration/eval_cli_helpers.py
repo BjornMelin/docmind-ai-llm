@@ -68,7 +68,7 @@ def run_ragas_cli(tmp_path: Path, *, sample_count: int | None = None) -> None:
     """Run the RAGAS CLI with mocked dependencies."""
     pytest.importorskip("tools.eval.run_ragas")
     if importlib.util.find_spec("ragas") is None:
-        pytest.skip("requires ragas; install optional eval extras")
+        pytest.skip("requires ragas; install optional eval dependencies")
     csv = tmp_path / "data.csv"
     pd.DataFrame({"question": ["q1"], "ground_truth": ["gt"]}).to_csv(csv, index=False)
 

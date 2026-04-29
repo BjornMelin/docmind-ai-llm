@@ -28,8 +28,12 @@ Use the project’s GPU extras. This installs:
 - `fastembed-gpu` (embedding acceleration)
 - `cupy-cuda12x>=13` (spaCy/Thinc GPU acceleration for CUDA 12.x)
 
+The `unsafe-best-match` strategy is intentional for this CUDA-only install so
+uv can select CUDA 12.8 wheels from the PyTorch index instead of CPU wheels from
+the default index.
+
 ```bash
-uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 uv run python -m spacy download en_core_web_sm
 ```
 
@@ -68,14 +72,14 @@ uv run python -c "import spacy; print(spacy.__version__); print(spacy.prefer_gpu
 ### Install (Apple Extras)
 
 ```bash
-uv sync --extra apple
+uv sync --frozen --extra apple
 uv run python -m spacy download en_core_web_sm
 ```
 
 ### Runtime selection (spaCy / Apple)
 
 ```bash
-export SPACY_DEVICE=auto   # or apple
+export DOCMIND_SPACY__DEVICE=auto   # or apple
 ```
 
 ### Verify (spaCy / Apple)

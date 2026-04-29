@@ -92,7 +92,7 @@ def test_app_entrypoint_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def chat_app_smoke(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> Generator[AppTest, None, None]:  # noqa: UP043
+) -> Generator[AppTest, None, None]:
     """AppTest harness for Chat page with a stub coordinator.
 
     Args:
@@ -154,7 +154,7 @@ def test_chat_smoke_echo(chat_app_smoke: AppTest) -> None:
 
 
 @pytest.fixture
-def documents_app(tmp_path: Path) -> Generator[AppTest, None, None]:  # noqa: UP043
+def documents_app(tmp_path: Path) -> Generator[AppTest, None, None]:
     """AppTest harness for Documents page with temp data dir.
 
     Args:
@@ -171,7 +171,7 @@ def _build_page_app(
     *,
     page_name: str,
     analytics_enabled: bool | None = None,
-) -> Generator[AppTest, None, None]:  # noqa: UP043
+) -> Generator[AppTest, None, None]:
     """Create an AppTest instance with a temp data dir and optional flags.
 
     Args:
@@ -233,7 +233,7 @@ def test_documents_empty_ingest_warns(documents_app: AppTest) -> None:
 
 
 @pytest.fixture
-def analytics_app(tmp_path: Path) -> Generator[AppTest, None, None]:  # noqa: UP043
+def analytics_app(tmp_path: Path) -> Generator[AppTest, None, None]:
     """AppTest harness for Analytics page with analytics disabled.
 
     Args:

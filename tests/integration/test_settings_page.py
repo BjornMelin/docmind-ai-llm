@@ -21,7 +21,7 @@ pytestmark = pytest.mark.integration
 def _install_integrations_stub(
     monkeypatch: pytest.MonkeyPatch,
 ) -> list[dict[str, object]]:
-    """Install a lightweight `src.config.integrations` stub for Apply runtime."""
+    """Install a lightweight integrations stub for Apply runtime."""
     import sys
 
     calls: list[dict[str, object]] = []
@@ -81,9 +81,10 @@ def fixture_settings_app_test(tmp_path, monkeypatch) -> Iterator[AppTest]:
     original_llm = getattr(LISettings, "_llm", None)
     original_embed = getattr(LISettings, "_embed_model", None)
 
-    # Avoid slow/optional GraphRAG adapter discovery during Settings AppTest reruns.
-    # The Settings page only needs the badge health tuple; heavy adapter imports are
-    # out of scope for this integration test and can dominate runtime under coverage.
+    # Avoid slow/optional GraphRAG adapter discovery during Settings
+    # AppTest reruns. The Settings page only needs the badge health tuple;
+    # heavy adapter imports are out of scope for this integration test and
+    # can dominate runtime under coverage.
     monkeypatch.setattr(
         "src.retrieval.adapter_registry.get_default_adapter_health",
         lambda *, force_refresh=False: (
@@ -93,7 +94,7 @@ def fixture_settings_app_test(tmp_path, monkeypatch) -> Iterator[AppTest]:
         ),
     )
 
-    # Build AppTest for the Settings page file
+    # Build AppTest for the Settings page file.
     page_path = Path(__file__).resolve().parents[2] / "src" / "pages" / "04_settings.py"
     try:
         yield AppTest.from_file(
@@ -118,7 +119,8 @@ def test_settings_apply_runtime_calls_initialize_integrations(
     assert not app.exception
 
     # Install stub after the initial render to avoid impacting import-time
-    # behavior in environments with additional optional dependencies (CI llama job).
+    # behavior in environments with additional optional dependencies
+    # (CI llama job).
     calls = _install_integrations_stub(monkeypatch)
 
     buttons = [b for b in app.button if getattr(b, "label", "") == "Apply runtime"]
@@ -134,6 +136,24 @@ def test_settings_apply_runtime_calls_initialize_integrations(
             "backend": _settings.llm_backend,
         }
     ], f"Unexpected initialize_integrations calls: {calls}"
+
+
+def test_settings_ignores_hidden_openai_state_when_provider_switches(
+    settings_app_test: AppTest,
+    reset_settings_after_test: None,
+) -> None:
+    """Hidden OpenAI state should not block unrelated providers."""
+    app = settings_app_test.run()
+    assert not app.exception
+
+    provider_sel = _find_provider_select(app)
+    app = provider_sel.select("openai_compatible").run()
+    _set_text(app, "Base URL", "not-a-url")
+
+    provider_sel = _find_provider_select(app)
+    app = provider_sel.select("ollama").run()
+    assert not app.exception
+    _click_apply(app)
 
 
 def test_settings_save_persists_env(
@@ -158,7 +178,7 @@ def test_settings_save_persists_env(
     # Model field
     text_inputs = list(app.text_input)
     # Find model input by label
-    if model_inputs := [w for w in text_inputs if "Model (id or GGUF path)" in str(w)]:
+    if model_inputs := [w for w in text_inputs if "Model ID" in str(w)]:
         model_inputs[0].set_value("Hermes-2-Pro-Llama-3-8B").run()
 
     # LM Studio base URL (must end with /v1)
@@ -214,7 +234,7 @@ def test_settings_save_persists_openai_compatible_env(
     tmp_path: Path,
     reset_settings_after_test: None,
 ) -> None:
-    """Saving settings should persist OpenAI-compatible configuration to .env."""
+    """Persist OpenAI-compatible settings to .env."""
     import json
 
     app = settings_app_test.run()
@@ -292,6 +312,41 @@ def test_settings_save_persists_openai_compatible_env(
     assert values.get("DOCMIND_OPENAI__DEFAULT_HEADERS") == (
         '{"HTTP-Referer":"https://example.com","X-Test":"1"}'
     )
+
+
+def test_settings_preserves_openai_state_when_provider_is_hidden(
+    settings_app_test: AppTest,
+    reset_settings_after_test: None,
+) -> None:
+    """OpenAI-compatible inputs should survive provider switches."""
+    app = settings_app_test.run()
+    assert not app.exception
+
+    providers = [w for w in app.selectbox if getattr(w, "label", "") == "LLM Provider"]
+    assert providers, "LLM Provider selectbox not found"
+    app = providers[0].set_value("openai_compatible").run()
+    assert not app.exception
+
+    base_url_inputs = [
+        w for w in app.text_input if getattr(w, "label", "") == "Base URL"
+    ]
+    assert base_url_inputs, "OpenAI-compatible Base URL input not found"
+    app = base_url_inputs[0].set_value("http://localhost:1234/v1").run()
+    assert not app.exception
+
+    provider_select = _find_provider_select(app)
+    app = provider_select.set_value("ollama").run()
+    assert not app.exception
+
+    provider_select = _find_provider_select(app)
+    app = provider_select.set_value("openai_compatible").run()
+    assert not app.exception
+
+    base_url_inputs = [
+        w for w in app.text_input if getattr(w, "label", "") == "Base URL"
+    ]
+    assert base_url_inputs, "OpenAI-compatible Base URL input not found"
+    assert str(base_url_inputs[0].value) == "http://localhost:1234/v1"
 
 
 def test_settings_connectivity_test_shows_for_openai_compatible(
@@ -524,13 +579,6 @@ def test_settings_warns_when_ollama_allowlist_missing(
     assert any(msg.strip() == expected_warning for msg in warnings), warnings
 
 
-def _ensure_gguf_file() -> Path:
-    """Create a stub GGUF file for llama.cpp local validation."""
-    gguf_path = Path("model.gguf")
-    gguf_path.write_text("dummy", encoding="utf-8")
-    return gguf_path
-
-
 def _find_provider_select(app: AppTest):
     """Return the provider selectbox widget."""
     providers = [s for s in app.selectbox if "LLM Provider" in str(s)]
@@ -561,13 +609,10 @@ def _apply_provider(
     *,
     provider: str,
     inputs: dict[str, str],
-    allow_gguf_base: bool = False,
 ) -> None:
     """Select a provider, set inputs, and apply runtime."""
     app = settings_app_test.run()
     assert not app.exception
-    if allow_gguf_base:
-        app.session_state["docmind_allowed_gguf_base_dirs"] = [str(Path.cwd())]
     provider_sel = _find_provider_select(app)
     provider_sel.select(provider).run()
     for label, value in inputs.items():
@@ -577,7 +622,7 @@ def _apply_provider(
 
 @pytest.fixture
 def reset_settings_after_test() -> Iterator[None]:
-    """Reset global settings to defaults before and after test to avoid pollution."""
+    """Reset global settings before and after each test."""
     import importlib
 
     def _reset_settings() -> None:
@@ -606,7 +651,6 @@ def test_settings_toggle_providers_and_apply(
 ) -> None:
     """Toggle each provider and Apply runtime (offline)."""
     calls = _install_integrations_stub(monkeypatch)
-    gguf_path = _ensure_gguf_file()
 
     def _assert_last_call(expected_backend: str) -> None:
         assert calls, "Expected initialize_integrations to be called"
@@ -621,9 +665,8 @@ def test_settings_toggle_providers_and_apply(
         provider="ollama",
         inputs={
             "Ollama base URL": "http://localhost:11434",
-            "Model (id or GGUF path)": "test-ollama",
+            "Model ID": "test-ollama",
         },
-        allow_gguf_base=True,
     )
     from src.config.settings import settings as _settings
 
@@ -635,7 +678,7 @@ def test_settings_toggle_providers_and_apply(
         provider="vllm",
         inputs={
             "vLLM base URL": "http://localhost:8000",
-            "Model (id or GGUF path)": "test-vllm",
+            "Model ID": "test-vllm",
         },
     )
     assert _settings.llm_backend == "vllm"
@@ -646,7 +689,7 @@ def test_settings_toggle_providers_and_apply(
         provider="lmstudio",
         inputs={
             "LM Studio base URL": "http://localhost:1234/v1",
-            "Model (id or GGUF path)": "test-lms",
+            "Model ID": "test-lms",
         },
     )
     assert _settings.llm_backend == "lmstudio"
@@ -656,23 +699,11 @@ def test_settings_toggle_providers_and_apply(
         settings_app_test,
         provider="llamacpp",
         inputs={
-            "llama.cpp server URL (optional)": "http://localhost:8080/v1",
-            "Model (id or GGUF path)": "ignored-for-server",
+            "llama.cpp server URL": "http://localhost:8080/v1",
+            "Model ID": "llamacpp-server-model",
         },
     )
     assert _settings.llm_backend == "llamacpp"
     _assert_last_call("llamacpp")
 
-    _apply_provider(
-        settings_app_test,
-        provider="llamacpp",
-        inputs={
-            "llama.cpp server URL (optional)": "",
-            "GGUF model path (LlamaCPP local)": str(gguf_path),
-        },
-        allow_gguf_base=True,
-    )
-    assert _settings.llm_backend == "llamacpp"
-    _assert_last_call("llamacpp")
-
-    assert len(calls) == 5
+    assert len(calls) == 4

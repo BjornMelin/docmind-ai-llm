@@ -76,17 +76,17 @@ When resuming after compaction:
 
 ## Optional extras
 
-- `uv sync --extra gpu` (fastembed-gpu, CuPy CUDA wheels)
-- `uv sync --extra graph` (GraphRAG adapters)
-- `uv sync --extra multimodal` (ColPali reranker)
-- `uv sync --extra observability` (OTLP exporters + portalocker)
-- `uv sync --extra eval` (ragas, beir)
+- `uv sync --frozen --extra gpu` (fastembed-gpu, CuPy CUDA wheels)
+- `uv sync --frozen --extra graph` (GraphRAG adapters)
+- `uv sync --frozen --extra multimodal` (ColPali reranker)
+- `uv sync --frozen --extra observability` (OTLP exporters + portalocker)
+- `uv sync --frozen --extra eval` (beir)
 
 ## Dependency constraints (don’t drift)
 
 Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
-- Python: `>=3.13,<3.14` (primary dev/runtime: Python 3.13.11)
+- Python: `>=3.12,<3.14` (primary dev/runtime: Python 3.12.13)
 - Keep these coupled:
   - Torch 2.8.x ↔ Transformers `<5.0` (vLLM is external-only via OpenAI-compatible HTTP)
   - DuckDB `<1.4.0` (LlamaIndex integrations cap it)
@@ -122,7 +122,7 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
 ## Containerization (CI-enforced)
 
-- `Dockerfile`: Python 3.13.11 base; final `USER` non-root; `CMD`/`ENTRYPOINT` exec-form (no `sh -c`); no `:latest`.
+- `Dockerfile`: Python 3.12.13 base; final `USER` non-root; `CMD`/`ENTRYPOINT` exec-form (no `sh -c`); no `:latest`.
 - `.dockerignore`: ignore `.env` (`.env`, `.env.*`, or `.env*`); don’t bake `.env` into images.
 - Compose: use canonical `DOCMIND_*` env vars (no legacy `OLLAMA_BASE_URL`/`VLLM_BASE_URL`/`LMSTUDIO_BASE_URL`); prod override sets `read_only: true` and `tmpfs: /tmp`.
 
@@ -209,7 +209,7 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 - Use `pathlib.Path` and guard clauses; avoid `Any` unless isolated behind a narrow boundary.
 - Device/VRAM policy: use `src/utils/core.py` (`resolve_device`, `has_cuda_vram`) for business logic.
 - Python style (apply to all code; when editing a file, align the whole file):
-  4-space indent, 80-char lines; public docstrings use `"""` + 1-line summary
+  4-space indent, 88-char lines; public docstrings use `"""` + 1-line summary
   <=80 chars and include `Args:`, `Returns:`/`Yields:`, `Raises:` when needed
   with 4-space hanging indents; absolute imports only, one per line, top of
   file; None checks use `is (not) None`, booleans use `if not x` (add

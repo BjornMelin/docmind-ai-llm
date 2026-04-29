@@ -18,7 +18,7 @@ This guide helps you set up a working development environment and run DocMind AI
 
 ### Prerequisites - Quick Start
 
-- Python 3.13.11
+- Python 3.12.13
 - CUDA-compatible GPU (RTX 4060+ recommended)
 - Docker for Qdrant vector database
 - Git
@@ -31,7 +31,11 @@ git clone https://github.com/BjornMelin/docmind-ai-llm.git
 cd docmind-ai-llm
 
 # 2. Install dependencies
-uv sync
+uv sync --frozen
+
+# If you have a CUDA-compatible NVIDIA GPU and want local accelerated inference,
+# prefer the GPU extras install:
+uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 
 # 3. Start services
 docker compose up -d qdrant
@@ -66,7 +70,7 @@ uv run python scripts/performance_monitor.py --run-tests --check-regressions
 
 ### Required Software
 
-- **Python**: 3.13.11
+- **Python**: 3.12.13
 - **uv**: For package management (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 - **Git**: Version control
 - **Docker**: Optional, for Qdrant database
@@ -104,13 +108,13 @@ cd docmind-ai-llm
 
 ```bash
 # Install core dependencies
-uv sync
+uv sync --frozen
 
 # Install with GPU support (recommended)
-uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 
 # Install with test dependencies
-uv sync --group test
+uv sync --frozen --group test
 ```
 
 Note: development and test tooling live in dependency groups (`[dependency-groups]`, PEP 735) and
@@ -123,7 +127,7 @@ For optimal performance with RTX 4090:
 
 ```bash
 # Install app GPU extras (CUDA-enabled PyTorch wheels)
-uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 ```
 
 If you use vLLM, run it as an external OpenAI-compatible server and point DocMind at it via
@@ -234,12 +238,12 @@ uv run streamlit run app.py
 
 ```bash
 # Format and lint code (run before commits)
-ruff format . && ruff check . --fix
+uv run ruff format . && uv run ruff check .
 
 # Run tests
-pytest tests/unit/ -v                    # Fast unit tests
-pytest tests/integration/ -v             # Cross-component tests
-python scripts/run_tests.py              # Full test suite
+uv run pytest tests/unit/ -v             # Fast unit tests
+uv run pytest tests/integration/ -v      # Cross-component tests
+uv run python scripts/run_tests.py       # Full test suite
 
 # Performance testing
 uv run python scripts/performance_monitor.py --run-tests --report
@@ -276,8 +280,8 @@ git checkout -b feature/your-feature-name
 # 2. Make changes following coding standards
 
 # 3. Test changes
-pytest tests/ -v
-ruff format . && ruff check . --fix
+uv run pytest tests/ -v
+uv run ruff format . && uv run ruff check .
 
 # 4. Commit changes
 git add .
@@ -306,7 +310,7 @@ uv run python -c "import torch; print(f'CUDA available: {torch.cuda.is_available
 
 ```bash
 # Reinstall PyTorch with correct CUDA version
-uv pip install torch==2.8.0 --extra-index-url https://download.pytorch.org/whl/cu128
+uv pip install torch==2.8.0 --torch-backend cu128
 ```
 
 ### vLLM Server Issues
@@ -427,10 +431,10 @@ uv pip list | grep -E "(torch|streamlit)"
 
 ```bash
 # Reinstall dependencies
-uv sync --force-reinstall
+uv sync --frozen --force-reinstall
 
 # Verify correct Python version
-uv run python -c "import sys; print(sys.version)"  # Should be 3.13.11
+uv run python -c "import sys; print(sys.version)"  # uv run uses the project's configured interpreter, so this should be 3.12.13
 ```
 
 ## Next Steps
@@ -448,7 +452,7 @@ Once you have the system running:
 2. **Architecture Questions**: See system-architecture.md
 3. **Implementation Help**: See developer-handbook.md
 4. **Performance Issues**: See operations-guide.md and configuration.md
-5. **ADR References**: Check `../adrs/` for architectural decisions
+5. **ADR References**: Check [ADRs](./adrs/README.md) for architectural decisions
 
 ---
 

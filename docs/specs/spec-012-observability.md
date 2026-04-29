@@ -50,7 +50,7 @@ Additional resource metadata:
 
 - OpenTelemetry SDK + OTLP exporters are installed in the base environment (`pyproject.toml` dependencies).
 - LlamaIndex OTel instrumentation is optional and provided by the `observability` extra:
-  - `uv sync --extra observability` (adds `llama-index-observability-otel`).
+- `uv sync --frozen --extra observability` (adds `llama-index-observability-otel`).
 
 ### Environment Overrides
 

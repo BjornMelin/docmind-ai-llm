@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import contextlib
 import sqlite3
-import sys
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 
 import pytest
 
@@ -492,18 +491,9 @@ def test_visual_search_helpers(monkeypatch, clean_streamlit_session):
     assert run is True
 
     # Query visual search with stubbed dependencies
-    pil = ModuleType("PIL")
-    pil_image = ModuleType("PIL.Image")
-
-    class _Image:
-        @staticmethod
-        def open(_f):  # type: ignore[no-untyped-def]
-            return object()
-
-    pil.Image = _Image  # type: ignore[attr-defined]
-    pil_image.open = _Image.open  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "PIL", pil)
-    monkeypatch.setitem(sys.modules, "PIL.Image", pil_image)
+    monkeypatch.setattr(
+        "src.utils.images.open_untrusted_image", lambda _upload: object()
+    )
 
     mm = importlib.import_module("src.retrieval.multimodal_fusion")
 

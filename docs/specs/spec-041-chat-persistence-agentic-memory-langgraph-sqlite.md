@@ -57,7 +57,7 @@ notes: "ADR-058 is the integrated source of truth (supersedes ADR-057). ADR-055 
 
 Add (pinned):
 
-- `langgraph-checkpoint-sqlite==3.0.1` (includes `sqlite-vec>=0.1.6`)
+- `langgraph-checkpoint-sqlite>=3.0.3,<4.0.0` (with `sqlite-vec>=0.1.6`)
 
 Rationale:
 
@@ -270,7 +270,7 @@ Threats and controls:
    - Use fixed tool schemas; do not allow arbitrary system prompt writes.
 3. **SQL injection**
    - Never interpolate user-provided keys into SQL.
-   - Rely on `langgraph-checkpoint-sqlite` filter-key validation and keep package pinned.
+   - Rely on `langgraph-checkpoint-sqlite` filter-key validation and keep the package within the `>=3.0.3,<4.0.0` constraint.
 4. **Filesystem escape**
    - Validate the Chat DB path remains under `settings.data_dir` unless user explicitly overrides.
 5. **Secret leakage**

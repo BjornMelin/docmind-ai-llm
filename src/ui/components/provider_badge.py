@@ -38,14 +38,9 @@ def provider_badge(
         )
         base_url = str(candidate).rstrip("/") if candidate else None
     elif provider == "llamacpp":
-        if cfg.llamacpp_base_url:
-            base_url = str(cfg.llamacpp_base_url).rstrip("/")
-        else:
-            base_url = (
-                str(getattr(vllm_cfg, "llamacpp_model_path", "")).rstrip("/")
-                if vllm_cfg
-                else None
-            )
+        base_url = (
+            str(cfg.llamacpp_base_url).rstrip("/") if cfg.llamacpp_base_url else None
+        )
 
     if graphrag_health is None:
         graphrag_health = get_default_adapter_health()

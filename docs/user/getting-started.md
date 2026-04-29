@@ -4,7 +4,7 @@ DocMind AI is a local-first document analysis app. It runs offline after initial
 
 ## Prerequisites
 
-- **Python**: 3.13.11 (see `pyproject.toml`)
+- **Python**: 3.12-3.13 (`>=3.12,<3.14` in `pyproject.toml`)
 - **uv**: dependency manager used by this repo
 - **Docker** (optional but recommended): for running Qdrant locally
 - **One local LLM backend**:
@@ -19,10 +19,13 @@ uv sync
 
 ### Optional: GPU extras (NVIDIA CUDA)
 
-DocMind’s GPU extra accelerates embeddings/reranking and installs CUDA wheels for PyTorch via the PyTorch index.
+DocMind’s GPU extra accelerates embeddings/reranking and installs CUDA wheels
+for PyTorch via the PyTorch index. The `unsafe-best-match` index strategy is
+intentional here: it lets uv select the CUDA 12.8 wheels from the PyTorch index
+instead of preferring CPU wheels from the default index.
 
 ```bash
-uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 uv run python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
 ```
 

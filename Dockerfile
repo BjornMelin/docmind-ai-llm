@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM python:3.13.11-slim-bookworm AS builder
+FROM python:3.12.13-slim-bookworm AS builder
 
 WORKDIR /app
 
@@ -70,7 +70,7 @@ COPY src ./src
 COPY templates ./templates
 
 
-FROM python:3.13.11-slim-bookworm AS runtime
+FROM python:3.12.13-slim-bookworm AS runtime
 
 WORKDIR /app
 

@@ -108,7 +108,7 @@ Design goals:
 
 - One supported LLM backend running locally: [Ollama](https://ollama.com/) (default), vLLM OpenAI-compatible server, LM Studio, or a llama.cpp server.
 
-- Python 3.13.11 (see `pyproject.toml`)
+- Python 3.12.13 (see `pyproject.toml`)
 
 - (Optional) Docker and Docker Compose for containerized deployment.
 
@@ -132,25 +132,25 @@ Design goals:
    _Need LlamaIndex OpenTelemetry instrumentation?_ Install the optional observability extras as well:
 
    ```bash
-   uv sync --extra observability
+   uv sync --frozen --extra observability
    ```
 
    _Need GraphRAG adapters or ColPali visual reranking?_ Install the optional extras:
 
    ```bash
-   uv sync --extra graph
-   uv sync --extra multimodal
+   uv sync --frozen --extra graph
+   uv sync --frozen --extra multimodal
    ```
 
    **Key Dependencies Included:**
 
    - **LlamaIndex (>=0.14.12,<0.15.0)**: Retrieval, RouterQueryEngine, IngestionPipeline, PropertyGraphIndex
-   - **LangGraph (==1.0.6)**: 5-agent supervisor orchestration (graph-native `StateGraph`, no external supervisor wrapper)
+   - **LangGraph (>=1.0.10,<2.0.0)**: 5-agent supervisor orchestration (graph-native `StateGraph`, no external supervisor wrapper)
    - **Streamlit (>=1.52.2,<2.0.0)**: Web interface framework
    - **Ollama (0.6.1)**: Local LLM integration
    - **Qdrant Client (>=1.15.1,<2.0.0)**: Vector database operations
    - **Unstructured (>=0.18.26,<0.19.0)**: Multi-format parsing (PDF/DOCX/PPTX/XLSX, etc.)
-   - **LlamaIndex Embeddings FastEmbed (>=0.5.0,<0.6.0)**: Sparse query encoding (optional fastembed-gpu >=0.7.4,<0.8.0)
+   - **LlamaIndex Embeddings FastEmbed (>=0.5.0,<0.6.0)**: Sparse query encoding (optional fastembed-gpu >=0.8.0,<0.9.0)
    - **Tenacity (>=9.1.2,<10.0.0)**: Retry strategies with exponential backoff
    - **Loguru (>=0.7.3,<1.0.0)**: Structured logging
    - **Pydantic (2.12.5)**: Data validation and settings.
@@ -184,8 +184,8 @@ Design goals:
 
    Cross-platform acceleration:
 
-   - NVIDIA CUDA (Linux/Windows): `uv sync --extra gpu` and set `DOCMIND_SPACY__DEVICE=auto|cuda`
-   - Apple Silicon (macOS arm64): `uv sync --extra apple` and set `DOCMIND_SPACY__DEVICE=auto|apple`
+   - NVIDIA CUDA (Linux/Windows): `uv sync --frozen --extra gpu` and set `DOCMIND_SPACY__DEVICE=auto|cuda`
+   - Apple Silicon (macOS arm64): `uv sync --frozen --extra apple` and set `DOCMIND_SPACY__DEVICE=auto|apple`
 
    See `docs/specs/spec-015-nlp-enrichment-spacy.md` and `docs/developers/gpu-setup.md`.
 
@@ -241,11 +241,14 @@ Design goals:
 
 5. **(Optional) Install GPU support (embeddings/reranking acceleration):**
 
-   Install the repo’s GPU extras and the CUDA wheel index for PyTorch:
+   Install the repo’s GPU extras and the CUDA wheel index for PyTorch. The
+   `unsafe-best-match` strategy is intentional for this CUDA-only command so uv
+   can select CUDA 12.8 wheels from the PyTorch index instead of CPU wheels from
+   the default index:
 
    ```bash
    nvidia-smi
-   uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+   uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
    uv run python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
    ```
 
@@ -594,7 +597,11 @@ DOCMIND_ENABLE_DSPY_BOOTSTRAPPING=true
 Notes:
 
 - DSPy runs in the agents layer and augments retrieval by refining the query; retrieval remains library-first (server-side hybrid via Qdrant + reranking).
-- DSPy ships with the default dependencies; if it is unavailable or the flag is false, the system falls back gracefully to standard retrieval.
+- `DOCMIND_ENABLE_DSPY_OPTIMIZATION=true` only takes effect when DSPy is
+  installed. DSPy is not installed by default while its dependency chain
+  conflicts with the project security floors, so on the supported baseline the
+  flag falls back gracefully to standard retrieval unless you install DSPy
+  separately.
 
 ### Additional Configuration
 
@@ -725,12 +732,16 @@ ollama serve
 
 ```bash
 # Install GPU dependencies
-uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 
 # Verify CUDA installation
 nvidia-smi
 uv run python -c "import torch; print(torch.cuda.is_available())"
 ```
+
+The `unsafe-best-match` strategy is intentional for this CUDA-only command so
+uv can select CUDA 12.8 wheels from the PyTorch index instead of CPU wheels from
+the default index.
 
 #### 3. Model Download Issues
 
@@ -926,7 +937,7 @@ DocMind AI configures OpenTelemetry tracing and metrics via `configure_observabi
 
 - Observability is disabled by default; enable with `DOCMIND_OBSERVABILITY__ENABLED=true`.
 - OTLP exporters are used when enabled; set `DOCMIND_OBSERVABILITY__ENDPOINT` and `DOCMIND_OBSERVABILITY__PROTOCOL` as needed.
-- LlamaIndex instrumentation requires the `observability` extra (`uv sync --extra observability`).
+- LlamaIndex instrumentation requires the `observability` extra (`uv sync --frozen --extra observability`).
 - Core spans cover ingestion runs, snapshot promotion, GraphRAG exports, router selection, and UI actions.
 - Telemetry events (`router_selected`, `export_performed`, `snapshot_stale_detected`) are persisted as JSONL for local audits.
 
