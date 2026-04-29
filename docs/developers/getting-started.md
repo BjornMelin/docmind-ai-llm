@@ -107,7 +107,7 @@ cd docmind-ai-llm
 uv --frozen sync
 
 # Install with GPU support (recommended)
-uv --frozen sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128
 
 # Install with test dependencies
 uv --frozen sync --group test
@@ -123,7 +123,7 @@ For optimal performance with RTX 4090:
 
 ```bash
 # Install app GPU extras (CUDA-enabled PyTorch wheels)
-uv --frozen sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128
 ```
 
 If you use vLLM, run it as an external OpenAI-compatible server and point DocMind at it via
@@ -306,7 +306,7 @@ uv run python -c "import torch; print(f'CUDA available: {torch.cuda.is_available
 
 ```bash
 # Reinstall PyTorch with correct CUDA version
-uv --frozen pip install torch==2.8.0 --extra-index-url https://download.pytorch.org/whl/cu128
+uv pip install torch==2.8.0 --torch-backend cu128
 ```
 
 ### vLLM Server Issues
@@ -430,7 +430,7 @@ uv pip list | grep -E "(torch|streamlit)"
 uv --frozen sync --force-reinstall
 
 # Verify correct Python version
-uv run python -c "import sys; print(sys.version)"  # Should be 3.12.13
+uv run python -c "import sys; print(sys.version)"  # Should use the workspace Python 3.12.13
 ```
 
 ## Next Steps
@@ -448,7 +448,7 @@ Once you have the system running:
 2. **Architecture Questions**: See system-architecture.md
 3. **Implementation Help**: See developer-handbook.md
 4. **Performance Issues**: See operations-guide.md and configuration.md
-5. **ADR References**: Check `../adrs/` for architectural decisions
+5. **ADR References**: Check `adrs/` for architectural decisions
 
 ---
 

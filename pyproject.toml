@@ -33,7 +33,7 @@ dependencies = [
     "typer==0.21.1",                     # spaCy CLI stability (ADR-061) – prevent typer/typer-slim import conflicts with GPU extras
     # ML/LLM Fundamentals
     "torch==2.8.0",                      # PyTorch runtime (CPU-first baseline; GPU via extras)
-    "transformers>=5.0.0rc3,<6.0.0",     # HF model interfaces (security-patched prerelease floor)
+    "transformers>=4.0.0,<5.0.0",        # HF model interfaces (Torch 2.8-compatible)
     "tiktoken==0.12.0",
     "openai>=2.8.0,<3.0.0",
     "openai-whisper==20250625",          # Whisper speech-to-text (optional)
@@ -166,11 +166,11 @@ target_prefill_tps = [800, 1300]  # tokens per second
 # Installation Commands (documented in README.md)
 installation_notes = """
 Automated GPU Installation:
-uv --frozen sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128
 
 Manual Installation Steps (if needed):
 1. Install PyTorch with CUDA 12.8:
-   uv --frozen pip install torch==2.8.0 --extra-index-url https://download.pytorch.org/whl/cu128
+   uv pip install torch==2.8.0 --torch-backend cu128
 
 2. Use vLLM as an external server (OpenAI-compatible HTTP).
    Configure `DOCMIND_OPENAI__BASE_URL` (or `DOCMIND_VLLM__VLLM_BASE_URL`) and `DOCMIND_LLM_BACKEND=vllm`.
@@ -181,7 +181,7 @@ Manual Installation Steps (if needed):
    `diskcache`.
 
 4. Install remaining GPU dependencies (mirror [project.optional-dependencies].gpu):
-   uv --frozen pip install "fastembed-gpu>=0.8.0,<0.9.0"
+   uv pip install "fastembed-gpu>=0.8.0,<0.9.0"
 """
 
 [tool.ruff]

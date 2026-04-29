@@ -16,8 +16,8 @@ import tempfile
 import threading
 from collections.abc import Callable
 from contextlib import contextmanager
-from io import BytesIO
 from pathlib import Path
+from tempfile import SpooledTemporaryFile
 from typing import Any
 from typing import TYPE_CHECKING
 from typing import cast
@@ -55,14 +55,15 @@ def _configure_pillow_limits(image_module: Any) -> None:
         image_module.MAX_IMAGE_PIXELS = MAX_UNTRUSTED_IMAGE_PIXELS
 
 
-def _buffer_upload(upload: Any) -> BytesIO:
+def _buffer_upload(upload: Any) -> SpooledTemporaryFile[bytes]:
     """Read an upload into a bounded buffer.
 
     Args:
         upload: Binary file-like object.
 
     Returns:
-        BytesIO: In-memory copy of the uploaded bytes.
+        SpooledTemporaryFile[bytes]: Buffered upload handle positioned at the
+            start of the stream.
 
     Raises:
         ValueError: If the upload exceeds `MAX_IMAGE_BYTES`.
@@ -75,7 +76,10 @@ def _buffer_upload(upload: Any) -> BytesIO:
     _safe_rewind_upload(upload)
 
     total = 0
-    with tempfile.SpooledTemporaryFile(max_size=IMAGE_READ_CHUNK_BYTES) as buffer:
+    with contextlib.ExitStack() as stack:
+        buffer = stack.enter_context(
+            tempfile.SpooledTemporaryFile(max_size=IMAGE_READ_CHUNK_BYTES)
+        )
         while True:
             chunk = read_bytes(IMAGE_READ_CHUNK_BYTES)
             if not chunk:
@@ -85,7 +89,8 @@ def _buffer_upload(upload: Any) -> BytesIO:
                 raise ValueError("Uploaded image exceeds the maximum allowed size")
             buffer.write(chunk)
         buffer.seek(0)
-        return BytesIO(buffer.read())
+        stack.pop_all()
+        return buffer
 
 
 def open_untrusted_image(upload: Any) -> PILImage:
@@ -109,20 +114,25 @@ def open_untrusted_image(upload: Any) -> PILImage:
     except ImportError as exc:  # pragma: no cover - optional dep
         raise ImportError("Pillow is required for image operations") from exc
 
-    with _PIL_MAX_PIXELS_LOCK:
-        previous_limit = Image.MAX_IMAGE_PIXELS
-        _configure_pillow_limits(Image)
-        try:
-            data = _buffer_upload(upload)
-            with Image.open(data) as probe:
-                probe.verify()
-            data.seek(0)
-            with Image.open(data) as image:
-                image.load()
-                return image.copy()
-        finally:
-            Image.MAX_IMAGE_PIXELS = previous_limit
-            _safe_rewind_upload(upload)
+    data: SpooledTemporaryFile[bytes] | None = None
+    try:
+        data = _buffer_upload(upload)
+        with _PIL_MAX_PIXELS_LOCK:
+            previous_limit = Image.MAX_IMAGE_PIXELS
+            _configure_pillow_limits(Image)
+            try:
+                with Image.open(data) as probe:
+                    probe.verify()
+                data.seek(0)
+                with Image.open(data) as image:
+                    image.load()
+                    return image.copy()
+            finally:
+                Image.MAX_IMAGE_PIXELS = previous_limit
+    finally:
+        if data is not None:
+            data.close()
+        _safe_rewind_upload(upload)
 
 
 @contextmanager
