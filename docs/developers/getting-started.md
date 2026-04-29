@@ -33,6 +33,10 @@ cd docmind-ai-llm
 # 2. Install dependencies
 uv sync --frozen
 
+# If you have a CUDA-compatible NVIDIA GPU and want local accelerated inference,
+# prefer the GPU extras install:
+uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+
 # 3. Start services
 docker compose up -d qdrant
 
@@ -234,7 +238,7 @@ uv run streamlit run app.py
 
 ```bash
 # Format and lint code (run before commits)
-uv run ruff format . && uv run ruff check . --fix
+uv run ruff format . && uv run ruff check .
 
 # Run tests
 uv run pytest tests/unit/ -v             # Fast unit tests
@@ -277,7 +281,7 @@ git checkout -b feature/your-feature-name
 
 # 3. Test changes
 uv run pytest tests/ -v
-uv run ruff format . && uv run ruff check . --fix
+uv run ruff format . && uv run ruff check .
 
 # 4. Commit changes
 git add .
@@ -448,7 +452,7 @@ Once you have the system running:
 2. **Architecture Questions**: See system-architecture.md
 3. **Implementation Help**: See developer-handbook.md
 4. **Performance Issues**: See operations-guide.md and configuration.md
-5. **ADR References**: Check `adrs/` for architectural decisions
+5. **ADR References**: Check [ADRs](./adrs/README.md) for architectural decisions
 
 ---
 
