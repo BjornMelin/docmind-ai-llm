@@ -23,7 +23,8 @@ def test_siglip_loader_cached(monkeypatch):
 
     class _FakeModel:
         @staticmethod
-        def from_pretrained(_id):  # type: ignore[no-untyped-def]
+        def from_pretrained(_id, revision=None):  # type: ignore[no-untyped-def]
+            assert revision is not None
             calls["model"] += 1
             return SimpleNamespace(
                 get_text_features=lambda **_: 0,
@@ -32,7 +33,8 @@ def test_siglip_loader_cached(monkeypatch):
 
     class _FakeProcessor:
         @staticmethod
-        def from_pretrained(_id):  # type: ignore[no-untyped-def]
+        def from_pretrained(_id, revision=None):  # type: ignore[no-untyped-def]
+            assert revision is not None
             calls["proc"] += 1
             return SimpleNamespace()
 

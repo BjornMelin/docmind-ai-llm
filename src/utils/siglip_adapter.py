@@ -10,6 +10,11 @@ from typing import Any
 import numpy as np
 from loguru import logger
 
+from src.utils.vision_siglip import (
+    DEFAULT_SIGLIP_MODEL_REVISION,
+    siglip_features,
+)
+
 
 class SiglipEmbedding:
     """Minimal SigLIP adapter exposing `get_image_embedding`.
@@ -29,14 +34,22 @@ class SiglipEmbedding:
             model_id: Hugging Face model identifier for SigLIP.
             device: Optional device override ("cpu"|"cuda"). When None, auto.
         """
+        revision = DEFAULT_SIGLIP_MODEL_REVISION
         if model_id is None:
             try:
                 from src.config import settings as app_settings  # local import
 
                 model_id = getattr(app_settings.embedding, "siglip_model_id", None)
+                revision = getattr(
+                    app_settings.embedding,
+                    "siglip_model_revision",
+                    DEFAULT_SIGLIP_MODEL_REVISION,
+                )
             except (ImportError, AttributeError):
                 model_id = None
+                revision = DEFAULT_SIGLIP_MODEL_REVISION
         self.model_id = model_id or "google/siglip-base-patch16-224"
+        self.revision = revision
         # Delegate device selection to shared helper with safe fallback
         self.device = device or self._choose_device()
         self._model: Any | None = None
@@ -75,10 +88,16 @@ class SiglipEmbedding:
         """Direct transformers-based SigLIP loading fallback."""
         from transformers import SiglipModel, SiglipProcessor  # type: ignore
 
-        model: Any = SiglipModel.from_pretrained(self.model_id)
+        model: Any = SiglipModel.from_pretrained(  # nosec B615
+            self.model_id,
+            revision=self.revision,
+        )
         if self.device in ("cuda", "mps"):
             model = model.to(self.device)
-        proc = SiglipProcessor.from_pretrained(self.model_id)
+        proc = SiglipProcessor.from_pretrained(  # nosec B615
+            self.model_id,
+            revision=self.revision,
+        )
         self._model = model
         self._proc = proc
 
@@ -100,7 +119,11 @@ class SiglipEmbedding:
             try:
                 from src.utils.vision_siglip import load_siglip
 
-                model, proc, dev = load_siglip(self.model_id, self.device)
+                model, proc, dev = load_siglip(
+                    self.model_id,
+                    self.device,
+                    self.revision,
+                )
                 self.device = dev
                 self._model = model
                 self._proc = proc
@@ -154,8 +177,9 @@ class SiglipEmbedding:
                 raise RuntimeError("SigLIP processor returned no pixel_values")
             pix = self._move_to_device(pix)
             with torch.no_grad():  # type: ignore[name-defined]
-                feats = self._model.get_image_features(pixel_values=pix)  # type: ignore[union-attr]
-                feats = feats / feats.norm(dim=-1, keepdim=True)
+                feats = siglip_features(
+                    self._model.get_image_features(pixel_values=pix)  # type: ignore[union-attr]
+                )
                 vec = feats[0].detach().cpu().numpy().astype(np.float32)
             return vec
         except (ImportError, AttributeError, RuntimeError, ValueError, TypeError):
@@ -185,11 +209,12 @@ class SiglipEmbedding:
             input_ids = self._move_to_device(input_ids)
             attn = self._move_to_device(attn)
             with torch.no_grad():  # type: ignore[name-defined]
-                feats = self._model.get_text_features(  # type: ignore[union-attr]
-                    input_ids=input_ids,
-                    attention_mask=attn,
+                feats = siglip_features(
+                    self._model.get_text_features(  # type: ignore[union-attr]
+                        input_ids=input_ids,
+                        attention_mask=attn,
+                    )
                 )
-                feats = feats / feats.norm(dim=-1, keepdim=True)
                 vec = feats[0].detach().cpu().numpy().astype(np.float32)
             return vec
         except (ImportError, AttributeError, RuntimeError, ValueError, TypeError):
@@ -225,8 +250,9 @@ class SiglipEmbedding:
                     raise RuntimeError("SigLIP processor returned no pixel_values")
                 pix = self._move_to_device(pix)
                 with torch.no_grad():  # type: ignore[name-defined]
-                    feats = self._model.get_image_features(pixel_values=pix)  # type: ignore[union-attr]
-                    feats = feats / feats.norm(dim=-1, keepdim=True)
+                    feats = siglip_features(
+                        self._model.get_image_features(pixel_values=pix)  # type: ignore[union-attr]
+                    )
                     out.append(feats.detach().cpu().numpy().astype(np.float32))
         except Exception as exc:
             from src.utils.log_safety import build_pii_log_entry
@@ -282,11 +308,12 @@ class SiglipEmbedding:
                 input_ids = self._move_to_device(input_ids)
                 attn = self._move_to_device(attn)
                 with torch.no_grad():  # type: ignore[name-defined]
-                    feats = self._model.get_text_features(  # type: ignore[union-attr]
-                        input_ids=input_ids,
-                        attention_mask=attn,
+                    feats = siglip_features(
+                        self._model.get_text_features(  # type: ignore[union-attr]
+                            input_ids=input_ids,
+                            attention_mask=attn,
+                        )
                     )
-                    feats = feats / feats.norm(dim=-1, keepdim=True)
                     out.append(feats.detach().cpu().numpy().astype(np.float32))
         except Exception as exc:
             from src.utils.log_safety import build_pii_log_entry

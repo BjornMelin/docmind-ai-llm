@@ -629,6 +629,10 @@ class EmbeddingConfig(BaseModel):
     # Images
     image_backbone: ImageBackboneName = Field(default="auto")
     siglip_model_id: str = Field(default="google/siglip-base-patch16-224")
+    siglip_model_revision: str = Field(
+        default="7fd15f0689c79d79e38b1c2e2e2370a7bf2761ed",
+        description="Pinned Hugging Face revision for the default SigLIP model.",
+    )
     normalize_image: bool = Field(default=True)
     batch_size_image: int = Field(default=8, ge=1, le=64)
 
@@ -1426,6 +1430,7 @@ class DocMindSettings(BaseSettings):
             "enable_sparse": self.embedding.enable_sparse,
             # Images
             "image_backbone": self.embedding.image_backbone,
+            "siglip_model_revision": self.embedding.siglip_model_revision,
             "batch_size_image": self.embedding.batch_size_image,
             "normalize_image": self.embedding.normalize_image,
             # Misc

@@ -397,15 +397,26 @@ class ImageEmbedder:
 
             try:
                 from src.config import settings as _settings
+                from src.utils.vision_siglip import DEFAULT_SIGLIP_MODEL_REVISION
 
                 model_id = getattr(
                     _settings.embedding,
                     "siglip_model_id",
                     "google/siglip-base-patch16-224",
                 )
+                revision = getattr(
+                    _settings.embedding,
+                    "siglip_model_revision",
+                    DEFAULT_SIGLIP_MODEL_REVISION,
+                )
             except (AttributeError, ImportError, RuntimeError, ValueError, TypeError):
                 model_id = "google/siglip-base-patch16-224"
-            model, processor, _dev = load_siglip(model_id=model_id, device=self.device)
+                revision = None
+            model, processor, _dev = load_siglip(
+                model_id=model_id,
+                device=self.device,
+                revision=revision,
+            )
             self._backend = model
             self._preprocess = processor
         except (ImportError, RuntimeError, AttributeError, ValueError, TypeError):
@@ -415,11 +426,20 @@ class ImageEmbedder:
         """Direct transformers-based SigLIP loading as a fallback path."""
         from transformers import SiglipModel, SiglipProcessor  # type: ignore
 
+        from src.utils.vision_siglip import DEFAULT_SIGLIP_MODEL_REVISION
+
         model_id = "google/siglip-base-patch16-224"
-        model = SiglipModel.from_pretrained(model_id, device_map=None)
+        model = SiglipModel.from_pretrained(  # nosec B615
+            model_id,
+            device_map=None,
+            revision=DEFAULT_SIGLIP_MODEL_REVISION,
+        )
         if self.device in ("cuda", "mps"):
             model = cast(Any, model).to(self.device)
-        processor = SiglipProcessor.from_pretrained(model_id)
+        processor = SiglipProcessor.from_pretrained(  # nosec B615
+            model_id,
+            revision=DEFAULT_SIGLIP_MODEL_REVISION,
+        )
         self._backend = model
         self._preprocess = processor
 
@@ -543,9 +563,12 @@ class ImageEmbedder:
                 elif self.device == "mps":
                     pix = pix.to("mps")
                 with TORCH.no_grad():
-                    f = backend_any.get_image_features(pixel_values=pix)
-                    if normalize:
-                        f = f / f.norm(dim=-1, keepdim=True)
+                    from src.utils.vision_siglip import siglip_features
+
+                    f = siglip_features(
+                        backend_any.get_image_features(pixel_values=pix),
+                        normalize=normalize,
+                    )
                     out_list.append(f.detach().cpu().numpy().astype(np.float32))
             return np.concatenate(out_list, axis=0)
 

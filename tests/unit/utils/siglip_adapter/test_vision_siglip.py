@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import types
 
+import numpy as np
 import pytest
 
 from src.utils import vision_siglip
@@ -20,11 +21,13 @@ def test_load_siglip_uses_cached_loader(monkeypatch):
 
     monkeypatch.setattr(vision_siglip, "select_device", _select)
 
-    def _model_loader(model_id: str):
+    def _model_loader(model_id: str, revision: str):
+        assert revision == vision_siglip.DEFAULT_SIGLIP_MODEL_REVISION
         call_count["model"] += 1
         return types.SimpleNamespace(to=lambda device: None)
 
-    def _proc_loader(model_id: str):
+    def _proc_loader(model_id: str, revision: str):
+        assert revision == vision_siglip.DEFAULT_SIGLIP_MODEL_REVISION
         call_count["processor"] += 1
         return object()
 
@@ -41,3 +44,22 @@ def test_load_siglip_uses_cached_loader(monkeypatch):
     assert model1 is model2
     assert proc1 is proc2
     assert device1 == device2 == "cpu"
+
+
+@pytest.mark.unit
+def test_siglip_features_accepts_v5_pooler_output() -> None:
+    """Verify Transformers v5 output objects normalize like v4 tensors."""
+    torch = pytest.importorskip("torch")
+
+    direct = torch.ones((1, 4), dtype=torch.float32)
+    wrapped = types.SimpleNamespace(
+        pooler_output=torch.ones((1, 4), dtype=torch.float32)
+    )
+
+    direct_out = vision_siglip.siglip_features(direct).detach().numpy()
+    wrapped_out = vision_siglip.siglip_features(wrapped).detach().numpy()
+
+    assert direct_out.shape == (1, 4)
+    assert wrapped_out.shape == (1, 4)
+    assert np.linalg.norm(direct_out[0]) == pytest.approx(1.0)
+    assert np.linalg.norm(wrapped_out[0]) == pytest.approx(1.0)

@@ -17,7 +17,11 @@ def test_ensure_loaded_prefers_unified_loader(monkeypatch):
     sentinel_proc = object()
 
     stub = types.SimpleNamespace(
-        load_siglip=lambda model_id, device: (sentinel_model, sentinel_proc, "cuda")
+        load_siglip=lambda model_id, device, revision=None: (
+            sentinel_model,
+            sentinel_proc,
+            "cuda",
+        )
     )
     monkeypatch.setitem(sys.modules, "src.utils.vision_siglip", stub)
 
@@ -39,8 +43,12 @@ def test_ensure_loaded_falls_back_to_transformers(monkeypatch):
     fake_model = types.SimpleNamespace(config=types.SimpleNamespace(projection_dim=384))
     fake_proc = object()
     transformers = types.SimpleNamespace(
-        SiglipModel=types.SimpleNamespace(from_pretrained=lambda _mid: fake_model),
-        SiglipProcessor=types.SimpleNamespace(from_pretrained=lambda _mid: fake_proc),
+        SiglipModel=types.SimpleNamespace(
+            from_pretrained=lambda _mid, revision=None: fake_model
+        ),
+        SiglipProcessor=types.SimpleNamespace(
+            from_pretrained=lambda _mid, revision=None: fake_proc
+        ),
     )
     monkeypatch.setitem(sys.modules, "transformers", transformers)
 

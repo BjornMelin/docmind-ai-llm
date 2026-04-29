@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import pytest
@@ -49,7 +49,11 @@ def test_image_embedder_siglip_via_vision_siglip(monkeypatch) -> None:
 
     class _Backend:
         def get_image_features(self, *, pixel_values):  # type: ignore[no-untyped-def]
-            return torch.ones((pixel_values.shape[0], 768), dtype=torch.float32)
+            return SimpleNamespace(
+                pooler_output=torch.ones(
+                    (pixel_values.shape[0], 768), dtype=torch.float32
+                )
+            )
 
     class _Processor:
         def __call__(self, *, images, return_tensors="pt"):  # type: ignore[no-untyped-def]
@@ -58,7 +62,15 @@ def test_image_embedder_siglip_via_vision_siglip(monkeypatch) -> None:
 
     vision = ModuleType("src.utils.vision_siglip")
     vision.load_siglip = (  # type: ignore[attr-defined]
-        lambda model_id, device: (_Backend(), _Processor(), device)
+        lambda model_id, device, revision=None: (_Backend(), _Processor(), device)
+    )
+    vision.DEFAULT_SIGLIP_MODEL_REVISION = "test-revision"  # type: ignore[attr-defined]
+    vision.siglip_features = (  # type: ignore[attr-defined]
+        lambda output, normalize=True: (
+            output.pooler_output / output.pooler_output.norm(dim=-1, keepdim=True)
+            if normalize
+            else output.pooler_output
+        )
     )
     monkeypatch.setitem(sys.modules, "src.utils.vision_siglip", vision)
 
@@ -93,6 +105,12 @@ def test_image_embedder_siglip_falls_back_to_transformers(monkeypatch) -> None:
     vision.load_siglip = (  # type: ignore[attr-defined]
         lambda *_a, **_k: (_ for _ in ()).throw(ImportError("x"))
     )
+    vision.DEFAULT_SIGLIP_MODEL_REVISION = "test-revision"  # type: ignore[attr-defined]
+    vision.siglip_features = (  # type: ignore[attr-defined]
+        lambda output, normalize=True: (
+            output / output.norm(dim=-1, keepdim=True) if normalize else output
+        )
+    )
     monkeypatch.setitem(sys.modules, "src.utils.vision_siglip", vision)
 
     class _Backend:
@@ -105,13 +123,17 @@ def test_image_embedder_siglip_falls_back_to_transformers(monkeypatch) -> None:
 
     class _SiglipModel:
         @staticmethod
-        def from_pretrained(_model_id: str, device_map=None):  # type: ignore[no-untyped-def]
+        def from_pretrained(  # type: ignore[no-untyped-def]
+            _model_id: str, device_map=None, revision=None
+        ):
             _ = device_map
+            assert revision == "test-revision"
             return _Backend()
 
     class _SiglipProcessor:
         @staticmethod
-        def from_pretrained(_model_id: str):  # type: ignore[no-untyped-def]
+        def from_pretrained(_model_id: str, revision=None):  # type: ignore[no-untyped-def]
+            assert revision == "test-revision"
             return _Processor()
 
     transformers = ModuleType("transformers")
