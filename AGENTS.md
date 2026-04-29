@@ -88,7 +88,7 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
 - Python: `>=3.12,<3.14` (primary dev/runtime: Python 3.12.13)
 - Keep these coupled:
-  - Torch 2.8.x ↔ Transformers `<5.0` (vLLM is external-only via OpenAI-compatible HTTP)
+  - Torch 2.8.x ↔ Transformers `>=5.0,<6.0` (vLLM is external-only via OpenAI-compatible HTTP)
   - DuckDB `<1.4.0` (LlamaIndex integrations cap it)
   - LlamaIndex packages stay `<0.15.0`
   - Streamlit `<2.0.0`
