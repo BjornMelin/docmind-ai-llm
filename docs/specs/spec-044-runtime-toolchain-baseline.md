@@ -54,7 +54,7 @@ DocMind targets Python 3.12-compatible syntax and typing:
 - Source of truth: `pyproject.toml` + `uv.lock`.
 - Base install must remain CPU-first and resolve without CUDA-specific indices.
 - Optional extras must be deterministic and documented:
-  - `uv --frozen sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match`
+  - `uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match`
   - `uv sync --extra graph`
   - `uv sync --extra multimodal`
   - `uv sync --extra observability`

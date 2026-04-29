@@ -106,7 +106,7 @@ uv run python -m spacy download en_core_web_sm
 Recommended (repo-supported):
 
 ```bash
-uv --frozen sync --extra gpu
+uv sync --frozen --extra gpu
 uv run python -m spacy download en_core_web_sm
 ```
 

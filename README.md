@@ -245,7 +245,7 @@ Design goals:
 
    ```bash
    nvidia-smi
-   uv --frozen sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+   uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
    uv run python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
    ```
 
@@ -729,7 +729,7 @@ ollama serve
 
 ```bash
 # Install GPU dependencies
-uv --frozen sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 
 # Verify CUDA installation
 nvidia-smi

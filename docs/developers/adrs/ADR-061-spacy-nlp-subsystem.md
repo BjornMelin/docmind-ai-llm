@@ -105,7 +105,7 @@ To avoid environment churn where uninstalling `typer` can remove files needed by
 For acceleration:
 
 - **Apple Silicon**: `uv sync --extra apple` installs `spacy[apple]` on macOS arm64.
-- **NVIDIA CUDA (12.x)**: `uv --frozen sync --extra gpu` installs `cupy-cuda12x>=13` on non-darwin.
+- **NVIDIA CUDA (12.x)**: `uv sync --frozen --extra gpu` installs `cupy-cuda12x>=13` on non-darwin.
 
 Why not use `spacy[cuda12x]==3.8.11`?
 
