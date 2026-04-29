@@ -7,7 +7,7 @@
 
 ## Dependencies & Security Constraints
 
-- `langgraph-checkpoint-sqlite>=3.0.3,<4.0.0` (versions `<3.0.1` have known CVEs affecting checkpoint integrity)
+- `langgraph-checkpoint-sqlite>=3.0.3,<4.0.0` (versions `<3.0.3` have known CVEs affecting checkpoint integrity)
 - `sqlite-vec` (runtime dependency used by LangGraph checkpointing; required for vector-backed SQLite)
 - Optional multimodal deps (fail-open): `transformers` + `torch` (SigLIP model execution/embeddings; multimodal search is disabled if unavailable)
 

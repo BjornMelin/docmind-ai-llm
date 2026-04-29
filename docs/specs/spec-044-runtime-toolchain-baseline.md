@@ -9,7 +9,7 @@ related_requirements:
   - NFR-MAINT-002: Ruff/pyright pass (ruff enforces pylint-equivalent rules).
   - NFR-MAINT-003: No placeholders; docs/specs/RTM must match code.
   - NFR-PORT-003: Docker/compose runnable + reproducible.
-related_adrs: ["ADR-065", "ADR-064", "ADR-014", "ADR-024", "ADR-042"]
+related_adrs: ["ADR-065", "ADR-014", "ADR-024", "ADR-042"]
 ---
 
 ## Objective

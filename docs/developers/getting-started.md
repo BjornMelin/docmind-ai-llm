@@ -107,7 +107,7 @@ cd docmind-ai-llm
 uv sync --frozen
 
 # Install with GPU support (recommended)
-uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128
+uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 
 # Install with test dependencies
 uv sync --frozen --group test
@@ -123,7 +123,7 @@ For optimal performance with RTX 4090:
 
 ```bash
 # Install app GPU extras (CUDA-enabled PyTorch wheels)
-uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128
+uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 ```
 
 If you use vLLM, run it as an external OpenAI-compatible server and point DocMind at it via

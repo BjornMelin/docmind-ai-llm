@@ -35,6 +35,8 @@ The repository currently ships `Dockerfile` and `docker-compose.yml`, but they m
 
 Additionally, the “final release” posture requires a clear GPU story without forcing CUDA/PyTorch stacks into the app container. Bundling multiple GPU servers in-compose is high-maintenance; bundling none is a poor operator story.
 
+Minimum hardware baseline: RTX 4090 laptop with 12–14 GB VRAM, supporting 128K context using FP8 quantization.
+
 ## Decision Drivers
 
 - Correctness: containers must run out-of-the-box
@@ -64,6 +66,8 @@ Weights: Complexity 40% · Perf/Size 30% · Alignment/Security 30% (10 = best)
 ## Decision
 
 Implement a ship-ready container baseline:
+
+- Minimum hardware baseline: RTX 4090 laptop with 12–14 GB VRAM, supporting 128K context using FP8 quantization.
 
 - Add `.dockerignore`
 - Replace Dockerfile with:
