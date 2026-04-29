@@ -12,9 +12,7 @@ def _load_settings_page_module(
 ) -> types.ModuleType:
     # Avoid importing heavy UI runtime init for unit tests.
     integrations = importlib.import_module("src.config.integrations")
-    monkeypatch.setattr(
-        integrations, "initialize_integrations", lambda **_: None
-    )
+    monkeypatch.setattr(integrations, "initialize_integrations", lambda **_: None)
 
     # Ensure a fresh import for each test (avoid module cache pollution).
     sys.modules.pop("src.pages.04_settings", None)

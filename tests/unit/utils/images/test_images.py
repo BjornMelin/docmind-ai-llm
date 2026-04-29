@@ -132,9 +132,7 @@ def test_open_untrusted_image_rejects_oversized_upload() -> None:
             """
             if self._remaining <= 0:
                 return b""
-            limit = (
-                len(self._chunk) if size < 0 else min(size, len(self._chunk))
-            )
+            limit = len(self._chunk) if size < 0 else min(size, len(self._chunk))
             chunk_size = min(limit, self._remaining)
             self._remaining -= chunk_size
             self._position += chunk_size
