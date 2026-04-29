@@ -209,7 +209,7 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 - Use `pathlib.Path` and guard clauses; avoid `Any` unless isolated behind a narrow boundary.
 - Device/VRAM policy: use `src/utils/core.py` (`resolve_device`, `has_cuda_vram`) for business logic.
 - Python style (apply to all code; when editing a file, align the whole file):
-  4-space indent, 80-char lines; public docstrings use `"""` + 1-line summary
+  4-space indent, 88-char lines; public docstrings use `"""` + 1-line summary
   <=80 chars and include `Args:`, `Returns:`/`Yields:`, `Raises:` when needed
   with 4-space hanging indents; absolute imports only, one per line, top of
   file; None checks use `is (not) None`, booleans use `if not x` (add

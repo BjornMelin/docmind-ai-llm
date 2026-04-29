@@ -107,7 +107,9 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
             "llm_backend": validated.llm_backend,
             "model": validated.model,
             "context_window": validated.context_window,
-            "llm_request_timeout_seconds": (validated.llm_request_timeout_seconds),
+            "llm_request_timeout_seconds": (
+                validated.llm_request_timeout_seconds
+            ),
             "enable_gpu_acceleration": validated.enable_gpu_acceleration,
             "openai": validated.openai,
             "ollama_base_url": validated.ollama_base_url,
@@ -132,8 +134,12 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
                     "text_rerank_timeout_ms": (
                         validated.retrieval.text_rerank_timeout_ms
                     ),
-                    "siglip_timeout_ms": (validated.retrieval.siglip_timeout_ms),
-                    "colpali_timeout_ms": (validated.retrieval.colpali_timeout_ms),
+                    "siglip_timeout_ms": (
+                        validated.retrieval.siglip_timeout_ms
+                    ),
+                    "colpali_timeout_ms": (
+                        validated.retrieval.colpali_timeout_ms
+                    ),
                     "total_rerank_budget_ms": (
                         validated.retrieval.total_rerank_budget_ms
                     ),
@@ -231,13 +237,17 @@ def main() -> None:
             else ""
         )
         openai_require_v1 = bool(getattr(settings.openai, "require_v1", True))
-        openai_api_mode = str(getattr(settings.openai, "api_mode", "chat_completions"))
+        openai_api_mode = str(
+            getattr(settings.openai, "api_mode", "chat_completions")
+        )
         openai_headers_json = _safe_json_dumps(
             getattr(settings.openai, "default_headers", None) or {}
         )
         openai_ui_errors = []
 
-    ollama_url, vllm_url, lmstudio_url, llamacpp_url = _render_provider_urls(provider)
+    ollama_url, vllm_url, lmstudio_url, llamacpp_url = _render_provider_urls(
+        provider
+    )
     (
         ollama_api_key,
         ollama_enable_web_search,
@@ -255,7 +265,9 @@ def main() -> None:
             allowlist=settings.security.endpoint_allowlist,
         )
 
-    ui_errors = _validate_llamacpp_inputs(provider, llamacpp_url, openai_base_url)
+    ui_errors = _validate_llamacpp_inputs(
+        provider, llamacpp_url, openai_base_url
+    )
     ui_errors.extend(openai_ui_errors)
     values: SettingsFormValues = {
         "provider": provider,
@@ -448,7 +460,9 @@ def _parse_headers_json(raw: str) -> tuple[dict[str, str] | None, list[str]]:
         v = str(raw_v).strip()
         if not v:
             continue
-        if _HEADER_CONTROL_CHARS_RE.search(k) or _HEADER_CONTROL_CHARS_RE.search(v):
+        if _HEADER_CONTROL_CHARS_RE.search(
+            k
+        ) or _HEADER_CONTROL_CHARS_RE.search(v):
             errors.append(
                 "openai.default_headers: control characters are not "
                 "allowed in keys/values"
@@ -456,14 +470,17 @@ def _parse_headers_json(raw: str) -> tuple[dict[str, str] | None, list[str]]:
             continue
         if "\n" in k or "\r" in k or "\n" in v or "\r" in v:
             errors.append(
-                "openai.default_headers: newlines are not allowed in keys/values"
+                "openai.default_headers: newlines are not allowed in "
+                "keys/values"
             )
             continue
         headers[k] = v
     return (headers or None), errors
 
 
-def _render_openai_compatible_section() -> tuple[str, str, bool, str, str, list[str]]:
+def _render_openai_compatible_section() -> tuple[
+    str, str, bool, str, str, list[str]
+]:
     """Render OpenAI-compatible provider settings.
 
     Returns:
@@ -490,7 +507,9 @@ def _render_openai_compatible_section() -> tuple[str, str, bool, str, str, list[
         if "base_url" in preset_cfg:
             st.session_state[_OPENAI_BASE_URL_KEY] = str(preset_cfg["base_url"])
         if "require_v1" in preset_cfg:
-            st.session_state[_OPENAI_REQUIRE_V1_KEY] = bool(preset_cfg["require_v1"])
+            st.session_state[_OPENAI_REQUIRE_V1_KEY] = bool(
+                preset_cfg["require_v1"]
+            )
         if "api_mode" in preset_cfg:
             st.session_state[_OPENAI_API_MODE_KEY] = str(preset_cfg["api_mode"])
         if "headers" in preset_cfg:
@@ -508,14 +527,16 @@ def _render_openai_compatible_section() -> tuple[str, str, bool, str, str, list[
         "API key (optional)",
         type="password",
         help=(
-            "Bearer token for the provider. For local servers, a placeholder is fine."
+            "Bearer token for the provider. For local servers, a placeholder "
+            "is fine."
         ),
         key=_OPENAI_API_KEY_KEY,
     )
     require_v1 = st.checkbox(
         "Normalize base URL to include /v1",
         help=(
-            "Disable for providers rooted at '/', such as the LiteLLM Proxy default."
+            "Disable for providers rooted at '/', such as the LiteLLM Proxy "
+            "default."
         ),
         key=_OPENAI_REQUIRE_V1_KEY,
     )
@@ -563,7 +584,9 @@ def _render_provider_urls(provider: str) -> tuple[str, str, str, str]:
             str(settings.ollama_base_url).rstrip("/"),
             str(settings.vllm_base_url or settings.vllm.vllm_base_url),
             str(settings.lmstudio_base_url),
-            str(settings.llamacpp_base_url) if settings.llamacpp_base_url else "",
+            str(settings.llamacpp_base_url)
+            if settings.llamacpp_base_url
+            else "",
         )
     st.subheader("Provider URLs")
     col1, col2 = st.columns(2)
@@ -585,7 +608,9 @@ def _render_provider_urls(provider: str) -> tuple[str, str, str, str]:
         )
         llamacpp_url = st.text_input(
             "llama.cpp server URL",
-            value=str(settings.llamacpp_base_url) if settings.llamacpp_base_url else "",
+            value=str(settings.llamacpp_base_url)
+            if settings.llamacpp_base_url
+            else "",
             placeholder="http://localhost:8080/v1",
         )
     return ollama_url, vllm_url, lmstudio_url, llamacpp_url
@@ -724,10 +749,14 @@ def _render_retrieval_section() -> tuple[int, int, int, int, int]:
             siglip_timeout_ms, colpali_timeout_ms, total_rerank_budget_ms).
     """
     st.subheader("Retrieval (Policy)")
-    st.caption("Server-side hybrid and fusion are managed by environment policy")
+    st.caption(
+        "Server-side hybrid and fusion are managed by environment policy"
+    )
     st.text_input(
         "Server-side hybrid enabled",
-        value=str(bool(getattr(settings.retrieval, "enable_server_hybrid", False))),
+        value=str(
+            bool(getattr(settings.retrieval, "enable_server_hybrid", False))
+        ),
         disabled=True,
     )
     st.text_input(
@@ -752,7 +781,9 @@ def _render_retrieval_section() -> tuple[int, int, int, int, int]:
                 "Text rerank timeout (ms)",
                 min_value=50,
                 max_value=5000,
-                value=int(getattr(settings.retrieval, "text_rerank_timeout_ms", 250)),
+                value=int(
+                    getattr(settings.retrieval, "text_rerank_timeout_ms", 250)
+                ),
             )
         )
     with col2t:
@@ -761,7 +792,9 @@ def _render_retrieval_section() -> tuple[int, int, int, int, int]:
                 "SigLIP timeout (ms)",
                 min_value=25,
                 max_value=5000,
-                value=int(getattr(settings.retrieval, "siglip_timeout_ms", 150)),
+                value=int(
+                    getattr(settings.retrieval, "siglip_timeout_ms", 150)
+                ),
             )
         )
     with col3t:
@@ -770,7 +803,9 @@ def _render_retrieval_section() -> tuple[int, int, int, int, int]:
                 "ColPali timeout (ms)",
                 min_value=25,
                 max_value=10000,
-                value=int(getattr(settings.retrieval, "colpali_timeout_ms", 400)),
+                value=int(
+                    getattr(settings.retrieval, "colpali_timeout_ms", 400)
+                ),
             )
         )
     with col4t:
@@ -779,7 +814,9 @@ def _render_retrieval_section() -> tuple[int, int, int, int, int]:
                 "Total rerank budget (ms)",
                 min_value=100,
                 max_value=20000,
-                value=int(getattr(settings.retrieval, "total_rerank_budget_ms", 800)),
+                value=int(
+                    getattr(settings.retrieval, "total_rerank_budget_ms", 800)
+                ),
             )
         )
     return rrf_k, t_text, t_siglip, t_colpali, t_total
@@ -890,7 +927,8 @@ def _build_candidate_settings(values: SettingsFormValues) -> dict[str, Any]:
             "base_url": str(values["openai_base_url"]).strip(),
             "api_key": str(values["openai_api_key"]).strip() or None,
             "require_v1": bool(values["openai_require_v1"]),
-            "api_mode": str(values["openai_api_mode"]).strip() or "chat_completions",
+            "api_mode": str(values["openai_api_mode"]).strip()
+            or "chat_completions",
             "default_headers": headers,
         },
         "ollama_base_url": str(values["ollama_url"]).strip(),
@@ -930,13 +968,34 @@ def _render_resolved_base_url(validated: DocMindSettings | None) -> None:
     st.text_input("Resolved base URL", value=resolved_base_url, disabled=True)
 
 
-def _render_validation(ui_errors: list[str], validation_errors: list[str]) -> None:
+def _render_validation(
+    ui_errors: list[str], validation_errors: list[str]
+) -> None:
     """Render validation errors in the UI."""
     if not ui_errors and not validation_errors:
         return
     st.subheader("Validation")
     for msg in ui_errors + validation_errors:
         st.error(msg)
+
+
+def _build_endpoint_test_headers(validated: DocMindSettings) -> dict[str, str]:
+    """Build headers for the manual endpoint connectivity test.
+
+    Args:
+        validated: The validated runtime settings.
+
+    Returns:
+        Headers to send with the connectivity probe.
+    """
+    headers: dict[str, str] = {"Accept": "application/json"}
+    if validated.openai.api_key is not None:
+        headers["Authorization"] = (
+            f"Bearer {validated.openai.api_key.get_secret_value()}"
+        )
+    if validated.openai.default_headers:
+        headers.update(validated.openai.default_headers)
+    return headers
 
 
 def _render_endpoint_test(validated: DocMindSettings | None) -> None:
@@ -960,7 +1019,9 @@ def _render_endpoint_test(validated: DocMindSettings | None) -> None:
         return
 
     st.subheader("Connectivity Test")
-    st.caption("Sends a lightweight `GET /models` request to the configured endpoint.")
+    st.caption(
+        "Sends a lightweight `GET /models` request to the configured endpoint."
+    )
     cooldown_key = "docmind_endpoint_test_last_ts"
     cooldown_s = 3.0
     now = time.monotonic()
@@ -982,13 +1043,7 @@ def _render_endpoint_test(validated: DocMindSettings | None) -> None:
 
         base = httpx.URL(str(base_url))
         url = str(base.copy_with(path=base.path.rstrip("/") + "/models"))
-        headers: dict[str, str] = {"Accept": "application/json"}
-        if validated.openai.api_key is not None and backend_type != "llamacpp":
-            headers["Authorization"] = (
-                f"Bearer {validated.openai.api_key.get_secret_value()}"
-            )
-        if validated.openai.default_headers:
-            headers.update(validated.openai.default_headers)
+        headers = _build_endpoint_test_headers(validated)
 
         timeout_s = min(30.0, float(validated.llm_request_timeout_seconds))
         with httpx.Client(timeout=timeout_s) as client:
@@ -1009,7 +1064,9 @@ def _render_endpoint_test(validated: DocMindSettings | None) -> None:
     except Exception as exc:  # pragma: no cover - UI feedback
         from src.utils.log_safety import build_pii_log_entry
 
-        redaction = build_pii_log_entry(str(exc), key_id="settings.endpoint_test")
+        redaction = build_pii_log_entry(
+            str(exc), key_id="settings.endpoint_test"
+        )
         st.error(f"Endpoint test failed ({type(exc).__name__}).")
         st.caption(f"Error reference: {redaction.redacted}")
         log_jsonl(
@@ -1059,7 +1116,9 @@ def _render_ollama_web_search_warning(
             host = normalize_endpoint_host(raw.split("/")[0].split(":")[0])
         return host == "ollama.com" or host.endswith(".ollama.com")
 
-    has_ollama_host = any(_is_ollama_host(str(entry)) for entry in allowlist if entry)
+    has_ollama_host = any(
+        _is_ollama_host(str(entry)) for entry in allowlist if entry
+    )
     if not has_ollama_host:
         st.warning(
             "Ollama web tools require `https://ollama.com` in "
@@ -1067,7 +1126,9 @@ def _render_ollama_web_search_warning(
         )
 
 
-def _render_actions(validated: DocMindSettings | None, ui_errors: list[str]) -> None:
+def _render_actions(
+    validated: DocMindSettings | None, ui_errors: list[str]
+) -> None:
     """Render apply/save actions based on validation status."""
     actions_disabled = validated is None or bool(ui_errors)
     col_a, col_b = st.columns(2)
@@ -1083,7 +1144,9 @@ def _render_actions(validated: DocMindSettings | None, ui_errors: list[str]) -> 
                 _apply_validated_runtime(validated)
 
     with col_b:
-        if st.button("Save", use_container_width=True, disabled=actions_disabled):
+        if st.button(
+            "Save", use_container_width=True, disabled=actions_disabled
+        ):
             if validated is None:  # pragma: no cover - defensive
                 st.error("Cannot save: invalid settings.")
             else:
@@ -1150,7 +1213,9 @@ def _persist_env_from_validated(validated: DocMindSettings) -> None:
         ),
         "DOCMIND_LMSTUDIO_BASE_URL": str(validated.lmstudio_base_url),
         "DOCMIND_LLAMACPP_BASE_URL": (
-            str(validated.llamacpp_base_url) if validated.llamacpp_base_url else ""
+            str(validated.llamacpp_base_url)
+            if validated.llamacpp_base_url
+            else ""
         ),
         "DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS": (
             "true" if validated.security.allow_remote_endpoints else "false"
@@ -1213,7 +1278,9 @@ def _render_cache_controls() -> None:
         ) as e:  # pragma: no cover - defensive UI feedback
             from src.utils.log_safety import build_pii_log_entry
 
-            redaction = build_pii_log_entry(str(e), key_id="settings.clear_caches")
+            redaction = build_pii_log_entry(
+                str(e), key_id="settings.clear_caches"
+            )
             st.error(f"Failed to clear caches ({type(e).__name__}).")
             st.caption(f"Error reference: {redaction.redacted}")
             log_jsonl(

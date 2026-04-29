@@ -100,21 +100,59 @@ def test_open_untrusted_image_rejects_oversized_upload() -> None:
     """Oversized upload bytes should be rejected before Pillow opens them."""
 
     class StreamingOversizedUpload:
+        """Stream bytes beyond the configured image upload limit.
+
+        Attributes:
+            _position: Current read cursor position.
+            _remaining: Number of unread bytes left in the stream.
+            _chunk: Reusable byte chunk returned by read.
+        """
+
         def __init__(self) -> None:
+            """Initialize StreamingOversizedUpload.
+
+            Args:
+                None.
+
+            Returns:
+                None.
+            """
             self._position = 0
             self._remaining = MAX_IMAGE_BYTES + 1
             self._chunk = b"0" * IMAGE_READ_CHUNK_BYTES
 
         def read(self, size: int = -1) -> bytes:
+            """Read bytes from the oversized stream.
+
+            Args:
+                size: Maximum number of bytes to read, or -1 for a full chunk.
+
+            Returns:
+                The next byte chunk, or empty bytes at EOF.
+            """
             if self._remaining <= 0:
                 return b""
-            limit = len(self._chunk) if size < 0 else min(size, len(self._chunk))
+            limit = (
+                len(self._chunk) if size < 0 else min(size, len(self._chunk))
+            )
             chunk_size = min(limit, self._remaining)
             self._remaining -= chunk_size
             self._position += chunk_size
             return self._chunk[:chunk_size]
 
         def seek(self, offset: int, whence: int = 0) -> int:
+            """Seek within the oversized stream.
+
+            Args:
+                offset: Target stream offset.
+                whence: Offset reference point.
+
+            Returns:
+                The new stream position.
+
+            Raises:
+                OSError: Raised when the seek is not a rewind to the start.
+            """
             if offset == 0 and whence == 0:
                 self._position = 0
                 self._remaining = MAX_IMAGE_BYTES + 1
@@ -122,6 +160,14 @@ def test_open_untrusted_image_rejects_oversized_upload() -> None:
             raise OSError("seek only supports rewinding to the start")
 
         def tell(self) -> int:
+            """Return the current stream position.
+
+            Args:
+                None.
+
+            Returns:
+                The current byte offset.
+            """
             return self._position
 
     upload = StreamingOversizedUpload()
@@ -137,7 +183,22 @@ def test_open_untrusted_image_ignores_non_callable_seek() -> None:
     """Uploads with a non-callable seek attribute should still open safely."""
 
     class UploadWithBadSeek:
+        """Expose a valid image stream with a non-callable seek attribute.
+
+        Attributes:
+            _buffer: In-memory PNG bytes used by read.
+            seek: Non-callable attribute that shadows normal seek behavior.
+        """
+
         def __init__(self) -> None:
+            """Initialize UploadWithBadSeek.
+
+            Args:
+                None.
+
+            Returns:
+                None.
+            """
             self._buffer = BytesIO()
             Image.new("RGB", (8, 8), color=(255, 255, 0)).save(
                 self._buffer,
@@ -147,6 +208,14 @@ def test_open_untrusted_image_ignores_non_callable_seek() -> None:
             self.seek = 42
 
         def read(self, size: int = -1) -> bytes:
+            """Read bytes from the backing image buffer.
+
+            Args:
+                size: Maximum number of bytes to read, or -1 for all bytes.
+
+            Returns:
+                Bytes read from the image buffer.
+            """
             return self._buffer.read(size)
 
     image = open_untrusted_image(UploadWithBadSeek())

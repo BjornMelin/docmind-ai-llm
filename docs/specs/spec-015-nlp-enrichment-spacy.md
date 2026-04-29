@@ -120,7 +120,7 @@ export SPACY_GPU_ID=0
 ### Apple Silicon (macOS arm64)
 
 ```bash
-uv sync --extra apple
+uv sync --frozen --extra apple
 uv run python -m spacy download en_core_web_sm
 ```
 

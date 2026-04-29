@@ -7,10 +7,14 @@ import types
 import pytest
 
 
-def _load_settings_page_module(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
+def _load_settings_page_module(
+    monkeypatch: pytest.MonkeyPatch,
+) -> types.ModuleType:
     # Avoid importing heavy UI runtime init for unit tests.
     integrations = importlib.import_module("src.config.integrations")
-    monkeypatch.setattr(integrations, "initialize_integrations", lambda **_: None)
+    monkeypatch.setattr(
+        integrations, "initialize_integrations", lambda **_: None
+    )
 
     # Ensure a fresh import for each test (avoid module cache pollution).
     sys.modules.pop("src.pages.04_settings", None)
@@ -113,3 +117,29 @@ def test_validate_llamacpp_inputs_accepts_explicit_default_llamacpp_url(
     )
 
     assert errors == []
+
+
+@pytest.mark.unit
+def test_build_endpoint_test_headers_includes_llamacpp_auth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    page = _load_settings_page_module(monkeypatch)
+
+    validated = page.DocMindSettings.model_validate(
+        {
+            "llm_backend": "llamacpp",
+            "llamacpp_base_url": "http://localhost:8080/v1",
+            "openai": {
+                "api_key": "local-token",
+                "default_headers": {"X-Provider": "llamacpp"},
+            },
+        }
+    )
+
+    headers = page._build_endpoint_test_headers(validated)
+
+    assert headers == {
+        "Accept": "application/json",
+        "Authorization": "Bearer local-token",
+        "X-Provider": "llamacpp",
+    }
