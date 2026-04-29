@@ -629,9 +629,13 @@ class EmbeddingConfig(BaseModel):
     # Images
     image_backbone: ImageBackboneName = Field(default="auto")
     siglip_model_id: str = Field(default="google/siglip-base-patch16-224")
-    siglip_model_revision: str = Field(
-        default="7fd15f0689c79d79e38b1c2e2e2370a7bf2761ed",
-        description="Pinned Hugging Face revision for the default SigLIP model.",
+    siglip_model_revision: str | None = Field(
+        default=None,
+        description=(
+            "Optional pinned Hugging Face revision for SigLIP. When unset, the "
+            "default SigLIP model uses the repo-curated revision pin; custom "
+            "model IDs load without a revision unless explicitly configured."
+        ),
     )
     normalize_image: bool = Field(default=True)
     batch_size_image: int = Field(default=8, ge=1, le=64)

@@ -36,14 +36,76 @@ def test_load_siglip_uses_cached_loader(monkeypatch):
         SiglipProcessor=types.SimpleNamespace(from_pretrained=_proc_loader),
     )
     monkeypatch.setitem(sys.modules, "transformers", transformers)
+    vision_siglip._cached.cache_clear()
 
-    model1, proc1, device1 = vision_siglip.load_siglip("siglip-test", "cpu")
-    model2, proc2, device2 = vision_siglip.load_siglip("siglip-test", "cpu")
+    model1, proc1, device1 = vision_siglip.load_siglip(
+        vision_siglip.DEFAULT_SIGLIP_MODEL_ID, "cpu"
+    )
+    model2, proc2, device2 = vision_siglip.load_siglip(
+        vision_siglip.DEFAULT_SIGLIP_MODEL_ID, "cpu"
+    )
 
     assert call_count == {"model": 1, "processor": 1}
     assert model1 is model2
     assert proc1 is proc2
     assert device1 == device2 == "cpu"
+
+
+@pytest.mark.unit
+def test_load_siglip_does_not_apply_default_revision_to_custom_model(monkeypatch):
+    """Verify custom model IDs do not inherit the default model commit pin."""
+    revisions: list[str | None] = []
+
+    def _select(device: str) -> str:
+        return device
+
+    def _record_revision(_model_id: str, revision: str | None = None):
+        revisions.append(revision)
+        return object()
+
+    monkeypatch.setattr(vision_siglip, "select_device", _select)
+
+    transformers = types.SimpleNamespace(
+        SiglipModel=types.SimpleNamespace(from_pretrained=_record_revision),
+        SiglipProcessor=types.SimpleNamespace(from_pretrained=_record_revision),
+    )
+    monkeypatch.setitem(sys.modules, "transformers", transformers)
+    vision_siglip._cached.cache_clear()
+
+    vision_siglip.load_siglip(
+        "example/custom-siglip",
+        "cpu",
+        revision=vision_siglip.DEFAULT_SIGLIP_MODEL_REVISION,
+    )
+
+    assert revisions == [None, None]
+
+
+@pytest.mark.unit
+def test_load_siglip_preserves_explicit_custom_revision(monkeypatch):
+    """Verify custom model IDs can still opt into a matching revision pin."""
+    revisions: list[str | None] = []
+
+    monkeypatch.setattr(vision_siglip, "select_device", lambda device: device)
+
+    def _record_revision(_model_id: str, revision: str | None = None):
+        revisions.append(revision)
+        return object()
+
+    transformers = types.SimpleNamespace(
+        SiglipModel=types.SimpleNamespace(from_pretrained=_record_revision),
+        SiglipProcessor=types.SimpleNamespace(from_pretrained=_record_revision),
+    )
+    monkeypatch.setitem(sys.modules, "transformers", transformers)
+    vision_siglip._cached.cache_clear()
+
+    vision_siglip.load_siglip(
+        "example/custom-siglip",
+        "cpu",
+        revision="custom-revision",
+    )
+
+    assert revisions == ["custom-revision", "custom-revision"]
 
 
 @pytest.mark.unit
@@ -63,10 +125,10 @@ def test_load_siglip_moves_model_to_mps(monkeypatch):
 
     transformers = types.SimpleNamespace(
         SiglipModel=types.SimpleNamespace(
-            from_pretrained=lambda _model_id, revision: _Model()
+            from_pretrained=lambda _model_id, revision=None: _Model()
         ),
         SiglipProcessor=types.SimpleNamespace(
-            from_pretrained=lambda _model_id, revision: object()
+            from_pretrained=lambda _model_id, revision=None: object()
         ),
     )
     monkeypatch.setitem(sys.modules, "transformers", transformers)

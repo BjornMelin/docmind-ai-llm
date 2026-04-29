@@ -397,7 +397,6 @@ class ImageEmbedder:
 
             try:
                 from src.config import settings as _settings
-                from src.utils.vision_siglip import DEFAULT_SIGLIP_MODEL_REVISION
 
                 model_id = getattr(
                     _settings.embedding,
@@ -407,7 +406,7 @@ class ImageEmbedder:
                 revision = getattr(
                     _settings.embedding,
                     "siglip_model_revision",
-                    DEFAULT_SIGLIP_MODEL_REVISION,
+                    None,
                 )
             except (AttributeError, ImportError, RuntimeError, ValueError, TypeError):
                 model_id = "google/siglip-base-patch16-224"

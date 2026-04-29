@@ -29,7 +29,7 @@ from src.retrieval.rrf import rrf_merge
 from src.utils.core import has_cuda_vram, resolve_device
 from src.utils.log_safety import build_pii_log_entry
 from src.utils.telemetry import log_jsonl
-from src.utils.vision_siglip import DEFAULT_SIGLIP_MODEL_REVISION, siglip_features
+from src.utils.vision_siglip import siglip_features
 
 
 # Time budgets (ms)
@@ -211,11 +211,11 @@ def _load_siglip() -> tuple[Any, Any, str]:  # (model, processor, device)
         revision = getattr(
             settings.embedding,
             "siglip_model_revision",
-            DEFAULT_SIGLIP_MODEL_REVISION,
+            None,
         )
     except AttributeError:
         model_id = "google/siglip-base-patch16-224"
-        revision = DEFAULT_SIGLIP_MODEL_REVISION
+        revision = None
     from src.utils.vision_siglip import load_siglip
 
     return load_siglip(model_id=model_id, device=None, revision=revision)

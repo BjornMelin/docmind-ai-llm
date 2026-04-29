@@ -30,19 +30,25 @@ def siglip_features(output: Any, *, normalize: bool = True) -> Any:
 
 
 @lru_cache(maxsize=16)
-def _cached(model_id: str, revision: str, device: str) -> tuple[Any, Any, str]:
+def _cached(model_id: str, revision: str | None, device: str) -> tuple[Any, Any, str]:
     from transformers import SiglipModel, SiglipProcessor  # type: ignore
 
-    model: Any = SiglipModel.from_pretrained(  # nosec B615
-        model_id,
-        revision=revision,
-    )
+    if revision is None:
+        model: Any = SiglipModel.from_pretrained(model_id)  # nosec B615
+    else:
+        model = SiglipModel.from_pretrained(  # nosec B615
+            model_id,
+            revision=revision,
+        )
     if device in {"cuda", "mps"} and hasattr(model, "to"):
         model = model.to(device)
-    processor = SiglipProcessor.from_pretrained(  # nosec B615
-        model_id,
-        revision=revision,
-    )
+    if revision is None:
+        processor = SiglipProcessor.from_pretrained(model_id)  # nosec B615
+    else:
+        processor = SiglipProcessor.from_pretrained(  # nosec B615
+            model_id,
+            revision=revision,
+        )
     return model, processor, device
 
 
@@ -62,6 +68,15 @@ def load_siglip(
         (model, processor, device_str)
     """
     resolved_id = model_id or DEFAULT_SIGLIP_MODEL_ID
-    resolved_revision = revision or DEFAULT_SIGLIP_MODEL_REVISION
+    resolved_revision = _resolve_revision(resolved_id, revision)
     dev = select_device(device or "auto")
     return _cached(resolved_id, resolved_revision, dev)
+
+
+def _resolve_revision(model_id: str, revision: str | None) -> str | None:
+    """Resolve the revision pin without applying default pins to custom models."""
+    if model_id == DEFAULT_SIGLIP_MODEL_ID:
+        return revision or DEFAULT_SIGLIP_MODEL_REVISION
+    if revision == DEFAULT_SIGLIP_MODEL_REVISION:
+        return None
+    return revision

@@ -11,7 +11,6 @@ import numpy as np
 from loguru import logger
 
 from src.utils.vision_siglip import (
-    DEFAULT_SIGLIP_MODEL_REVISION,
     load_siglip,
     siglip_features,
 )
@@ -35,7 +34,7 @@ class SiglipEmbedding:
             model_id: Hugging Face model identifier for SigLIP.
             device: Optional device override ("cpu"|"cuda"). When None, auto.
         """
-        revision = DEFAULT_SIGLIP_MODEL_REVISION
+        revision: str | None = None
         if model_id is None:
             try:
                 from src.config import settings as app_settings  # local import
@@ -44,11 +43,11 @@ class SiglipEmbedding:
                 revision = getattr(
                     app_settings.embedding,
                     "siglip_model_revision",
-                    DEFAULT_SIGLIP_MODEL_REVISION,
+                    None,
                 )
             except (ImportError, AttributeError):
                 model_id = None
-                revision = DEFAULT_SIGLIP_MODEL_REVISION
+                revision = None
         self.model_id = model_id or "google/siglip-base-patch16-224"
         self.revision = revision
         # Delegate device selection to shared helper with safe fallback
