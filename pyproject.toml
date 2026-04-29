@@ -108,7 +108,6 @@ multimodal = [
 ]
 eval = [
     "beir>=2.0.0,<3.0.0",                # IR benchmark datasets + evaluation
-    "ragas>=0.2.10,<0.4.0",               # RAGAS end-to-end RAG evaluation
 ]
 
 # Note: spaCy models are not PyPI packages and must be installed separately:
