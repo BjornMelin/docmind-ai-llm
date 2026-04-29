@@ -47,6 +47,38 @@ def test_load_siglip_uses_cached_loader(monkeypatch):
 
 
 @pytest.mark.unit
+def test_load_siglip_moves_model_to_mps(monkeypatch):
+    """Verify canonical loader preserves Apple Silicon MPS placement."""
+    moved_to: list[str] = []
+
+    def _select(_device: str) -> str:
+        return "mps"
+
+    class _Model:
+        def to(self, device: str):
+            moved_to.append(device)
+            return self
+
+    monkeypatch.setattr(vision_siglip, "select_device", _select)
+
+    transformers = types.SimpleNamespace(
+        SiglipModel=types.SimpleNamespace(
+            from_pretrained=lambda _model_id, revision: _Model()
+        ),
+        SiglipProcessor=types.SimpleNamespace(
+            from_pretrained=lambda _model_id, revision: object()
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "transformers", transformers)
+
+    vision_siglip._cached.cache_clear()
+    _model, _proc, device = vision_siglip.load_siglip("siglip-test", "auto")
+
+    assert device == "mps"
+    assert moved_to == ["mps"]
+
+
+@pytest.mark.unit
 def test_siglip_features_accepts_v5_pooler_output() -> None:
     """Verify Transformers v5 output objects normalize like v4 tensors."""
     torch = pytest.importorskip("torch")

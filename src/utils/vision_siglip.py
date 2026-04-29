@@ -37,8 +37,8 @@ def _cached(model_id: str, revision: str, device: str) -> tuple[Any, Any, str]:
         model_id,
         revision=revision,
     )
-    if device == "cuda" and hasattr(model, "to"):
-        model = model.to("cuda")
+    if device in {"cuda", "mps"} and hasattr(model, "to"):
+        model = model.to(device)
     processor = SiglipProcessor.from_pretrained(  # nosec B615
         model_id,
         revision=revision,
