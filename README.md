@@ -132,25 +132,25 @@ Design goals:
    _Need LlamaIndex OpenTelemetry instrumentation?_ Install the optional observability extras as well:
 
    ```bash
-   uv sync --extra observability
+   uv sync --frozen --extra observability
    ```
 
    _Need GraphRAG adapters or ColPali visual reranking?_ Install the optional extras:
 
    ```bash
-   uv sync --extra graph
-   uv sync --extra multimodal
+   uv sync --frozen --extra graph
+   uv sync --frozen --extra multimodal
    ```
 
    **Key Dependencies Included:**
 
    - **LlamaIndex (>=0.14.12,<0.15.0)**: Retrieval, RouterQueryEngine, IngestionPipeline, PropertyGraphIndex
-   - **LangGraph (==1.0.6)**: 5-agent supervisor orchestration (graph-native `StateGraph`, no external supervisor wrapper)
+   - **LangGraph (>=1.0.10,<2.0.0)**: 5-agent supervisor orchestration (graph-native `StateGraph`, no external supervisor wrapper)
    - **Streamlit (>=1.52.2,<2.0.0)**: Web interface framework
    - **Ollama (0.6.1)**: Local LLM integration
    - **Qdrant Client (>=1.15.1,<2.0.0)**: Vector database operations
    - **Unstructured (>=0.18.26,<0.19.0)**: Multi-format parsing (PDF/DOCX/PPTX/XLSX, etc.)
-   - **LlamaIndex Embeddings FastEmbed (>=0.5.0,<0.6.0)**: Sparse query encoding (optional fastembed-gpu >=0.7.4,<0.8.0)
+   - **LlamaIndex Embeddings FastEmbed (>=0.5.0,<0.6.0)**: Sparse query encoding (optional fastembed-gpu >=0.8.0,<0.9.0)
    - **Tenacity (>=9.1.2,<10.0.0)**: Retry strategies with exponential backoff
    - **Loguru (>=0.7.3,<1.0.0)**: Structured logging
    - **Pydantic (2.12.5)**: Data validation and settings.
@@ -241,7 +241,10 @@ Design goals:
 
 5. **(Optional) Install GPU support (embeddings/reranking acceleration):**
 
-   Install the repo’s GPU extras and the CUDA wheel index for PyTorch:
+   Install the repo’s GPU extras and the CUDA wheel index for PyTorch. The
+   `unsafe-best-match` strategy is intentional for this CUDA-only command so uv
+   can select CUDA 12.8 wheels from the PyTorch index instead of CPU wheels from
+   the default index:
 
    ```bash
    nvidia-smi
@@ -736,6 +739,10 @@ nvidia-smi
 uv run python -c "import torch; print(torch.cuda.is_available())"
 ```
 
+The `unsafe-best-match` strategy is intentional for this CUDA-only command so
+uv can select CUDA 12.8 wheels from the PyTorch index instead of CPU wheels from
+the default index.
+
 #### 3. Model Download Issues
 
 ```bash
@@ -930,7 +937,7 @@ DocMind AI configures OpenTelemetry tracing and metrics via `configure_observabi
 
 - Observability is disabled by default; enable with `DOCMIND_OBSERVABILITY__ENABLED=true`.
 - OTLP exporters are used when enabled; set `DOCMIND_OBSERVABILITY__ENDPOINT` and `DOCMIND_OBSERVABILITY__PROTOCOL` as needed.
-- LlamaIndex instrumentation requires the `observability` extra (`uv sync --extra observability`).
+- LlamaIndex instrumentation requires the `observability` extra (`uv sync --frozen --extra observability`).
 - Core spans cover ingestion runs, snapshot promotion, GraphRAG exports, router selection, and UI actions.
 - Telemetry events (`router_selected`, `export_performed`, `snapshot_stale_detected`) are persisted as JSONL for local audits.
 

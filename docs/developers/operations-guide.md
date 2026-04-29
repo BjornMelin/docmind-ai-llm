@@ -53,8 +53,8 @@ To operate in air-gapped or restricted environments, you must pre-download artif
 
    Optional acceleration:
 
-   - NVIDIA CUDA (Linux/Windows): `uv --frozen sync --extra gpu` and set `SPACY_DEVICE=auto|cuda|cpu`
-   - Apple Silicon (macOS arm64): `uv sync --extra apple` and set `SPACY_DEVICE=auto|apple|cpu`
+   - NVIDIA CUDA (Linux/Windows): `uv sync --frozen --extra gpu` and set `DOCMIND_SPACY__DEVICE=auto|cuda|cpu`
+   - Apple Silicon (macOS arm64): `uv sync --frozen --extra apple` and set `DOCMIND_SPACY__DEVICE=auto|apple|cpu`
 
    See `docs/specs/spec-015-nlp-enrichment-spacy.md` and `docs/developers/gpu-setup.md`.
 
@@ -183,4 +183,4 @@ Standard commands for repo maintenance.
 | **Lint/Format**  | `uv run ruff check .` / `uv run ruff format .` |
 | **Type Check**   | `uv run pyright`                               |
 | **Run Tests**    | `uv run python scripts/run_tests.py`           |
-| **Quality Gate** | `uv run scripts/run_quality_gates.py`          |
+| **Quality Gate** | `uv run python scripts/run_quality_gates.py`   |

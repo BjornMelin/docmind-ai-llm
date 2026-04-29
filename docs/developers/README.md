@@ -89,7 +89,7 @@ uv run python scripts/run_tests.py --unit         # Unit tests only
 uv run python scripts/run_tests.py --integration  # Integration tests
 
 # Code Quality (detailed in Developer Handbook)
-ruff format . && ruff check . --fix      # Format and lint
+uv run ruff format . && uv run ruff check . --fix      # Format and lint
 uv run python scripts/performance_monitor.py --run-tests --check-regressions # Performance check
 ```
 

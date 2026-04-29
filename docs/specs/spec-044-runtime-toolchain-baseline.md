@@ -55,10 +55,13 @@ DocMind targets Python 3.12-compatible syntax and typing:
 - Base install must remain CPU-first and resolve without CUDA-specific indices.
 - Optional extras must be deterministic and documented:
   - `uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match`
-  - `uv sync --extra graph`
-  - `uv sync --extra multimodal`
-  - `uv sync --extra observability`
-  - `uv sync --extra eval`
+  - `uv sync --frozen --extra graph`
+  - `uv sync --frozen --extra multimodal`
+  - `uv sync --frozen --extra observability`
+  - `uv sync --frozen --extra eval`
+- The GPU command intentionally uses `--index-strategy=unsafe-best-match` only
+  with the CUDA wheel index so uv selects CUDA 12.8 PyTorch wheels rather than
+  CPU wheels from the default index.
 
 ## vLLM policy
 

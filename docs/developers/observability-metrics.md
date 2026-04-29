@@ -44,7 +44,7 @@ export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318/"
 If you need LlamaIndex-specific instrumentation, install the optional extra:
 
 ```bash
-uv sync --extra observability
+uv sync --frozen --extra observability
 ```
 
 For notebook experiments, you can import and call the helpers in

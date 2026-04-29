@@ -189,7 +189,7 @@ All changes must remain minimal, library-first, and maintainable.
 - All work packages in `docs/specs/spec-021-release-readiness-v1.md` are completed and their prompts are moved to `docs/developers/prompts/implemented/`, each passing its quality gates.
 - No placeholder markers remain in `src/` (except explicitly allowed in tests or archived docs).
 - `docs/specs/traceability.md` reflects all shipped changes (status updated to Implemented).
-- Dockerfile + compose run successfully and respect Python 3.13.11 + `DOCMIND_*` env contract.
+- Dockerfile + compose run successfully and respect Python 3.12.13 + `DOCMIND_*` env contract.
 
 **In-scope modules/files (initial):**
 
@@ -208,7 +208,7 @@ All changes must remain minimal, library-first, and maintainable.
 
 #### 1) Python + Packaging
 
-- Python baseline is **3.13.11** (Python 3.13-only; respect `pyproject.toml`).
+- Python baseline is **3.12.13** primary with `>=3.12,<3.14` support; respect `pyproject.toml`.
 - Use **uv only**:
   - install/sync: `uv sync`
   - run tools: `uv run <cmd>`

@@ -2,8 +2,8 @@
 ADR: 042
 Title: Containerization Hardening (Dockerfile + Compose) with Optional GPU Backend (Ollama)
 Status: Implemented
-Version: 1.1
-Date: 2026-01-10
+Version: 1.2
+Date: 2026-04-29
 Supersedes: 015
 Superseded-by:
 Related: 015, 024
@@ -18,7 +18,7 @@ References:
 
 ## Description
 
-Replace the current broken/inconsistent Docker artifacts with a **Python 3.13.11** `uv`-based, multi-stage Dockerfile and a compose configuration that:
+Replace the current broken/inconsistent Docker artifacts with a **Python 3.12.13** `uv`-based, multi-stage Dockerfile and a compose configuration that:
 
 - uses canonical `DOCMIND_*` env vars
 - is secure-by-default (non-root, `.dockerignore`, no baked secrets)
@@ -67,7 +67,7 @@ Implement a ship-ready container baseline:
 
 - Add `.dockerignore`
 - Replace Dockerfile with:
-  - Python 3.13.11 base
+  - Python 3.12.13 base
   - multi-stage build with `uv sync --frozen`
   - `UV_PYTHON_DOWNLOADS=never` to force uv to use container Python
   - non-root runtime user

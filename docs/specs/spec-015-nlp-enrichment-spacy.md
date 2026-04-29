@@ -34,7 +34,7 @@ Add a **first-class NLP enrichment stage** to ingestion using **spaCy 3.8.11** w
 - Pipeline insertion: `src/processing/ingestion_pipeline.py::build_ingestion_pipeline`
   - runs **after chunking** and **before embeddings**
   - fail-open on missing models (blank fallback), but **fail-fast** when the
-    operator explicitly requests `SPACY_DEVICE=cuda|apple` and the runtime
+    operator explicitly requests `DOCMIND_SPACY__DEVICE=cuda|apple` and the runtime
     cannot activate it
 
 ### UI surfacing
@@ -113,8 +113,8 @@ uv run python -m spacy download en_core_web_sm
 Runtime:
 
 ```bash
-export SPACY_DEVICE=cuda
-export SPACY_GPU_ID=0
+export DOCMIND_SPACY__DEVICE=cuda
+export DOCMIND_SPACY__GPU_ID=0
 ```
 
 ### Apple Silicon (macOS arm64)
@@ -127,7 +127,7 @@ uv run python -m spacy download en_core_web_sm
 Runtime:
 
 ```bash
-export SPACY_DEVICE=apple   # or auto
+export DOCMIND_SPACY__DEVICE=apple   # or auto
 ```
 
 ## Performance notes

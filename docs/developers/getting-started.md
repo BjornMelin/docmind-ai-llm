@@ -31,7 +31,7 @@ git clone https://github.com/BjornMelin/docmind-ai-llm.git
 cd docmind-ai-llm
 
 # 2. Install dependencies
-uv --frozen sync
+uv sync --frozen
 
 # 3. Start services
 docker compose up -d qdrant
@@ -104,13 +104,13 @@ cd docmind-ai-llm
 
 ```bash
 # Install core dependencies
-uv --frozen sync
+uv sync --frozen
 
 # Install with GPU support (recommended)
 uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128
 
 # Install with test dependencies
-uv --frozen sync --group test
+uv sync --frozen --group test
 ```
 
 Note: development and test tooling live in dependency groups (`[dependency-groups]`, PEP 735) and
@@ -234,12 +234,12 @@ uv run streamlit run app.py
 
 ```bash
 # Format and lint code (run before commits)
-ruff format . && ruff check . --fix
+uv run ruff format . && uv run ruff check . --fix
 
 # Run tests
-pytest tests/unit/ -v                    # Fast unit tests
-pytest tests/integration/ -v             # Cross-component tests
-python scripts/run_tests.py              # Full test suite
+uv run pytest tests/unit/ -v             # Fast unit tests
+uv run pytest tests/integration/ -v      # Cross-component tests
+uv run python scripts/run_tests.py       # Full test suite
 
 # Performance testing
 uv run python scripts/performance_monitor.py --run-tests --report
@@ -276,8 +276,8 @@ git checkout -b feature/your-feature-name
 # 2. Make changes following coding standards
 
 # 3. Test changes
-pytest tests/ -v
-ruff format . && ruff check . --fix
+uv run pytest tests/ -v
+uv run ruff format . && uv run ruff check . --fix
 
 # 4. Commit changes
 git add .
@@ -427,7 +427,7 @@ uv pip list | grep -E "(torch|streamlit)"
 
 ```bash
 # Reinstall dependencies
-uv --frozen sync --force-reinstall
+uv sync --frozen --force-reinstall
 
 # Verify correct Python version
 uv run python -c "import sys; print(sys.version)"  # uv run uses the project's configured interpreter, so this should be 3.12.13

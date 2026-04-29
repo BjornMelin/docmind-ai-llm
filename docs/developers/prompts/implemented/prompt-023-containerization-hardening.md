@@ -82,7 +82,7 @@ Skill references to consult (as needed):
 **Time-sensitive facts (prefer web tools):**
 
 - Use `functions.mcp__exa__web_search_exa` (or `web.run` when you need citations/dates) for:
-  - current `python:3.13.11-*` tag conventions
+  - current `python:3.12.13-*` tag conventions
   - Streamlit container best practices (ports, healthchecks)
 
 **Long-running docker flows (use `functions.write_stdin`):**
@@ -109,7 +109,7 @@ Skill references to consult (as needed):
 
 1. `functions.mcp__zen__planner` → plan Dockerfile/compose changes + smoke checks.
 2. Exa search (official sources) for:
-   - Python 3.13.11 base image tags
+   - Python 3.12.13 base image tags
    - Streamlit container best practices (ports, health checks)
 3. Context7 for `uv` and Streamlit entrypoint behavior if uncertain.
 4. `functions.mcp__zen__secaudit` → container hardening checklist (non-root, secrets, .dockerignore).
@@ -137,13 +137,13 @@ You must keep changes minimal, library-first, and maintainable.
 
 ### FEATURE CONTEXT (FILLED)
 
-**Primary Task:** Fix Dockerfile + docker-compose so containers run correctly and match repo constraints (Python 3.13.11 baseline, `DOCMIND_*` env vars, Streamlit entrypoint `app.py`).
+**Primary Task:** Fix Dockerfile + docker-compose so containers run correctly and match repo constraints (Python 3.12.13 primary baseline, `DOCMIND_*` env vars, Streamlit entrypoint `app.py`).
 
-**Why now:** Current Docker artifacts are not runnable and violate Python constraint (`>=3.13,<3.14`), blocking any “ship-ready” claim.
+**Why now:** Current Docker artifacts are not runnable and violate Python/container constraints, blocking any “ship-ready” claim.
 
 **Definition of Done (DoD):**
 
-- `Dockerfile` uses Python 3.13.11 and launches `streamlit run app.py` correctly.
+- `Dockerfile` uses Python 3.12.13 and launches `streamlit run app.py` correctly.
 - Docker CMD/ENTRYPOINT is valid (no shell in JSON array bug).
 - Container runs as non-root user.
 - `.dockerignore` exists and excludes `.env` and large dev artifacts.
@@ -173,7 +173,7 @@ You must keep changes minimal, library-first, and maintainable.
 
 #### 1) Python + Packaging
 
-- Container runtime baseline is Python **3.13.11**.
+- Container runtime baseline is Python **3.12.13**.
 - Use `uv sync --frozen` in container builds.
 
 #### 2) Style, Types, and Lint (host-side)
@@ -208,7 +208,7 @@ After container changes, the repo must still pass:
 
 2. [ ] Add `.dockerignore` to exclude secrets and build junk.
 
-3. [ ] Replace Dockerfile with a Python 3.13.11 multi-stage uv build (non-root runtime).
+3. [ ] Replace Dockerfile with a Python 3.12.13 multi-stage uv build (non-root runtime).
 
 4. [ ] Update `docker-compose.yml` to canonical `DOCMIND_*` env contract and validate config.
 
@@ -232,7 +232,7 @@ After container changes, the repo must still pass:
 
 ### Anti-Pattern Kill List (Immediate Deletion/Rewrite)
 
-1. Python base images that drift from the repo’s pinned runtime baseline (must be Python 3.13.11).
+1. Python base images that drift from the repo’s pinned runtime baseline (must be Python 3.12.13).
 2. JSON `CMD` with embedded shell strings (`[". venv/bin/activate && …"]`).
 3. Missing `.dockerignore`.
 4. Root runtime user without justification.

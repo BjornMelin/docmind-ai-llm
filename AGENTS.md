@@ -76,11 +76,11 @@ When resuming after compaction:
 
 ## Optional extras
 
-- `uv sync --extra gpu` (fastembed-gpu, CuPy CUDA wheels)
-- `uv sync --extra graph` (GraphRAG adapters)
-- `uv sync --extra multimodal` (ColPali reranker)
-- `uv sync --extra observability` (OTLP exporters + portalocker)
-- `uv sync --extra eval` (beir)
+- `uv sync --frozen --extra gpu` (fastembed-gpu, CuPy CUDA wheels)
+- `uv sync --frozen --extra graph` (GraphRAG adapters)
+- `uv sync --frozen --extra multimodal` (ColPali reranker)
+- `uv sync --frozen --extra observability` (OTLP exporters + portalocker)
+- `uv sync --frozen --extra eval` (beir)
 
 ## Dependency constraints (don’t drift)
 

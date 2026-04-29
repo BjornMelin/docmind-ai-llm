@@ -73,10 +73,10 @@ We adopt a centralized spaCy subsystem:
   wired into `src/processing/ingestion_pipeline.py::build_ingestion_pipeline`
 - **Streamlit caching boundary**: `src/pages/02_documents.py::_get_spacy_service`
 
-Device selection is applied **before** loading any pipeline and is controlled by:
+Device selection is applied **before** loading any pipeline and is controlled by preferred DocMind-native variables:
 
-- `SPACY_DEVICE=cpu|cuda|apple|auto`
-- `SPACY_GPU_ID=<int>`
+- `DOCMIND_SPACY__DEVICE=cpu|cuda|apple|auto`
+- `DOCMIND_SPACY__GPU_ID=<int>`
 
 Missing spaCy models fail open by falling back to `spacy.blank("en")`. Explicit GPU requests
 fail fast with a clear error.
@@ -136,7 +136,7 @@ GPU execution via Thinc.
 ### Negative Consequences / Trade-offs
 
 - Ingestion performs extra work when NLP enrichment is enabled.
-- GPU installs depend on local CUDA/driver correctness; explicit `SPACY_DEVICE=cuda` fails fast.
+- GPU installs depend on local CUDA/driver correctness; explicit `DOCMIND_SPACY__DEVICE=cuda` fails fast.
 - CUDA extra deviates from spaCy’s published `cuda12x` constraint to remain compatible with the
   project’s NumPy 2 lock.
 

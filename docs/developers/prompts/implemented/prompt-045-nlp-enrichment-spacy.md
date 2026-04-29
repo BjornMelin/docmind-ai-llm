@@ -43,18 +43,18 @@ uv run python -m spacy download en_core_web_sm
 NVIDIA CUDA (Linux/Windows):
 
 ```bash
-uv --frozen sync --extra gpu
+uv sync --frozen --extra gpu
 uv run python -m spacy download en_core_web_sm
-export SPACY_DEVICE=auto  # or cuda
-export SPACY_GPU_ID=0
+export DOCMIND_SPACY__DEVICE=auto  # or cuda
+export DOCMIND_SPACY__GPU_ID=0
 ```
 
 Apple Silicon (macOS arm64):
 
 ```bash
-uv sync --extra apple
+uv sync --frozen --extra apple
 uv run python -m spacy download en_core_web_sm
-export SPACY_DEVICE=auto  # or apple
+export DOCMIND_SPACY__DEVICE=auto  # or apple
 ```
 
 ## Verification
