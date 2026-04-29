@@ -22,7 +22,7 @@ uv sync
 DocMind’s GPU extra accelerates embeddings/reranking and installs CUDA wheels for PyTorch via the PyTorch index.
 
 ```bash
-uv --frozen sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 uv run python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
 ```
 
