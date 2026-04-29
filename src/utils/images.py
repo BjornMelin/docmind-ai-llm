@@ -38,9 +38,9 @@ def _safe_rewind_upload(upload: Any) -> None:
         seek(0)
     except (io.UnsupportedOperation, OSError, ValueError) as exc:
         logger.debug(
-            "Upload rewind failed for {}: {}",
+            "Upload rewind failed for {} ({})",
             type(upload).__name__,
-            exc,
+            type(exc).__name__,
         )
 
 

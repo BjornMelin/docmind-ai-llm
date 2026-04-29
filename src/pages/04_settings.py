@@ -805,8 +805,7 @@ def _validate_llamacpp_inputs(
     )
     has_llamacpp_url = bool(clean_llamacpp_url)
     has_custom_shared_url = (
-        bool(clean_openai_base_url)
-        and clean_openai_base_url.rstrip("/") not in _LLAMACPP_DISALLOWED_SHARED_URLS
+        bool(normalized_openai_base_url)
         and normalized_openai_base_url not in _LLAMACPP_DISALLOWED_SHARED_URLS
     )
     if has_llamacpp_url or has_custom_shared_url:

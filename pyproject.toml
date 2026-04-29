@@ -136,7 +136,7 @@ constraint-dependencies = [
     "mako>=1.3.11",
     "nltk>=3.9.4",
     "onnx>=1.21.0",
-    "orjson>=3.11.6",
+    "orjson>=3.11.8",
     "pypdf>=6.10.2,<7.0.0",
     "python-multipart>=0.0.26",
     "rapidfuzz>=3.14.1,<4.0.0",
@@ -172,7 +172,8 @@ Manual Installation Steps (if needed):
    uv pip install torch==2.8.0 --torch-backend cu128
 
 2. Use vLLM as an external server (OpenAI-compatible HTTP).
-   Configure `DOCMIND_OPENAI__BASE_URL` (or `DOCMIND_VLLM__VLLM_BASE_URL`) and `DOCMIND_LLM_BACKEND=vllm`.
+   Configure `DOCMIND_OPENAI__BASE_URL` (for example `https://host:port/v1`)
+   or `DOCMIND_VLLM__VLLM_BASE_URL`, and set `DOCMIND_LLM_BACKEND=vllm`.
 
 3. Use llama.cpp out-of-process behind an OpenAI-compatible HTTP endpoint.
    The in-process `llama-cpp-python` dependency is intentionally excluded from
@@ -318,7 +319,7 @@ filterwarnings = [
     "ignore::FutureWarning:httpx.*",
     "ignore:.*asyncio_default_fixture_loop_scope.*:pytest.PytestDeprecationWarning",
 ]
-minversion = "8.0"
+minversion = "9.0.3"
 markers = [
     # CI/CD Pipeline Tiers (Phase 5A Optimized)
     "unit: Fast unit tests with mocked dependencies (95%+ success rate, <0.1s avg)",
