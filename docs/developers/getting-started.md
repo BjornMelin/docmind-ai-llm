@@ -430,7 +430,7 @@ uv pip list | grep -E "(torch|streamlit)"
 uv --frozen sync --force-reinstall
 
 # Verify correct Python version
-uv run python -c "import sys; print(sys.version)"  # Should use the workspace Python 3.12.13
+uv run python -c "import sys; print(sys.version)"  # uv run uses the project's configured interpreter, so this should be 3.12.13
 ```
 
 ## Next Steps
