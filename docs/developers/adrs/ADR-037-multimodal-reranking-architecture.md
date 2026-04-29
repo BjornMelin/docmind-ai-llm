@@ -121,7 +121,7 @@ def multimodal_rerank(nodes: List[NodeWithScore], query: str) -> List[NodeWithSc
     out: list[NodeWithScore] = []
     if text_nodes:
         out += _make_text_reranker(settings.retrieval.reranking_top_k).postprocess_nodes(text_nodes, query_str=query)
-    # Default SigLIP re‑score is implemented in‑project using transformers text/image features
+    # Default SigLIP re-score uses src.utils.vision_siglip for pinned Transformers loading
     # Optional ColPali path if installed and enabled by ops
     if img_nodes and getattr(settings.retrieval, "enable_colpali", False):
         out += _make_visual_reranker(settings.retrieval.reranking_top_k).postprocess_nodes(img_nodes, query_str=query)

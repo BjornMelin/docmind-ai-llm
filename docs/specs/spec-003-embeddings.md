@@ -52,7 +52,9 @@ Deliver a minimal, library‑first embedding stack for text and images, removing
 
    - Remove BGEM3 tri‑mode specific wrappers; avoid duplicative adapters.
    - Remove CLIP VRAM heuristic helpers and any nonessential image preprocess shims.
-   - Keep a single, minimal SigLIP adapter for visual similarities only where needed; otherwise use Transformers directly.
+   - Keep a single, minimal SigLIP adapter for visual similarities only where
+     needed; route Hugging Face SigLIP model/processor loading through
+     `src/utils/vision_siglip.py`.
 
 4) Tests
 
