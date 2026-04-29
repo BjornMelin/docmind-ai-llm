@@ -252,8 +252,8 @@ def _download_qdrant_snapshot(
         f"{urllib.parse.quote(snapshot_name)}"
     )
     headers = {"api-key": api_key} if api_key else {}
-    req = urllib.request.Request(url, method="GET", headers=headers)  # noqa: S310
-    with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310
+    req = urllib.request.Request(url, method="GET", headers=headers)  # noqa: S310 # nosec B310
+    with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310 # nosec B310
         _safe_mkdir(dest_file.parent)
         with dest_file.open("wb") as f:
             shutil.copyfileobj(resp, f)

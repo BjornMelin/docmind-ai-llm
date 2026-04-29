@@ -174,7 +174,7 @@ class KeywordSparseRetriever:
             float(self.params.rate_limit_backoff_max_s),
         )
         # jitter in [0.5x, 1.0x]
-        return delay * (0.5 + (random.random() * 0.5))  # noqa: S311
+        return delay * (0.5 + (random.random() * 0.5))  # noqa: S311 # nosec B311
 
     def _emit_telemetry(
         self,

@@ -149,7 +149,7 @@ def validate_export_path(base_or_dest: Path | str, dest_rel: str | None = None):
         dest = Path(rel)
         # In single-arg mode, constrain absolute paths to safe prefixes
         if single_arg_mode:
-            safe_roots = [Path.cwd().resolve(), Path("/tmp"), Path("/var/tmp")]
+            safe_roots = [Path.cwd().resolve(), Path("/tmp"), Path("/var/tmp")]  # nosec B108
             if not any(
                 str(dest.resolve()).startswith(str(root)) for root in safe_roots
             ):

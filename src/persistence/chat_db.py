@@ -30,11 +30,11 @@ CHAT_SESSION_TABLE = "chat_session"
 STORE_ITEMS_TABLE = "docmind_store_items"
 STORE_VEC_TABLE = "docmind_store_vec"
 _NS_DELETE_VEC = {
-    i: f"DELETE FROM {STORE_VEC_TABLE} WHERE ns{i}=?;"  # noqa: S608
+    i: f"DELETE FROM {STORE_VEC_TABLE} WHERE ns{i}=?;"  # noqa: S608 # nosec
     for i in range(_MAX_NS_DEPTH)
 }
 _NS_DELETE_ITEMS = {
-    i: f"DELETE FROM {STORE_ITEMS_TABLE} WHERE ns{i}=?;"  # noqa: S608
+    i: f"DELETE FROM {STORE_ITEMS_TABLE} WHERE ns{i}=?;"  # noqa: S608 # nosec
     for i in range(_MAX_NS_DEPTH)
 }
 

@@ -57,12 +57,11 @@ def set_determinism(seed: int | None = None, threads: int | None = None) -> None
                 torch.cuda.manual_seed_all(seed)  # type: ignore[attr-defined]
         # Threads and determinism hints
         with suppress(Exception):
-            torch.set_num_threads(threads)
+            torch.set_num_threads(threads)  # type: ignore[attr-defined]
         with suppress(Exception):
             torch.use_deterministic_algorithms(True)  # type: ignore[attr-defined]
         with suppress(Exception):
-            from torch import backends as _b  # type: ignore
-
+            _b = torch.backends  # type: ignore[attr-defined]
             if hasattr(_b, "cudnn"):
                 _b.cudnn.deterministic = True  # type: ignore[attr-defined]
                 _b.cudnn.benchmark = False  # type: ignore[attr-defined]
