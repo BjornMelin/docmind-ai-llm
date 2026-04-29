@@ -705,10 +705,6 @@ class RetrievalConfig(BaseModel):
         default=True,
         description=("Route device/VRAM checks via src.utils.core"),
     )
-    siglip_adapter_unified: bool = Field(
-        default=True,
-        description=("Use shared vision_siglip.load_siglip in adapter"),
-    )
     rerank_executor: Literal["thread", "process"] = Field(
         default="thread",
         description=("Executor for rerank timeouts: 'thread' or 'process'"),

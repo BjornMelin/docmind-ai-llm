@@ -419,29 +419,14 @@ class ImageEmbedder:
             )
             self._backend = model
             self._preprocess = processor
-        except (ImportError, RuntimeError, AttributeError, ValueError, TypeError):
-            self._load_siglip_transformers_fallback()
-
-    def _load_siglip_transformers_fallback(self) -> None:
-        """Direct transformers-based SigLIP loading as a fallback path."""
-        from transformers import SiglipModel, SiglipProcessor  # type: ignore
-
-        from src.utils.vision_siglip import DEFAULT_SIGLIP_MODEL_REVISION
-
-        model_id = "google/siglip-base-patch16-224"
-        model = SiglipModel.from_pretrained(  # nosec B615
-            model_id,
-            device_map=None,
-            revision=DEFAULT_SIGLIP_MODEL_REVISION,
-        )
-        if self.device in ("cuda", "mps"):
-            model = cast(Any, model).to(self.device)
-        processor = SiglipProcessor.from_pretrained(  # nosec B615
-            model_id,
-            revision=DEFAULT_SIGLIP_MODEL_REVISION,
-        )
-        self._backend = model
-        self._preprocess = processor
+        except (
+            ImportError,
+            RuntimeError,
+            AttributeError,
+            ValueError,
+            TypeError,
+        ) as exc:
+            raise RuntimeError("SigLIP backend unavailable") from exc
 
     def _load_bge_visualized(self) -> None:
         # Optional path; raise clear error if selected without deps

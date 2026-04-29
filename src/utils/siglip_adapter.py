@@ -12,6 +12,7 @@ from loguru import logger
 
 from src.utils.vision_siglip import (
     DEFAULT_SIGLIP_MODEL_REVISION,
+    load_siglip,
     siglip_features,
 )
 
@@ -84,60 +85,17 @@ class SiglipEmbedding:
             except AttributeError:
                 return "cpu"
 
-    def _load_siglip_transformers(self) -> None:
-        """Direct transformers-based SigLIP loading fallback."""
-        from transformers import SiglipModel, SiglipProcessor  # type: ignore
-
-        model: Any = SiglipModel.from_pretrained(  # nosec B615
-            self.model_id,
-            revision=self.revision,
-        )
-        if self.device in ("cuda", "mps"):
-            model = model.to(self.device)
-        proc = SiglipProcessor.from_pretrained(  # nosec B615
-            self.model_id,
-            revision=self.revision,
-        )
-        self._model = model
-        self._proc = proc
-
     def _ensure_loaded(self) -> None:
         if self._model is not None and self._proc is not None:
             return
-        # Gate unified loader via settings flag
-        use_unified = True
-        try:
-            from src.config import settings as app_settings
-
-            use_unified = bool(
-                getattr(app_settings.retrieval, "siglip_adapter_unified", True)
-            )
-        except (ImportError, AttributeError):  # pragma: no cover - settings import edge
-            use_unified = True
-
-        if use_unified:
-            try:
-                from src.utils.vision_siglip import load_siglip
-
-                model, proc, dev = load_siglip(
-                    self.model_id,
-                    self.device,
-                    self.revision,
-                )
-                self.device = dev
-                self._model = model
-                self._proc = proc
-            except (
-                ImportError,
-                AttributeError,
-                RuntimeError,
-                ValueError,
-                TypeError,
-            ):
-                # Fallback to direct transformers path
-                self._load_siglip_transformers()
-        else:
-            self._load_siglip_transformers()
+        model, proc, dev = load_siglip(
+            self.model_id,
+            self.device,
+            self.revision,
+        )
+        self.device = dev
+        self._model = model
+        self._proc = proc
         # best-effort dimension
         try:
             cfg = getattr(getattr(self, "_model", None), "config", None)
@@ -145,6 +103,14 @@ class SiglipEmbedding:
             self._dim = proj or None
         except (AttributeError, ValueError, TypeError):
             self._dim = None
+
+    def _try_ensure_loaded(self) -> bool:
+        """Load SigLIP dependencies, preserving optional-dependency fail-open."""
+        try:
+            self._ensure_loaded()
+            return self._model is not None and self._proc is not None
+        except (ImportError, AttributeError, RuntimeError, ValueError, TypeError):
+            return False
 
     def _move_to_device(self, tensor: Any | None) -> Any | None:
         if tensor is None:
@@ -164,8 +130,7 @@ class SiglipEmbedding:
         Returns:
             numpy.ndarray: 1-D vector of visual features.
         """
-        self._ensure_loaded()
-        if self._model is None or self._proc is None:
+        if not self._try_ensure_loaded():
             dim = int(self._dim or 768)
             return np.zeros(dim, dtype=np.float32)
         try:
@@ -191,8 +156,7 @@ class SiglipEmbedding:
 
         This enables cross-modal text->image retrieval in the same SigLIP space.
         """
-        self._ensure_loaded()
-        if self._model is None or self._proc is None:
+        if not self._try_ensure_loaded():
             dim = int(self._dim or 768)
             return np.zeros(dim, dtype=np.float32)
         try:
@@ -228,8 +192,7 @@ class SiglipEmbedding:
         if not images:
             dim = int(self._dim or 768)
             return np.empty((0, dim), dtype=np.float32)
-        self._ensure_loaded()
-        if self._model is None or self._proc is None:
+        if not self._try_ensure_loaded():
             dim = int(self._dim or 768)
             return np.zeros((len(images), dim), dtype=np.float32)
 
@@ -281,8 +244,7 @@ class SiglipEmbedding:
         if not texts:
             dim = int(self._dim or 768)
             return np.empty((0, dim), dtype=np.float32)
-        self._ensure_loaded()
-        if self._model is None or self._proc is None:
+        if not self._try_ensure_loaded():
             dim = int(self._dim or 768)
             return np.zeros((len(texts), dim), dtype=np.float32)
 
