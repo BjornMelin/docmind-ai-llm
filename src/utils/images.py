@@ -82,7 +82,9 @@ def _buffer_upload(upload: Any) -> SpooledTemporaryFile[bytes]:
                 break
             total += len(chunk)
             if total > MAX_IMAGE_BYTES:
-                raise ValueError("Uploaded image exceeds the maximum allowed size")
+                raise ValueError(
+                    "Uploaded image exceeds the maximum allowed size"
+                )
             buffer.write(chunk)
         buffer.seek(0)
         stack.pop_all()

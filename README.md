@@ -184,7 +184,7 @@ Design goals:
 
    Cross-platform acceleration:
 
-   - NVIDIA CUDA (Linux/Windows): `uv --frozen sync --extra gpu` and set `DOCMIND_SPACY__DEVICE=auto|cuda`
+   - NVIDIA CUDA (Linux/Windows): `uv sync --frozen --extra gpu` and set `DOCMIND_SPACY__DEVICE=auto|cuda`
    - Apple Silicon (macOS arm64): `uv sync --extra apple` and set `DOCMIND_SPACY__DEVICE=auto|apple`
 
    See `docs/specs/spec-015-nlp-enrichment-spacy.md` and `docs/developers/gpu-setup.md`.
