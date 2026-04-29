@@ -5,6 +5,8 @@ Provides a context manager to open images securely, handling optional
 cleaned up regardless of success or failure.
 """
 
+# ruff: noqa: I001
+
 from __future__ import annotations
 
 import contextlib
@@ -16,7 +18,9 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from io import BytesIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any
+from typing import TYPE_CHECKING
+from typing import cast
 
 from loguru import logger
 
@@ -31,12 +35,17 @@ _PIL_MAX_PIXELS_LOCK = threading.Lock()
 
 def _safe_rewind_upload(upload: Any) -> None:
     """Attempt to rewind a file-like upload object and ignore seek errors."""
-    if not hasattr(upload, "seek"):
+    seek = getattr(upload, "seek", None)
+    if not callable(seek):
         return
     try:
-        upload.seek(0)
+        seek(0)
     except (io.UnsupportedOperation, OSError, ValueError) as exc:
-        logger.debug("Upload rewind failed, continuing without reset: {}", exc)
+        logger.debug(
+            "Upload rewind failed for {}: {}",
+            type(upload).__name__,
+            exc,
+        )
 
 
 def _configure_pillow_limits(image_module: Any) -> None:

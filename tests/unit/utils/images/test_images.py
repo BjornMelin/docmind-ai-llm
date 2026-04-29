@@ -103,3 +103,26 @@ def test_open_untrusted_image_rejects_oversized_upload() -> None:
         open_untrusted_image(upload)
 
     assert upload.tell() == 0
+
+
+@pytest.mark.unit
+def test_open_untrusted_image_ignores_non_callable_seek() -> None:
+    """Uploads with a non-callable seek attribute should still open safely."""
+
+    class UploadWithBadSeek:
+        def __init__(self) -> None:
+            self._buffer = BytesIO()
+            Image.new("RGB", (8, 8), color=(255, 255, 0)).save(
+                self._buffer,
+                format="PNG",
+            )
+            self._buffer.seek(0)
+            self.seek = 42
+
+        def read(self, size: int = -1) -> bytes:
+            return self._buffer.read(size)
+
+    image = open_untrusted_image(UploadWithBadSeek())
+
+    assert image.size == (8, 8)
+    assert image.mode == "RGB"

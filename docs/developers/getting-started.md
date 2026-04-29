@@ -31,7 +31,7 @@ git clone https://github.com/BjornMelin/docmind-ai-llm.git
 cd docmind-ai-llm
 
 # 2. Install dependencies
-uv sync
+uv --frozen sync
 
 # 3. Start services
 docker compose up -d qdrant
@@ -104,13 +104,13 @@ cd docmind-ai-llm
 
 ```bash
 # Install core dependencies
-uv sync
+uv --frozen sync
 
 # Install with GPU support (recommended)
 uv --frozen sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 
 # Install with test dependencies
-uv sync --group test
+uv --frozen sync --group test
 ```
 
 Note: development and test tooling live in dependency groups (`[dependency-groups]`, PEP 735) and
@@ -427,7 +427,7 @@ uv pip list | grep -E "(torch|streamlit)"
 
 ```bash
 # Reinstall dependencies
-uv sync --force-reinstall
+uv --frozen sync --force-reinstall
 
 # Verify correct Python version
 uv run python -c "import sys; print(sys.version)"  # Should be 3.12.13

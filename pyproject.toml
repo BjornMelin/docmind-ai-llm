@@ -5,14 +5,13 @@ description = "Local LLM for AI-Powered Document Analysis"
 authors = [{ name = "Bjorn Melin" }]
 license-files = ["LICENSE"]
 readme = "README.md"
-requires-python = ">=3.12,<3.14" # Python 3.12-compatible baseline (ADR-065)
+requires-python = ">=3.12,<3.13" # Python 3.12-compatible baseline (ADR-065)
 keywords = ["ai", "rag", "document-analysis", "llm", "hybrid-search"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
