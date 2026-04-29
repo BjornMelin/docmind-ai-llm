@@ -594,9 +594,11 @@ DOCMIND_ENABLE_DSPY_BOOTSTRAPPING=true
 Notes:
 
 - DSPy runs in the agents layer and augments retrieval by refining the query; retrieval remains library-first (server-side hybrid via Qdrant + reranking).
-- DSPy is not installed by default while its dependency chain conflicts with
-  the project security floors. If it is unavailable or the flag is false, the
-  system falls back gracefully to standard retrieval.
+- `DOCMIND_ENABLE_DSPY_OPTIMIZATION=true` only takes effect when DSPy is
+  installed. DSPy is not installed by default while its dependency chain
+  conflicts with the project security floors, so on the supported baseline the
+  flag falls back gracefully to standard retrieval unless you install DSPy
+  separately.
 
 ### Additional Configuration
 

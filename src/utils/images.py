@@ -12,6 +12,7 @@ import io
 import os
 import tempfile
 import threading
+import warnings
 from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
@@ -36,7 +37,12 @@ def _safe_rewind_upload(upload: Any) -> None:
         return
     try:
         seek(0)
-    except (io.UnsupportedOperation, OSError, ValueError) as exc:
+    except (
+        TypeError,
+        io.UnsupportedOperation,
+        OSError,
+        ValueError,
+    ) as exc:
         logger.debug(
             "Upload rewind failed for {} ({})",
             type(upload).__name__,
@@ -82,9 +88,7 @@ def _buffer_upload(upload: Any) -> SpooledTemporaryFile[bytes]:
                 break
             total += len(chunk)
             if total > MAX_IMAGE_BYTES:
-                raise ValueError(
-                    "Uploaded image exceeds the maximum allowed size"
-                )
+                raise ValueError("Uploaded image exceeds the maximum allowed size")
             buffer.write(chunk)
         buffer.seek(0)
         stack.pop_all()
@@ -119,12 +123,20 @@ def open_untrusted_image(upload: Any) -> PILImage:
             previous_limit = Image.MAX_IMAGE_PIXELS
             _configure_pillow_limits(Image)
             try:
-                with Image.open(data) as probe:
-                    probe.verify()
+                with warnings.catch_warnings():
+                    warnings.filterwarnings(
+                        "error", category=Image.DecompressionBombWarning
+                    )
+                    with Image.open(data) as probe:
+                        probe.verify()
                 data.seek(0)
-                with Image.open(data) as image:
-                    image.load()
-                    return image.copy()
+                with warnings.catch_warnings():
+                    warnings.filterwarnings(
+                        "error", category=Image.DecompressionBombWarning
+                    )
+                    with Image.open(data) as image:
+                        image.load()
+                        return image.copy()
             finally:
                 Image.MAX_IMAGE_PIXELS = previous_limit
     finally:
@@ -163,7 +175,8 @@ def open_image_encrypted(path: str):
                 AttributeError,
                 RuntimeError,
             ):  # pragma: no cover - fallback
-                # If decryptor is missing, treat input as plaintext for best-effort open
+                # If decryptor is missing, treat input as plaintext.
+                # Best-effort open.
                 def decrypt_file(pth: str) -> str:  # type: ignore
                     return pth
 
@@ -187,11 +200,12 @@ def ensure_thumbnail(
     thumb_dir: Path | None = None,
     encrypt: bool | None = None,
 ) -> Path:
-    """Create (or reuse) a small WebP thumbnail for fast UI rendering.
+    """Create or reuse a small WebP thumbnail for fast UI rendering.
 
-    Thumbnails are stored alongside the original by default (or under ``thumb_dir``)
-    and are encrypted when ``encrypt`` is true or the source image is encrypted.
-    Plaintext deletion after encryption follows DOCMIND_IMG_DELETE_PLAINTEXT.
+    Thumbnails are stored alongside the original by default (or under
+    ``thumb_dir``) and are encrypted when ``encrypt`` is true or the source
+    image is encrypted. Plaintext deletion after encryption follows
+    DOCMIND_IMG_DELETE_PLAINTEXT.
     """
     try:
         from PIL.Image import Resampling  # type: ignore
@@ -203,7 +217,8 @@ def ensure_thumbnail(
     thumb_root.mkdir(parents=True, exist_ok=True)
 
     # Determine underlying extension and encryption state.
-    # src.stem strips .enc → "image.png", then Path().stem strips image ext → "image"
+    # src.stem strips .enc -> "image.png", then Path().stem strips the
+    # image extension -> "image"
     base_stem = Path(src.stem).stem if src.suffix == ".enc" else src.stem
     is_enc = src.suffix == ".enc"
 

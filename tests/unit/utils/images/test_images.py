@@ -58,7 +58,7 @@ def test_open_image_encrypted_invokes_decryptor(
 
 @pytest.mark.unit
 def test_open_untrusted_image_verifies_uploaded_bytes() -> None:
-    """Uploaded images should be verified and detached from the source stream."""
+    """Uploaded images should be verified and detached."""
     buffer = BytesIO()
     Image.new("RGB", (8, 8), color=(0, 0, 255)).save(buffer, format="PNG")
     buffer.seek(0)
@@ -89,14 +89,14 @@ def test_open_untrusted_image_restores_pillow_pixel_limit() -> None:
 
 @pytest.mark.unit
 def test_open_untrusted_image_rejects_malformed_upload() -> None:
-    """Malformed uploaded image bytes should be rejected by Pillow verification."""
+    """Malformed upload bytes should be rejected by Pillow verification."""
     with pytest.raises(UnidentifiedImageError):
         open_untrusted_image(BytesIO(b"not an image"))
 
 
 @pytest.mark.unit
 def test_open_untrusted_image_rejects_oversized_upload() -> None:
-    """Oversized uploaded image bytes should be rejected before Pillow opens them."""
+    """Oversized upload bytes should be rejected before Pillow opens them."""
     upload = BytesIO(b"0" * (MAX_IMAGE_BYTES + 1))
 
     with pytest.raises(ValueError, match="exceeds the maximum allowed size"):
