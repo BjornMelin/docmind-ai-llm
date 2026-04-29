@@ -93,7 +93,7 @@ jobs:
         if: ${{ always() && matrix.profile == 'base' }}
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-${{ matrix.profile }}
+          name: coverage-${{ matrix.profile }}-${{ matrix.python-version }}
           path: |
             htmlcov
             coverage.xml

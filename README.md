@@ -184,7 +184,7 @@ Design goals:
 
    Cross-platform acceleration:
 
-   - NVIDIA CUDA (Linux/Windows): `uv sync --extra gpu` and set `DOCMIND_SPACY__DEVICE=auto|cuda`
+   - NVIDIA CUDA (Linux/Windows): `uv --frozen sync --extra gpu` and set `DOCMIND_SPACY__DEVICE=auto|cuda`
    - Apple Silicon (macOS arm64): `uv sync --extra apple` and set `DOCMIND_SPACY__DEVICE=auto|apple`
 
    See `docs/specs/spec-015-nlp-enrichment-spacy.md` and `docs/developers/gpu-setup.md`.
@@ -245,7 +245,7 @@ Design goals:
 
    ```bash
    nvidia-smi
-   uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+   uv --frozen sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
    uv run python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
    ```
 
@@ -727,7 +727,7 @@ ollama serve
 
 ```bash
 # Install GPU dependencies
-uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+uv --frozen sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 
 # Verify CUDA installation
 nvidia-smi
@@ -784,7 +784,7 @@ Notes:
 This repo pins **PyTorch 2.8.0** for reproducibility. If you need CUDA wheels, install with the CUDA index:
 
 ```bash
-uv pip install torch==2.8.0 --extra-index-url https://download.pytorch.org/whl/cu128
+uv --frozen pip install torch==2.8.0 --extra-index-url https://download.pytorch.org/whl/cu128
 uv run python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
 ```
 

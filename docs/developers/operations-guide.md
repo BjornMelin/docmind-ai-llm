@@ -53,7 +53,7 @@ To operate in air-gapped or restricted environments, you must pre-download artif
 
    Optional acceleration:
 
-   - NVIDIA CUDA (Linux/Windows): `uv sync --extra gpu` and set `SPACY_DEVICE=auto|cuda|cpu`
+   - NVIDIA CUDA (Linux/Windows): `uv --frozen sync --extra gpu` and set `SPACY_DEVICE=auto|cuda|cpu`
    - Apple Silicon (macOS arm64): `uv sync --extra apple` and set `SPACY_DEVICE=auto|apple|cpu`
 
    See `docs/specs/spec-015-nlp-enrichment-spacy.md` and `docs/developers/gpu-setup.md`.

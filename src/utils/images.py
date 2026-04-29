@@ -8,6 +8,7 @@ cleaned up regardless of success or failure.
 from __future__ import annotations
 
 import contextlib
+import io
 import os
 import tempfile
 import threading
@@ -26,6 +27,16 @@ MAX_UNTRUSTED_IMAGE_PIXELS = 50_000_000
 MAX_IMAGE_BYTES = 25 * 1024 * 1024
 IMAGE_READ_CHUNK_BYTES = 1024 * 1024
 _PIL_MAX_PIXELS_LOCK = threading.Lock()
+
+
+def _safe_rewind_upload(upload: Any) -> None:
+    """Attempt to rewind a file-like upload object and ignore seek errors."""
+    if not hasattr(upload, "seek"):
+        return
+    try:
+        upload.seek(0)
+    except (io.UnsupportedOperation, OSError, ValueError) as exc:
+        logger.debug("Upload rewind failed, continuing without reset: {}", exc)
 
 
 def _configure_pillow_limits(image_module: Any) -> None:
@@ -52,8 +63,7 @@ def _buffer_upload(upload: Any) -> BytesIO:
     if not callable(read):
         raise TypeError("Upload object must expose a binary read() method")
     read_bytes = cast(Callable[[int], bytes], read)
-    if hasattr(upload, "seek"):
-        upload.seek(0)
+    _safe_rewind_upload(upload)
 
     total = 0
     with tempfile.SpooledTemporaryFile(max_size=IMAGE_READ_CHUNK_BYTES) as buffer:
@@ -103,8 +113,7 @@ def open_untrusted_image(upload: Any) -> PILImage:
                 return image.copy()
         finally:
             Image.MAX_IMAGE_PIXELS = previous_limit
-            if hasattr(upload, "seek"):
-                upload.seek(0)
+            _safe_rewind_upload(upload)
 
 
 @contextmanager

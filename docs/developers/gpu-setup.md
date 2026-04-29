@@ -29,7 +29,7 @@ Use the project’s GPU extras. This installs:
 - `cupy-cuda12x>=13` (spaCy/Thinc GPU acceleration for CUDA 12.x)
 
 ```bash
-uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+uv --frozen sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 uv run python -m spacy download en_core_web_sm
 ```
 

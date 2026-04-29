@@ -113,7 +113,7 @@ DOCMIND_SPACY__GPU_ID=0
 
 GPU installs:
 
-- NVIDIA CUDA (Linux/Windows): `uv sync --extra gpu`
+- NVIDIA CUDA (Linux/Windows): `uv --frozen sync --extra gpu`
 - Apple Silicon (macOS arm64): `uv sync --extra apple`
 
 Details: `docs/specs/spec-015-nlp-enrichment-spacy.md` and `docs/developers/gpu-setup.md`.

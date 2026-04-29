@@ -107,7 +107,7 @@ cd docmind-ai-llm
 uv sync
 
 # Install with GPU support (recommended)
-uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+uv --frozen sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 
 # Install with test dependencies
 uv sync --group test
@@ -123,7 +123,7 @@ For optimal performance with RTX 4090:
 
 ```bash
 # Install app GPU extras (CUDA-enabled PyTorch wheels)
-uv sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+uv --frozen sync --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
 ```
 
 If you use vLLM, run it as an external OpenAI-compatible server and point DocMind at it via
@@ -306,7 +306,7 @@ uv run python -c "import torch; print(f'CUDA available: {torch.cuda.is_available
 
 ```bash
 # Reinstall PyTorch with correct CUDA version
-uv pip install torch==2.8.0 --extra-index-url https://download.pytorch.org/whl/cu128
+uv --frozen pip install torch==2.8.0 --extra-index-url https://download.pytorch.org/whl/cu128
 ```
 
 ### vLLM Server Issues

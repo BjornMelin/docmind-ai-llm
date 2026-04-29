@@ -45,7 +45,7 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
   Scope: Pydantic BaseSettings + LlamaIndex Settings integration
 - **[ADR-065 — Python 3.12-Compatible Security Baseline](ADR-065-python-312-compatible-security-baseline.md)**  
   Scope: Current Python runtime/tooling baseline
-- **[ADR-064 — Python 3.13-Only Baseline (Primary 3.13.11)](ADR-064-python-313-only-baseline.md)**  
+- **[ADR-064 — Python 3.13-Only Baseline (Primary 3.13.11)](superseded/ADR-064-python-313-only-baseline.md)**  
   Scope: Superseded single-version Python baseline and tooling targeting
 - **[ADR-062 — Python 3.13.11 Baseline + External vLLM Policy (Superseded)](superseded/ADR-062-python-313-baseline-and-external-vllm-policy.md)**  
   Scope: Historical multi-version baseline + vLLM policy (superseded by ADR-064)

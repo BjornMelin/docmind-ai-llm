@@ -43,7 +43,7 @@ uv run python -m spacy download en_core_web_sm
 NVIDIA CUDA (Linux/Windows):
 
 ```bash
-uv sync --extra gpu
+uv --frozen sync --extra gpu
 uv run python -m spacy download en_core_web_sm
 export SPACY_DEVICE=auto  # or cuda
 export SPACY_GPU_ID=0
