@@ -836,10 +836,6 @@ def _validate_llamacpp_inputs(
     normalized_llamacpp_url = (
         ensure_v1(clean_llamacpp_url) if clean_llamacpp_url else None
     )
-    if normalized_llamacpp_url in _LLAMACPP_DISALLOWED_SHARED_URLS:
-        ui_errors.append("Provide a llama.cpp OpenAI-compatible server URL.")
-        return ui_errors
-
     has_llamacpp_url = bool(normalized_llamacpp_url)
     has_custom_shared_url = (
         bool(normalized_openai_base_url)

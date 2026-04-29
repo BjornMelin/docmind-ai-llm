@@ -10,6 +10,7 @@ import pytest
 from PIL import Image, UnidentifiedImageError
 
 from src.utils.images import (
+    IMAGE_READ_CHUNK_BYTES,
     MAX_IMAGE_BYTES,
     MAX_UNTRUSTED_IMAGE_PIXELS,
     open_image_encrypted,
@@ -97,7 +98,33 @@ def test_open_untrusted_image_rejects_malformed_upload() -> None:
 @pytest.mark.unit
 def test_open_untrusted_image_rejects_oversized_upload() -> None:
     """Oversized upload bytes should be rejected before Pillow opens them."""
-    upload = BytesIO(b"0" * (MAX_IMAGE_BYTES + 1))
+
+    class StreamingOversizedUpload:
+        def __init__(self) -> None:
+            self._position = 0
+            self._remaining = MAX_IMAGE_BYTES + 1
+            self._chunk = b"0" * IMAGE_READ_CHUNK_BYTES
+
+        def read(self, size: int = -1) -> bytes:
+            if self._remaining <= 0:
+                return b""
+            limit = len(self._chunk) if size < 0 else min(size, len(self._chunk))
+            chunk_size = min(limit, self._remaining)
+            self._remaining -= chunk_size
+            self._position += chunk_size
+            return self._chunk[:chunk_size]
+
+        def seek(self, offset: int, whence: int = 0) -> int:
+            if offset == 0 and whence == 0:
+                self._position = 0
+                self._remaining = MAX_IMAGE_BYTES + 1
+                return 0
+            raise OSError("seek only supports rewinding to the start")
+
+        def tell(self) -> int:
+            return self._position
+
+    upload = StreamingOversizedUpload()
 
     with pytest.raises(ValueError, match="exceeds the maximum allowed size"):
         open_untrusted_image(upload)

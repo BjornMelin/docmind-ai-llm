@@ -185,7 +185,7 @@ Design goals:
    Cross-platform acceleration:
 
    - NVIDIA CUDA (Linux/Windows): `uv sync --frozen --extra gpu` and set `DOCMIND_SPACY__DEVICE=auto|cuda`
-   - Apple Silicon (macOS arm64): `uv sync --extra apple` and set `DOCMIND_SPACY__DEVICE=auto|apple`
+   - Apple Silicon (macOS arm64): `uv sync --frozen --extra apple` and set `DOCMIND_SPACY__DEVICE=auto|apple`
 
    See `docs/specs/spec-015-nlp-enrichment-spacy.md` and `docs/developers/gpu-setup.md`.
 
@@ -786,7 +786,7 @@ Notes:
 This repo pins **PyTorch 2.8.0** for reproducibility. If you need CUDA wheels, install with the CUDA index:
 
 ```bash
-uv --frozen pip install torch==2.8.0 --extra-index-url https://download.pytorch.org/whl/cu128
+uv pip install torch==2.8.0 --extra-index-url https://download.pytorch.org/whl/cu128
 uv run python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
 ```
 
