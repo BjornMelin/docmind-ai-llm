@@ -126,7 +126,7 @@ import streamlit as st
 st.set_page_config(page_title="DocMind AI", page_icon=":material/description:", layout="wide", initial_sidebar_state="expanded")
 
 chat = st.Page("src/pages/01_chat.py", title="Chat", icon=":material/chat:", default=True)
-docs = st.Page("src/pages/02_documents.py", title="Documents", icon=":material/folder:")
+docs = st.Page("src/pages/02_documents.py", title="Documents", icon=":material/description:")
 analytics = st.Page("src/pages/03_analytics.py", title="Analytics", icon=":material/bar_chart:")
 settings = st.Page("src/pages/04_settings.py", title="Settings", icon=":material/settings:")
 
