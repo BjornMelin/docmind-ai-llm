@@ -101,10 +101,10 @@ graph = [
     "kuzu>=0.11.3,<1.0.0",
 ]
 observability = [
-    "llama-index-observability-otel>=0.2.1,<0.3.0",
+    "llama-index-observability-otel>=0.6.0,<0.7.0",
 ]
 multimodal = [
-    "llama-index-postprocessor-colpali-rerank==0.3.1",
+    "llama-index-postprocessor-colpali-rerank==0.4.0",
     "colpali-engine>=0.3.13,<0.4.0",
 ]
 eval = [
