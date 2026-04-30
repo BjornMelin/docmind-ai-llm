@@ -114,7 +114,7 @@ class SiglipEmbedding:
         try:
             self._ensure_loaded()
             return self._model is not None and self._proc is not None
-        except (ImportError, AttributeError, RuntimeError, ValueError, TypeError):
+        except Exception:
             return False
 
     def _move_to_device(self, tensor: Any | None) -> Any | None:

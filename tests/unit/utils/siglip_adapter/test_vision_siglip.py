@@ -111,6 +111,29 @@ def test_load_siglip_preserves_explicit_custom_revision(monkeypatch):
 
 
 @pytest.mark.unit
+def test_load_siglip_normalizes_blank_custom_revision(monkeypatch):
+    """Blank revisions should resolve like an unset SigLIP revision."""
+    revisions: list[str | None] = []
+
+    monkeypatch.setattr(vision_siglip, "select_device", lambda device: device)
+
+    def _record_revision(_model_id: str, revision: str | None = None):
+        revisions.append(revision)
+        return object()
+
+    transformers = types.SimpleNamespace(
+        SiglipModel=types.SimpleNamespace(from_pretrained=_record_revision),
+        SiglipProcessor=types.SimpleNamespace(from_pretrained=_record_revision),
+    )
+    monkeypatch.setitem(sys.modules, "transformers", transformers)
+    vision_siglip._cached.cache_clear()
+
+    vision_siglip.load_siglip("example/custom-siglip", "cpu", revision="   ")
+
+    assert revisions == [None, None]
+
+
+@pytest.mark.unit
 def test_load_siglip_moves_model_to_mps(monkeypatch):
     """Verify canonical loader preserves Apple Silicon MPS placement."""
     moved_to: list[str] = []
@@ -148,16 +171,20 @@ def test_siglip_features_accepts_v5_pooler_output() -> None:
     torch = pytest.importorskip("torch")
 
     direct = torch.ones((1, 4), dtype=torch.float32)
+    tuple_wrapped = (torch.ones((1, 4), dtype=torch.float32),)
     wrapped = types.SimpleNamespace(
         pooler_output=torch.ones((1, 4), dtype=torch.float32)
     )
 
     direct_out = vision_siglip.siglip_features(direct).detach().numpy()
+    tuple_out = vision_siglip.siglip_features(tuple_wrapped).detach().numpy()
     wrapped_out = vision_siglip.siglip_features(wrapped).detach().numpy()
 
     assert direct_out.shape == (1, 4)
+    assert tuple_out.shape == (1, 4)
     assert wrapped_out.shape == (1, 4)
     assert np.linalg.norm(direct_out[0]) == pytest.approx(1.0)
+    assert np.linalg.norm(tuple_out[0]) == pytest.approx(1.0)
     assert np.linalg.norm(wrapped_out[0]) == pytest.approx(1.0)
 
 

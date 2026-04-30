@@ -100,7 +100,15 @@ def test_create_backup_requires_enabled(
 def test_qdrant_snapshot_download_skips_allowlist_when_remote_enabled(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Remote snapshot downloads should not consult the allowlist."""
+    """Remote snapshot downloads skip allowlist checks.
+
+    Args:
+        tmp_path: Temporary path fixture.
+        monkeypatch: Pytest monkeypatch fixture.
+
+    Returns:
+        None.
+    """
     monkeypatch.chdir(tmp_path)
 
     def _deny_allowlist(*args: object, **kwargs: object) -> bool:

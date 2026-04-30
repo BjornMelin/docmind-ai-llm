@@ -32,6 +32,10 @@ def siglip_features(output: Any, *, normalize: bool = True) -> Any:
         The SigLIP feature tensor, normalized by default.
     """
     features = getattr(output, "pooler_output", output)
+    if isinstance(features, (tuple, list)):
+        if not features:
+            return features
+        features = features[0]
     if normalize:
         norm = features.norm(dim=-1, keepdim=True)
         if hasattr(norm, "clamp_min"):
@@ -88,6 +92,8 @@ def load_siglip(
 
 def _resolve_revision(model_id: str, revision: str | None) -> str | None:
     """Resolve the revision pin without applying default pins to custom models."""
+    if isinstance(revision, str):
+        revision = revision.strip() or None
     if model_id == DEFAULT_SIGLIP_MODEL_ID:
         return revision or DEFAULT_SIGLIP_MODEL_REVISION
     return revision

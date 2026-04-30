@@ -8,6 +8,7 @@ deterministic zero vectors.
 from __future__ import annotations
 
 from types import ModuleType
+from typing import Any
 
 import numpy as np
 
@@ -71,7 +72,7 @@ def test_siglip_embedding_forward_error_returns_zero(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    torch_stub = ModuleType("torch")
+    torch_stub: Any = ModuleType("torch")
     torch_stub.no_grad = _NoGrad
     monkeypatch.setitem(__import__("sys").modules, "torch", torch_stub)
 
@@ -104,6 +105,20 @@ def test_siglip_adapter_dim_inference_from_config(monkeypatch):
     monkeypatch.setattr(s, "_ensure_loaded", _fake_ensure)
     _ = s.get_image_embedding(image=None)
     assert s._dim == 640
+
+
+def test_siglip_adapter_try_ensure_loaded_catches_unexpected_errors(monkeypatch):
+    """_try_ensure_loaded should fail open on unexpected load-time exceptions."""
+    from src.utils.siglip_adapter import SiglipEmbedding
+
+    s = SiglipEmbedding(model_id="dummy/ok", device="cpu")
+
+    def _raise():
+        raise KeyError("boom")
+
+    monkeypatch.setattr(s, "_ensure_loaded", _raise)
+
+    assert s._try_ensure_loaded() is False
 
 
 def test_siglip_adapter_uses_config_revision_for_explicit_model(monkeypatch):
