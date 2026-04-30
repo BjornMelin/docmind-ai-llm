@@ -32,9 +32,12 @@ def test_ensure_loaded_prefers_unified_loader(monkeypatch):
 
 @pytest.mark.unit
 def test_get_image_embedding_fails_open_when_loader_fails(monkeypatch):
+    def _fail_loader(*_args, **_kwargs):
+        raise RuntimeError("fail")
+
     monkeypatch.setattr(
         "src.utils.siglip_adapter.load_siglip",
-        lambda *_: (_ for _ in ()).throw(RuntimeError("fail")),
+        _fail_loader,
     )
 
     emb = SiglipEmbedding(model_id="test", device="cpu")

@@ -5,11 +5,45 @@ updates:
     schedule:
       interval: "weekly"
     groups:
-      python-security:
+      python-security-hf-runtime:
         applies-to: "security-updates"
         patterns:
-          - "*"
-      python-runtime:
+          - "transformers"
+          - "huggingface-hub"
+          - "sentence-transformers"
+          - "tokenizers"
+          - "accelerate"
+      python-security-rag:
+        applies-to: "security-updates"
+        patterns:
+          - "langchain*"
+          - "langgraph*"
+          - "llama-index*"
+          - "qdrant-client"
+      python-security-app:
+        applies-to: "security-updates"
+        patterns:
+          - "streamlit"
+          - "pillow"
+          - "requests"
+          - "urllib3"
+      python-runtime-hf:
         applies-to: "version-updates"
         patterns:
-          - "*"
+          - "transformers"
+          - "huggingface-hub"
+          - "sentence-transformers"
+          - "tokenizers"
+          - "accelerate"
+      python-runtime-rag:
+        applies-to: "version-updates"
+        patterns:
+          - "langchain*"
+          - "langgraph*"
+          - "llama-index*"
+          - "qdrant-client"
+      python-runtime-app:
+        applies-to: "version-updates"
+        patterns:
+          - "streamlit"
+          - "pillow"

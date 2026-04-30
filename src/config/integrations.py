@@ -288,6 +288,8 @@ def _configure_llm() -> None:
             type(err).__name__,
             redaction.redacted,
         )
+        # LlamaIndex Settings.llm is not typed as nullable, but failure paths
+        # must clear the global runtime slot so later configuration can retry.
         cast(Any, Settings).llm = None
         return
 
@@ -316,6 +318,8 @@ def _configure_llm() -> None:
             type(exc).__name__,
             redaction.redacted,
         )
+        # LlamaIndex Settings.llm is not typed as nullable, but failure paths
+        # must clear the global runtime slot so later configuration can retry.
         cast(Any, Settings).llm = None
 
 

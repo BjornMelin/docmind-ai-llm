@@ -41,6 +41,6 @@ def check_undeclared_variables(
             produce HTML or XML. Default False for general purpose templates
             like LLM prompts which are plain text.
     """
-    env = Environment(autoescape=autoescape)  # noqa: S701 # nosec B701
+    env = Environment(autoescape=autoescape)  # noqa: S701 # nosec B701 static parse only; no untrusted rendering.
     ast = env.parse(spec.body)
     return set(jinja_meta.find_undeclared_variables(ast))

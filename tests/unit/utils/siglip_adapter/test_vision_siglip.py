@@ -75,7 +75,6 @@ def test_load_siglip_does_not_apply_default_revision_to_custom_model(monkeypatch
     vision_siglip.load_siglip(
         "example/custom-siglip",
         "cpu",
-        revision=vision_siglip.DEFAULT_SIGLIP_MODEL_REVISION,
     )
 
     assert revisions == [None, None]
@@ -102,10 +101,13 @@ def test_load_siglip_preserves_explicit_custom_revision(monkeypatch):
     vision_siglip.load_siglip(
         "example/custom-siglip",
         "cpu",
-        revision="custom-revision",
+        revision=vision_siglip.DEFAULT_SIGLIP_MODEL_REVISION,
     )
 
-    assert revisions == ["custom-revision", "custom-revision"]
+    assert revisions == [
+        vision_siglip.DEFAULT_SIGLIP_MODEL_REVISION,
+        vision_siglip.DEFAULT_SIGLIP_MODEL_REVISION,
+    ]
 
 
 @pytest.mark.unit
@@ -157,3 +159,14 @@ def test_siglip_features_accepts_v5_pooler_output() -> None:
     assert wrapped_out.shape == (1, 4)
     assert np.linalg.norm(direct_out[0]) == pytest.approx(1.0)
     assert np.linalg.norm(wrapped_out[0]) == pytest.approx(1.0)
+
+
+@pytest.mark.unit
+def test_siglip_features_normalizes_zero_vectors_without_nan() -> None:
+    """Verify zero feature rows remain finite when normalization is enabled."""
+    torch = pytest.importorskip("torch")
+
+    out = vision_siglip.siglip_features(torch.zeros((1, 4), dtype=torch.float32))
+
+    assert np.all(np.isfinite(out.detach().numpy()))
+    assert np.all(out.detach().numpy() == 0.0)

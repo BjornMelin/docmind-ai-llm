@@ -528,6 +528,9 @@ class ImageEmbedder:
             and preprocess is not None
             and hasattr(backend, "get_image_features")
         ):
+            # Import once before the batch loop to avoid repeated import lookups.
+            from src.utils.vision_siglip import siglip_features
+
             backend_any = cast(Any, backend)
             # Processor returns dict with pixel_values
             proc = cast(Any, preprocess)
@@ -547,8 +550,6 @@ class ImageEmbedder:
                 elif self.device == "mps":
                     pix = pix.to("mps")
                 with TORCH.no_grad():
-                    from src.utils.vision_siglip import siglip_features
-
                     f = siglip_features(
                         backend_any.get_image_features(pixel_values=pix),
                         normalize=normalize,

@@ -7,7 +7,7 @@ with device selection delegated to utils.core.select_device.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Any
+from typing import Any, cast
 
 from src.utils.core import select_device
 
@@ -25,7 +25,8 @@ def siglip_features(output: Any, *, normalize: bool = True) -> Any:
     """
     features = getattr(output, "pooler_output", output)
     if normalize:
-        return features / features.norm(dim=-1, keepdim=True)
+        norm = features.norm(dim=-1, keepdim=True).clamp_min(1e-12)
+        return features / norm
     return features
 
 
@@ -33,22 +34,19 @@ def siglip_features(output: Any, *, normalize: bool = True) -> Any:
 def _cached(model_id: str, revision: str | None, device: str) -> tuple[Any, Any, str]:
     from transformers import SiglipModel, SiglipProcessor  # type: ignore
 
-    if revision is None:
-        model: Any = SiglipModel.from_pretrained(model_id)  # nosec B615
-    else:
-        model = SiglipModel.from_pretrained(  # nosec B615
-            model_id,
-            revision=revision,
-        )
+    pretrained_kwargs = {"revision": revision} if revision is not None else {}
+    siglip_model = cast(Any, SiglipModel)
+    siglip_processor = cast(Any, SiglipProcessor)
+    model: Any = siglip_model.from_pretrained(  # nosec B615
+        model_id,
+        **pretrained_kwargs,
+    )
     if device in {"cuda", "mps"} and hasattr(model, "to"):
         model = model.to(device)
-    if revision is None:
-        processor = SiglipProcessor.from_pretrained(model_id)  # nosec B615
-    else:
-        processor = SiglipProcessor.from_pretrained(  # nosec B615
-            model_id,
-            revision=revision,
-        )
+    processor = siglip_processor.from_pretrained(  # nosec B615
+        model_id,
+        **pretrained_kwargs,
+    )
     return model, processor, device
 
 
@@ -77,6 +75,4 @@ def _resolve_revision(model_id: str, revision: str | None) -> str | None:
     """Resolve the revision pin without applying default pins to custom models."""
     if model_id == DEFAULT_SIGLIP_MODEL_ID:
         return revision or DEFAULT_SIGLIP_MODEL_REVISION
-    if revision == DEFAULT_SIGLIP_MODEL_REVISION:
-        return None
     return revision
