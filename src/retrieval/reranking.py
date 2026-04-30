@@ -209,7 +209,8 @@ def _compute_siglip_scores(
                         str(exc), key_id="reranking.siglip.fail_open"
                     )
                     logger.warning(
-                        "SigLIP image feature error; fail-open (error_type={}, error={})",
+                        "SigLIP image feature error; "
+                        "fail-open (error_type={}, error={})",
                         type(exc).__name__,
                         redaction.redacted,
                     )
