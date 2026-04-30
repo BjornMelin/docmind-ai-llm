@@ -65,6 +65,10 @@ The workflow is defined in [`.github/workflows/release.yml`](../../.github/workf
   `style`, `refactor`, `perf`, `test`, and `deps`.
 - The release workflow fails after publishing if the GitHub Release body is
   blank, which catches Release Please parse failures before they go unnoticed.
+- Generated Release Please PRs skip the heavy CI, docs, and automatic CodeRabbit
+  review lanes. They contain only version and release-note files assembled from
+  already-merged commits, so the useful gate is the Release Please contract
+  itself plus the semantic PR title check.
 - GitHub Releases should use the curated `CHANGELOG.md` release block as their
   source of truth. Do not use GitHub's auto-generated notes for Release Please
   releases; they summarize pull request titles and contributors instead of the

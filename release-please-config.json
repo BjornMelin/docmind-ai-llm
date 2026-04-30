@@ -9,7 +9,7 @@
         {
           "type": "toml",
           "path": "uv.lock",
-          "jsonpath": "$.package[?(@.name == 'docmind-ai-llm')].version"
+          "jsonpath": "$.package[?(@.name.value == 'docmind-ai-llm')].version"
         }
       ],
       "changelog-sections": [
