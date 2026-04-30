@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [0.8.1](https://github.com/BjornMelin/docmind-ai-llm/compare/docmind-ai-llm-v0.8.0...docmind-ai-llm-v0.8.1) (2026-04-30)
+
+
+### Bug Fixes
+
+* **release:** attribute release PR commits to maintainer ([e35a7b0](https://github.com/BjornMelin/docmind-ai-llm/commit/e35a7b0781af61f0e8089726a4767292fc8be332))
+* **release:** harden release note guard ([bfd9dc5](https://github.com/BjornMelin/docmind-ai-llm/commit/bfd9dc54ad7a5d513cc9dde80685a86ce48bba5f))
+
 ## [0.8.0](https://github.com/BjornMelin/docmind-ai-llm/compare/docmind-ai-llm-v0.7.2...docmind-ai-llm-v0.8.0) (2026-04-30)
 
 
