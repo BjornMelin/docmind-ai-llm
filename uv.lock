@@ -939,20 +939,20 @@ requires-dist = [
     { name = "langgraph-checkpoint-sqlite", specifier = ">=3.0.3,<4.0.0" },
     { name = "llama-index", specifier = ">=0.14.12,<0.15.0" },
     { name = "llama-index-core", marker = "extra == 'llama'", specifier = ">=0.14.12,<0.15.0" },
-    { name = "llama-index-embeddings-clip", specifier = ">=0.5.1,<0.6.0" },
-    { name = "llama-index-embeddings-fastembed", specifier = ">=0.5.0,<0.6.0" },
-    { name = "llama-index-embeddings-huggingface", specifier = ">=0.6.1,<0.7.0" },
+    { name = "llama-index-embeddings-clip", specifier = ">=0.6.0,<0.7.0" },
+    { name = "llama-index-embeddings-fastembed", specifier = ">=0.6.0,<0.7.0" },
+    { name = "llama-index-embeddings-huggingface", specifier = ">=0.7.0,<0.8.0" },
     { name = "llama-index-embeddings-openai", specifier = ">=0.5.1,<0.6.0" },
     { name = "llama-index-graph-stores-kuzu", marker = "extra == 'graph'", specifier = ">=0.9.1,<1.0.0" },
     { name = "llama-index-llms-ollama", specifier = ">=0.9.1,<1.0.0" },
     { name = "llama-index-llms-openai", specifier = ">=0.6.13,<0.7.0" },
     { name = "llama-index-llms-openai-like", specifier = ">=0.6.0,<0.7.0" },
-    { name = "llama-index-observability-otel", marker = "extra == 'observability'", specifier = ">=0.2.1,<0.3.0" },
-    { name = "llama-index-postprocessor-colpali-rerank", marker = "extra == 'multimodal'", specifier = "==0.3.1" },
+    { name = "llama-index-observability-otel", marker = "extra == 'observability'", specifier = ">=0.6.0,<0.7.0" },
+    { name = "llama-index-postprocessor-colpali-rerank", marker = "extra == 'multimodal'", specifier = "==0.4.0" },
     { name = "llama-index-readers-file", specifier = ">=0.5.6,<0.6.0" },
-    { name = "llama-index-storage-kvstore-duckdb", specifier = ">=0.2.1,<0.3.0" },
-    { name = "llama-index-vector-stores-duckdb", specifier = ">=0.5.1,<0.6.0" },
-    { name = "llama-index-vector-stores-qdrant", specifier = ">=0.9.0,<0.10.0" },
+    { name = "llama-index-storage-kvstore-duckdb", specifier = ">=0.3.0,<0.4.0" },
+    { name = "llama-index-vector-stores-duckdb", specifier = ">=0.6.0,<0.7.0" },
+    { name = "llama-index-vector-stores-qdrant", specifier = ">=0.10.0,<0.11.0" },
     { name = "loguru", specifier = ">=0.7.3,<1.0.0" },
     { name = "ollama", specifier = "==0.6.2" },
     { name = "openai", specifier = ">=2.8.0,<3.0.0" },
@@ -2226,40 +2226,40 @@ wheels = [
 
 [[package]]
 name = "llama-index-embeddings-clip"
-version = "0.5.1"
+version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "llama-index-core" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c2/01/7f8a2c62eac5a182e779280344b527a1a4732d1d56341168665916b669e9/llama_index_embeddings_clip-0.5.1.tar.gz", hash = "sha256:0783326029d32f4aa8a1558017fa1467d908abb5aff8fd5e738f26362a313aca", size = 4217, upload-time = "2025-09-08T20:15:42.286Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f6/13/baf7a6fea35922533bf9c11bffe7d70547df8e5eb10abd73ca9b1835fed7/llama_index_embeddings_clip-0.6.0.tar.gz", hash = "sha256:18fa7f2fee2d4bcb35351d02508ddb82ff32953b867e92a3d816eac5c129ff12", size = 4215, upload-time = "2026-03-12T20:19:01.447Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/04/2e/14f03fd7bd62193be292a06aaa7ecee4b3b484b127f525e0ad4ea570b73d/llama_index_embeddings_clip-0.5.1-py3-none-any.whl", hash = "sha256:3aa3b0a34a7bf519b676ee30e2ebfc0ad75f92efa7be47f4fca7ec58b5d7478a", size = 3793, upload-time = "2025-09-08T20:15:41.621Z" },
+    { url = "https://files.pythonhosted.org/packages/0b/8a/37233c0dff491b475589846095588af8004c2692876d20718249101bb7f3/llama_index_embeddings_clip-0.6.0-py3-none-any.whl", hash = "sha256:1d6552b38f7a2e2ac7f476383b4598f1a5dab6e8d41c86adc57e94345c7e3d9c", size = 3789, upload-time = "2026-03-12T20:19:00.791Z" },
 ]
 
 [[package]]
 name = "llama-index-embeddings-fastembed"
-version = "0.5.0"
+version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "llama-index-core" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f6/6a/ebe898dd830446ada662037c55d6a149e7a66fbe19ac14f527ae7d5e271b/llama_index_embeddings_fastembed-0.5.0.tar.gz", hash = "sha256:d550d617ca94393c6d8e6ee1f39a7e203586458d7bd73108fd7d242f875fd6c0", size = 4125, upload-time = "2025-09-16T02:42:36.754Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b5/4f/c7b8ad88de03b432e7b91c6dbda546f577ee750c25f0f1bb837fecbe68a8/llama_index_embeddings_fastembed-0.6.0.tar.gz", hash = "sha256:819a4349e2c49fcd4deabcc873d51da7bf937cb85d81331185b5226137aab2df", size = 4124, upload-time = "2026-03-12T20:19:22.967Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/70/56/25ddb7746ba2e96ac36fe9a4e4b5a7dbb3437e85b4a6158cd9b0e4e472fb/llama_index_embeddings_fastembed-0.5.0-py3-none-any.whl", hash = "sha256:718107a5a3798f668d1ae0c40812274faacf1f3d62fd9f0cbbfadfd220fe7e16", size = 3760, upload-time = "2025-09-16T02:42:35.666Z" },
+    { url = "https://files.pythonhosted.org/packages/24/e9/6f21f164bed8772bc038cd30897ddff2c18ce48c4aa207b5184e51aee88c/llama_index_embeddings_fastembed-0.6.0-py3-none-any.whl", hash = "sha256:c3277d748fc6ab730e613b89af4da81cb4f2bbd66d91995890d0c00235922f70", size = 3759, upload-time = "2026-03-12T20:19:23.608Z" },
 ]
 
 [[package]]
 name = "llama-index-embeddings-huggingface"
-version = "0.6.1"
+version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub" },
     { name = "llama-index-core" },
     { name = "sentence-transformers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a1/a0/77beca4ed28af68db6ab9c647b3fa75fae905d33ace96e91010cc9b96027/llama_index_embeddings_huggingface-0.6.1.tar.gz", hash = "sha256:3b21ffeda22f8221ed55778bb3daed71664ab07b341f1dd2f408963bd20355b9", size = 8694, upload-time = "2025-09-08T20:25:27.816Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a1/b3/faa44f7c9edaaefb6f7e1d8a306433c4ccc5ea5bde92302bec149e62b838/llama_index_embeddings_huggingface-0.7.0.tar.gz", hash = "sha256:da8a2a65df9404112c4430dfada09d4f846ba165197a25dbe77f734014c56a87", size = 8692, upload-time = "2026-03-12T20:20:31.588Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5e/b0/4d327cb2f2e039606feb9345b4de975090b9659c4ee84b00443bb149a80d/llama_index_embeddings_huggingface-0.6.1-py3-none-any.whl", hash = "sha256:b63990cf71ee7a36c51f36657133fcf76130e9bf5dcf9eb5a73a5087106d6881", size = 8903, upload-time = "2025-09-08T20:25:27.038Z" },
+    { url = "https://files.pythonhosted.org/packages/25/86/dc43deab70f19db4fcdd82337e18b7f5b828478c486d6308cea10def87c5/llama_index_embeddings_huggingface-0.7.0-py3-none-any.whl", hash = "sha256:cae7e4ffddc1fecb34b83425a00679f338ce03ad0a7f3aca6b927136d6af7131", size = 8904, upload-time = "2026-03-12T20:20:32.449Z" },
 ]
 
 [[package]]
@@ -2304,15 +2304,15 @@ wheels = [
 
 [[package]]
 name = "llama-index-instrumentation"
-version = "0.5.0"
+version = "0.4.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "deprecated" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4e/d0/671b23ccff255c9bce132a84ffd5a6f4541ceefdeab9c1786b08c9722f2e/llama_index_instrumentation-0.5.0.tar.gz", hash = "sha256:eeb724648b25d149de882a5ac9e21c5acb1ce780da214bda2b075341af29ad8e", size = 43831, upload-time = "2026-03-12T20:17:06.742Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0b/45/293b89d330a989e444ade307252c190b497142761f1a6a8f20b300fefeb2/llama_index_instrumentation-0.4.3.tar.gz", hash = "sha256:6a8bd34b0c2fb9485971f952f3e5d63341eb87f8c55c82f2819a37e174494eb9", size = 48458, upload-time = "2026-03-03T19:01:27.146Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c3/45/6dcaccef44e541ffa138e4b45e33e0d40ab2a7d845338483954fcf77bc75/llama_index_instrumentation-0.5.0-py3-none-any.whl", hash = "sha256:aaab83cddd9dd434278891012d8995f47a3bc7ed1736a371db90965348c56a21", size = 16444, upload-time = "2026-03-12T20:17:05.957Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/0f/5fe062395c8d444235fc228bb2577588be4e9db6fb5f4d1b662e9ac98aee/llama_index_instrumentation-0.4.3-py3-none-any.whl", hash = "sha256:4669d5f6da4b478784a196489d4b58072cb2e6928c3781d2bddd34f36da9cac1", size = 16446, upload-time = "2026-03-03T19:01:28.807Z" },
 ]
 
 [[package]]
@@ -2356,23 +2356,23 @@ wheels = [
 
 [[package]]
 name = "llama-index-observability-otel"
-version = "0.2.1"
+version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "llama-index-core" },
+    { name = "llama-index-instrumentation" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-sdk" },
     { name = "opentelemetry-semantic-conventions" },
     { name = "termcolor" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/23/5a/b91cf89aad6c1c448bd54dda940ea43a5af338cb4a694da2bbdf87cbece7/llama_index_observability_otel-0.2.1.tar.gz", hash = "sha256:9fcd919b6af8111fb77b8a30e130ba1d24a9816ca66063a3f2e180b73e41dae2", size = 6383, upload-time = "2025-09-08T20:35:31.869Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/40/95/fe619a2ca4a9d3c6462b1286a2da15fbaecb85db0876be753481ecf2b129/llama_index_observability_otel-0.6.0.tar.gz", hash = "sha256:b9dcc6f24b0d1433d5d29daaa0734d71857c6ab80f9ea14767e002175ca041cd", size = 7788, upload-time = "2026-03-12T20:30:50.31Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/93/aa31c08b7b6be0f44986eb04170489810aa06c22c5661b90e38cfe145415/llama_index_observability_otel-0.2.1-py3-none-any.whl", hash = "sha256:de4e933b5372b5a53fd42b07d33e46f2bd1fc8b21bccf8d8ff345cb4b5f9c8d9", size = 6308, upload-time = "2025-09-08T20:35:30.778Z" },
+    { url = "https://files.pythonhosted.org/packages/41/f2/b1a5f62ebfd259636efd2142ceb6182efb448a2adb9733aa2b5dade2a847/llama_index_observability_otel-0.6.0-py3-none-any.whl", hash = "sha256:024d650e070eddc7aa095ffaa2c68ede1fc1ab6191a1c7a5282c4147f1317663", size = 7719, upload-time = "2026-03-12T20:30:50.869Z" },
 ]
 
 [[package]]
 name = "llama-index-postprocessor-colpali-rerank"
-version = "0.3.1"
+version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colpali-engine" },
@@ -2381,9 +2381,9 @@ dependencies = [
     { name = "torch" },
     { name = "transformers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/52/82/c37f14354ae8ec9f57f0c6e1d82c21db7ebaa8d24049932cef10d51f4be7/llama_index_postprocessor_colpali_rerank-0.3.1.tar.gz", hash = "sha256:ddefc4b68a0b0368f53a9b292e3b7838ba2bd1ae6d562503f99ecc2874f3026d", size = 4672, upload-time = "2025-09-08T20:25:11.575Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1f/bb/f1dfadf87dd67b2d05cbfa7ad474a21a46b265b0b346bf93e23f83719c9e/llama_index_postprocessor_colpali_rerank-0.4.0.tar.gz", hash = "sha256:f1c89cd88b043f5b83aba30d269cc5c49329cbb80f15ec87a0cb43bac9b25aa0", size = 4670, upload-time = "2026-03-12T20:31:13.518Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ff/2e/e67e6b27eacea650c64b47a0e307f840368c0335250f08cc78a332c11e75/llama_index_postprocessor_colpali_rerank-0.3.1-py3-none-any.whl", hash = "sha256:47920a4cdbf38951311caf56e51282f1c091278dbc99abf69914a81ad197fec7", size = 4290, upload-time = "2025-09-08T20:25:10.84Z" },
+    { url = "https://files.pythonhosted.org/packages/a4/3d/40c2eeaa90de729c73f822f98312316039e27e57b696de5f1784c713ee62/llama_index_postprocessor_colpali_rerank-0.4.0-py3-none-any.whl", hash = "sha256:742c782b9f2721dba0420dc1dd1ce6d193662c89391996ca0a70708b71b61af2", size = 4290, upload-time = "2026-03-12T20:31:12.782Z" },
 ]
 
 [[package]]
@@ -2418,7 +2418,7 @@ wheels = [
 
 [[package]]
 name = "llama-index-storage-kvstore-duckdb"
-version = "0.2.1"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "duckdb" },
@@ -2426,37 +2426,37 @@ dependencies = [
     { name = "llama-index-vector-stores-duckdb" },
     { name = "pyarrow" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/dc/1d/93cc9addf4759605b473fb5d01371e2cab62cbc374e469365cf1e2b7fb91/llama_index_storage_kvstore_duckdb-0.2.1.tar.gz", hash = "sha256:efb277f5c70b8877818324c010144120807cb355207283cd350f9319b82640dd", size = 5360, upload-time = "2025-09-08T20:39:26.435Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d3/c2/1c86f4802e751d4cdc6dca10e4fd23b2ab3a9b51da43c27808e0d6b6f26f/llama_index_storage_kvstore_duckdb-0.3.0.tar.gz", hash = "sha256:743dacf7a215757ecc46e7e1fe2c03d3d509a3ad6ac83fca4f20f2ab56134122", size = 5361, upload-time = "2026-03-12T20:42:08.494Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/90/d9/dd9257719fe1e1407b6c340662eebeb238d3db6a70d0dd81c39284e6b559/llama_index_storage_kvstore_duckdb-0.2.1-py3-none-any.whl", hash = "sha256:8d3df1ad0e41e5ca437b5fe30d7561f17b106916b50d33ad5f738a1bdac828f6", size = 4956, upload-time = "2025-09-08T20:39:25.274Z" },
+    { url = "https://files.pythonhosted.org/packages/c5/d2/39e3aaae0ba82ee2e449a78c7a9d8609f68517e7a9ca79e0ab39e9a2ffb4/llama_index_storage_kvstore_duckdb-0.3.0-py3-none-any.whl", hash = "sha256:c95d6257caaa2e8860af2e0f4edbe21db40866aa25e7c93e1bcbb1df453ac201", size = 4954, upload-time = "2026-03-12T20:42:07.791Z" },
 ]
 
 [[package]]
 name = "llama-index-vector-stores-duckdb"
-version = "0.5.1"
+version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "duckdb" },
     { name = "llama-index-core" },
     { name = "pyarrow" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/50/e8/f4fcbbcc5635844bfd6e025d102f09c9b791f0f976164cddd656bdfbab03/llama_index_vector_stores_duckdb-0.5.1.tar.gz", hash = "sha256:e04d63cc12c1f5fd27fce9dd68f805e7c70f93c94e0cda01e12fcd2c68a108b3", size = 8009, upload-time = "2025-09-08T20:41:34.851Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d5/de/c27fae4ad869685d4afac8d938cc29fc1095278de27d4944cd84b2449d3f/llama_index_vector_stores_duckdb-0.6.0.tar.gz", hash = "sha256:333273a6fc14a7dedb61cdaaf63e30be292407eac20d0dc1b929153f5710a131", size = 8010, upload-time = "2026-03-12T20:46:20.744Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/05/bf/471aa699029a6d6fa0cb4cc66963f71d69d363c1f3340794a849d02961af/llama_index_vector_stores_duckdb-0.5.1-py3-none-any.whl", hash = "sha256:ac8058a9accd624afcf60548956251f0f0d4ede84c1601cbeec646ca4d918316", size = 7744, upload-time = "2025-09-08T20:41:34.101Z" },
+    { url = "https://files.pythonhosted.org/packages/af/2b/cec901b710e6e6baa799ec094259afed204bc937f45148649c5337b439f0/llama_index_vector_stores_duckdb-0.6.0-py3-none-any.whl", hash = "sha256:2aa4a59a05959f4c32cb2965e6aae1242d4f37621e9848a1f2b488f9f106fd19", size = 7742, upload-time = "2026-03-12T20:46:20.071Z" },
 ]
 
 [[package]]
 name = "llama-index-vector-stores-qdrant"
-version = "0.9.2"
+version = "0.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "grpcio" },
     { name = "llama-index-core" },
     { name = "qdrant-client" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c2/5b/4957f112b2405e960f425f92e337f1ad22315c0cda50c5117575b0e08d10/llama_index_vector_stores_qdrant-0.9.2.tar.gz", hash = "sha256:c7f8138a0f4f79bed79a32b7c875d2766849b02a779617e55b8d1feb1a9e605a", size = 14698, upload-time = "2026-03-06T11:20:52.802Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cf/ff/f1ce3444c65cf3aff1edd4810e2736f9d81512cd5e2565cd7d341e17fbba/llama_index_vector_stores_qdrant-0.10.0.tar.gz", hash = "sha256:173855ff82fffedda5b24c2561f8a6dcd9da24318143188de85470f6667a84ea", size = 14699, upload-time = "2026-03-12T20:47:56.99Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/42/d7/5e137cee4acf04ae49e6be865cf732174353439377ba65999e43b91ad978/llama_index_vector_stores_qdrant-0.9.2-py3-none-any.whl", hash = "sha256:631139e3dc84a831e949758f99b0858a53c835c5a5878a68d676b3eb579c824f", size = 14953, upload-time = "2026-03-06T11:20:55.127Z" },
+    { url = "https://files.pythonhosted.org/packages/d4/8d/6486b04a867e6ce5fdd3b838146a9e951a42668ea8fd7fcee9d0e6c41c9f/llama_index_vector_stores_qdrant-0.10.0-py3-none-any.whl", hash = "sha256:a883c9bd3d301b434fdf1645a5118b18db0b429d4011ba275ce23a69297606c6", size = 14967, upload-time = "2026-03-12T20:47:57.921Z" },
 ]
 
 [[package]]
