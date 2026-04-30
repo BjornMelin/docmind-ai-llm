@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [0.7.2](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.7.1...v0.7.2) (2026-04-30)
+
+### Security
+
+* Refresh the Python dependency baseline and lockfile to clear security alerts,
+  keep the runtime on Python `>=3.12,<3.14`, and expand Dependabot coverage for
+  maintained package surfaces ([c927285](https://github.com/BjornMelin/docmind-ai-llm/commit/c92728511e4d6bbf5ea8f9f83e7b795d0682632e), [8d32604](https://github.com/BjornMelin/docmind-ai-llm/commit/8d326043367fb5678fd3c699e8e6eaf5e27d0fe9)).
+* Harden untrusted image uploads by preserving Pillow decompression-bomb guard
+  restoration, bounding oversized uploads, and safely rewinding only seekable
+  upload streams ([8cc621e](https://github.com/BjornMelin/docmind-ai-llm/commit/8cc621ed43448bfbb42cbce6418716977106eb40), [92ab492](https://github.com/BjornMelin/docmind-ai-llm/commit/92ab49246bcdc8277a03b6e727978d510255d86f), [378865e](https://github.com/BjornMelin/docmind-ai-llm/commit/378865e380f0b3907ff422eefda35949c0494d7e)).
+
+### Fixed
+
+* Stabilize SigLIP and visual reranking on the Transformers v5 baseline,
+  including model-output normalization, scalar norm handling, custom revision
+  preservation, MPS placement, adapter error paths, and lazy loader cache
+  behavior ([1e7a1d9](https://github.com/BjornMelin/docmind-ai-llm/commit/1e7a1d9e9acb36051dbd0ec0cc419e8c0500cbe7), [4f7f198](https://github.com/BjornMelin/docmind-ai-llm/commit/4f7f198832b11b28f4605129a1ecfa67c953f03a), [c1ea29c](https://github.com/BjornMelin/docmind-ai-llm/commit/c1ea29cdddc846a3a319021704abd7ae1c54200c), [7478768](https://github.com/BjornMelin/docmind-ai-llm/commit/74787681fd42905df1cff0fddf0311413b69f805)).
+* Preserve settings form state and keep local LLM endpoint validation aligned
+  with intentional llama.cpp and OpenAI-compatible targets ([a93956a](https://github.com/BjornMelin/docmind-ai-llm/commit/a93956aa05d4c1b7f3e3942d84b76c928aa00ff2), [5fc4c62](https://github.com/BjornMelin/docmind-ai-llm/commit/5fc4c6205910601845cb08163dc89548aff3622a)).
+* Keep CI and static-analysis gates green after dependency upgrades, including
+  Ruff line-length cleanup, coverage artifact naming, markdown table linting,
+  and valid `uv sync --frozen` install examples ([332ae05](https://github.com/BjornMelin/docmind-ai-llm/commit/332ae05de6081c21bdf10467e0dd18ae2d043300), [be123a3](https://github.com/BjornMelin/docmind-ai-llm/commit/be123a3bbeee2a89e7746d528173d4800c5ec882), [983fba4](https://github.com/BjornMelin/docmind-ai-llm/commit/983fba49b792767c4e93b2586b42dd21fab04e52), [744d608](https://github.com/BjornMelin/docmind-ai-llm/commit/744d608123b7fd56dee0fd02a67cb53916100b52)).
+
+### Changed
+
+* Centralize SigLIP loader ownership by removing fallback duplication and
+  aligning embeddings, reranking, docs, and specs around the canonical loader
+  policy ([61b87bf](https://github.com/BjornMelin/docmind-ai-llm/commit/61b87bf2d7f2d93ad16c6ce3d7e5b5d7a018e9ff), [5ced3b3](https://github.com/BjornMelin/docmind-ai-llm/commit/5ced3b3a69bb17724bc49bc225223c0252f51cd7)).
+* Align repository guidance, ADRs, and specs with the supported runtime
+  baseline, GPU profile ownership, chat persistence traceability, and current
+  developer setup flow ([51b21d7](https://github.com/BjornMelin/docmind-ai-llm/commit/51b21d7b208a7e6270bb3db1dab12362623cc359), [6ff0972](https://github.com/BjornMelin/docmind-ai-llm/commit/6ff09728128d03331df0ff2928749d3051a522d3), [ea5371a](https://github.com/BjornMelin/docmind-ai-llm/commit/ea5371a43c6682a8563883e766d457f47e9d2640), [9fe868a](https://github.com/BjornMelin/docmind-ai-llm/commit/9fe868a2c20df0169f79ae2a14506f95963deee4)).
+
 ## [0.7.1](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.7.0...v0.7.1) (2026-01-19)
 
 
