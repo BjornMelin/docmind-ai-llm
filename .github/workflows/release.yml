@@ -18,9 +18,30 @@ jobs:
         uses: googleapis/release-please-action@v4.4.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          release-type: python
-          package-name: docmind-ai-llm
-          bump-minor-pre-major: true
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+      - name: Validate published release notes
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          body=""
+          for attempt in 1 2 3 4 5; do
+            body="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json body --jq '.body // ""' 2>/dev/null || true)"
+            if printf '%s' "$body" | grep -q '[^[:space:]]'; then
+              break
+            fi
+            if [ "$attempt" -lt 5 ]; then
+              sleep "$attempt"
+            fi
+          done
+          if ! printf '%s' "$body" | grep -q '[^[:space:]]'; then
+            echo "Release $RELEASE_TAG has a blank body."
+            echo "Release Please could not parse release notes for the tag."
+            exit 1
+          fi
       - name: Checkout repository
         if: ${{ steps.release.outputs.prs_created == 'true' }}
         uses: actions/checkout@v5
