@@ -35,6 +35,9 @@ _LLAMACPP_DISALLOWED_SHARED_URLS = frozenset(
         },
     )
 )
+_LLAMACPP_DISALLOWED_EXPLICIT_URLS = frozenset(
+    {"https://api.openai.com", "https://api.openai.com/v1"}
+)
 
 _OPENAI_BASE_URL_KEY = "docmind_openai_base_url"
 _OPENAI_API_KEY_KEY = "docmind_openai_api_key"
@@ -838,7 +841,7 @@ def _validate_llamacpp_inputs(
     normalized_llamacpp_url = (
         ensure_v1(clean_llamacpp_url) if clean_llamacpp_url else None
     )
-    if normalized_llamacpp_url in _LLAMACPP_DISALLOWED_SHARED_URLS:
+    if normalized_llamacpp_url in _LLAMACPP_DISALLOWED_EXPLICIT_URLS:
         ui_errors.append("Provide a llama.cpp OpenAI-compatible server URL.")
         return ui_errors
 
