@@ -45,11 +45,11 @@ This section describes the "why" behind the decision.
 Use a weighted scoring matrix to provide a quantitative justification for the decision. Adjust criteria and weights based on project priorities.
 -->
 
-| Model / Option         | [Criterion 1 (e.g., Solution Leverage)] (Weight: X%) | [Criterion 2 (e.g., Application Value)] (Weight: Y%) | [Criterion 3 (e.g., Maintenance)] (Weight: Z%) | [Criterion 4 (e.g., Adaptability)] (Weight: W%) | Total Score | Decision        |
-| ---------------------- | ---------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------- | ----------------------------------------------- | ----------- | --------------- |
-| **[Chosen Solution]**  | [Score]                                              | [Score]                                              | [Score]                                        | [Score]                                         | **[Score]** | ✅ **Selected** |
-| [Alternative Option A] | [Score]                                              | [Score]                                              | [Score]                                        | [Score]                                         | [Score]     | Rejected        |
-| [Alternative Option B] | [Score]                                              | [Score]                                              | [Score]                                        | [Score]                                         | [Score]     | Rejected        |
+| Model / Option | [Criterion 1 (e.g., Solution Leverage)] (Weight: X%) | [Criterion 2 (e.g., Application Value)] (Weight: Y%) | [Criterion 3 (e.g., Maintenance)] (Weight: Z%) | [Criterion 4 (e.g., Adaptability)] (Weight: W%) | Total Score | Decision |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Chosen Solution] | [Score] | [Score] | [Score] | [Score] | **[Score]** | Selected |
+| [Alternative Option A] | [Score] | [Score] | [Score] | [Score] | [Score] | Rejected |
+| [Alternative Option B] | [Score] | [Score] | [Score] | [Score] | [Score] | Rejected |
 
 ## Decision
 

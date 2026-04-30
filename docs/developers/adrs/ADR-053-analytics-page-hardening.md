@@ -45,11 +45,11 @@ This risks file handle leaks, unnecessary memory use, and drift from the telemet
 
 Weights: Complexity 40% · Perf 30% · Alignment 30% (10 = best)
 
-| Option                                  | Complexity (40%) | Perf (30%) | Alignment (30%) |    Total |
-| --------------------------------------- | ---------------: | ---------: | --------------: | -------: |
-| **B: Safe lifecycle + bounded parsing** |              9.5 |        9.0 |             9.5 | **9.35** |
-| A: status quo                           |             10.0 |        3.0 |             4.0 |      6.1 |
-| C: remove page                          |              6.0 |       10.0 |             5.0 |      6.9 |
+| Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- |
+| B: Safe lifecycle + bounded parsing | 9.5 | 9.0 | 9.5 | **9.35** | Selected |
+| A: status quo | 10.0 | 3.0 | 4.0 | 6.1 | Rejected |
+| C: remove page | 6.0 | 10.0 | 5.0 | 6.9 | Rejected |
 
 ## Decision
 

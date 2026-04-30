@@ -59,7 +59,7 @@ multiple issues:
 
 | Option | Solution leverage (35%) | Application value (30%) | Maintenance (25%) | Adaptability (10%) | Total | Decision |
 | --- | --- | --- | --- | --- | --- | --- |
-| **C: Centralized service** | 9.5 | 9.2 | 9.4 | 9.0 | **9.33** | ✅ Selected |
+| **C: Centralized service** | 9.5 | 9.2 | 9.4 | 9.0 | **9.33** | Selected |
 | A: Ad-hoc call sites | 6.0 | 8.0 | 5.5 | 7.0 | 6.57 | Rejected |
 | B: Import-time singleton | 6.5 | 8.3 | 6.0 | 6.0 | 6.79 | Rejected |
 

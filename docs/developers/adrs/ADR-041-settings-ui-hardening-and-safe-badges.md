@@ -43,11 +43,11 @@ This creates a “startup bricking” risk and violates Streamlit Master Archite
 
 ### Decision Framework
 
-| Model / Option                                 | Leverage (35%) | Value (25%) | Risk Reduction (25%) | Maint (15%) |    Total | Decision    |
-| ---------------------------------------------- | -------------: | ----------: | -------------------: | ----------: | -------: | ----------- |
-| **B: Pre-validate + st.badge + python-dotenv** |              9 |           9 |                   10 |           9 | **9.25** | ✅ Selected |
-| A: Status quo                                  |              2 |           4 |                    2 |           7 |     3.15 | Rejected    |
-| C: Custom persistence                          |              5 |           6 |                    7 |           3 |     5.55 | Rejected    |
+| Model / Option | Leverage (35%) | Value (25%) | Risk Reduction (25%) | Maint (15%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- | --- |
+| B: Pre-validate + st.badge + python-dotenv | 9 | 9 | 10 | 9 | **9.25** | Selected |
+| A: Status quo | 2 | 4 | 2 | 7 | 3.15 | Rejected |
+| C: Custom persistence | 5 | 6 | 7 | 3 | 5.55 | Rejected |
 
 ## Decision
 

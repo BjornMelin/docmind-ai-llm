@@ -62,11 +62,11 @@ Open Responses defines a shared schema and streaming event taxonomy around the *
 
 Weights match the project “upgrade” rubric:
 
-| Option | Complexity & Maintenance (40%) | Performance & Scale (30%) | Ecosystem Alignment (30%) | Total |
-| --- | ---: | ---: | ---: | ---: |
-| **A: OpenAI-compatible-first core** | 9.5 | 8.5 | 9.5 | **9.2 ✅** |
-| B: Many native SDKs | 6.5 | 9.0 | 7.0 | 7.4 |
-| C: LiteLLM everywhere (in-process SDK) | 7.5 | 8.5 | 9.0 | 8.3 |
+| Option | Complexity & Maintenance (40%) | Performance & Scale (30%) | Ecosystem Alignment (30%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- |
+| A: OpenAI-compatible-first core | 9.5 | 8.5 | 9.5 | **9.2** | Selected |
+| B: Many native SDKs | 6.5 | 9.0 | 7.0 | 7.4 | Rejected |
+| C: LiteLLM everywhere (in-process SDK) | 7.5 | 8.5 | 9.0 | 8.3 | Rejected |
 
 ## Decision
 

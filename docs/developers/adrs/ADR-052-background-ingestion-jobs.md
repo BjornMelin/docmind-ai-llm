@@ -45,11 +45,11 @@ Streamlit’s execution model requires that UI commands be executed only on the 
 
 Weights: Complexity 40% · Performance 30% · Alignment 30% (10 = best)
 
-| Option                                                | Complexity (40%) | Perf (30%) | Alignment (30%) |   Total |
-| ----------------------------------------------------- | ---------------: | ---------: | --------------: | ------: |
-| **A: Threads + `st.fragment(run_every=...)` polling** |              9.0 |        9.0 |            10.0 | **9.3** |
-| B: Processes + terminate                              |              5.5 |        8.5 |             6.5 |     6.7 |
-| C: synchronous                                        |             10.0 |        3.0 |             7.0 |     6.7 |
+| Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- |
+| A: Threads + `st.fragment(run_every=...)` polling | 9.0 | 9.0 | 10.0 | **9.3** | Selected |
+| B: Processes + terminate | 5.5 | 8.5 | 6.5 | 6.7 | Rejected |
+| C: synchronous | 10.0 | 3.0 | 7.0 | 6.7 | Rejected |
 
 ## Decision
 

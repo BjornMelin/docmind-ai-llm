@@ -80,14 +80,14 @@ DocMind is offline-first and already uses LangGraph (supervisor pattern). We sho
 
 Weights: Complexity 40% · Performance 30% · Alignment 30% (10 = best)
 
-| Option                                                         | Complexity (40%) | Perf (30%) | Alignment (30%) |    Total | Decision    |
-| -------------------------------------------------------------- | ---------------: | ---------: | --------------: | -------: | ----------- |
-| **A: LangGraph SQLite + DocMind memory store + consolidation** |              9.2 |        9.0 |             9.7 | **9.26** | ✅ Selected |
-| B: LlamaIndex JSON store only                                  |              9.5 |        7.5 |             6.5 |     8.00 | Rejected    |
-| C: Zep/Graphiti service                                        |              6.0 |        8.5 |             6.5 |     6.95 | Rejected    |
-| D: Mem0 OSS                                                    |              6.5 |        8.5 |             6.5 |     7.10 | Rejected    |
-| E: Letta/MemGPT service                                        |              5.5 |        7.5 |             5.0 |     5.93 | Rejected    |
-| F: Custom (SQLite + Qdrant memory)                             |              7.5 |        9.0 |             9.0 |     8.15 | Rejected    |
+| Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- |
+| A: LangGraph SQLite + DocMind memory store + consolidation | 9.2 | 9.0 | 9.7 | **9.26** | Selected |
+| B: LlamaIndex JSON store only | 9.5 | 7.5 | 6.5 | 8.00 | Rejected |
+| C: Zep/Graphiti service | 6.0 | 8.5 | 6.5 | 6.95 | Rejected |
+| D: Mem0 OSS | 6.5 | 8.5 | 6.5 | 7.10 | Rejected |
+| E: Letta/MemGPT service | 5.5 | 7.5 | 5.0 | 5.93 | Rejected |
+| F: Custom (SQLite + Qdrant memory) | 7.5 | 9.0 | 9.0 | 8.15 | Rejected |
 
 ## Decision
 

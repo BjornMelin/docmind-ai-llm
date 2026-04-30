@@ -41,12 +41,12 @@ The UI must surface agentic RAG (ADR‑001), multimodal processing (ADR‑009), 
 
 ### Decision Framework
 
-| Model / Option                | Simplicity (35%) | UX (30%) | Integration (20%) | Maintenance (15%) | Total Score | Decision    |
-| ----------------------------- | ---------------- | -------- | ----------------- | ----------------- | ----------- | ----------- |
-| Programmatic Streamlit (Sel.) | 9                | 9        | 9                 | 9                 | **9.0**     | ✅ Selected |
-| Directory‑based multipage     | 8                | 6        | 6                 | 7                 | 6.9         | Rejected    |
-| Gradio                        | 9                | 6        | 5                 | 8                 | 6.9         | Rejected    |
-| FastAPI + React               | 4                | 9        | 9                 | 5                 | 6.4         | Rejected    |
+| Model / Option | Simplicity (35%) | UX (30%) | Integration (20%) | Maintenance (15%) | Total Score | Decision |
+| --- | --- | --- | --- | --- | --- | --- |
+| Programmatic Streamlit (Sel.) | 9 | 9 | 9 | 9 | **9.0** | Selected |
+| Directory‑based multipage | 8 | 6 | 6 | 7 | 6.9 | Rejected |
+| Gradio | 9 | 6 | 5 | 8 | 6.9 | Rejected |
+| FastAPI + React | 4 | 9 | 9 | 5 | 6.4 | Rejected |
 
 ## Decision
 
@@ -123,12 +123,12 @@ In `src/app.py` (launched via `app.py`):
 ```python
 import streamlit as st
 
-st.set_page_config(page_title="DocMind AI", page_icon="📄", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="DocMind AI", page_icon=":material/description:", layout="wide", initial_sidebar_state="expanded")
 
-chat = st.Page("src/pages/01_chat.py", title="Chat", icon="💬", default=True)
-docs = st.Page("src/pages/02_documents.py", title="Documents", icon="📁")
-analytics = st.Page("src/pages/03_analytics.py", title="Analytics", icon="📊")
-settings = st.Page("src/pages/04_settings.py", title="Settings", icon="⚙️")
+chat = st.Page("src/pages/01_chat.py", title="Chat", icon=":material/chat:", default=True)
+docs = st.Page("src/pages/02_documents.py", title="Documents", icon=":material/folder:")
+analytics = st.Page("src/pages/03_analytics.py", title="Analytics", icon=":material/bar_chart:")
+settings = st.Page("src/pages/04_settings.py", title="Settings", icon=":material/settings:")
 
 nav = st.navigation({"Main": [chat, docs], "System": [analytics, settings]})
 st.logo("assets/docmind_logo.png", icon_image="assets/docmind_icon.png")
@@ -172,8 +172,8 @@ import pytest
 
 def test_pages_construct():
     import streamlit as st
-    st.Page("src/pages/01_chat.py", title="Chat", icon="💬", default=True)
-    st.Page("src/pages/02_documents.py", title="Documents", icon="📁")
+    st.Page("src/pages/01_chat.py", title="Chat", icon=":material/chat:", default=True)
+    st.Page("src/pages/02_documents.py", title="Documents", icon=":material/folder:")
 
 def test_page_registry_metadata():
     # Verify titles/icons/default selection for registered pages.

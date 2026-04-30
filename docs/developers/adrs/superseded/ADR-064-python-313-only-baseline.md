@@ -50,8 +50,8 @@ The repository already pins `.python-version` to **3.13.11** and uses a Python 3
 Weights: Complexity 40% · Performance/Scale 30% · Ecosystem Alignment 30% (10 = best)
 
 | Option | Complexity (40%) | Perf/Scale (30%) | Alignment (30%) | Total | Decision |
-| --- | ---: | ---: | ---: | ---: | --- |
-| **A: 3.13-only baseline** | 9.5 | 9.0 | 9.5 | **9.3** | ✅ Selected |
+| --- | --- | --- | --- | --- | --- |
+| A: 3.13-only baseline | 9.5 | 9.0 | 9.5 | **9.3** | Selected |
 | B: 3.13 primary, support 3.11–3.13 | 8.5 | 9.0 | 8.5 | 8.7 | Rejected |
 | C: 3.11 baseline | 8.0 | 7.5 | 7.0 | 7.6 | Rejected |
 

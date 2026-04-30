@@ -37,11 +37,11 @@ Previous configuration was over‑abstracted and duplicated framework features. 
 
 ### Decision Framework
 
-| Model / Option                      | Simplicity (35%) | Library Fit (35%) | Flexibility (20%) | Maintenance (10%) | Total Score | Decision    |
-| ----------------------------------- | ---------------- | ----------------- | ----------------- | ----------------- | ----------- | ----------- |
-| C: Pydantic + LlamaIndex (Selected) | 9                | 10                | 9                 | 9                 | **9.3**     | ✅ Selected |
-| A: Monolithic custom                | 4                | 5                 | 8                 | 5                 | 5.5         | Rejected    |
-| B: Disjoint modules                 | 6                | 6                 | 7                 | 6                 | 6.3         | Rejected    |
+| Model / Option | Simplicity (35%) | Library Fit (35%) | Flexibility (20%) | Maintenance (10%) | Total Score | Decision |
+| --- | --- | --- | --- | --- | --- | --- |
+| C: Pydantic + LlamaIndex (Selected) | 9 | 10 | 9 | 9 | **9.3** | Selected |
+| A: Monolithic custom | 4 | 5 | 8 | 5 | 5.5 | Rejected |
+| B: Disjoint modules | 6 | 6 | 7 | 6 | 6.3 | Rejected |
 
 ## Decision
 

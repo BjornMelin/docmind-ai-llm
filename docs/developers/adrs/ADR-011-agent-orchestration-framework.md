@@ -42,13 +42,13 @@ We therefore migrate the orchestration to graph-native LangGraph primitives (`St
 
 ### Decision Framework
 
-| Option                    | Simplicity (35%) | Reliability (30%) | Maintenance (25%) | Adaptability (10%) | Total | Decision    |
-| ------------------------- | ---------------- | ----------------- | ----------------- | ------------------ | ----- | ----------- |
-| LangGraph StateGraph      | 9                | 9                 | 9                 | 9                  | 9.0   | ✅ Selected |
-| Third‑party supervisor    | 9                | 8                 | 6                 | 7                  | 7.9   | Rejected    |
-| LlamaIndex AgentWorkflow  | 6                | 7                 | 6                 | 7                  | 6.4   | Rejected    |
-| Manual orchestration      | 3                | 5                 | 5                 | 6                  | 4.3   | Rejected    |
-| Monolithic agent          | 9                | 4                 | 6                 | 5                  | 6.2   | Rejected    |
+| Option | Simplicity (35%) | Reliability (30%) | Maintenance (25%) | Adaptability (10%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- | --- |
+| LangGraph StateGraph | 9 | 9 | 9 | 9 | 9.0 | Selected |
+| Third‑party supervisor | 9 | 8 | 6 | 7 | 7.9 | Rejected |
+| LlamaIndex AgentWorkflow | 6 | 7 | 6 | 7 | 6.4 | Rejected |
+| Manual orchestration | 3 | 5 | 5 | 6 | 4.3 | Rejected |
+| Monolithic agent | 9 | 4 | 6 | 5 | 6.2 | Rejected |
 
 ## Decision
 

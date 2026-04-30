@@ -37,11 +37,11 @@ Custom evaluation code was large and brittle. DeepEval provides ready metrics fo
 
 ### Decision Framework
 
-| Model / Option      | Rigor (35%) | Simplicity (35%) | Local (20%) | Maintenance (10%) | Total   | Decision    |
-| ------------------- | ----------- | ---------------- | ----------- | ----------------- | ------- | ----------- |
-| DeepEval (Selected) | 8           | 9                | 9           | 9                 | **8.6** | ✅ Selected |
-| Custom evaluators   | 9           | 3                | 9           | 4                 | 6.6     | Rejected    |
-| Spot checks         | 3           | 9                | 9           | 9                 | 6.0     | Rejected    |
+| Model / Option | Rigor (35%) | Simplicity (35%) | Local (20%) | Maintenance (10%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- | --- |
+| DeepEval (Selected) | 8 | 9 | 9 | 9 | **8.6** | Selected |
+| Custom evaluators | 9 | 3 | 9 | 4 | 6.6 | Rejected |
+| Spot checks | 3 | 9 | 9 | 9 | 6.0 | Rejected |
 
 ## Decision
 

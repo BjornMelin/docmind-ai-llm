@@ -34,11 +34,11 @@ Shipping unused “toy pipeline” utilities in the production package:
 
 Weights: leverage 35%, application value 30%, maintenance 25%, adaptability 10%.
 
-| Option | Leverage (35%) | App Value (30%) | Maintenance (25%) | Adaptability (10%) | Total |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| **C: Delete dead code + tests (Selected)** | 9 | 9 | 10 | 9 | **9.25** |
-| B: Move to eval/tests only | 5 | 3 | 6 | 5 | 4.65 |
-| A: Keep in prod (remove marker only) | 2 | 1 | 2 | 3 | 1.80 |
+| Option | Leverage (35%) | App Value (30%) | Maintenance (25%) | Adaptability (10%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- | --- |
+| C: Delete dead code + tests (Selected) | 9 | 9 | 10 | 9 | **9.25** | Selected |
+| B: Move to eval/tests only | 5 | 3 | 6 | 5 | 4.65 | Rejected |
+| A: Keep in prod (remove marker only) | 2 | 1 | 2 | 3 | 1.80 | Rejected |
 
 ## Decision
 

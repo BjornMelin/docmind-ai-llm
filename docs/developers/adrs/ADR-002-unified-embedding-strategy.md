@@ -39,11 +39,11 @@ Separate dense and sparse models increase coordination cost and memory. BGE‑M3
 
 ### Decision Framework
 
-| Model / Option     | Quality (40%) | Simplicity (30%) | Perf (30%) | Total Score | Decision    |
-| ------------------ | ------------- | ---------------- | ---------- | ----------- | ----------- |
-| BGE‑M3 + CLIP      | 9             | 9                | 9          | **9.0**     | ✅ Selected |
-| Nomic‑v2 + CLIP    | 8             | 8                | 8          | 8.0         | Rejected    |
-| 3‑model (baseline) | 7             | 2                | 3          | 4.0         | Rejected    |
+| Model/Option | Quality (40%) | Simplicity (30%) | Perf (30%) | Total Score | Decision |
+| --- | --- | --- | --- | --- | --- |
+| BGE‑M3+CLIP | 9 | 9 | 9 | **9.0** | Selected |
+| Nomic‑v2+CLIP | 8 | 8 | 8 | 8.0 | Rejected |
+| 3‑model(baseline) | 7 | 2 | 3 | 4.0 | Rejected |
 
 ## Decision
 

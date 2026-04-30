@@ -46,11 +46,11 @@ Shipping these as-is creates a misleading public configuration surface and incre
 
 Weights: Complexity 40% · Risk Reduction 30% · Alignment 30% (10 = best)
 
-| Option                         | Complexity (40%) | Risk (30%) | Alignment (30%) |   Total |
-| ------------------------------ | ---------------: | ---------: | --------------: | ------: |
-| **A: Remove + document scope** |              9.5 |        9.5 |             9.5 | **9.5** |
-| B: Implement features          |              3.0 |        6.0 |             5.0 |     4.5 |
-| C: Keep no-op                  |              8.5 |        5.5 |             6.0 |     7.0 |
+| Option | Complexity (40%) | Risk (30%) | Alignment (30%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- |
+| A: Remove + document scope | 9.5 | 9.5 | 9.5 | **9.5** | Selected |
+| B: Implement features | 3.0 | 6.0 | 5.0 | 4.5 | Rejected |
+| C: Keep no-op | 8.5 | 5.5 | 6.0 | 7.0 | Rejected |
 
 ## Decision
 

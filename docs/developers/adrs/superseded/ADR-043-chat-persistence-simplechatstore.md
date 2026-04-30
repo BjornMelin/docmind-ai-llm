@@ -46,11 +46,11 @@ Note: LlamaIndex documents `ChatMemoryBuffer` as a deprecated memory type in new
 
 ### Decision Framework (≥9.0)
 
-| Option                      | Complexity (40%) | Perf (30%) | Alignment (30%) |   Total |
-| --------------------------- | ---------------: | ---------: | --------------: | ------: |
-| **B: SimpleChatStore JSON** |                9 |          9 |              10 | **9.3** |
-| A: Session-only             |               10 |          8 |               5 |     7.9 |
-| C: SQLite integration       |                6 |          9 |               7 |     7.2 |
+| Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- |
+| B: SimpleChatStore JSON | 9 | 9 | 10 | **9.3** | Selected |
+| A: Session-only | 10 | 8 | 5 | 7.9 | Rejected |
+| C: SQLite integration | 6 | 9 | 7 | 7.2 | Rejected |
 
 ## Decision
 

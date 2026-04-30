@@ -47,20 +47,20 @@ Users need document‑specific insights and cross‑document synthesis. Separate
 
 Weights: Capability 35% · Performance 35% · Simplicity 20% · Maintenance 10%
 
-| Model / Option                             | Capability (35%) | Performance (35%) | Simplicity (20%) | Maintenance (10%) | Total Score | Decision |
-| ------------------------------------------ | ---------------- | ----------------- | ---------------- | ----------------- | ----------: | -------- |
-| **C: ThreadPool map + lightweight reduce** | 9                | 9                 | 9                | 9                 | **9.0**     | ✅ Sel.  |
-| D: LangGraph-native MapReduce              | 9                | 9                 | 6                | 7                 | 7.9         | Rejected |
-| B: Sequential per-doc                      | 7                | 4                 | 9                | 9                 | 6.6         | Rejected |
-| A: Combined only                           | 5                | 7                 | 10               | 10                | 7.0         | Rejected |
+| Model / Option | Capability (35%) | Performance (35%) | Simplicity (20%) | Maintenance (10%) | Total Score | Decision |
+| --- | --- | --- | --- | --- | --- | --- |
+| C: ThreadPool map + lightweight reduce | 9 | 9 | 9 | 9 | **9.0** | Selected |
+| D: LangGraph-native MapReduce | 9 | 9 | 6 | 7 | 7.9 | Rejected |
+| B: Sequential per-doc | 7 | 4 | 9 | 9 | 6.6 | Rejected |
+| A: Combined only | 5 | 7 | 10 | 10 | 7.0 | Rejected |
 
 ### Architecture Tier-2 ≥9.0 (Complexity/Perf/Alignment)
 
 Weights: Complexity 40% · Perf 30% · Alignment 30% (10 = best)
 
 | Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total | Decision |
-| --- | ---: | ---: | ---: | ---: | --- |
-| **ThreadPool map + lightweight reduce** | 9.5 | 9.0 | 9.5 | **9.35** | ✅ Selected |
+| --- | --- | --- | --- | --- | --- |
+| ThreadPool map + lightweight reduce | 9.5 | 9.0 | 9.5 | **9.35** | Selected |
 | LangGraph-native MapReduce graph | 7.0 | 9.0 | 9.0 | 8.10 | Rejected |
 
 ## Decision

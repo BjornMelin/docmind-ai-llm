@@ -33,9 +33,9 @@ Hard‑coded dictionaries (`src/prompts.py`) are brittle and not extensible. We 
 
 ### Decision Framework
 
-| Option                 | Flex (40%) | Simplicity (40%) | Perf (20%) | Total | Decision |
-| ---------------------- | ---------- | ---------------- | ---------- | ----- | -------- |
-| RichPromptTemplate + FS| 9          | 9                | 9          | 9.0   | ✅ Sel.  |
+| Option | Flex (40%) | Simplicity (40%) | Perf (20%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- |
+| RichPromptTemplate + FS | 9 | 9 | 9 | 9.0 | Selected |
 
 ## Decision
 

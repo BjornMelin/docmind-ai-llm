@@ -38,11 +38,11 @@ Unify document‑processing cache on LlamaIndex IngestionCache with a local Duck
 
 ### Decision Framework
 
-| Model / Option     | Solution Leverage (35%) | Maintenance (30%) | Performance (25%) | Simplicity (10%) | Total Score | Decision    |
-| ------------------ | ----------------------- | ----------------- | ----------------- | ---------------- | ----------- | ----------- |
-| B: Ingest+DuckDBKV | 9.5                     | 9.0               | 9.0               | 9.0              | **9.2**     | ✅ Selected |
-| A: Ingest+JSON     | 8.0                     | 8.5               | 6.0               | 10.0             | 7.9         | Rejected    |
-| C: Custom Wrapper  | 4.0                     | 3.0               | 6.0               | 5.0              | 4.3         | Rejected    |
+| Model / Option | Solution Leverage (35%) | Maintenance (30%) | Performance (25%) | Simplicity (10%) | Total Score | Decision |
+| --- | --- | --- | --- | --- | --- | --- |
+| B: Ingest+DuckDBKV | 9.5 | 9.0 | 9.0 | 9.0 | **9.2** | Selected |
+| A: Ingest+JSON | 8.0 | 8.5 | 6.0 | 10.0 | 7.9 | Rejected |
+| C: Custom Wrapper | 4.0 | 3.0 | 6.0 | 5.0 | 4.3 | Rejected |
 
 ## Decision
 
