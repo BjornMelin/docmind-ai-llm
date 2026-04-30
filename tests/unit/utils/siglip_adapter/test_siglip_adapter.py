@@ -108,6 +108,7 @@ def test_siglip_adapter_dim_inference_from_config(monkeypatch):
     assert s._dim == 640
 
 
+@pytest.mark.unit
 def test_siglip_adapter_try_ensure_loaded_catches_unexpected_errors(monkeypatch):
     """_try_ensure_loaded should fail open on unexpected load-time exceptions."""
     from src.utils.siglip_adapter import SiglipEmbedding
