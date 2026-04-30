@@ -13,6 +13,9 @@ The workflow is defined in [`.github/workflows/release.yml`](../../.github/workf
 - **Manifest Config**: Advanced Release Please settings live in
   [`release-please-config.json`](../../release-please-config.json) and
   [`.release-please-manifest.json`](../../.release-please-manifest.json).
+- **Tag and Release Name Format**: Releases use plain SemVer tags and titles,
+  such as `v0.8.2`, not component-prefixed names like
+  `docmind-ai-llm-v0.8.2`.
 - **Release Token**: The workflow requires the repository secret
   `RELEASE_PLEASE_TOKEN`, a fine-grained personal access token owned by the
   maintainer whose release PR commits should be credited. The token needs
@@ -77,4 +80,5 @@ The workflow is defined in [`.github/workflows/release.yml`](../../.github/workf
 ## Source of Truth
 
 - **Version**: The `version` field in `pyproject.toml` and the latest GitHub Tag.
+- **Tag Format**: `v<major>.<minor>.<patch>`.
 - **Changelog**: `CHANGELOG.md` in the root directory.
