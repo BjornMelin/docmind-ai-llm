@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 pytestmark = pytest.mark.unit
@@ -28,12 +30,16 @@ def test_siglip_embedding_text_and_image_with_stubbed_model() -> None:
     class _Model:
         def get_image_features(self, *, pixel_values):  # type: ignore[no-untyped-def]
             batch = int(pixel_values.shape[0])
-            return torch.ones((batch, 4), dtype=torch.float32)
+            return SimpleNamespace(
+                pooler_output=torch.ones((batch, 4), dtype=torch.float32)
+            )
 
         def get_text_features(self, *, input_ids, attention_mask):  # type: ignore[no-untyped-def]
             batch = int(input_ids.shape[0])
-            return torch.arange(1, 1 + (batch * 4), dtype=torch.float32).reshape(
-                batch, 4
+            return SimpleNamespace(
+                pooler_output=torch.arange(
+                    1, 1 + (batch * 4), dtype=torch.float32
+                ).reshape(batch, 4)
             )
 
     emb = SiglipEmbedding(model_id="stub", device="cpu")

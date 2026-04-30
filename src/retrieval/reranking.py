@@ -29,6 +29,7 @@ from src.retrieval.rrf import rrf_merge
 from src.utils.core import has_cuda_vram, resolve_device
 from src.utils.log_safety import build_pii_log_entry
 from src.utils.telemetry import log_jsonl
+from src.utils.vision_siglip import siglip_features
 
 
 # Time budgets (ms)
@@ -192,9 +193,28 @@ def _compute_siglip_scores(
             im_inputs["pixel_values"] = im_inputs["pixel_values"].to("mps")
         with torch.no_grad():  # type: ignore[name-defined]
             if hasattr(model, "get_image_features"):
-                imfeat = model.get_image_features(**im_inputs)
-                imfeat = imfeat / imfeat.norm(dim=-1, keepdim=True)
-                sims = (tfeat @ imfeat.T).squeeze(0).detach().cpu().numpy().tolist()
+                try:
+                    imfeat = siglip_features(model.get_image_features(**im_inputs))
+                    sims = (tfeat @ imfeat.T).squeeze(0).detach().cpu().numpy().tolist()
+                except (
+                    ImportError,
+                    ModuleNotFoundError,
+                    AttributeError,
+                    RuntimeError,
+                    ValueError,
+                    OSError,
+                    TypeError,
+                ) as exc:
+                    redaction = build_pii_log_entry(
+                        str(exc), key_id="reranking.siglip.fail_open"
+                    )
+                    logger.warning(
+                        "SigLIP image feature error; "
+                        "fail-open (error_type={}, error={})",
+                        type(exc).__name__,
+                        redaction.redacted,
+                    )
+                    sims = [float("-inf")] * len(idxs)
             else:
                 sims = [float("-inf")] * len(idxs)
         for k, s in zip(idxs, sims, strict=False):
@@ -208,11 +228,17 @@ def _load_siglip() -> tuple[Any, Any, str]:  # (model, processor, device)
         model_id = getattr(
             settings.embedding, "siglip_model_id", "google/siglip-base-patch16-224"
         )
+        revision = getattr(
+            settings.embedding,
+            "siglip_model_revision",
+            None,
+        )
     except AttributeError:
         model_id = "google/siglip-base-patch16-224"
+        revision = None
     from src.utils.vision_siglip import load_siglip
 
-    return load_siglip(model_id=model_id, device=None)
+    return load_siglip(model_id=model_id, device=None, revision=revision)
 
 
 def _extract_image_paths(ns: list[NodeWithScore]) -> list[str]:
@@ -304,8 +330,26 @@ def _siglip_rescore(
             for k, v in txt_inputs.items():
                 txt_inputs[k] = v.to("mps")
         with torch.no_grad():  # type: ignore[name-defined]
-            tfeat = model.get_text_features(**txt_inputs)
-            tfeat = tfeat / tfeat.norm(dim=-1, keepdim=True)
+            try:
+                tfeat = siglip_features(model.get_text_features(**txt_inputs))
+            except (
+                ImportError,
+                ModuleNotFoundError,
+                AttributeError,
+                RuntimeError,
+                ValueError,
+                OSError,
+                TypeError,
+            ) as exc:
+                redaction = build_pii_log_entry(
+                    str(exc), key_id="reranking.siglip.fail_open"
+                )
+                logger.warning(
+                    "SigLIP text feature error; fail-open (error_type={}, error={})",
+                    type(exc).__name__,
+                    redaction.redacted,
+                )
+                return nodes
         # Batched image features via helper
         try:
             bs_conf = int(getattr(settings.retrieval, "siglip_batch_size", 0))

@@ -31,3 +31,23 @@ def test_siglip_fail_open_on_timeout(monkeypatch):
     out = rr._siglip_rescore("q", nodes, budget_ms=0)
     # Fail-open returns input list unchanged length
     assert len(out) == len(nodes)
+
+
+def test_siglip_fail_open_on_text_feature_attribute_error(monkeypatch):
+    """SigLIP reranking should fail open if text feature extraction breaks."""
+    import src.retrieval.reranking as rr
+
+    nodes = [_nws("x"), _nws("y")]
+
+    class _Model:
+        def get_text_features(self, **_kwargs):
+            raise AttributeError("missing pooler_output")
+
+    class _Processor:
+        def __call__(self, *args, **kwargs):
+            return {"input_ids": object()}
+
+    monkeypatch.setattr(rr, "_load_siglip", lambda: (_Model(), _Processor(), "cpu"))
+
+    out = rr._siglip_rescore("q", nodes, budget_ms=9999)
+    assert out is nodes

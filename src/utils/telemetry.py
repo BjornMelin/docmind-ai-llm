@@ -134,7 +134,7 @@ def log_jsonl(event: dict[str, Any]) -> None:
     if settings.telemetry.disabled:
         return
     rate = float(settings.telemetry.sample)
-    if rate < 1.0 and random.random() >= rate:  # noqa: S311
+    if rate < 1.0 and random.random() >= rate:  # noqa: S311 # nosec B311
         return
 
     rec = {

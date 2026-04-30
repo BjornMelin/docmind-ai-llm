@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import pytest
@@ -49,7 +49,11 @@ def test_image_embedder_siglip_via_vision_siglip(monkeypatch) -> None:
 
     class _Backend:
         def get_image_features(self, *, pixel_values):  # type: ignore[no-untyped-def]
-            return torch.ones((pixel_values.shape[0], 768), dtype=torch.float32)
+            return SimpleNamespace(
+                pooler_output=torch.ones(
+                    (pixel_values.shape[0], 768), dtype=torch.float32
+                )
+            )
 
     class _Processor:
         def __call__(self, *, images, return_tensors="pt"):  # type: ignore[no-untyped-def]
@@ -58,7 +62,15 @@ def test_image_embedder_siglip_via_vision_siglip(monkeypatch) -> None:
 
     vision = ModuleType("src.utils.vision_siglip")
     vision.load_siglip = (  # type: ignore[attr-defined]
-        lambda model_id, device: (_Backend(), _Processor(), device)
+        lambda model_id, device, revision=None: (_Backend(), _Processor(), device)
+    )
+    vision.DEFAULT_SIGLIP_MODEL_REVISION = "test-revision"  # type: ignore[attr-defined]
+    vision.siglip_features = (  # type: ignore[attr-defined]
+        lambda output, normalize=True: (
+            output.pooler_output / output.pooler_output.norm(dim=-1, keepdim=True)
+            if normalize
+            else output.pooler_output
+        )
     )
     monkeypatch.setitem(sys.modules, "src.utils.vision_siglip", vision)
 
@@ -83,44 +95,3 @@ def test_image_embedder_bge_visualized_backbone_raises() -> None:
     ie = ImageEmbedder(backbone="bge_visualized", device="cpu")
     with pytest.raises(RuntimeError, match="bge_visualized"):
         ie.encode_image([object()])
-
-
-def test_image_embedder_siglip_falls_back_to_transformers(monkeypatch) -> None:
-    import torch
-
-    # Force vision_siglip import path to fail
-    vision = ModuleType("src.utils.vision_siglip")
-    vision.load_siglip = (  # type: ignore[attr-defined]
-        lambda *_a, **_k: (_ for _ in ()).throw(ImportError("x"))
-    )
-    monkeypatch.setitem(sys.modules, "src.utils.vision_siglip", vision)
-
-    class _Backend:
-        def get_image_features(self, *, pixel_values):  # type: ignore[no-untyped-def]
-            return torch.ones((pixel_values.shape[0], 768), dtype=torch.float32)
-
-    class _Processor:
-        def __call__(self, *, images, return_tensors="pt"):  # type: ignore[no-untyped-def]
-            return {"pixel_values": torch.zeros((len(images), 3, 224, 224))}
-
-    class _SiglipModel:
-        @staticmethod
-        def from_pretrained(_model_id: str, device_map=None):  # type: ignore[no-untyped-def]
-            _ = device_map
-            return _Backend()
-
-    class _SiglipProcessor:
-        @staticmethod
-        def from_pretrained(_model_id: str):  # type: ignore[no-untyped-def]
-            return _Processor()
-
-    transformers = ModuleType("transformers")
-    transformers.SiglipModel = _SiglipModel  # type: ignore[attr-defined]
-    transformers.SiglipProcessor = _SiglipProcessor  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "transformers", transformers)
-
-    from src.models.embeddings import ImageEmbedder
-
-    ie = ImageEmbedder(backbone="siglip_base", device="cpu")
-    out = ie.encode_image([object()])
-    assert out.shape == (1, 768)

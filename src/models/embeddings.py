@@ -403,25 +403,29 @@ class ImageEmbedder:
                     "siglip_model_id",
                     "google/siglip-base-patch16-224",
                 )
+                revision = getattr(
+                    _settings.embedding,
+                    "siglip_model_revision",
+                    None,
+                )
             except (AttributeError, ImportError, RuntimeError, ValueError, TypeError):
                 model_id = "google/siglip-base-patch16-224"
-            model, processor, _dev = load_siglip(model_id=model_id, device=self.device)
+                revision = None
+            model, processor, _dev = load_siglip(
+                model_id=model_id,
+                device=self.device,
+                revision=revision,
+            )
             self._backend = model
             self._preprocess = processor
-        except (ImportError, RuntimeError, AttributeError, ValueError, TypeError):
-            self._load_siglip_transformers_fallback()
-
-    def _load_siglip_transformers_fallback(self) -> None:
-        """Direct transformers-based SigLIP loading as a fallback path."""
-        from transformers import SiglipModel, SiglipProcessor  # type: ignore
-
-        model_id = "google/siglip-base-patch16-224"
-        model = SiglipModel.from_pretrained(model_id, device_map=None)
-        if self.device in ("cuda", "mps"):
-            model = cast(Any, model).to(self.device)
-        processor = SiglipProcessor.from_pretrained(model_id)
-        self._backend = model
-        self._preprocess = processor
+        except (
+            ImportError,
+            RuntimeError,
+            AttributeError,
+            ValueError,
+            TypeError,
+        ) as exc:
+            raise RuntimeError("SigLIP backend unavailable") from exc
 
     def _load_bge_visualized(self) -> None:
         # Optional path; raise clear error if selected without deps
@@ -524,6 +528,9 @@ class ImageEmbedder:
             and preprocess is not None
             and hasattr(backend, "get_image_features")
         ):
+            # Import once before the batch loop to avoid repeated import lookups.
+            from src.utils.vision_siglip import siglip_features
+
             backend_any = cast(Any, backend)
             # Processor returns dict with pixel_values
             proc = cast(Any, preprocess)
@@ -543,9 +550,10 @@ class ImageEmbedder:
                 elif self.device == "mps":
                     pix = pix.to("mps")
                 with TORCH.no_grad():
-                    f = backend_any.get_image_features(pixel_values=pix)
-                    if normalize:
-                        f = f / f.norm(dim=-1, keepdim=True)
+                    f = siglip_features(
+                        backend_any.get_image_features(pixel_values=pix),
+                        normalize=normalize,
+                    )
                     out_list.append(f.detach().cpu().numpy().astype(np.float32))
             return np.concatenate(out_list, axis=0)
 

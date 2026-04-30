@@ -22,6 +22,10 @@ from loguru import logger
 from qdrant_client.http import models as qmodels
 
 from src.config.settings import DocMindSettings, settings
+from src.config.settings_utils import (
+    endpoint_url_allowed,
+    parse_endpoint_allowlist_hosts,
+)
 from src.utils.log_safety import build_pii_log_entry, safe_url_for_log
 from src.utils.telemetry import log_jsonl
 
@@ -224,6 +228,8 @@ def _download_qdrant_snapshot(
     snapshot_name: str,
     dest_file: Path,
     timeout_s: int,
+    allow_remote_endpoints: bool,
+    allowed_hosts: set[str],
 ) -> int:
     """Download a Qdrant snapshot.
 
@@ -234,6 +240,9 @@ def _download_qdrant_snapshot(
         snapshot_name: Name of the snapshot to download.
         dest_file: Destination file to create.
         timeout_s: Timeout in seconds.
+        allow_remote_endpoints: Whether non-local endpoints are allowed
+            without the endpoint allowlist.
+        allowed_hosts: Canonical endpoint host allowlist for SSRF checks.
 
     Returns:
         The total size of the downloaded snapshot in bytes.
@@ -247,13 +256,23 @@ def _download_qdrant_snapshot(
             URL is invalid.
     """
     base = qdrant_url.rstrip("/")
+    parsed_base = urllib.parse.urlparse(base)
+    if parsed_base.scheme not in {"http", "https"}:
+        raise ValueError("Qdrant snapshot URL must use http or https")
+    if not allow_remote_endpoints and not endpoint_url_allowed(
+        base,
+        allowed_hosts=allowed_hosts,
+    ):
+        raise ValueError("Qdrant snapshot URL is not allowed by endpoint policy")
     url = (
         f"{base}/collections/{urllib.parse.quote(collection)}/snapshots/"
         f"{urllib.parse.quote(snapshot_name)}"
     )
     headers = {"api-key": api_key} if api_key else {}
-    req = urllib.request.Request(url, method="GET", headers=headers)  # noqa: S310
-    with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310
+    # B310 is safe here: qdrant_url comes from typed DocMind settings, and the
+    # scheme is validated above before the request is issued.
+    req = urllib.request.Request(url, method="GET", headers=headers)  # noqa: S310 # nosec B310
+    with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310 # nosec B310
         _safe_mkdir(dest_file.parent)
         with dest_file.open("wb") as f:
             shutil.copyfileobj(resp, f)
@@ -308,6 +327,7 @@ def _create_qdrant_snapshots(
     if api_key is not None:
         api_key = api_key.strip() or None
     snapshots: list[QdrantSnapshotFile] = []
+    allowed_hosts = parse_endpoint_allowlist_hosts(cfg.security.endpoint_allowlist)
 
     with create_sync_client() as client:
         collections = {c.name for c in client.get_collections().collections}
@@ -362,6 +382,8 @@ def _create_qdrant_snapshots(
                     snapshot_name=snapshot_name,
                     dest_file=dest_file,
                     timeout_s=timeout_s,
+                    allow_remote_endpoints=cfg.security.allow_remote_endpoints,
+                    allowed_hosts=allowed_hosts,
                 )
                 bytes_written += snapshot_bytes
                 snapshots.append(

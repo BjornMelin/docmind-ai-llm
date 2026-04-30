@@ -28,7 +28,7 @@ Deliver a minimal, library‑first embedding stack for text and images, removing
   - BGE‑M3 dense (LlamaIndex embed model) + FastEmbed sparse (BM42/BM25) for hybrid alignment with Qdrant Query API.
 
 - Images:
-  - Transformers SigLIP (default) via `SiglipModel` + `SiglipProcessor`, using `get_image_features()` / `get_text_features()`.
+  - Transformers SigLIP (default) via `SiglipModel` + `SiglipProcessor`, using `get_image_features()` / `get_text_features()` with a curated revision pin for the default model only.
   - OpenCLIP optionally via `open_clip.create_model_and_transforms('ViT-L-14'|'ViT-H-14', pretrained=...)` when explicitly required.
   - In LlamaIndex contexts, use a SigLIP adapter or `TextImageReranker` equivalents; avoid legacy CLIP-first wrappers.
   - Metadata: set `image_backbone="siglip"` for image/page nodes; default DPI≈200 for page image renders.
@@ -52,7 +52,9 @@ Deliver a minimal, library‑first embedding stack for text and images, removing
 
    - Remove BGEM3 tri‑mode specific wrappers; avoid duplicative adapters.
    - Remove CLIP VRAM heuristic helpers and any nonessential image preprocess shims.
-   - Keep a single, minimal SigLIP adapter for visual similarities only where needed; otherwise use Transformers directly.
+   - Keep a single, minimal SigLIP adapter for visual similarities only where
+     needed; route Hugging Face SigLIP model/processor loading through
+     `src/utils/vision_siglip.py`.
 
 4) Tests
 

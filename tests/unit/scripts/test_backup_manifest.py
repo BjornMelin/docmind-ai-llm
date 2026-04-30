@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import io
 import json
+from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
 
+from src.persistence import backup_service as mod
 from src.persistence.backup_service import create_backup
 from tests.fixtures.test_settings import create_test_settings
 
@@ -91,3 +94,44 @@ def test_create_backup_requires_enabled(
 
     with pytest.raises(ValueError, match="Backups are disabled"):
         create_backup(dest_root=tmp_path / "backups", qdrant_snapshot=False, cfg=cfg)
+
+
+@pytest.mark.unit
+def test_qdrant_snapshot_download_skips_allowlist_when_remote_enabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Remote snapshot downloads skip allowlist checks.
+
+    Args:
+        tmp_path: Temporary path fixture.
+        monkeypatch: Pytest monkeypatch fixture.
+
+    Returns:
+        None.
+    """
+    monkeypatch.chdir(tmp_path)
+
+    def _deny_allowlist(*args: object, **kwargs: object) -> bool:
+        raise AssertionError("endpoint allowlist should not be consulted")
+
+    monkeypatch.setattr(mod, "endpoint_url_allowed", _deny_allowlist)
+    monkeypatch.setattr(
+        mod.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: nullcontext(io.BytesIO(b"snapshot-bytes")),
+    )
+
+    dest_file = tmp_path / "qdrant" / "collection" / "snapshot.bin"
+    written = mod._download_qdrant_snapshot(
+        qdrant_url="https://qdrant.example.com",
+        api_key=None,
+        collection="collection",
+        snapshot_name="snapshot.bin",
+        dest_file=dest_file,
+        timeout_s=5,
+        allow_remote_endpoints=True,
+        allowed_hosts=set(),
+    )
+
+    assert written == len(b"snapshot-bytes")
+    assert dest_file.read_bytes() == b"snapshot-bytes"

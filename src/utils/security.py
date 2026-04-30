@@ -149,10 +149,13 @@ def validate_export_path(base_or_dest: Path | str, dest_rel: str | None = None):
         dest = Path(rel)
         # In single-arg mode, constrain absolute paths to safe prefixes
         if single_arg_mode:
-            safe_roots = [Path.cwd().resolve(), Path("/tmp"), Path("/var/tmp")]
-            if not any(
-                str(dest.resolve()).startswith(str(root)) for root in safe_roots
-            ):
+            safe_roots = [
+                Path.cwd().resolve(),
+                Path("/tmp").resolve(),
+                Path("/var/tmp").resolve(),
+            ]  # nosec B108
+            dest_resolved = dest.resolve(strict=False)
+            if not any(dest_resolved.is_relative_to(root) for root in safe_roots):
                 raise ValueError("Export path is outside the project root")
         if dest.exists() and dest.is_symlink():
             raise ValueError("Symlink export target blocked")

@@ -1,9 +1,6 @@
-"""Unit tests for SiglipEmbedding covering unified and fallback paths."""
+"""Unit tests for SiglipEmbedding canonical loader behavior."""
 
 from __future__ import annotations
-
-import sys
-import types
 
 import numpy as np
 import pytest
@@ -16,10 +13,14 @@ def test_ensure_loaded_prefers_unified_loader(monkeypatch):
     sentinel_model = object()
     sentinel_proc = object()
 
-    stub = types.SimpleNamespace(
-        load_siglip=lambda model_id, device: (sentinel_model, sentinel_proc, "cuda")
+    monkeypatch.setattr(
+        "src.utils.siglip_adapter.load_siglip",
+        lambda model_id, device, revision=None: (
+            sentinel_model,
+            sentinel_proc,
+            "cuda",
+        ),
     )
-    monkeypatch.setitem(sys.modules, "src.utils.vision_siglip", stub)
 
     emb = SiglipEmbedding(model_id="test", device="cpu")
     emb._ensure_loaded()
@@ -30,26 +31,21 @@ def test_ensure_loaded_prefers_unified_loader(monkeypatch):
 
 
 @pytest.mark.unit
-def test_ensure_loaded_falls_back_to_transformers(monkeypatch):
-    stub = types.SimpleNamespace(
-        load_siglip=lambda *_: (_ for _ in ()).throw(RuntimeError("fail"))
-    )
-    monkeypatch.setitem(sys.modules, "src.utils.vision_siglip", stub)
+def test_get_image_embedding_fails_open_when_loader_fails(monkeypatch):
+    def _fail_loader(*_args, **_kwargs):
+        raise RuntimeError("fail")
 
-    fake_model = types.SimpleNamespace(config=types.SimpleNamespace(projection_dim=384))
-    fake_proc = object()
-    transformers = types.SimpleNamespace(
-        SiglipModel=types.SimpleNamespace(from_pretrained=lambda _mid: fake_model),
-        SiglipProcessor=types.SimpleNamespace(from_pretrained=lambda _mid: fake_proc),
+    monkeypatch.setattr(
+        "src.utils.siglip_adapter.load_siglip",
+        _fail_loader,
     )
-    monkeypatch.setitem(sys.modules, "transformers", transformers)
 
     emb = SiglipEmbedding(model_id="test", device="cpu")
-    emb._ensure_loaded()
+    emb._dim = 384
+    vec = emb.get_image_embedding(object())
 
-    assert emb._model is fake_model
-    assert emb._proc is fake_proc
-    assert emb._dim == 384
+    assert vec.shape == (384,)
+    assert np.all(vec == 0.0)
 
 
 @pytest.mark.unit

@@ -288,7 +288,9 @@ def _configure_llm() -> None:
             type(err).__name__,
             redaction.redacted,
         )
-        Settings.llm = None
+        # LlamaIndex Settings.llm is not typed as nullable, but failure paths
+        # must clear the global runtime slot so later configuration can retry.
+        cast(Any, Settings).llm = None
         return
 
     try:
@@ -316,7 +318,9 @@ def _configure_llm() -> None:
             type(exc).__name__,
             redaction.redacted,
         )
-        Settings.llm = None
+        # LlamaIndex Settings.llm is not typed as nullable, but failure paths
+        # must clear the global runtime slot so later configuration can retry.
+        cast(Any, Settings).llm = None
 
 
 def get_settings_embed_model() -> BaseEmbedding | None:
@@ -380,7 +384,7 @@ def _configure_embeddings() -> None:
             type(exc).__name__,
             redaction.redacted,
         )
-        Settings.embed_model = None
+        cast(Any, Settings).embed_model = None
 
 
 def _configure_context_settings() -> None:

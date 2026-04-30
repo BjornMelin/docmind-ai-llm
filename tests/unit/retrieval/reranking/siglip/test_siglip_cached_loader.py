@@ -9,6 +9,7 @@ from __future__ import annotations
 import importlib
 import sys
 from types import ModuleType, SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
@@ -23,7 +24,8 @@ def test_siglip_loader_cached(monkeypatch):
 
     class _FakeModel:
         @staticmethod
-        def from_pretrained(_id):  # type: ignore[no-untyped-def]
+        def from_pretrained(_id, revision=None):  # type: ignore[no-untyped-def]
+            assert revision is not None
             calls["model"] += 1
             return SimpleNamespace(
                 get_text_features=lambda **_: 0,
@@ -32,7 +34,8 @@ def test_siglip_loader_cached(monkeypatch):
 
     class _FakeProcessor:
         @staticmethod
-        def from_pretrained(_id):  # type: ignore[no-untyped-def]
+        def from_pretrained(_id, revision=None):  # type: ignore[no-untyped-def]
+            assert revision is not None
             calls["proc"] += 1
             return SimpleNamespace()
 
@@ -40,7 +43,10 @@ def test_siglip_loader_cached(monkeypatch):
         rr,
         "settings",
         SimpleNamespace(
-            embedding=SimpleNamespace(siglip_model_id="google/siglip-base-patch16-224"),
+            embedding=SimpleNamespace(
+                siglip_model_id="google/siglip-base-patch16-224",
+                siglip_model_revision="test-revision",
+            ),
             retrieval=SimpleNamespace(
                 text_rerank_timeout_ms=10, siglip_timeout_ms=10, colpali_timeout_ms=10
             ),
@@ -52,7 +58,7 @@ def test_siglip_loader_cached(monkeypatch):
     monkeypatch.setenv("TRANSFORMERS_OFFLINE", "1")
 
     # Inject fake transformers module used by the loader
-    fake_tf = ModuleType("transformers")
+    fake_tf = cast(Any, ModuleType("transformers"))
     fake_tf.SiglipModel = _FakeModel
     fake_tf.SiglipProcessor = _FakeProcessor
     monkeypatch.setitem(sys.modules, "transformers", fake_tf)

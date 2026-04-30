@@ -8,8 +8,10 @@ deterministic zero vectors.
 from __future__ import annotations
 
 from types import ModuleType
+from typing import Any
 
 import numpy as np
+import pytest
 
 
 def test_siglip_embedding_returns_zeros_when_not_loaded(monkeypatch):
@@ -71,7 +73,7 @@ def test_siglip_embedding_forward_error_returns_zero(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    torch_stub = ModuleType("torch")
+    torch_stub: Any = ModuleType("torch")
     torch_stub.no_grad = _NoGrad
     monkeypatch.setitem(__import__("sys").modules, "torch", torch_stub)
 
@@ -104,3 +106,41 @@ def test_siglip_adapter_dim_inference_from_config(monkeypatch):
     monkeypatch.setattr(s, "_ensure_loaded", _fake_ensure)
     _ = s.get_image_embedding(image=None)
     assert s._dim == 640
+
+
+@pytest.mark.unit
+def test_siglip_adapter_try_ensure_loaded_catches_unexpected_errors(monkeypatch):
+    """_try_ensure_loaded should fail open on unexpected load-time exceptions."""
+    from src.utils.siglip_adapter import SiglipEmbedding
+
+    s = SiglipEmbedding(model_id="dummy/ok", device="cpu")
+
+    def _raise():
+        raise KeyError("boom")
+
+    monkeypatch.setattr(s, "_ensure_loaded", _raise)
+
+    assert s._try_ensure_loaded() is False
+
+
+@pytest.mark.unit
+def test_siglip_adapter_uses_config_revision_for_explicit_model(monkeypatch):
+    """Explicit model IDs still inherit the configured SigLIP revision."""
+    from types import SimpleNamespace
+
+    from src.config import settings as app_settings
+    from src.utils.siglip_adapter import SiglipEmbedding
+
+    monkeypatch.setattr(
+        app_settings,
+        "embedding",
+        SimpleNamespace(
+            siglip_model_id="google/siglip-base-patch16-224",
+            siglip_model_revision="configured-revision",
+        ),
+        raising=False,
+    )
+
+    emb = SiglipEmbedding(model_id="example/custom-siglip", device="cpu")
+    assert emb.model_id == "example/custom-siglip"
+    assert emb.revision == "configured-revision"

@@ -472,7 +472,9 @@ flowchart TD
 ### Hybrid Retrieval Architecture
 
 - **Unified Text Embeddings:** BGE-M3 (BAAI/bge-m3) via LlamaIndex for dense vectors (1024D); sparse query vectors via FastEmbed BM42/BM25 when available.
-- **Multimodal:** SigLIP visual scoring by default; OpenCLIP optional. ColPali visual reranking is optional (multimodal extra).
+- **Multimodal:** SigLIP visual scoring by default via the shared pinned
+  `src/utils/vision_siglip.py` loader; OpenCLIP optional. ColPali visual
+  reranking is optional (multimodal extra).
 - **Multimodal retrieval (PDF images):** `multimodal_search` fuses text hybrid with SigLIP text→image retrieval over a dedicated Qdrant image collection and returns image-bearing sources for rendering.
 - **Fusion:** Server-side RRF via Qdrant Query API when `DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=true` (DBSF optional).
 - **Deduplication:** Configurable key via `DOCMIND_RETRIEVAL__DEDUP_KEY` (page_id|doc_id); default = `page_id`.
@@ -552,6 +554,9 @@ DOCMIND_OLLAMA_BASE_URL=http://localhost:11434
 
 # Embeddings
 DOCMIND_EMBEDDING__MODEL_NAME=BAAI/bge-m3
+# Optional: only set when pinning a custom SigLIP model to a matching revision.
+# The default SigLIP model uses DocMind's curated revision automatically.
+# DOCMIND_EMBEDDING__SIGLIP_MODEL_REVISION=7fd15f0689c79d79e38b1c2e2e2370a7bf2761ed
 
 # Retrieval / reranking
 DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=false

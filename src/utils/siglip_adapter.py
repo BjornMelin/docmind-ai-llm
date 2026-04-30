@@ -10,6 +10,11 @@ from typing import Any
 import numpy as np
 from loguru import logger
 
+from src.utils.vision_siglip import (
+    load_siglip,
+    siglip_features,
+)
+
 
 class SiglipEmbedding:
     """Minimal SigLIP adapter exposing `get_image_embedding`.
@@ -27,16 +32,30 @@ class SiglipEmbedding:
 
         Args:
             model_id: Hugging Face model identifier for SigLIP.
-            device: Optional device override ("cpu"|"cuda"). When None, auto.
+            device: Optional device override ("cpu"|"cuda"|"mps"|"auto").
+                When None, auto-select the best available device.
         """
-        if model_id is None:
+        revision: str | None = None
+        if model_id is None or revision is None:
             try:
                 from src.config import settings as app_settings  # local import
 
-                model_id = getattr(app_settings.embedding, "siglip_model_id", None)
+                if model_id is None:
+                    model_id = getattr(
+                        app_settings.embedding,
+                        "siglip_model_id",
+                        None,
+                    )
+                if revision is None:
+                    revision = getattr(
+                        app_settings.embedding,
+                        "siglip_model_revision",
+                        None,
+                    )
             except (ImportError, AttributeError):
-                model_id = None
+                pass
         self.model_id = model_id or "google/siglip-base-patch16-224"
+        self.revision = revision
         # Delegate device selection to shared helper with safe fallback
         self.device = device or self._choose_device()
         self._model: Any | None = None
@@ -71,50 +90,17 @@ class SiglipEmbedding:
             except AttributeError:
                 return "cpu"
 
-    def _load_siglip_transformers(self) -> None:
-        """Direct transformers-based SigLIP loading fallback."""
-        from transformers import SiglipModel, SiglipProcessor  # type: ignore
-
-        model: Any = SiglipModel.from_pretrained(self.model_id)
-        if self.device in ("cuda", "mps"):
-            model = model.to(self.device)
-        proc = SiglipProcessor.from_pretrained(self.model_id)
-        self._model = model
-        self._proc = proc
-
     def _ensure_loaded(self) -> None:
         if self._model is not None and self._proc is not None:
             return
-        # Gate unified loader via settings flag
-        use_unified = True
-        try:
-            from src.config import settings as app_settings
-
-            use_unified = bool(
-                getattr(app_settings.retrieval, "siglip_adapter_unified", True)
-            )
-        except (ImportError, AttributeError):  # pragma: no cover - settings import edge
-            use_unified = True
-
-        if use_unified:
-            try:
-                from src.utils.vision_siglip import load_siglip
-
-                model, proc, dev = load_siglip(self.model_id, self.device)
-                self.device = dev
-                self._model = model
-                self._proc = proc
-            except (
-                ImportError,
-                AttributeError,
-                RuntimeError,
-                ValueError,
-                TypeError,
-            ):
-                # Fallback to direct transformers path
-                self._load_siglip_transformers()
-        else:
-            self._load_siglip_transformers()
+        model, proc, dev = load_siglip(
+            self.model_id,
+            self.device,
+            self.revision,
+        )
+        self.device = dev
+        self._model = model
+        self._proc = proc
         # best-effort dimension
         try:
             cfg = getattr(getattr(self, "_model", None), "config", None)
@@ -122,6 +108,14 @@ class SiglipEmbedding:
             self._dim = proj or None
         except (AttributeError, ValueError, TypeError):
             self._dim = None
+
+    def _try_ensure_loaded(self) -> bool:
+        """Load SigLIP dependencies, preserving optional-dependency fail-open."""
+        try:
+            self._ensure_loaded()
+            return self._model is not None and self._proc is not None
+        except Exception:
+            return False
 
     def _move_to_device(self, tensor: Any | None) -> Any | None:
         if tensor is None:
@@ -141,8 +135,7 @@ class SiglipEmbedding:
         Returns:
             numpy.ndarray: 1-D vector of visual features.
         """
-        self._ensure_loaded()
-        if self._model is None or self._proc is None:
+        if not self._try_ensure_loaded():
             dim = int(self._dim or 768)
             return np.zeros(dim, dtype=np.float32)
         try:
@@ -154,8 +147,9 @@ class SiglipEmbedding:
                 raise RuntimeError("SigLIP processor returned no pixel_values")
             pix = self._move_to_device(pix)
             with torch.no_grad():  # type: ignore[name-defined]
-                feats = self._model.get_image_features(pixel_values=pix)  # type: ignore[union-attr]
-                feats = feats / feats.norm(dim=-1, keepdim=True)
+                feats = siglip_features(
+                    self._model.get_image_features(pixel_values=pix)  # type: ignore[union-attr]
+                )
                 vec = feats[0].detach().cpu().numpy().astype(np.float32)
             return vec
         except (ImportError, AttributeError, RuntimeError, ValueError, TypeError):
@@ -167,8 +161,7 @@ class SiglipEmbedding:
 
         This enables cross-modal text->image retrieval in the same SigLIP space.
         """
-        self._ensure_loaded()
-        if self._model is None or self._proc is None:
+        if not self._try_ensure_loaded():
             dim = int(self._dim or 768)
             return np.zeros(dim, dtype=np.float32)
         try:
@@ -185,11 +178,12 @@ class SiglipEmbedding:
             input_ids = self._move_to_device(input_ids)
             attn = self._move_to_device(attn)
             with torch.no_grad():  # type: ignore[name-defined]
-                feats = self._model.get_text_features(  # type: ignore[union-attr]
-                    input_ids=input_ids,
-                    attention_mask=attn,
+                feats = siglip_features(
+                    self._model.get_text_features(  # type: ignore[union-attr]
+                        input_ids=input_ids,
+                        attention_mask=attn,
+                    )
                 )
-                feats = feats / feats.norm(dim=-1, keepdim=True)
                 vec = feats[0].detach().cpu().numpy().astype(np.float32)
             return vec
         except (ImportError, AttributeError, RuntimeError, ValueError, TypeError):
@@ -203,8 +197,7 @@ class SiglipEmbedding:
         if not images:
             dim = int(self._dim or 768)
             return np.empty((0, dim), dtype=np.float32)
-        self._ensure_loaded()
-        if self._model is None or self._proc is None:
+        if not self._try_ensure_loaded():
             dim = int(self._dim or 768)
             return np.zeros((len(images), dim), dtype=np.float32)
 
@@ -225,8 +218,9 @@ class SiglipEmbedding:
                     raise RuntimeError("SigLIP processor returned no pixel_values")
                 pix = self._move_to_device(pix)
                 with torch.no_grad():  # type: ignore[name-defined]
-                    feats = self._model.get_image_features(pixel_values=pix)  # type: ignore[union-attr]
-                    feats = feats / feats.norm(dim=-1, keepdim=True)
+                    feats = siglip_features(
+                        self._model.get_image_features(pixel_values=pix)  # type: ignore[union-attr]
+                    )
                     out.append(feats.detach().cpu().numpy().astype(np.float32))
         except Exception as exc:
             from src.utils.log_safety import build_pii_log_entry
@@ -255,8 +249,7 @@ class SiglipEmbedding:
         if not texts:
             dim = int(self._dim or 768)
             return np.empty((0, dim), dtype=np.float32)
-        self._ensure_loaded()
-        if self._model is None or self._proc is None:
+        if not self._try_ensure_loaded():
             dim = int(self._dim or 768)
             return np.zeros((len(texts), dim), dtype=np.float32)
 
@@ -282,11 +275,12 @@ class SiglipEmbedding:
                 input_ids = self._move_to_device(input_ids)
                 attn = self._move_to_device(attn)
                 with torch.no_grad():  # type: ignore[name-defined]
-                    feats = self._model.get_text_features(  # type: ignore[union-attr]
-                        input_ids=input_ids,
-                        attention_mask=attn,
+                    feats = siglip_features(
+                        self._model.get_text_features(  # type: ignore[union-attr]
+                            input_ids=input_ids,
+                            attention_mask=attn,
+                        )
                     )
-                    feats = feats / feats.norm(dim=-1, keepdim=True)
                     out.append(feats.detach().cpu().numpy().astype(np.float32))
         except Exception as exc:
             from src.utils.log_safety import build_pii_log_entry

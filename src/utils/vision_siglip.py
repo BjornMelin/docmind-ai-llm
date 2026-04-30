@@ -7,34 +7,93 @@ with device selection delegated to utils.core.select_device.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Any
+from typing import Any, cast
 
 from src.utils.core import select_device
 
+DEFAULT_SIGLIP_MODEL_ID = "google/siglip-base-patch16-224"
+DEFAULT_SIGLIP_MODEL_REVISION = "7fd15f0689c79d79e38b1c2e2e2370a7bf2761ed"
+
+
+def siglip_features(output: Any, *, normalize: bool = True) -> Any:
+    """Return SigLIP feature tensors across Transformers v4 and v5 APIs.
+
+    Transformers v4 returned tensors directly from ``get_*_features``. In
+    Transformers v5 those methods return model output objects with
+    ``pooler_output``. Keeping this normalization local prevents each caller
+    from depending on a specific Transformers major version.
+
+    Args:
+        output: Model output object or tensor returned by SigLIP feature
+            extractors.
+        normalize: Whether to L2-normalize the feature tensor.
+
+    Returns:
+        The SigLIP feature tensor, normalized by default.
+    """
+    features = getattr(output, "pooler_output", output)
+    if isinstance(features, (tuple, list)):
+        if not features:
+            return features
+        features = features[0]
+    if normalize:
+        norm = features.norm(dim=-1, keepdim=True)
+        if hasattr(norm, "clamp_min"):
+            norm = norm.clamp_min(1e-12)
+        else:
+            try:
+                norm = max(float(norm), 1e-12)
+            except (TypeError, ValueError):
+                norm = 1e-12
+        return features / norm
+    return features
+
 
 @lru_cache(maxsize=16)
-def _cached(model_id: str, device: str) -> tuple[Any, Any, str]:
+def _cached(model_id: str, revision: str | None, device: str) -> tuple[Any, Any, str]:
     from transformers import SiglipModel, SiglipProcessor  # type: ignore
 
-    model: Any = SiglipModel.from_pretrained(model_id)
-    if device == "cuda" and hasattr(model, "to"):
-        model = model.to("cuda")
-    processor = SiglipProcessor.from_pretrained(model_id)
+    pretrained_kwargs = {"revision": revision} if revision is not None else {}
+    siglip_model = cast(Any, SiglipModel)
+    siglip_processor = cast(Any, SiglipProcessor)
+    model: Any = siglip_model.from_pretrained(  # nosec B615
+        model_id,
+        **pretrained_kwargs,
+    )
+    if device in {"cuda", "mps"} and hasattr(model, "to"):
+        model = model.to(device)
+    processor = siglip_processor.from_pretrained(  # nosec B615
+        model_id,
+        **pretrained_kwargs,
+    )
     return model, processor, device
 
 
 def load_siglip(
-    model_id: str | None = None, device: str | None = None
+    model_id: str | None = None,
+    device: str | None = None,
+    revision: str | None = None,
 ) -> tuple[Any, Any, str]:
     """Load SigLIP model+processor and choose device.
 
     Args:
         model_id: Hugging Face model id. Defaults to google/siglip-base-patch16-224.
         device: Preferred device ("auto"|"cpu"|"cuda"|"mps"). Defaults to auto.
+        revision: Pinned Hugging Face revision for supply-chain stability.
 
     Returns:
         (model, processor, device_str)
     """
-    resolved_id = model_id or "google/siglip-base-patch16-224"
+    resolved_id = model_id or DEFAULT_SIGLIP_MODEL_ID
+    resolved_revision = _resolve_revision(resolved_id, revision)
     dev = select_device(device or "auto")
-    return _cached(resolved_id, dev)
+    return _cached(resolved_id, resolved_revision, dev)
+
+
+def _resolve_revision(model_id: str, revision: str | None) -> str | None:
+    """Resolve the revision pin without applying default pins to custom models."""
+    if isinstance(revision, str):
+        revision = revision.strip() or None
+    if model_id == DEFAULT_SIGLIP_MODEL_ID:
+        return revision or DEFAULT_SIGLIP_MODEL_REVISION
+    return revision

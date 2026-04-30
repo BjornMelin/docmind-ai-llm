@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import sys
 from types import SimpleNamespace
 
 
@@ -14,16 +15,16 @@ def test_siglip_loader_device_and_cache(monkeypatch):
     # Fake transformers with stable class identities
     class _M:
         @staticmethod
-        def from_pretrained(_id):
+        def from_pretrained(_id, revision=None):
             return SimpleNamespace(to=lambda _d: SimpleNamespace())
 
     class _P:
         @staticmethod
-        def from_pretrained(_id):
+        def from_pretrained(_id, revision=None):
             return SimpleNamespace()
 
     fake_tf = SimpleNamespace(SiglipModel=_M, SiglipProcessor=_P)
-    monkeypatch.setitem(importlib.sys.modules, "transformers", fake_tf)
+    monkeypatch.setitem(sys.modules, "transformers", fake_tf)
     # Clear cache to avoid interference
     vision._cached.cache_clear()
 

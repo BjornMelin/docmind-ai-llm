@@ -29,12 +29,15 @@ CHAT_SESSION_TABLE = "chat_session"
 # DocMind store tables (memory store)
 STORE_ITEMS_TABLE = "docmind_store_items"
 STORE_VEC_TABLE = "docmind_store_vec"
+# Safe SQL generation: table names are compile-time constants, ns indexes are
+# bounded by _MAX_NS_DEPTH, and ns values are bound as query parameters.
 _NS_DELETE_VEC = {
-    i: f"DELETE FROM {STORE_VEC_TABLE} WHERE ns{i}=?;"  # noqa: S608
+    i: f"DELETE FROM {STORE_VEC_TABLE} WHERE ns{i}=?;"  # noqa: S608 # nosec
     for i in range(_MAX_NS_DEPTH)
 }
+# Same safety constraints as _NS_DELETE_VEC.
 _NS_DELETE_ITEMS = {
-    i: f"DELETE FROM {STORE_ITEMS_TABLE} WHERE ns{i}=?;"  # noqa: S608
+    i: f"DELETE FROM {STORE_ITEMS_TABLE} WHERE ns{i}=?;"  # noqa: S608 # nosec
     for i in range(_MAX_NS_DEPTH)
 }
 

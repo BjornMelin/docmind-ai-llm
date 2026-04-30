@@ -88,7 +88,7 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
 - Python: `>=3.12,<3.14` (primary dev/runtime: Python 3.12.13)
 - Keep these coupled:
-  - Torch 2.8.x ↔ Transformers `<5.0` (vLLM is external-only via OpenAI-compatible HTTP)
+  - Torch 2.8.x ↔ Transformers `>=5.0,<6.0` (vLLM is external-only via OpenAI-compatible HTTP)
   - DuckDB `<1.4.0` (LlamaIndex integrations cap it)
   - LlamaIndex packages stay `<0.15.0`
   - Streamlit `<2.0.0`
@@ -157,6 +157,9 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
 - Text rerank: BGE cross-encoder (`BAAI/bge-reranker-v2-m3`).
 - Visual rerank: SigLIP when image nodes exist; ColPali is optional (`--extra multimodal`).
+- SigLIP Hugging Face model/processor loading is centralized in
+  `src/utils/vision_siglip.py`; do not add alternate `from_pretrained` loaders,
+  fallback canary flags, or duplicate revision pins.
 - Fail open on timeouts; respect `settings.retrieval.*_timeout_ms`.
 
 ## DSPy (opt)

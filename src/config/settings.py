@@ -629,6 +629,28 @@ class EmbeddingConfig(BaseModel):
     # Images
     image_backbone: ImageBackboneName = Field(default="auto")
     siglip_model_id: str = Field(default="google/siglip-base-patch16-224")
+    siglip_model_revision: str | None = Field(
+        default=None,
+        description=(
+            "Optional pinned Hugging Face revision for SigLIP. When unset, the "
+            "default SigLIP model uses the repo-curated revision pin; custom "
+            "model IDs load without a revision unless explicitly configured."
+        ),
+    )
+
+    @field_validator("siglip_model_revision", mode="before")
+    @classmethod
+    def _normalize_siglip_model_revision(
+        cls,
+        value: Any,
+    ) -> str | None:
+        """Normalize blank SigLIP revisions to `None`."""
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
     normalize_image: bool = Field(default=True)
     batch_size_image: int = Field(default=8, ge=1, le=64)
 
@@ -700,10 +722,6 @@ class RetrievalConfig(BaseModel):
     device_policy_core: bool = Field(
         default=True,
         description=("Route device/VRAM checks via src.utils.core"),
-    )
-    siglip_adapter_unified: bool = Field(
-        default=True,
-        description=("Use shared vision_siglip.load_siglip in adapter"),
     )
     rerank_executor: Literal["thread", "process"] = Field(
         default="thread",
@@ -1426,6 +1444,7 @@ class DocMindSettings(BaseSettings):
             "enable_sparse": self.embedding.enable_sparse,
             # Images
             "image_backbone": self.embedding.image_backbone,
+            "siglip_model_revision": self.embedding.siglip_model_revision,
             "batch_size_image": self.embedding.batch_size_image,
             "normalize_image": self.embedding.normalize_image,
             # Misc

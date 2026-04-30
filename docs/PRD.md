@@ -10,7 +10,7 @@
 > - **128K Context Support**: Full 131,072 token context window with FP8 KV cache optimization
 > - **VRAM Optimization**: Validated 12-14 GB VRAM usage on RTX 4090 Laptop hardware
 > - **Token Efficiency**: Achieved 50-87% token reduction through parallel tool execution
-> - **GPU Stack**: CUDA 12.8+, PyTorch 2.8.x (CUDA wheels via PyTorch index; coupled with Transformers <5.0), vLLM runs out-of-process
+> - **GPU Stack**: CUDA 12.8+, PyTorch 2.8.x (CUDA wheels via PyTorch index; coupled with Transformers 5.x), vLLM runs out-of-process
 >
 > - **Library-First Ingestion Pipeline**: LlamaIndex `IngestionPipeline` with DuckDB cache, deterministic hashing, and AES-GCM page image support
 > - **Snapshot Persistence**: Portalocker-backed SnapshotManager with tri-file manifests, CURRENT pointer discipline, GraphRAG export packaging
