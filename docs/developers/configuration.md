@@ -399,11 +399,23 @@ DOCMIND_RETRIEVAL__USE_RERANKING=true
 
 ```env
 DOCMIND_LLM_BACKEND=llamacpp
+DOCMIND_LLAMACPP_BASE_URL=http://localhost:8080/v1
+DOCMIND_MODEL=local-gguf
 DOCMIND_ENABLE_GPU_ACCELERATION=false
 DOCMIND_EMBEDDING__EMBED_DEVICE=cpu
 DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false
 DOCMIND_HF_HUB_OFFLINE=1
 ```
+
+Run llama.cpp out of process:
+
+```bash
+llama-server -m ./models/model.gguf --alias local-gguf \
+  --ctx-size 8192 --host 127.0.0.1 --port 8080
+```
+
+Use `--alias` as `DOCMIND_MODEL`. Keep `DOCMIND_LLAMACPP_BASE_URL`
+normalized to `/v1`; DocMind probes `/health` and `/v1/models` from Settings.
 
 ---
 

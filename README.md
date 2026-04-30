@@ -221,9 +221,9 @@ Design goals:
 
    # Example - llama.cpp server:
    #   DOCMIND_LLM_BACKEND=llamacpp
-   #   DOCMIND_OPENAI__BASE_URL=http://localhost:8080/v1
+   #   DOCMIND_LLAMACPP_BASE_URL=http://localhost:8080/v1
    #   DOCMIND_OPENAI__API_KEY=not-needed
-   #   DOCMIND_MODEL=your-model-name
+   #   DOCMIND_MODEL=local-gguf
 
    # Offline-first recommended:
    #   HF_HUB_OFFLINE=1
@@ -236,6 +236,23 @@ Design goals:
    #   DOCMIND_OPENAI__API_MODE=responses
    #   DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true
    ```
+
+   Start llama.cpp as an OpenAI-compatible GGUF server:
+
+   ```bash
+   # CPU / portable baseline
+   llama-server -m ./models/model.gguf --alias local-gguf \
+     --ctx-size 8192 --host 127.0.0.1 --port 8080
+
+   # CUDA or other GPU backends
+   llama-server -m ./models/model.gguf --alias local-gguf \
+     --ctx-size 8192 -ngl 999 -fa --host 127.0.0.1 --port 8080
+   ```
+
+   Use the `--alias` value as `DOCMIND_MODEL`, keep `/v1` in
+   `DOCMIND_LLAMACPP_BASE_URL`, and bind to loopback unless remote access is
+   explicitly required. For remote access, start `llama-server` with
+   `--api-key` and configure `DOCMIND_OPENAI__API_KEY`.
 
    For a complete overview, see `docs/developers/configuration.md`. The relevant section is `LLM Backend Selection`.
 

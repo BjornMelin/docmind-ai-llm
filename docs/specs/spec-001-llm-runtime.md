@@ -114,7 +114,9 @@ Feature: LLM provider selection
 
   Scenario: Use llama.cpp server
     Given I select 'llamacpp' and set base_url to http://localhost:8080/v1
+    And llama-server reports ready from /health
     Then Settings.llm SHALL be OpenAILike
+    And Settings SHALL expose /v1/models probe status
     And generation SHALL not raise exceptions
 
   Scenario: LM Studio endpoint
