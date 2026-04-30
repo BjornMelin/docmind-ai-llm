@@ -32,7 +32,8 @@ class SiglipEmbedding:
 
         Args:
             model_id: Hugging Face model identifier for SigLIP.
-            device: Optional device override ("cpu"|"cuda"). When None, auto.
+            device: Optional device override ("cpu"|"cuda"|"mps"|"auto").
+                When None, auto-select the best available device.
         """
         revision: str | None = None
         if model_id is None:
