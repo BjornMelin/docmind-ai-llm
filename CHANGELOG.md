@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [0.8.2](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.8.1...v0.8.2) (2026-04-30)
+
+
+### Bug Fixes
+
+* **release:** use plain semver release tags ([9d01e5a](https://github.com/BjornMelin/docmind-ai-llm/commit/9d01e5a055b1a6b725a531a1434388dfb8e87b0e))
+
 ## [0.8.1](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.8.0...v0.8.1) (2026-04-30)
 
 
