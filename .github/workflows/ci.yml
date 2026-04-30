@@ -15,6 +15,7 @@ permissions:
 
 jobs:
   build-test:
+    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -101,6 +102,7 @@ jobs:
           if-no-files-found: ignore
 
   container-static:
+    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
