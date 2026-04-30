@@ -313,7 +313,7 @@ Device selection MUST occur before any `spacy.load()` call to avoid device alloc
 | `DOCMIND_EMBEDDING__DIMENSION`             | int     | `1024`        | Resulting vector dimension.                     |
 | `DOCMIND_EMBEDDING__ENABLE_SPARSE`         | boolean | `true`        | Computes Lexical/BM25-style weights via BGE-M3. |
 | `DOCMIND_EMBEDDING__IMAGE_BACKBONE`        | string  | `auto`        | Preferred SigLIP backbone or `auto`.            |
-| `DOCMIND_EMBEDDING__SIGLIP_MODEL_REVISION` | string  | `unset`       | Optional SigLIP revision; uses curated default. |
+| `DOCMIND_EMBEDDING__SIGLIP_MODEL_REVISION` | string  | `unset`       | Optional SigLIP revision; the curated pin applies only to the built-in SigLIP model, while custom SigLIP model IDs stay unpinned unless this is set explicitly. |
 | `DOCMIND_EMBEDDING__BATCH_SIZE_TEXT_GPU`   | int     | `12`          | Optimization for CUDA.                          |
 | `DOCMIND_EMBEDDING__BATCH_SIZE_TEXT_CPU`   | int     | `4`           | Optimization for RAM-constrained systems.       |
 

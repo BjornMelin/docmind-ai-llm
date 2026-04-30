@@ -22,6 +22,14 @@ def siglip_features(output: Any, *, normalize: bool = True) -> Any:
     Transformers v5 those methods return model output objects with
     ``pooler_output``. Keeping this normalization local prevents each caller
     from depending on a specific Transformers major version.
+
+    Args:
+        output: Model output object or tensor returned by SigLIP feature
+            extractors.
+        normalize: Whether to L2-normalize the feature tensor.
+
+    Returns:
+        The SigLIP feature tensor, normalized by default.
     """
     features = getattr(output, "pooler_output", output)
     if normalize:

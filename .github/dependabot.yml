@@ -13,6 +13,11 @@ updates:
           - "sentence-transformers"
           - "tokenizers"
           - "accelerate"
+          - "torch"
+          - "pytorch"
+          - "numpy"
+          - "scipy"
+          - "pydantic*"
       python-security-rag:
         applies-to: "security-updates"
         patterns:
@@ -20,6 +25,10 @@ updates:
           - "langgraph*"
           - "llama-index*"
           - "qdrant-client"
+          - "duckdb"
+          - "numpy"
+          - "scipy"
+          - "pydantic*"
       python-security-app:
         applies-to: "security-updates"
         patterns:
@@ -27,6 +36,11 @@ updates:
           - "pillow"
           - "requests"
           - "urllib3"
+          - "numpy"
+          - "scipy"
+          - "pydantic*"
+          - "rapidfuzz"
+          - "ollama"
       python-runtime-hf:
         applies-to: "version-updates"
         patterns:
@@ -35,6 +49,8 @@ updates:
           - "sentence-transformers"
           - "tokenizers"
           - "accelerate"
+          - "torch"
+          - "pytorch"
       python-runtime-rag:
         applies-to: "version-updates"
         patterns:
@@ -42,8 +58,14 @@ updates:
           - "langgraph*"
           - "llama-index*"
           - "qdrant-client"
+          - "duckdb"
       python-runtime-app:
         applies-to: "version-updates"
         patterns:
           - "streamlit"
           - "pillow"
+          - "numpy"
+          - "scipy"
+          - "pydantic*"
+          - "rapidfuzz"
+          - "ollama"

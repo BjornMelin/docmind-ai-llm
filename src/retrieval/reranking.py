@@ -310,7 +310,24 @@ def _siglip_rescore(
             for k, v in txt_inputs.items():
                 txt_inputs[k] = v.to("mps")
         with torch.no_grad():  # type: ignore[name-defined]
-            tfeat = siglip_features(model.get_text_features(**txt_inputs))
+            try:
+                tfeat = siglip_features(model.get_text_features(**txt_inputs))
+            except (
+                AttributeError,
+                RuntimeError,
+                ValueError,
+                OSError,
+                TypeError,
+            ) as exc:
+                redaction = build_pii_log_entry(
+                    str(exc), key_id="reranking.siglip.fail_open"
+                )
+                logger.warning(
+                    "SigLIP text feature error; fail-open (error_type={}, error={})",
+                    type(exc).__name__,
+                    redaction.redacted,
+                )
+                return nodes
         # Batched image features via helper
         try:
             bs_conf = int(getattr(settings.retrieval, "siglip_batch_size", 0))

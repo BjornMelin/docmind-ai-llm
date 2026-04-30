@@ -45,7 +45,7 @@ Improve retrieval quality by applying **BGE Cross-Encoder** for text nodes and *
 from llama_index.core.postprocessor import SentenceTransformerRerank  # BGE text cross-encoder
 # Optional visual reranker (plugin):
 from llama_index.postprocessor.colpali_rerank import ColPaliRerank  # if installed
-# SigLIP similarity uses src.utils.vision_siglip for the pinned Transformers loader
+# SigLIP similarity uses src/utils/vision_siglip.py for the pinned Transformers loader
 ```
 
 ## File Operations

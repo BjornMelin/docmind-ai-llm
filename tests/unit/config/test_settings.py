@@ -24,6 +24,7 @@ def test_custom_siglip_model_does_not_inherit_default_revision(
 ) -> None:
     """Custom SigLIP model IDs load unpinned unless a revision is configured."""
     monkeypatch.setenv("DOCMIND_EMBEDDING__SIGLIP_MODEL_ID", "example/custom-siglip")
+    monkeypatch.delenv("DOCMIND_EMBEDDING__SIGLIP_MODEL_REVISION", raising=False)
 
     settings = DocMindSettings(_env_file=None)  # type: ignore[arg-type]
 

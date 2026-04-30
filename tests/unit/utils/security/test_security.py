@@ -41,3 +41,9 @@ def test_validate_export_path_blocks_egress() -> None:
     # Force a path that looks like an egress to root
     with pytest.raises(ValueError, match="outside the project root"):
         security.validate_export_path("/etc/passwd")
+
+
+def test_validate_export_path_blocks_tmp_prefix_bypass() -> None:
+    """validate_export_path must reject prefix lookalikes such as /tmp_evil."""
+    with pytest.raises(ValueError, match="outside the project root"):
+        security.validate_export_path("/tmp_evil/export.txt")

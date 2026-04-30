@@ -36,19 +36,24 @@ class SiglipEmbedding:
                 When None, auto-select the best available device.
         """
         revision: str | None = None
-        if model_id is None:
+        if model_id is None or revision is None:
             try:
                 from src.config import settings as app_settings  # local import
 
-                model_id = getattr(app_settings.embedding, "siglip_model_id", None)
-                revision = getattr(
-                    app_settings.embedding,
-                    "siglip_model_revision",
-                    None,
-                )
+                if model_id is None:
+                    model_id = getattr(
+                        app_settings.embedding,
+                        "siglip_model_id",
+                        None,
+                    )
+                if revision is None:
+                    revision = getattr(
+                        app_settings.embedding,
+                        "siglip_model_revision",
+                        None,
+                    )
             except (ImportError, AttributeError):
-                model_id = None
-                revision = None
+                pass
         self.model_id = model_id or "google/siglip-base-patch16-224"
         self.revision = revision
         # Delegate device selection to shared helper with safe fallback

@@ -637,6 +637,20 @@ class EmbeddingConfig(BaseModel):
             "model IDs load without a revision unless explicitly configured."
         ),
     )
+
+    @field_validator("siglip_model_revision", mode="before")
+    @classmethod
+    def _normalize_siglip_model_revision(
+        cls,
+        value: Any,
+    ) -> str | None:
+        """Normalize blank SigLIP revisions to `None`."""
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
     normalize_image: bool = Field(default=True)
     batch_size_image: int = Field(default=8, ge=1, le=64)
 

@@ -104,3 +104,25 @@ def test_siglip_adapter_dim_inference_from_config(monkeypatch):
     monkeypatch.setattr(s, "_ensure_loaded", _fake_ensure)
     _ = s.get_image_embedding(image=None)
     assert s._dim == 640
+
+
+def test_siglip_adapter_uses_config_revision_for_explicit_model(monkeypatch):
+    """Explicit model IDs still inherit the configured SigLIP revision."""
+    from types import SimpleNamespace
+
+    from src.config import settings as app_settings
+    from src.utils.siglip_adapter import SiglipEmbedding
+
+    monkeypatch.setattr(
+        app_settings,
+        "embedding",
+        SimpleNamespace(
+            siglip_model_id="google/siglip-base-patch16-224",
+            siglip_model_revision="configured-revision",
+        ),
+        raising=False,
+    )
+
+    emb = SiglipEmbedding(model_id="example/custom-siglip", device="cpu")
+    assert emb.model_id == "example/custom-siglip"
+    assert emb.revision == "configured-revision"
