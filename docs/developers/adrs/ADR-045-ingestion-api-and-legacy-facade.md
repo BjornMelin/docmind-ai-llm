@@ -45,10 +45,10 @@ To achieve a "production-ready, final-release" standard with no technical debt, 
 
 ### Decision Framework
 
-| Model / Option                    | Maintainability (40%) | Architecture Clarity (30%) | Backwards Compatibility (10%) | Implementation Cost (20%) | Total Score | Decision        |
-| --------------------------------- | --------------------- | -------------------------- | ----------------------------- | ------------------------- | ----------- | --------------- |
-| **Strict Unification (Selected)** | 10                    | 10                         | 0                             | 6                         | **8.2**     | **Selected**    |
-| Keep Facade                       | 5                     | 4                          | 10                            | 8                         | 5.8         | Rejected        |
+| Model / Option | Maintainability (40%) | Architecture Clarity (30%) | Backwards Compatibility (10%) | Implementation Cost (20%) | Total Score | Decision |
+| --- | --- | --- | --- | --- | --- | --- |
+| Strict Unification (Selected) | 10 | 10 | 0 | 6 | **8.2** | Selected |
+| Keep Facade | 5 | 4 | 10 | 8 | 5.8 | Rejected |
 
 ## Decision
 

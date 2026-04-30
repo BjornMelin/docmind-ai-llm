@@ -44,11 +44,11 @@ This violates UI/domain separation (ADR‑013/016), makes the behavior harder to
 
 Weights: Complexity 40% · Performance 30% · Alignment 30% (10 = best)
 
-| Option                                       | Complexity (40%) | Perf (30%) | Alignment (30%) |   Total |
-| -------------------------------------------- | ---------------: | ---------: | --------------: | ------: |
-| **A: `src/persistence/snapshot_service.py`** |              9.0 |        9.5 |             9.5 | **9.3** |
-| B: keep in page                              |              8.5 |        9.5 |             6.5 |     8.2 |
-| C: move to `src/ui/`                         |              7.5 |        9.2 |             7.5 |     8.0 |
+| Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- |
+| A: `src/persistence/snapshot_service.py` | 9.0 | 9.5 | 9.5 | **9.3** | Selected |
+| B: keep in page | 8.5 | 9.5 | 6.5 | 8.2 | Rejected |
+| C: move to `src/ui/` | 7.5 | 9.2 | 7.5 | 8.0 | Rejected |
 
 ## Decision
 

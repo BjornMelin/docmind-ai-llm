@@ -60,7 +60,7 @@ Each work package MUST ship with:
 - Implementation Prompt (atomic executor prompt)
 
 | WP | Title | ADR | SPEC | Prompt |
-| ---: | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- |
 | 01 | Settings UI hardening + safe provider badge | ADR-041 | SPEC-022 | `docs/developers/prompts/implemented/prompt-022-settings-ui-hardening.md` |
 | 02 | Containerization hardening (Dockerfile + compose) | ADR-042 | SPEC-023 | `docs/developers/prompts/implemented/prompt-023-containerization-hardening.md` |
 | 03 | Chat persistence + hybrid agentic memory (LangGraph SQLite) | ADR-058 | SPEC-041 | `docs/developers/prompts/implemented/prompt-041-chat-persistence-langgraph-sqlite-hybrid-memory.md` |

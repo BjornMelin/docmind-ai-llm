@@ -42,11 +42,11 @@ Adding a separate BM25 dependency or building a parallel inverted index would vi
 
 ### Decision Framework (≥9.0)
 
-| Option                    | Complexity (40%) | Perf (30%) | Alignment (30%) |   Total |
-| ------------------------- | ---------------: | ---------: | --------------: | ------: |
-| **B: Sparse-only Qdrant** |                9 |          9 |              10 | **9.3** |
-| A: Remove                 |               10 |          7 |               6 |     7.9 |
-| C: BM25 dep               |                5 |          8 |               6 |     6.1 |
+| Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- |
+| B: Sparse-only Qdrant | 9 | 9 | 10 | **9.3** | Selected |
+| A: Remove | 10 | 7 | 6 | 7.9 | Rejected |
+| C: BM25 dep | 5 | 8 | 6 | 6.1 | Rejected |
 
 ## Decision
 

@@ -65,24 +65,24 @@ Weights: Complexity 40% · Performance/Scale 30% · Ecosystem Alignment 30% (10 
 #### Python baseline
 
 | Option | Complexity (40%) | Perf/Scale (30%) | Alignment (30%) | Total | Decision |
-| --- | ---: | ---: | ---: | ---: | --- |
-| **B: 3.13.11 primary, support 3.11–3.13** | 9.0 | 9.0 | 9.5 | **9.2** | ✅ Selected |
+| --- | --- | --- | --- | --- | --- |
+| B: 3.13.11 primary, support 3.11–3.13 | 9.0 | 9.0 | 9.5 | **9.2** | Selected |
 | A: 3.13 only | 8.0 | 9.0 | 7.5 | 8.2 | Rejected |
 | C: 3.11 primary | 8.5 | 7.0 | 7.0 | 7.7 | Rejected |
 
 #### vLLM integration
 
 | Option | Complexity (40%) | Perf/Scale (30%) | Alignment (30%) | Total | Decision |
-| --- | ---: | ---: | ---: | ---: | --- |
-| **B: External vLLM server only** | 9.5 | 9.0 | 9.0 | **9.2** | ✅ Selected |
+| --- | --- | --- | --- | --- | --- |
+| B: External vLLM server only | 9.5 | 9.0 | 9.0 | **9.2** | Selected |
 | A: In-process vLLM | 5.5 | 9.5 | 6.5 | 6.9 | Rejected |
 | C: Remove vLLM support | 9.0 | 6.5 | 7.5 | 7.9 | Rejected |
 
 #### Tooling targeting
 
 | Option | Complexity (40%) | Perf/Scale (30%) | Alignment (30%) | Total | Decision |
-| --- | ---: | ---: | ---: | ---: | --- |
-| **B: Ruff/Pyright target 3.11; CI runs 3.11–3.13** | 9.5 | 8.0 | 9.5 | **9.0** | ✅ Selected |
+| --- | --- | --- | --- | --- | --- |
+| B: Ruff/Pyright target 3.11; CI runs 3.11–3.13 | 9.5 | 8.0 | 9.5 | **9.0** | Selected |
 | A: Target 3.13 only | 8.0 | 8.5 | 7.5 | 8.0 | Rejected |
 | C: Multi-config tooling per version | 6.0 | 7.5 | 7.0 | 6.8 | Rejected |
 

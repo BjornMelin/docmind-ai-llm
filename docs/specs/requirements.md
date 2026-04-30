@@ -32,7 +32,7 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 ## 2. Functional Requirements (FR-###)
 
 | ID | Requirement | Source | Acceptance |
-| :--- | :--- | :--- | :--- |
+| --- | --- | --- | --- |
 | **FR-001** | The system **shall** ingest documents using Unstructured with `strategy=auto` and apply OCR fallback when needed. | ADR‑002 | AC‑FR‑001 |
 | **FR-002** | The system **shall** build a LlamaIndex `IngestionPipeline` with per-node+transform caching (DuckDBKV). | ADR‑010 | AC‑FR‑002 |
 | **FR-003** | The system **shall** create canonical nodes with deterministic IDs and include `pdf_page_image` nodes for pages. | ADR‑002 | AC‑FR‑003 |
@@ -76,7 +76,7 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 ## 3. Non‑Functional Requirements (NFR‑###) — ISO/IEC 25010
 
 | Category | ID | Requirement | Verification |
-| :--- | :--- | :--- | :--- |
+| --- | --- | --- | --- |
 | **Functional suitability** | **NFR‑FS‑001** | The app **shall** achieve ≥0.7 nDCG@10 on a small bundled eval set (text RAG). | test+analysis |
 | **Functional suitability** | **NFR‑FS‑002** | With visual reranker on mixed corpora, Recall@20 **shall** improve ≥5% over no‑rerank baseline. | test |
 | **Reliability** | **NFR‑REL‑001** | The app **shall** recover from vector store restarts without re‑ingestion (idempotent upsert). | demo |

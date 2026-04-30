@@ -40,12 +40,12 @@ DocMind’s posture is local-first, offline-first, and security-first; logging s
 
 Weights: Complexity 40% · Perf 30% · Alignment/Security 30% (10 = best)
 
-| Option                                                            | Complexity (40%) | Perf (30%) | Alignment/Security (30%) |   Total | Decision    |
-| ----------------------------------------------------------------- | ---------------: | ---------: | -----------------------: | ------: | ----------- |
-| **D: Metadata-only + HMAC fingerprints + regex backstop + tests** |              9.0 |        9.0 |                     10.0 | **9.3** | ✅ Selected |
-| A: Policy only + tests (no backstop)                              |              9.5 |        9.5 |                      7.0 |     8.8 | Rejected    |
-| C: Heavy PII detection stack                                      |              4.5 |        6.0 |                      6.0 |     5.3 | Rejected    |
-| B: Keep no-op stub                                                |              8.0 |       10.0 |                      1.0 |     6.7 | Rejected    |
+| Option | Complexity (40%) | Perf (30%) | Alignment/Security (30%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- |
+| D: Metadata-only + HMAC fingerprints + regex backstop + tests | 9.0 | 9.0 | 10.0 | **9.3** | Selected |
+| A: Policy only + tests (no backstop) | 9.5 | 9.5 | 7.0 | 8.8 | Rejected |
+| C: Heavy PII detection stack | 4.5 | 6.0 | 6.0 | 5.3 | Rejected |
+| B: Keep no-op stub | 8.0 | 10.0 | 1.0 | 6.7 | Rejected |
 
 ## Decision
 

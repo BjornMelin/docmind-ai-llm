@@ -46,11 +46,11 @@ Key forces and constraints:
 
 ### Decision Framework
 
-| Model / Option                    | Local-First (35%) | Performance (25%) | Quality (20%) | Maintainability (20%) | Total Score | Decision    |
-| --------------------------------- | ----------------- | ----------------- | ------------- | --------------------- | ----------- | ----------- |
-| Qwen3‑4B FP8 on vLLM (Selected)   | 5                 | 4                 | 4             | 5                     | 4.6         | ✅ Selected |
-| Qwen3‑14B + YaRN (llama.cpp/vLLM) | 4                 | 3                 | 5             | 3                     | 3.95        | Rejected    |
-| Cloud API (OpenAI/Claude)         | 1                 | 4                 | 5             | 4                     | 3.2         | Rejected    |
+| Model / Option | Local-First (35%) | Performance (25%) | Quality (20%) | Maintainability (20%) | Total Score | Decision |
+| --- | --- | --- | --- | --- | --- | --- |
+| Qwen3‑4B FP8 on vLLM (Selected) | 5 | 4 | 4 | 5 | 4.6 | Selected |
+| Qwen3‑14B + YaRN (llama.cpp/vLLM) | 4 | 3 | 5 | 3 | 3.95 | Rejected |
+| Cloud API (OpenAI/Claude) | 1 | 4 | 5 | 4 | 3.2 | Rejected |
 
 ## Decision
 

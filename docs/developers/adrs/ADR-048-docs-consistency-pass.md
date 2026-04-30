@@ -37,12 +37,12 @@ Complexity is weighted highest (40%) to reflect the maintenance burden on a smal
 
 > **Complexity** refers to development effort required (lower effort = higher score).
 
-| Option                            | Complexity (40%) | Perf (30%) | Alignment (30%) |   Total |
-| --------------------------------- | ---------------: | ---------: | --------------: | ------: |
-| **C: Manual fixes + drift check** |                9 |         10 |               9 | **9.3** |
-| B: Manual only                    |               10 |         10 |               7 |     8.9 |
-| D: Archive                        |                6 |         10 |               7 |     7.6 |
-| A: Do nothing                     |               10 |         10 |               0 |     7.0 |
+| Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- |
+| C: Manual fixes + drift check | 9 | 10 | 9 | **9.3** | Selected |
+| B: Manual only | 10 | 10 | 7 | 8.9 | Rejected |
+| D: Archive | 6 | 10 | 7 | 7.6 | Rejected |
+| A: Do nothing | 10 | 10 | 0 | 7.0 | Rejected |
 
 Scoring notes (brief):
 

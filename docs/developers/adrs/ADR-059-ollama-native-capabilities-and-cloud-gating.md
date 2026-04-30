@@ -62,8 +62,8 @@ We need an integration that:
 Weights: **Solution leverage (35%)**, **Application value (30%)**, **Maintenance (25%)**, **Adaptability (10%)**. Scores are 1–10.
 
 | Option | Leverage (35%) | Value (30%) | Maintenance (25%) | Adaptability (10%) | Total | Decision |
-| --- | ---: | ---: | ---: | ---: | ---: | --- |
-| **C: Official SDK + central module + flags** | 9.5 | 9.2 | 9.0 | 9.0 | **9.24** | ✅ **Selected** |
+| --- | --- | --- | --- | --- | --- | --- |
+| C: Official SDK + central module + flags | 9.5 | 9.2 | 9.0 | 9.0 | **9.24** | Selected |
 | A: LlamaIndex wrapper only | 7.5 | 7.8 | 8.2 | 6.5 | 7.73 | Rejected |
 | B: Raw HTTP everywhere | 6.0 | 7.0 | 6.0 | 7.0 | 6.40 | Rejected |
 

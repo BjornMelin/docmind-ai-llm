@@ -36,9 +36,9 @@ Production settings had test‑specific branches causing drift and complexity. W
 
 ### Decision Framework
 
-| Option                 | Cleanliness (50%) | Simplicity (30%) | Effort (20%) | Total | Decision |
-| ---------------------- | ----------------- | ---------------- | ------------ | ----- | -------- |
-| Pytest fixtures (Sel.) | 10                | 9                | 7            | 9.3   | ✅ Sel.  |
+| Option | Cleanliness (50%) | Simplicity (30%) | Effort (20%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- |
+| Pytest fixtures (Sel.) | 10 | 9 | 7 | 9.3 | Selected |
 
 ## Decision
 

@@ -71,11 +71,11 @@ Resolution:
 
 Weights: Complexity 40% · Perf 30% · Alignment 30% (10 = best)
 
-| Option                                                                 | Complexity (40%) | Perf (30%) | Alignment (30%) |   Total |
-| ---------------------------------------------------------------------- | ---------------: | ---------: | --------------: | ------: |
-| **Qdrant semantic cache + exact-match + hash invalidation (Selected)** |              8.8 |        9.3 |             9.3 | **9.1** |
-| Exact-match only (SQLite/DuckDB)                                       |              9.5 |        8.5 |             9.0 |    9.05 |
-| GPTCache (SQLite + FAISS)                                              |              6.5 |        8.8 |             7.0 |     7.4 |
+| Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- |
+| Qdrant semantic cache + exact-match + hash invalidation (Selected) | 8.8 | 9.3 | 9.3 | **9.1** | Selected |
+| Exact-match only (SQLite/DuckDB) | 9.5 | 8.5 | 9.0 | 9.05 | Rejected |
+| GPTCache (SQLite + FAISS) | 6.5 | 8.8 | 7.0 | 7.4 | Rejected |
 
 ## Decision
 

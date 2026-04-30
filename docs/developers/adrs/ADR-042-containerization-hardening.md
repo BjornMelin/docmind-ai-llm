@@ -60,8 +60,8 @@ For the FP8/128K profile specifically, configure the external vLLM deployment (`
 Weights: Complexity 40% · Perf/Size 30% · Alignment/Security 30% (10 = best)
 
 | Option | Complexity (40%) | Perf/Size (30%) | Alignment/Security (30%) | Total | Decision |
-| --- | ---: | ---: | ---: | ---: | --- |
-| **D: App container + single GPU backend profile (Ollama)** | 9.5 | 8.5 | 9.5 | **9.2** | ✅ Selected |
+| --- | --- | --- | --- | --- | --- |
+| D: App container + single GPU backend profile (Ollama) | 9.5 | 8.5 | 9.5 | **9.2** | Selected |
 | B: App container + multiple GPU backends bundled | 6.5 | 7.5 | 7.5 | 7.1 | Rejected |
 | C: GPU-enabled app image | 5.5 | 6.0 | 7.0 | 6.1 | Rejected |
 | A: Minimal patch only | 8.0 | 5.0 | 6.0 | 6.7 | Rejected |

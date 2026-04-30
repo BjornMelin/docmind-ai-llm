@@ -159,13 +159,13 @@ vector_store = QdrantVectorStore(
 
 ### What NOT to Build
 
-- ❌ Custom vector storage format
-- ❌ Custom compression layers
-- ❌ Redis cache (use st.cache_data and IngestionCache)
-- ❌ DuckDB analytics coupled to cache (keep cache DB focused). If analytics are needed, add a separate DuckDB database later.
-- ❌ Complex data partitioning
-- ❌ Custom caching logic (use native IngestionCache)
-- ❌ Separate graph database (PropertyGraphIndex reuses Qdrant for embeddings)
+- Avoid: Custom vector storage format
+- Avoid: Custom compression layers
+- Avoid: Redis cache (use st.cache_data and IngestionCache)
+- Avoid: DuckDB analytics coupled to cache (keep cache DB focused). If analytics are needed, add a separate DuckDB database later.
+- Avoid: Complex data partitioning
+- Avoid: Custom caching logic (use native IngestionCache)
+- Avoid: Separate graph database (PropertyGraphIndex reuses Qdrant for embeddings)
 
 ### Integrated Patterns from Archived ADRs
 
@@ -822,7 +822,7 @@ class BackupManager:
 
 ## Implementation Status
 
-✅ **FULLY IMPLEMENTED** (Commit c54883d - 2025-08-21)
+**FULLY IMPLEMENTED** (Commit c54883d - 2025-08-21)
 
 ### Completed Components
 
@@ -835,10 +835,10 @@ class BackupManager:
 
 ### Key Features Implemented
 
-- ✅ Unified dense/sparse vector storage for BGE-M3
-- ✅ Resilience patterns with retry logic
-- ✅ SQLite WAL mode for concurrent operations
-- ✅ Integration with RouterQueryEngine and HybridRetriever
+- Unified dense/sparse vector storage for BGE-M3
+- Resilience patterns with retry logic
+- SQLite WAL mode for concurrent operations
+- Integration with RouterQueryEngine and HybridRetriever
 
 ## Changelog
 

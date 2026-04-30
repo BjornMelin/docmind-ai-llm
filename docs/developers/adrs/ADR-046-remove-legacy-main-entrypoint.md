@@ -34,11 +34,11 @@ Keeping it increases confusion and creates a latent “wrong entrypoint” trap,
 
 ### Decision Framework (≥9.0)
 
-| Option        | Complexity (40%) | Perf (30%) | Alignment (30%) |   Total |
-| ------------- | ---------------: | ---------: | --------------: | ------: |
-| **C: Delete** |               10 |         10 |               9 | **9.7** |
-| B: Archive    |                7 |         10 |               8 |     8.2 |
-| A: Keep       |                3 |          8 |               3 |     4.5 |
+| Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- |
+| C: Delete | 10 | 10 | 9 | **9.7** | Selected |
+| B: Archive | 7 | 10 | 8 | 8.2 | Rejected |
+| A: Keep | 3 | 8 | 3 | 4.5 | Rejected |
 
 Scoring rubric:
 

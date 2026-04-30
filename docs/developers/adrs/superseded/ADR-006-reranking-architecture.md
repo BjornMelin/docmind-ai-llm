@@ -35,11 +35,11 @@ Flat vector similarity alone returned off‑topic results for nuanced queries. W
 
 ### Decision Framework
 
-| Option                  | Leverage (35%) | Quality (30%) | Latency (20%) | Maintain (15%) | Total | Decision    |
-| ----------------------- | -------------- | ------------- | ------------- | -------------- | ----- | ----------- |
-| CrossEncoder (Selected) | 5              | 4             | 4             | 5              | 4.55  | ✅ Selected |
-| Vector‑only             | 2              | 2             | 5             | 5              | 3.10  | Rejected    |
-| Multi‑model ensemble    | 4              | 5             | 2             | 2              | 3.55  | Rejected    |
+| Option | Leverage (35%) | Quality (30%) | Latency (20%) | Maintain (15%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- | --- |
+| CrossEncoder (Selected) | 5 | 4 | 4 | 5 | 4.55 | Selected |
+| Vector‑only | 2 | 2 | 5 | 5 | 3.10 | Rejected |
+| Multi‑model ensemble | 4 | 5 | 2 | 2 | 3.55 | Rejected |
 
 ## Decision
 

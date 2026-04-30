@@ -42,11 +42,11 @@ Current drift points:
 
 ### Decision Framework (≥9.0)
 
-| Option                               | Leverage (35%) | Value (25%) | Risk Reduction (25%) | Maint (15%) |    Total | Decision                               |
-| ------------------------------------ | -------------: | ----------: | -------------------: | ----------: | -------: | -------------------------------------- |
-| **C: Move into settings + refactor** |              9 |           8 |                    9 |           9 | **8.75** | ✅ Selected (with simplification loop) |
-| B: Env bridge wrappers               |              6 |           6 |                    6 |           6 |      6.0 | Rejected                               |
-| A: Status quo                        |              2 |           4 |                    2 |           7 |     3.15 | Rejected                               |
+| Option | Leverage (35%) | Value (25%) | Risk Reduction (25%) | Maint (15%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- | --- |
+| C: Move into settings + refactor | 9 | 8 | 9 | 9 | **8.75** | Selected (simplification loop) |
+| B: Env bridge wrappers | 6 | 6 | 6 | 6 | 6.0 | Rejected |
+| A: Status quo | 2 | 4 | 2 | 7 | 3.15 | Rejected |
 
 #### Simplification loop to reach ≥9.0
 
@@ -58,9 +58,9 @@ To hit ≥9.0, we keep the change minimal:
 
 Re-scored:
 
-| Option                                                              | Complexity (40%) | Perf (30%) | Alignment (30%) |   Total |
-| ------------------------------------------------------------------- | ---------------: | ---------: | --------------: | ------: |
-| **C (minimal): Settings groups + refactor + wire hashing secret**   |              9.2 |       10.0 |             9.2 | **9.4** |
+| Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total |
+| --- | --- | --- | --- | --- |
+| C (minimal): Settings groups + refactor + wire hashing secret | 9.2 | 10.0 | 9.2 | **9.4** |
 
 ## Decision
 

@@ -61,11 +61,11 @@ current ingestion wiring, and ADR-058/SPEC-042 for final-release multimodal beha
 
 ### Decision Framework
 
-| Model / Option            | Coverage (35%) | Simplicity (35%) | Performance (20%) | Maintenance (10%) | Total Score | Decision    |
-| ------------------------- | -------------- | ---------------- | ----------------- | ----------------- | ----------- | ----------- |
-| Unstructured (Selected)   | 9              | 9                | 8                 | 9                 | **8.8**     | ✅ Selected |
-| Multi-library stack       | 7              | 4                | 7                 | 5                 | 5.9         | Rejected    |
-| Custom per-format parsers | 9              | 2                | 7                 | 3                 | 5.7         | Rejected    |
+| Model / Option | Coverage (35%) | Simplicity (35%) | Performance (20%) | Maintenance (10%) | Total Score | Decision |
+| --- | --- | --- | --- | --- | --- | --- |
+| Unstructured (Selected) | 9 | 9 | 8 | 9 | **8.8** | Selected |
+| Multi-library stack | 7 | 4 | 7 | 5 | 5.9 | Rejected |
+| Custom per-format parsers | 9 | 2 | 7 | 3 | 5.7 | Rejected |
 
 ## Decision
 

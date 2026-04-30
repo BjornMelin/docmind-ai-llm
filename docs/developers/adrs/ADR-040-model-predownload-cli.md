@@ -40,11 +40,11 @@ This ADR documents an existing decision already reflected in SPEC-013 and implem
 
 ### Decision Framework
 
-| Model / Option           | Leverage (35%) | Value (25%) | Risk Reduction (25%) | Maint (15%) |    Total | Decision    |
-| ------------------------ | -------------: | ----------: | -------------------: | ----------: | -------: | ----------- |
-| **C: Pre-download CLI**  |              8 |           8 |                    9 |           8 | **8.25** | ✅ Selected |
-| A: Lazy runtime download |              4 |           6 |                    2 |           8 |     4.6  | Rejected    |
-| B: Manual steps only     |              3 |           4 |                    4 |           7 |     4.1  | Rejected    |
+| Model / Option | Leverage (35%) | Value (25%) | Risk Reduction (25%) | Maint (15%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- | --- |
+| C: Pre-download CLI | 8 | 8 | 9 | 8 | **8.25** | Selected |
+| A: Lazy runtime download | 4 | 6 | 2 | 8 | 4.6 | Rejected |
+| B: Manual steps only | 3 | 4 | 4 | 7 | 4.1 | Rejected |
 
 ## Decision
 

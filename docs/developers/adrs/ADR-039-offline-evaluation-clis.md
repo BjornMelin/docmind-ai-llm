@@ -48,12 +48,12 @@ This ADR documents an existing decision already reflected in SPEC-010 and implem
 
 Weights reflect stakeholder consensus to prioritize leverage/maintenance (offline, repeatable, low overhead) while still valuing quality gates and risk reduction.
 
-| Model / Option                   | Leverage (35%) | Value (25%) | Risk Reduction (25%) | Maint (15%) |    Total | Decision    |
-| -------------------------------- | -------------: | ----------: | -------------------: | ----------: | -------: | ----------- |
-| **D: Offline CLIs (BEIR+RAGAS)** |              9 |           8 |                    9 |           8 | **8.65** | ✅ Selected |
-| A: None                          |              2 |           2 |                    1 |          10 |     2.65 | Rejected    |
-| B: Cloud                         |              6 |           7 |                    3 |           6 |     5.35 | Rejected    |
-| C: Custom                        |              4 |           6 |                    6 |           3 |     4.95 | Rejected    |
+| Model / Option | Leverage (35%) | Value (25%) | Risk Reduction (25%) | Maint (15%) | Total | Decision |
+| --- | --- | --- | --- | --- | --- | --- |
+| D: Offline CLIs (BEIR+RAGAS) | 9 | 8 | 9 | 8 | **8.65** | Selected |
+| A: None | 2 | 2 | 1 | 10 | 2.65 | Rejected |
+| B: Cloud | 6 | 7 | 3 | 6 | 5.35 | Rejected |
+| C: Custom | 4 | 6 | 6 | 3 | 4.95 | Rejected |
 
 ## Decision
 
