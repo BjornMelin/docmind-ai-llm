@@ -5,17 +5,9 @@ permissions:
 
 on:
   pull_request:
-    paths:
-      - 'docs/**'
-      - 'src/**'
-      - 'scripts/**'
-      - '.github/workflows/docs-ci.yml'
   push:
     branches:
       - main
-    paths:
-      - 'docs/**'
-      - 'src/**'
 
 jobs:
   validate-docs:
