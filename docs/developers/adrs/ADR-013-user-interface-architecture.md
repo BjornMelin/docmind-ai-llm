@@ -173,7 +173,11 @@ import pytest
 def test_pages_construct():
     import streamlit as st
     st.Page("src/pages/01_chat.py", title="Chat", icon=":material/chat:", default=True)
-    st.Page("src/pages/02_documents.py", title="Documents", icon=":material/folder:")
+    st.Page(
+        "src/pages/02_documents.py",
+        title="Documents",
+        icon=":material/description:",
+    )
 
 def test_page_registry_metadata():
     # Verify titles/icons/default selection for registered pages.
