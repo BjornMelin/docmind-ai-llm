@@ -30,14 +30,14 @@ jobs:
           body=""
           for attempt in 1 2 3 4 5; do
             body="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json body --jq '.body // ""' 2>/dev/null || true)"
-            if printf '%s' "$body" | grep -q '[^[:space:]]'; then
+            if [[ "$body" =~ [^[:space:]] ]]; then
               break
             fi
             if [ "$attempt" -lt 5 ]; then
               sleep "$attempt"
             fi
           done
-          if ! printf '%s' "$body" | grep -q '[^[:space:]]'; then
+          if [[ ! "$body" =~ [^[:space:]] ]]; then
             echo "Release $RELEASE_TAG has a blank body."
             echo "Release Please could not parse release notes for the tag."
             exit 1
