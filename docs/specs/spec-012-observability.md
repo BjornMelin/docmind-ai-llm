@@ -24,16 +24,16 @@ Provide local-first observability for DocMind AI:
 
 DocMind settings expose a single observability config surface under `settings.observability`.
 
-| Field                   | Type                        |            Default | Notes                                                               |
-| ----------------------- | --------------------------- | -----------------: | ------------------------------------------------------------------- |
-| `enabled`               | `bool`                      |            `False` | Export is opt-in (offline-first).                                   |
-| `service_name`          | `str`                       | `"docmind-agents"` | Used as OTEL `service.name`.                                        |
-| `endpoint`              | `str \| None`               |             `None` | Optional exporter endpoint override (see endpoint semantics below). |
-| `protocol`              | `"grpc" \| "http/protobuf"` |  `"http/protobuf"` | Which OTLP exporters to instantiate.                                |
-| `headers`               | `dict[str,str]`             |               `{}` | Passed to exporters (auth, multi-tenant keys).                      |
-| `sampling_ratio`        | `float`                     |              `1.0` | Trace sampling (ParentBased + TraceIdRatioBased).                   |
-| `metrics_interval_ms`   | `int`                       |            `60000` | Passed to `PeriodicExportingMetricReader`.                          |
-| `instrument_llamaindex` | `bool`                      |             `True` | Enables optional LlamaIndex OTel instrumentation when installed.    |
+| Field | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `enabled` | `bool` | `False` | Export is opt-in (offline-first). |
+| `service_name` | `str` | `"docmind-agents"` | Used as OTEL `service.name`. |
+| `endpoint` | `str \| None` | `None` | Optional exporter endpoint override (see endpoint semantics below). |
+| `protocol` | `"grpc" \| "http/protobuf"` | `"http/protobuf"` | Which OTLP exporters to instantiate. |
+| `headers` | `dict[str,str]` | `{}` | Passed to exporters (auth, multi-tenant keys). |
+| `sampling_ratio` | `float` | `1.0` | Trace sampling (ParentBased + TraceIdRatioBased). |
+| `metrics_interval_ms` | `int` | `60000` | Passed to `PeriodicExportingMetricReader`. |
+| `instrument_llamaindex` | `bool` | `True` | Enables optional LlamaIndex OTel instrumentation when installed. |
 
 Environment overrides use Pydantic Settings V2 nested env keys:
 
@@ -93,15 +93,15 @@ Implementation notes:
 
 Spans are present in these code paths (no-op unless tracing is enabled):
 
-| Component                                              | Span name                                                                                              | Attributes / events                                                                                                                                               |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Ingestion (`src/processing/ingestion_pipeline.py`)     | `ingest_documents`                                                                                     | `docmind.document_count`                                                                                                                                          |
-| Snapshot (`src/persistence/snapshot.py`)               | `snapshot.write_manifest` / `snapshot.finalize` / `snapshot.persist_vector` / `snapshot.persist_graph` | (no attributes currently)                                                                                                                                         |
-| Router build (`src/retrieval/router_factory.py`)       | `router_factory.build_router_engine`                                                                   | attrs: `router.adapter_name`, `router.kg_requested`, `router.hybrid_requested`, `router.kg_enabled`; event: `router_selected` (`tool.count`, `tool.names`)        |
-| Router tool (`src/agents/tools/router_tool.py`)        | `router_tool.query`                                                                                    | attrs: `router.query.length`, `router.engine.available`, `router.selected_strategy`, `router.success`, `router.latency_ms`, …                                     |
-| Coordinator (`src/agents/coordinator.py`)              | `coordinator.process_query`                                                                            | attrs: `coordinator.thread_id`, `query.length`, `coordinator.workflow_timeout`, `coordinator.fallback`                                                            |
-| Chat UI (`src/pages/01_chat.py`)                       | `chat.staleness_check`                                                                                 | attrs: `snapshot.id`, `snapshot.is_stale`                                                                                                                         |
-| Graph export helper (`src/telemetry/opentelemetry.py`) | `graph_export.<fmt>`                                                                                   | attrs: `graph.export.adapter_name`, `graph.export.format`, `graph.export.depth`, `graph.export.seed_count`; event: `export_performed` (`file.name`, `size.bytes`) |
+| Component | Span name | Attributes / events |
+| --- | --- | --- |
+| Ingestion (`src/processing/ingestion_pipeline.py`) | `ingest_documents` | `docmind.document_count` |
+| Snapshot (`src/persistence/snapshot.py`) | `snapshot.write_manifest` / `snapshot.finalize` / `snapshot.persist_vector` / `snapshot.persist_graph` | (no attributes currently) |
+| Router build (`src/retrieval/router_factory.py`) | `router_factory.build_router_engine` | attrs: `router.adapter_name`, `router.kg_requested`, `router.hybrid_requested`, `router.kg_enabled`; event: `router_selected` (`tool.count`, `tool.names`) |
+| Router tool (`src/agents/tools/router_tool.py`) | `router_tool.query` | attrs: `router.query.length`, `router.engine.available`, `router.selected_strategy`, `router.success`, `router.latency_ms`, … |
+| Coordinator (`src/agents/coordinator.py`) | `coordinator.process_query` | attrs: `coordinator.thread_id`, `query.length`, `coordinator.workflow_timeout`, `coordinator.fallback` |
+| Chat UI (`src/pages/01_chat.py`) | `chat.staleness_check` | attrs: `snapshot.id`, `snapshot.is_stale` |
+| Graph export helper (`src/telemetry/opentelemetry.py`) | `graph_export.<fmt>` | attrs: `graph.export.adapter_name`, `graph.export.format`, `graph.export.depth`, `graph.export.seed_count`; event: `export_performed` (`file.name`, `size.bytes`) |
 
 Metrics recorded via the shared `MeterProvider`:
 
