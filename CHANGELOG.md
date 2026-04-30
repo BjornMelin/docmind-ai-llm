@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
-## [0.8.1](https://github.com/BjornMelin/docmind-ai-llm/compare/docmind-ai-llm-v0.8.0...docmind-ai-llm-v0.8.1) (2026-04-30)
+## [0.8.1](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.8.0...v0.8.1) (2026-04-30)
 
 
 ### Bug Fixes
@@ -14,7 +14,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 * **release:** keep release PRs single commit ([66daf65](https://github.com/BjornMelin/docmind-ai-llm/commit/66daf65bae8aeb780218fa619497f3b1e550ced4))
 * **release:** skip heavy checks on release PRs ([7a3b32e](https://github.com/BjornMelin/docmind-ai-llm/commit/7a3b32e175e334169fb5497b4e350a2054e143c6))
 
-## [0.8.0](https://github.com/BjornMelin/docmind-ai-llm/compare/docmind-ai-llm-v0.7.2...docmind-ai-llm-v0.8.0) (2026-04-30)
+## [0.8.0](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.7.2...v0.8.0) (2026-04-30)
 
 
 ### Features
