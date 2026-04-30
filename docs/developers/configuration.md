@@ -307,17 +307,13 @@ Device selection MUST occur before any `spacy.load()` call to avoid device alloc
 
 ### 7. Embedding & Vision
 
-<!-- markdownlint-disable MD060 -->
-| Variable                                   | Type    | Default       | Description                                     |
-| :----------------------------------------- | :------ | :------------ | :---------------------------------------------- |
-| `DOCMIND_EMBEDDING__MODEL_NAME`            | string  | `BAAI/bge-m3` | Text embedding model.                           |
-| `DOCMIND_EMBEDDING__DIMENSION`             | int     | `1024`        | Resulting vector dimension.                     |
-| `DOCMIND_EMBEDDING__ENABLE_SPARSE`         | boolean | `true`        | Computes Lexical/BM25-style weights via BGE-M3. |
-| `DOCMIND_EMBEDDING__IMAGE_BACKBONE`        | string  | `auto`        | Preferred SigLIP backbone or `auto`.            |
-| `DOCMIND_EMBEDDING__SIGLIP_MODEL_REVISION` | string  | `unset`       | Optional SigLIP revision; see note below.      |
-| `DOCMIND_EMBEDDING__BATCH_SIZE_TEXT_GPU`   | int     | `12`          | Optimization for CUDA.                          |
-| `DOCMIND_EMBEDDING__BATCH_SIZE_TEXT_CPU`   | int     | `4`           | Optimization for RAM-constrained systems.       |
-<!-- markdownlint-enable MD060 -->
+- `DOCMIND_EMBEDDING__MODEL_NAME`: `BAAI/bge-m3` text embedding model.
+- `DOCMIND_EMBEDDING__DIMENSION`: `1024` resulting vector dimension.
+- `DOCMIND_EMBEDDING__ENABLE_SPARSE`: `true` computes Lexical/BM25-style weights.
+- `DOCMIND_EMBEDDING__IMAGE_BACKBONE`: `auto` preferred SigLIP backbone.
+- `DOCMIND_EMBEDDING__SIGLIP_MODEL_REVISION`: `unset`; see note below.
+- `DOCMIND_EMBEDDING__BATCH_SIZE_TEXT_GPU`: `12` for CUDA optimization.
+- `DOCMIND_EMBEDDING__BATCH_SIZE_TEXT_CPU`: `4` for RAM-constrained systems.
 
 Custom SigLIP model IDs stay unpinned unless `DOCMIND_EMBEDDING__SIGLIP_MODEL_REVISION` is set explicitly. The curated pin applies only when using the built-in SigLIP model ID.
 

@@ -11,6 +11,7 @@ from types import ModuleType
 from typing import Any
 
 import numpy as np
+import pytest
 
 
 def test_siglip_embedding_returns_zeros_when_not_loaded(monkeypatch):
@@ -121,6 +122,7 @@ def test_siglip_adapter_try_ensure_loaded_catches_unexpected_errors(monkeypatch)
     assert s._try_ensure_loaded() is False
 
 
+@pytest.mark.unit
 def test_siglip_adapter_uses_config_revision_for_explicit_model(monkeypatch):
     """Explicit model IDs still inherit the configured SigLIP revision."""
     from types import SimpleNamespace

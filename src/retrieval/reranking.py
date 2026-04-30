@@ -193,8 +193,27 @@ def _compute_siglip_scores(
             im_inputs["pixel_values"] = im_inputs["pixel_values"].to("mps")
         with torch.no_grad():  # type: ignore[name-defined]
             if hasattr(model, "get_image_features"):
-                imfeat = siglip_features(model.get_image_features(**im_inputs))
-                sims = (tfeat @ imfeat.T).squeeze(0).detach().cpu().numpy().tolist()
+                try:
+                    imfeat = siglip_features(model.get_image_features(**im_inputs))
+                    sims = (tfeat @ imfeat.T).squeeze(0).detach().cpu().numpy().tolist()
+                except (
+                    ImportError,
+                    ModuleNotFoundError,
+                    AttributeError,
+                    RuntimeError,
+                    ValueError,
+                    OSError,
+                    TypeError,
+                ) as exc:
+                    redaction = build_pii_log_entry(
+                        str(exc), key_id="reranking.siglip.fail_open"
+                    )
+                    logger.warning(
+                        "SigLIP image feature error; fail-open (error_type={}, error={})",
+                        type(exc).__name__,
+                        redaction.redacted,
+                    )
+                    sims = [float("-inf")] * len(idxs)
             else:
                 sims = [float("-inf")] * len(idxs)
         for k, s in zip(idxs, sims, strict=False):
@@ -313,6 +332,8 @@ def _siglip_rescore(
             try:
                 tfeat = siglip_features(model.get_text_features(**txt_inputs))
             except (
+                ImportError,
+                ModuleNotFoundError,
                 AttributeError,
                 RuntimeError,
                 ValueError,
