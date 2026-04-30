@@ -25,7 +25,14 @@ def siglip_features(output: Any, *, normalize: bool = True) -> Any:
     """
     features = getattr(output, "pooler_output", output)
     if normalize:
-        norm = features.norm(dim=-1, keepdim=True).clamp_min(1e-12)
+        norm = features.norm(dim=-1, keepdim=True)
+        if hasattr(norm, "clamp_min"):
+            norm = norm.clamp_min(1e-12)
+        else:
+            try:
+                norm = max(float(norm), 1e-12)
+            except (TypeError, ValueError):
+                norm = 1e-12
         return features / norm
     return features
 
