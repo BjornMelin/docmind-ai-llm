@@ -104,7 +104,7 @@ def test_validate_llamacpp_inputs_rejects_default_openai_base_url(
 
 
 @pytest.mark.unit
-def test_validate_llamacpp_inputs_accepts_explicit_default_llamacpp_url(
+def test_validate_llamacpp_inputs_rejects_explicit_default_llamacpp_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     page = _load_settings_page_module(monkeypatch)
@@ -114,7 +114,7 @@ def test_validate_llamacpp_inputs_accepts_explicit_default_llamacpp_url(
         "https://api.openai.com/v1",
     )
 
-    assert errors == []
+    assert errors == ["Provide a llama.cpp OpenAI-compatible server URL."]
 
 
 @pytest.mark.unit

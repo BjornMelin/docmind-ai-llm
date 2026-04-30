@@ -43,19 +43,19 @@ dependencies = [
     # Vector Databases & Clients
     "qdrant-client>=1.15.1,<2.0.0",
     # LlamaIndex (meta + selected integrations)
-    "llama-index>=0.14.12,<0.15.0",
-    "llama-index-vector-stores-qdrant>=0.9.0,<0.10.0",
-    "llama-index-vector-stores-duckdb>=0.5.1,<0.6.0",
-    "llama-index-storage-kvstore-duckdb>=0.2.1,<0.3.0",
-    "llama-index-llms-openai>=0.6.13,<0.7.0",
+    "llama-index>=0.14.21,<0.15.0",
+    "llama-index-vector-stores-qdrant>=0.10.0,<0.11.0",
+    "llama-index-vector-stores-duckdb>=0.6.0,<0.7.0",
+    "llama-index-storage-kvstore-duckdb>=0.3.0,<0.4.0",
+    "llama-index-llms-openai>=0.7.7,<0.8.0",
     "llama-index-llms-ollama>=0.9.1,<1.0.0",
-    "llama-index-llms-openai-like>=0.6.0,<0.7.0",
-    "llama-index-embeddings-huggingface>=0.6.1,<0.7.0",
-    "llama-index-embeddings-clip>=0.5.1,<0.6.0",
-    "llama-index-embeddings-fastembed>=0.5.0,<0.6.0",
-    "llama-index-embeddings-openai>=0.5.1,<0.6.0",
+    "llama-index-llms-openai-like>=0.7.2,<0.8.0",
+    "llama-index-embeddings-huggingface>=0.7.0,<0.8.0",
+    "llama-index-embeddings-clip>=0.6.0,<0.7.0",
+    "llama-index-embeddings-fastembed>=0.6.0,<0.7.0",
+    "llama-index-embeddings-openai>=0.6.0,<0.7.0",
     "fastembed>=0.5.1",                     # Sparse vectors (BM42) CPU support (FR-005)
-    "llama-index-readers-file>=0.5.6,<0.6.0",
+    "llama-index-readers-file>=0.6.0,<0.7.0",
     # Agentic Orchestration
     "langgraph>=1.0.10,<2.0.0",             # Graph-based orchestration
     "langgraph-checkpoint-sqlite>=3.0.3,<4.0.0",  # Durable checkpoints (ADR-058)
@@ -94,7 +94,7 @@ apple = [
     "spacy[apple]; sys_platform == 'darwin' and platform_machine == 'arm64'",
 ]
 llama = [
-    "llama-index-core>=0.14.12,<0.15.0",
+    "llama-index-core>=0.14.21,<0.15.0",
 ]
 graph = [
     "llama-index-graph-stores-kuzu>=0.9.1,<1.0.0",

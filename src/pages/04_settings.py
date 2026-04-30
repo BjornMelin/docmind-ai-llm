@@ -17,6 +17,7 @@ import streamlit as st
 from pydantic import ValidationError
 
 from src.config.env_persistence import persist_env
+from src.config.llm_runtime_probe import probe_openai_compatible_runtime
 from src.config.settings import DocMindSettings, settings
 from src.config.settings_utils import DEFAULT_OPENAI_BASE_URL, ensure_v1
 from src.retrieval import adapter_registry
@@ -238,6 +239,7 @@ def main() -> None:
         openai_ui_errors = []
 
     ollama_url, vllm_url, lmstudio_url, llamacpp_url = _render_provider_urls(provider)
+    _render_llamacpp_server_guide(provider)
     (
         ollama_api_key,
         ollama_enable_web_search,
@@ -836,6 +838,10 @@ def _validate_llamacpp_inputs(
     normalized_llamacpp_url = (
         ensure_v1(clean_llamacpp_url) if clean_llamacpp_url else None
     )
+    if normalized_llamacpp_url in _LLAMACPP_DISALLOWED_SHARED_URLS:
+        ui_errors.append("Provide a llama.cpp OpenAI-compatible server URL.")
+        return ui_errors
+
     has_llamacpp_url = bool(normalized_llamacpp_url)
     has_custom_shared_url = (
         bool(normalized_openai_base_url)
@@ -846,6 +852,45 @@ def _validate_llamacpp_inputs(
 
     ui_errors.append("Provide a llama.cpp OpenAI-compatible server URL.")
     return ui_errors
+
+
+def _render_llamacpp_server_guide(provider: str) -> None:
+    """Render llama.cpp server launch guidance for GGUF users."""
+    if provider != "llamacpp":
+        return
+
+    st.subheader("llama.cpp server")
+    st.caption(
+        "DocMind uses llama.cpp through `llama-server`'s OpenAI-compatible "
+        "HTTP API. Keep the server bound to loopback unless you explicitly "
+        "need remote access."
+    )
+    with st.expander("Launch examples", expanded=True):
+        st.code(
+            "\n".join(
+                (
+                    "# CPU / portable baseline",
+                    "llama-server -m ./models/model.gguf --alias local-gguf "
+                    "--ctx-size 8192 --host 127.0.0.1 --port 8080",
+                    "",
+                    "# CUDA or other GPU backends",
+                    "llama-server -m ./models/model.gguf --alias local-gguf "
+                    "--ctx-size 8192 -ngl 999 -fa --host 127.0.0.1 --port 8080",
+                    "",
+                    "# Add auth when exposing beyond local loopback",
+                    "llama-server -m ./models/model.gguf --alias local-gguf "
+                    "--api-key $DOCMIND_OPENAI__API_KEY --host 0.0.0.0 --port 8080",
+                )
+            ),
+            language="bash",
+        )
+        st.markdown(
+            "- Set **Model ID** to the `--alias` value, for example `local-gguf`.\n"
+            "- Set **llama.cpp server URL** to `http://localhost:8080/v1`.\n"
+            "- Match **Context window** to `--ctx-size`.\n"
+            "- Use trusted GGUF files only; DocMind does not load local GGUF "
+            "paths in-process."
+        )
 
 
 class SettingsFormValues(TypedDict):
@@ -979,7 +1024,10 @@ def _render_endpoint_test(validated: DocMindSettings | None) -> None:
         return
 
     st.subheader("Connectivity Test")
-    st.caption("Sends a lightweight `GET /models` request to the configured endpoint.")
+    st.caption(
+        "Sends lightweight readiness requests to the configured endpoint. "
+        "For llama.cpp this checks `/health` before `/v1/models`."
+    )
     cooldown_key = "docmind_endpoint_test_last_ts"
     cooldown_s = 3.0
     now = time.monotonic()
@@ -997,28 +1045,22 @@ def _render_endpoint_test(validated: DocMindSettings | None) -> None:
     st.session_state[cooldown_key] = now
 
     try:
-        import httpx
-
-        base = httpx.URL(str(base_url))
-        url = str(base.copy_with(path=base.path.rstrip("/") + "/models"))
         headers = _build_endpoint_test_headers(validated)
-
         timeout_s = min(30.0, float(validated.llm_request_timeout_seconds))
-        with httpx.Client(timeout=timeout_s) as client:
-            resp = client.get(url, headers=headers)
-        if resp.status_code >= 400:
-            st.error(f"Endpoint test failed: HTTP {resp.status_code}")
-            return
-        try:
-            payload = resp.json()
-        except ValueError:
-            st.success("Endpoint reachable (non-JSON response).")
-            return
-        models = payload.get("data")
-        if isinstance(models, list):
-            st.success(f"Endpoint reachable. Models returned: {len(models)}")
+        result = probe_openai_compatible_runtime(
+            base_url=str(base_url),
+            backend=backend_type,
+            headers=headers,
+            timeout_s=timeout_s,
+        )
+        if result.ok:
+            st.success(result.message)
         else:
-            st.success("Endpoint reachable.")
+            st.error(result.message)
+        if result.health_status_code is not None:
+            st.caption(f"Health status: HTTP {result.health_status_code}")
+        if result.models_status_code is not None:
+            st.caption(f"Models status: HTTP {result.models_status_code}")
     except Exception as exc:  # pragma: no cover - UI feedback
         from src.utils.log_safety import build_pii_log_entry
 
