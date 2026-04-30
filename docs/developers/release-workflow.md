@@ -17,10 +17,6 @@ The workflow is defined in [`.github/workflows/release.yml`](../../.github/workf
   `RELEASE_PLEASE_TOKEN`, a fine-grained personal access token owned by the
   maintainer whose release PR commits should be credited. The token needs
   repository contents and pull request write access.
-- **Release Commit Identity**: The workflow requires repository variables
-  `RELEASE_COMMIT_NAME` and `RELEASE_COMMIT_EMAIL` for release PR lockfile
-  commits. Use the maintainer's GitHub noreply email if the email should remain
-  private.
 - **SemVer Strategy**: `bump-minor-pre-major: true`.
   - This ensures that breaking changes ( `feat!:` ) increment the **minor** version (e.g., `0.1.0` -> `0.2.0`) rather than the **major** version, protecting the `1.0.0` milestone for the actual stable release.
 
@@ -35,13 +31,15 @@ The workflow is defined in [`.github/workflows/release.yml`](../../.github/workf
 2. **Release PR**:
     - When commits are merged to `main`, `release-please` analyzes them.
     - It creates or updates a special "Release PR".
-    - This PR contains the updated `CHANGELOG.md` and the version bump in `pyproject.toml`.
-    - If `uv.lock` is out of date (`uv lock --check`), the workflow regenerates and commits `uv.lock` on the release PR branch.
-    - Release PR commits are created with `RELEASE_PLEASE_TOKEN`. Lockfile
-      follow-up commits use `RELEASE_COMMIT_NAME` and `RELEASE_COMMIT_EMAIL`.
-      Do not use `GITHUB_TOKEN` here; GitHub automatically adds commit authors
-      as squash-merge coauthors, so bot-authored release commits create
-      unwanted bot coauthor trailers.
+    - This PR contains the updated `CHANGELOG.md`, the version bump in
+      `pyproject.toml`, and the matching root package version in `uv.lock`.
+    - Release PR commits are created with `RELEASE_PLEASE_TOKEN`. Do not use
+      `GITHUB_TOKEN` here; GitHub automatically adds commit authors as
+      squash-merge coauthors, so bot-authored release commits create unwanted
+      bot coauthor trailers.
+    - Release PRs must stay single-commit. Do not add follow-up lockfile commits
+      from the workflow; `release-please-config.json` updates `uv.lock` through
+      Release Please `extra-files` so the version files remain in one commit.
     - Release PR descriptions must keep the Release Please parseable version
       heading: `## [x.y.z]`, followed by the compare URL and release date.
       Manual note curation can edit bullets and sections inside that block, but

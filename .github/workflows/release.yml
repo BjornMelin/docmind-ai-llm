@@ -17,25 +17,16 @@ jobs:
       - name: Require release identity configuration
         env:
           RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-          RELEASE_COMMIT_NAME: ${{ vars.RELEASE_COMMIT_NAME }}
-          RELEASE_COMMIT_EMAIL: ${{ vars.RELEASE_COMMIT_EMAIL }}
         run: |
           if [ -z "$RELEASE_PLEASE_TOKEN" ]; then
             echo "RELEASE_PLEASE_TOKEN is required so release PR commits are attributed to the maintainer, not github-actions[bot]."
-            exit 1
-          fi
-          if [ -z "$RELEASE_COMMIT_NAME" ]; then
-            echo "RELEASE_COMMIT_NAME repository variable is required for release PR lockfile commits."
-            exit 1
-          fi
-          if [ -z "$RELEASE_COMMIT_EMAIL" ]; then
-            echo "RELEASE_COMMIT_EMAIL repository variable is required for release PR lockfile commits."
             exit 1
           fi
       - id: release
         uses: googleapis/release-please-action@v4.4.0
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          target-branch: main
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
       - name: Validate published release notes
@@ -60,61 +51,3 @@ jobs:
             echo "Release Please could not parse release notes for the tag."
             exit 1
           fi
-      - name: Checkout repository
-        if: ${{ steps.release.outputs.prs_created == 'true' }}
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
-      - name: Resolve release PR branch
-        if: ${{ steps.release.outputs.prs_created == 'true' }}
-        id: release-pr-branch
-        env:
-          PR_JSON: ${{ steps.release.outputs.pr }}
-        run: |
-          branch="$(echo "$PR_JSON" | jq -r '.headBranchName // .headBranch // .headRefName // empty')"
-          if [ -z "$branch" ]; then
-            echo "Failed to resolve release PR branch." >&2
-            exit 1
-          fi
-          echo "Resolved release PR branch: $branch"
-          echo "branch=$branch" >> "$GITHUB_OUTPUT"
-      - name: Checkout release PR branch
-        if: ${{ steps.release.outputs.prs_created == 'true' }}
-        run: |
-          git fetch origin "${{ steps.release-pr-branch.outputs.branch }}"
-          git checkout "${{ steps.release-pr-branch.outputs.branch }}"
-      - name: Set up uv
-        if: ${{ steps.release.outputs.prs_created == 'true' }}
-        uses: astral-sh/setup-uv@v7
-        with:
-          python-version: "3.12.13"
-          enable-cache: true
-          cache-python: true
-      - name: Check uv.lock status
-        if: ${{ steps.release.outputs.prs_created == 'true' }}
-        id: uv-lock-check
-        run: |
-          if uv lock --check; then
-            echo "outdated=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "outdated=true" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Update uv.lock
-        if: ${{ steps.release.outputs.prs_created == 'true' && steps.uv-lock-check.outputs.outdated == 'true' }}
-        run: uv lock
-      - name: Commit uv.lock if changed
-        if: ${{ steps.release.outputs.prs_created == 'true' && steps.uv-lock-check.outputs.outdated == 'true' }}
-        env:
-          RELEASE_COMMIT_NAME: ${{ vars.RELEASE_COMMIT_NAME }}
-          RELEASE_COMMIT_EMAIL: ${{ vars.RELEASE_COMMIT_EMAIL }}
-        run: |
-          if git diff --quiet -- uv.lock; then
-            echo "uv.lock unchanged."
-            exit 0
-          fi
-          git config user.name "$RELEASE_COMMIT_NAME"
-          git config user.email "$RELEASE_COMMIT_EMAIL"
-          git add uv.lock
-          git commit -m "chore: update uv.lock for release"
-          git push origin "HEAD:${{ steps.release-pr-branch.outputs.branch }}"
