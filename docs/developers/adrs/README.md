@@ -10,7 +10,7 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
   Scope: Multi-agent, modern RAG architecture and capabilities
 - **[ADR-011 — Agent Orchestration Framework](ADR-011-agent-orchestration-framework.md)**  
   Scope: Supervisor/orchestration patterns and agent tool integration
-- **[ADR-066 — LlamaIndex Workflows Evaluation Without Runtime Replacement](ADR-066-llamaindex-workflows-orchestration-evaluation.md)**<br>
+- **[ADR-066 — LlamaIndex Workflows Evaluation Without Runtime Replacement](ADR-066-llamaindex-workflows-orchestration-evaluation.md)**\
   Scope: Issue #86 decision to keep LangGraph as default and gate any future LlamaIndex Workflows pilot
 - **[ADR-056 — Agent Deadline Propagation + Router Injection](ADR-056-agent-deadline-propagation-and-router-injection.md)**  
   Scope: Cooperative time budgets, injected router engines, and retrieval contract correctness
