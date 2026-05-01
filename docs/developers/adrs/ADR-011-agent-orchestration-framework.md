@@ -6,7 +6,7 @@ Version: 7.1
 Date: 2026-01-18
 Supersedes:
 Superseded-by:
-Related: 001, 003, 004, 010, 015, 016, 024
+Related: 001, 003, 004, 010, 015, 016, 024, 066
 Tags: orchestration, agents, langgraph, supervisor
 References:
 - [LangGraph — Official Docs](https://langchain-ai.github.io/langgraph/)
@@ -23,6 +23,12 @@ DocMind AI relies on multiple agent roles that must coordinate while preserving 
 
 We therefore migrate the orchestration to graph-native LangGraph primitives (`StateGraph`) while keeping the existing per-role agents built via LangChain v1 `create_agent` and continuing to use LlamaIndex for retrieval/indexing (not as the orchestration runtime).
 
+ADR-066 re-evaluated modern `llama-index-workflows` and LlamaAgents options for
+issue #86. The decision remains unchanged for the default runtime: LangGraph
+`StateGraph` stays canonical. Any future LlamaIndex Workflows work must be a
+contained, in-process pilot with explicit parity gates and net code deletion
+potential before replacement can be considered.
+
 ## Decision Drivers
 
 - Simplicity over bespoke orchestration
@@ -37,6 +43,10 @@ We therefore migrate the orchestration to graph-native LangGraph primitives (`St
 - Manual orchestration — complex state and error handling
 - Heavy multi‑agent frameworks — overkill for local desktop app
 - LlamaIndex AgentWorkflow — introduces a second orchestration/state subsystem; would require rewriting existing LangChain/LangGraph tool seams
+- Modern LlamaIndex Workflows — active and promising for contained future
+  pilots, but not a replacement for the current default runtime without
+  checkpoint, store, streaming, deadline, cache, telemetry, and offline parity
+  evidence (see ADR-066)
 - Third‑party supervisor wrapper — prebuilt, but depended on deprecated LangGraph prebuilts in the pinned version
 - LangGraph StateGraph (Selected) — graph-native, testable, minimizes dependencies and upgrade risk
 
@@ -201,10 +211,12 @@ def test_supervisor_boots_with_agents(supervisor_app):
 
 ### Dependencies
 
-- Python: See `pyproject.toml` `[project].dependencies` for authoritative
-  versions/pins. Current constraints include `langgraph==1.0.6`,
-  `langgraph-checkpoint-sqlite==3.0.2`, `langchain>=1.2.2,<2.0.0`,
-  `langchain-core>=1.2.6,<2.0.0`, and `langchain-openai>=1.1.6,<2.0.0`.
+- Python and package constraints: See `pyproject.toml` and `uv.lock` for
+  authoritative versions. As of ADR-066, the lockfile contains
+  `langgraph==1.1.10`, `langgraph-checkpoint==4.0.3`,
+  `langgraph-checkpoint-sqlite==3.0.3`, `langchain==1.2.16`,
+  `langchain-core==1.3.2`, `llama-index==0.14.21`, and
+  `llama-index-workflows==2.20.0` as a transitive dependency.
 
 ### Ongoing Maintenance & Considerations
 
@@ -214,6 +226,8 @@ def test_supervisor_boots_with_agents(supervisor_app):
 
 ## Changelog
 
+- 7.2 (2026-05-01): Linked ADR-066 issue #86 decision; reaffirmed LangGraph as
+  the default runtime and refreshed dependency posture.
 - 7.1 (2026‑01‑18): Clarified handoff option deprecations and aligned dependency
   references with `pyproject.toml` as the source of truth.
 - 7.0 (2026‑01‑17): Migrate orchestration to graph-native LangGraph `StateGraph`;
