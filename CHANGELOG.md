@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [0.9.0](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.8.2...v0.9.0) (2026-05-01)
+
+
+### Features
+
+* **llm:** restore llama.cpp server-first GGUF UX ([#108](https://github.com/BjornMelin/docmind-ai-llm/issues/108)) ([6eeb9cd](https://github.com/BjornMelin/docmind-ai-llm/commit/6eeb9cda7249d94e5aa69f0c536e88cec7e1331e))
+
+
+### Performance Improvements
+
+* **analytics:** use Arrow tables with Plotly 6 ([#114](https://github.com/BjornMelin/docmind-ai-llm/issues/114)) ([863a312](https://github.com/BjornMelin/docmind-ai-llm/commit/863a312de7f7fb65d8eb02368dde4c0a3c5d2853))
+
+
+### Documentation
+
+* **agents:** document LlamaIndex workflows decision ([#112](https://github.com/BjornMelin/docmind-ai-llm/issues/112)) ([1dc227a](https://github.com/BjornMelin/docmind-ai-llm/commit/1dc227ae12a7a2adbbd08fc282b258f6898da018))
+* standardize markdown table formatting across documentation ([#111](https://github.com/BjornMelin/docmind-ai-llm/issues/111)) ([6321dca](https://github.com/BjornMelin/docmind-ai-llm/commit/6321dca99ba80ae4d3ed67d9e851eac597bf6d5b))
+
 ## [0.8.2](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.8.1...v0.8.2) (2026-04-30)
 
 
