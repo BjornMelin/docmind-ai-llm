@@ -47,20 +47,25 @@ DocMind's in-process checkpointed LangGraph supervisor.
 
 ## Package And Ecosystem Facts
 
-Package facts were verified from `uv.lock`, `pyproject.toml`, PyPI metadata, and
-local installed source on 2026-04-30:
+Repository snapshot facts were verified from `uv.lock` and `pyproject.toml`.
+Local installed source on 2026-04-30 was used only as a cross-check, not as the
+authoritative source for this ADR.
 
-- The repo lockfile already contains `llama-index-workflows==2.20.0`
+- The repo snapshot pins `llama-index==0.14.21` and `llama-index-core==0.14.21`.
+- The repo snapshot already contains `llama-index-workflows==2.20.0`
   transitively through `llama-index-core==0.14.21`.
-- The repo lockfile contains `langgraph==1.1.10`,
+- The repo snapshot pins `langgraph==1.1.10`,
   `langgraph-checkpoint==4.0.3`, and
   `langgraph-checkpoint-sqlite==3.0.3`.
-- Current PyPI metadata showed:
-  - `llama-index-workflows==2.20.0`, Python `>=3.10`
-  - `llama-agents-server==0.5.0`, Python `>=3.10`
-  - `llama-agents-client==0.3.7`, Python `>=3.10`
-  - `llamactl==0.9.1`, Python `>=3.10,<4`
-  - old `llama-agents==0.0.14`, uploaded in 2024
+- The repo snapshot pins `langchain==1.2.16` and `langchain-core==1.3.2`.
+
+PyPI metadata and the local install cross-check confirmed the broader ecosystem
+posture at the time of review:
+
+- `llama-agents-server==0.5.0`, Python `>=3.10`
+- `llama-agents-client==0.3.7`, Python `>=3.10`
+- `llamactl==0.9.1`, Python `>=3.10,<4`
+- old `llama-agents==0.0.14`, uploaded in 2024
 
 The old `llama-agents` package MUST NOT be added.
 
