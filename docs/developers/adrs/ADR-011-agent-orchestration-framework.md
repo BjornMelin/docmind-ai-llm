@@ -2,8 +2,8 @@
 ADR: 011
 Title: Agent Orchestration with LangGraph StateGraph
 Status: Accepted (Amended)
-Version: 7.1
-Date: 2026-01-18
+Version: 7.2
+Date: 2026-05-01
 Supersedes:
 Superseded-by:
 Related: 001, 003, 004, 010, 015, 016, 024, 066
