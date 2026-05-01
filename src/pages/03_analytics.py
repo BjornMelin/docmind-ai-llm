@@ -10,8 +10,8 @@ import contextlib
 from pathlib import Path
 
 import duckdb
-import pandas as pd
 import plotly.express as px
+import pyarrow as pa
 import streamlit as st
 from loguru import logger
 
@@ -25,14 +25,14 @@ from src.utils.telemetry import (
 
 def _load_query_metrics(
     db_path: Path,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+) -> tuple[pa.Table, pa.Table, pa.Table]:
     """Load and aggregate query performance metrics from DuckDB.
 
     Args:
         db_path: Path to the DuckDB database file.
 
     Returns:
-        tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]: DataFrames containing
+        tuple[pa.Table, pa.Table, pa.Table]: Arrow tables containing
             strategy counts, daily average latency, and success/failure counts.
     """
     con = duckdb.connect(str(db_path))
@@ -44,7 +44,7 @@ def _load_query_metrics(
             GROUP BY retrieval_strategy
             ORDER BY n DESC
             """
-        ).df()
+        ).fetch_arrow_table()
         df_latency = con.execute(
             """
             SELECT date_trunc('day', ts) AS day, AVG(latency_ms) AS avg_ms
@@ -52,14 +52,14 @@ def _load_query_metrics(
             GROUP BY 1
             ORDER BY 1
             """
-        ).df()
+        ).fetch_arrow_table()
         df_success = con.execute(
             """
             SELECT success, COUNT(*) AS n
             FROM query_metrics
             GROUP BY success
             """
-        ).df()
+        ).fetch_arrow_table()
         return df_strategy, df_latency, df_success
     finally:
         with contextlib.suppress(Exception):  # pragma: no cover - defensive
@@ -111,7 +111,7 @@ def main() -> None:  # pragma: no cover - Streamlit page
     if counts.lines_read > 0:
         st.subheader("Telemetry — Router Selection (JSONL)")
         if counts.router_selected_by_route:
-            df_routes = pd.DataFrame(
+            df_routes = pa.table(
                 {
                     "route": list(counts.router_selected_by_route.keys()),
                     "n": list(counts.router_selected_by_route.values()),
