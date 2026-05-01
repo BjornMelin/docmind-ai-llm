@@ -1,8 +1,8 @@
 ---
 spec: SPEC-034
 title: Analytics Page Hardening (DuckDB + Telemetry Parsing)
-version: 1.1.0
-date: 2026-01-12
+version: 1.2.0
+date: 2026-05-01
 owners: ["ai-arch"]
 status: Final
 related_requirements:
@@ -18,12 +18,16 @@ related_adrs: ["ADR-053", "ADR-032"]
 3. Use canonical paths from settings/telemetry utilities.
 4. Gate the page at runtime behind `DOCMIND_ANALYTICS_ENABLED=true`.
 5. Keep the page importable without side effects.
+6. Render Analytics charts from DuckDB/PyArrow tables with Plotly 6 native
+   dataframe support.
 
 ## Non-goals
 
 - Adding new analytics schemas or metrics tables.
 - Adding network exporters or remote analytics.
 - Building a full analytics dashboard UI redesign.
+- Removing Pandas from the repository; current LlamaIndex reader and eval
+  surfaces still require it.
 
 ## Technical Design
 
@@ -32,8 +36,11 @@ related_adrs: ["ADR-053", "ADR-032"]
 Update `src/pages/03_analytics.py` to use a context manager or `try/finally`:
 
 - open connection
-- query to DataFrames
+- query to PyArrow tables with `fetch_arrow_table()`
 - close connection
+
+Analytics chart inputs should avoid Pandas materialization. Pass PyArrow tables
+directly to Plotly Express so Plotly 6 can use its native dataframe layer.
 
 ### Telemetry JSONL parsing helper
 
@@ -80,6 +87,7 @@ No new telemetry; this is a consumer-only hardening.
   - enforce `max_lines` and `max_bytes` caps
 - Unit tests for Analytics DB lifecycle (`tests/unit/pages/test_analytics_telemetry_parsing.py`):
   - DuckDB connection closes normally and on query exception
+  - query metrics helper returns PyArrow tables
 - Keep `tests/integration/test_pages_smoke.py` passing.
 
 ## RTM Updates

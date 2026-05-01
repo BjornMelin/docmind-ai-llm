@@ -5,7 +5,8 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 
-import pandas as pd
+import duckdb
+import pyarrow as pa
 import pytest
 
 from src.utils import telemetry as telemetry_module
@@ -95,17 +96,62 @@ def test_get_analytics_duckdb_path_uses_base_dir(tmp_path: Path) -> None:
     assert get_analytics_duckdb_path(base_dir=base_dir) == expected.resolve()
 
 
+def test_load_query_metrics_returns_arrow_tables_from_duckdb(tmp_path: Path) -> None:
+    analytics = importlib.import_module("src.pages.03_analytics")
+    db_path = tmp_path / "analytics.duckdb"
+    con = duckdb.connect(str(db_path))
+    try:
+        con.execute(
+            """
+            CREATE TABLE query_metrics (
+                retrieval_strategy VARCHAR,
+                ts TIMESTAMP,
+                latency_ms DOUBLE,
+                success BOOLEAN
+            )
+            """
+        )
+        con.execute(
+            """
+            INSERT INTO query_metrics VALUES
+                ('hybrid_search', TIMESTAMP '2026-05-01 12:00:00', 42.0, true),
+                ('semantic_search', TIMESTAMP '2026-05-01 13:00:00', 84.0, false)
+            """
+        )
+    finally:
+        con.close()
+
+    strategy, latency, success = analytics._load_query_metrics(db_path)
+
+    assert isinstance(strategy, pa.Table)
+    assert isinstance(latency, pa.Table)
+    assert isinstance(success, pa.Table)
+    assert strategy.column_names == ["retrieval_strategy", "n"]
+    assert latency.column_names == ["day", "avg_ms"]
+    assert success.column_names == ["success", "n"]
+
+
+def test_plotly_accepts_arrow_table_inputs() -> None:
+    analytics = importlib.import_module("src.pages.03_analytics")
+    table = pa.table({"route": ["semantic_search"], "n": [1]})
+
+    fig = analytics.px.bar(table, x="route", y="n")
+
+    assert fig.data[0].x[0] == "semantic_search"
+    assert fig.data[0].y[0] == 1
+
+
 def test_load_query_metrics_closes_connection_on_success(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     analytics = importlib.import_module("src.pages.03_analytics")
 
     class _FakeResult:
-        def __init__(self, df: pd.DataFrame) -> None:
-            self._df = df
+        def __init__(self, table: pa.Table) -> None:
+            self._table = table
 
-        def df(self) -> pd.DataFrame:
-            return self._df
+        def fetch_arrow_table(self) -> pa.Table:
+            return self._table
 
     class _FakeConn:
         def __init__(self) -> None:
@@ -114,7 +160,7 @@ def test_load_query_metrics_closes_connection_on_success(
 
         def execute(self, _sql: str) -> _FakeResult:
             self.calls += 1
-            return _FakeResult(pd.DataFrame({"n": [self.calls]}))
+            return _FakeResult(pa.table({"n": [self.calls]}))
 
         def close(self) -> None:
             self.closed = True
@@ -122,9 +168,10 @@ def test_load_query_metrics_closes_connection_on_success(
     conn = _FakeConn()
     monkeypatch.setattr(analytics.duckdb, "connect", lambda _p: conn)
 
-    analytics._load_query_metrics(tmp_path / "analytics.duckdb")
+    tables = analytics._load_query_metrics(tmp_path / "analytics.duckdb")
 
     assert conn.closed is True
+    assert all(isinstance(table, pa.Table) for table in tables)
 
 
 def test_load_query_metrics_closes_connection_on_exception(
@@ -133,8 +180,8 @@ def test_load_query_metrics_closes_connection_on_exception(
     analytics = importlib.import_module("src.pages.03_analytics")
 
     class _FakeResult:
-        def df(self) -> pd.DataFrame:
-            return pd.DataFrame({"n": [1]})
+        def fetch_arrow_table(self) -> pa.Table:
+            return pa.table({"n": [1]})
 
     class _FakeConn:
         def __init__(self) -> None:

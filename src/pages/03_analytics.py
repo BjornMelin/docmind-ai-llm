@@ -10,8 +10,8 @@ import contextlib
 from pathlib import Path
 
 import duckdb
-import pandas as pd
 import plotly.express as px
+import pyarrow as pa
 import streamlit as st
 from loguru import logger
 
@@ -25,42 +25,42 @@ from src.utils.telemetry import (
 
 def _load_query_metrics(
     db_path: Path,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+) -> tuple[pa.Table, pa.Table, pa.Table]:
     """Load and aggregate query performance metrics from DuckDB.
 
     Args:
         db_path: Path to the DuckDB database file.
 
     Returns:
-        tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]: DataFrames containing
+        tuple[pa.Table, pa.Table, pa.Table]: Arrow tables containing
             strategy counts, daily average latency, and success/failure counts.
     """
     con = duckdb.connect(str(db_path))
     try:
-        df_strategy = con.execute(
+        strategy_table = con.execute(
             """
             SELECT retrieval_strategy, COUNT(*) AS n
             FROM query_metrics
             GROUP BY retrieval_strategy
             ORDER BY n DESC
             """
-        ).df()
-        df_latency = con.execute(
+        ).fetch_arrow_table()
+        latency_table = con.execute(
             """
             SELECT date_trunc('day', ts) AS day, AVG(latency_ms) AS avg_ms
             FROM query_metrics
             GROUP BY 1
             ORDER BY 1
             """
-        ).df()
-        df_success = con.execute(
+        ).fetch_arrow_table()
+        success_table = con.execute(
             """
             SELECT success, COUNT(*) AS n
             FROM query_metrics
             GROUP BY success
             """
-        ).df()
-        return df_strategy, df_latency, df_success
+        ).fetch_arrow_table()
+        return strategy_table, latency_table, success_table
     finally:
         with contextlib.suppress(Exception):  # pragma: no cover - defensive
             con.close()
@@ -83,7 +83,7 @@ def main() -> None:  # pragma: no cover - Streamlit page
         st.stop()
 
     try:
-        df_strategy, df_latency, df_success = _load_query_metrics(db_path)
+        strategy_table, latency_table, success_table = _load_query_metrics(db_path)
     except Exception as exc:  # pragma: no cover - UX best effort
         redaction = build_pii_log_entry(str(exc), key_id="analytics.load_db")
         logger.warning(
@@ -97,28 +97,35 @@ def main() -> None:  # pragma: no cover - Streamlit page
 
     st.subheader("Query volumes by strategy")
     st.plotly_chart(
-        px.bar(df_strategy, x="retrieval_strategy", y="n"), use_container_width=True
+        px.bar(strategy_table, x="retrieval_strategy", y="n"),
+        use_container_width=True,
     )
 
     st.subheader("Latency over time (avg ms)")
-    st.plotly_chart(px.line(df_latency, x="day", y="avg_ms"), use_container_width=True)
+    st.plotly_chart(
+        px.line(latency_table, x="day", y="avg_ms"),
+        use_container_width=True,
+    )
 
     st.subheader("Success rate")
-    st.plotly_chart(px.bar(df_success, x="success", y="n"), use_container_width=True)
+    st.plotly_chart(
+        px.bar(success_table, x="success", y="n"),
+        use_container_width=True,
+    )
 
     # Telemetry JSONL (optional)
     counts = parse_telemetry_jsonl_counts()
     if counts.lines_read > 0:
         st.subheader("Telemetry — Router Selection (JSONL)")
         if counts.router_selected_by_route:
-            df_routes = pd.DataFrame(
+            routes_table = pa.table(
                 {
                     "route": list(counts.router_selected_by_route.keys()),
                     "n": list(counts.router_selected_by_route.values()),
                 }
             )
             st.plotly_chart(
-                px.bar(df_routes, x="route", y="n"), use_container_width=True
+                px.bar(routes_table, x="route", y="n"), use_container_width=True
             )
         else:
             st.caption("No router selection events found.")
