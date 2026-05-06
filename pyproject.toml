@@ -34,7 +34,7 @@ dependencies = [
     "typer==0.21.1",                     # spaCy CLI stability (ADR-061) – prevent typer/typer-slim import conflicts with GPU extras
     # ML/LLM Fundamentals
     "torch==2.8.0",                      # PyTorch runtime (CPU-first baseline; GPU via extras)
-    "transformers>=5.0.0,<6.0.0",        # HF model interfaces (Torch 2.8-compatible)
+    "transformers>=5.8.0,<6.0.0",        # HF model interfaces (Torch 2.8-compatible)
     "tiktoken==0.12.0",
     "openai>=2.8.0,<3.0.0",
     "openai-whisper==20250625",          # Whisper speech-to-text (optional)
