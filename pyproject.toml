@@ -115,7 +115,7 @@ eval = [
 # uv run python -m spacy download en_core_web_sm
 
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=82.0.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project.urls]
