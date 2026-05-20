@@ -34,7 +34,7 @@ dependencies = [
     "typer==0.21.1",                     # spaCy CLI stability (ADR-061) – prevent typer/typer-slim import conflicts with GPU extras
     # ML/LLM Fundamentals
     "torch==2.8.0",                      # PyTorch runtime (CPU-first baseline; GPU via extras)
-    "transformers>=5.0.0,<6.0.0",        # HF model interfaces (Torch 2.8-compatible)
+    "transformers>=5.8.1,<6.0.0",        # HF model interfaces (Torch 2.8-compatible)
     "tiktoken==0.12.0",
     "openai>=2.8.0,<3.0.0",
     "openai-whisper==20250625",          # Whisper speech-to-text (optional)
@@ -65,7 +65,7 @@ dependencies = [
     "langchain-openai>=1.1.14,<2.0.0",
     # Retrieval & Reranking Extras
     "FlagEmbedding>=1.3.5,<2.0.0",          # BGE-M3 unified embeddings
-    "sentence-transformers>=5.2.0,<6.0.0",  # CrossEncoder reranking
+    "sentence-transformers>=5.5.0,<6.0.0",  # CrossEncoder reranking
     # Prompt Optimization (DSPy remains runtime-gated; install separately once
     # its dependency chain is compatible with security floors).
     "pyyaml>=6.0.3,<7.0.0",                 # YAML parser for prompt templates
