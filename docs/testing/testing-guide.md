@@ -190,7 +190,7 @@ uv run python scripts/check_links.py
 uv run python scripts/verify_structural_parity.py
 npx markdownlint-cli \
   --disable MD013 MD033 MD041 \
-  -- docs/**/*.md
+  -- 'docs/**/*.md'
 ```
 
 ## Use markers deliberately

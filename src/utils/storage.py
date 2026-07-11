@@ -118,7 +118,16 @@ def check_hybrid_collection(
     collection_name: str,
     dense_dim: int = settings.embedding.dimension,
 ) -> CollectionCompatibilityResult:
-    """Inspect named-vector compatibility without mutating Qdrant."""
+    """Inspect named-vector compatibility without mutating Qdrant.
+
+    Args:
+        client: Qdrant client used to inspect collection state.
+        collection_name: Collection whose named-vector schema is inspected.
+        dense_dim: Required dimension for the canonical dense vector.
+
+    Returns:
+        CollectionCompatibilityResult: Compatibility evidence and required action.
+    """
     try:
         if not client.collection_exists(collection_name):
             return CollectionCompatibilityResult(
@@ -198,7 +207,16 @@ def ensure_hybrid_collection(
     collection_name: str,
     dense_dim: int = settings.embedding.dimension,
 ) -> CollectionCompatibilityResult:
-    """Create a missing collection and fail closed for every existing mismatch."""
+    """Create a missing collection and reject every existing mismatch.
+
+    Args:
+        client: Qdrant client used to inspect and create collection state.
+        collection_name: Collection to validate or create.
+        dense_dim: Required dimension for the canonical dense vector.
+
+    Returns:
+        CollectionCompatibilityResult: Compatibility evidence and performed action.
+    """
     result = check_hybrid_collection(client, collection_name, dense_dim)
     if result.compatible or result.reason != "collection_missing":
         return result

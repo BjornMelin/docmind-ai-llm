@@ -8,6 +8,7 @@ events. Avoids real Qdrant network calls.
 from __future__ import annotations
 
 import importlib
+from types import SimpleNamespace
 from typing import Any
 
 
@@ -91,4 +92,60 @@ def test_hybrid_retrieval_telemetry_emits_backend_and_timeout(monkeypatch):  # t
     assert e.get("retrieval.fusion_mode") == "rrf"
     assert isinstance(e.get("retrieval.return_count"), int)
     assert isinstance(e.get("retrieval.latency_ms"), int)
+    assert e.get("retrieval.rrf_k") == 60
+    assert e.get("dedup.group_size") == 1
+    assert e.get("dedup.server_group_count") == 8
     assert e.get("dedup.server_side") is True
+    assert "dedup.before" not in e
+    assert "dedup.dropped" not in e
+
+
+def test_hybrid_dbsf_telemetry_omits_rrf_k(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Do not report the inactive RRF constant for DBSF queries."""
+    hmod = importlib.import_module("src.retrieval.hybrid")
+    monkeypatch.setattr(
+        hmod,
+        "ensure_hybrid_collection",
+        lambda *_args, **_kwargs: SimpleNamespace(compatible=True),
+    )
+    events: list[dict[str, Any]] = []
+    monkeypatch.setattr(hmod, "log_jsonl", events.append)
+
+    retriever = hmod.ServerHybridRetriever(
+        hmod.HybridParams(collection="c", fusion_mode="dbsf", rrf_k=91),
+        client=SimpleNamespace(close=lambda: None),
+    )
+    retriever._emit_telemetry(
+        t0=0.0,
+        nodes=[],
+        sparse_vec=None,
+        key_name="page_id",
+        server_group_count=0,
+    )
+
+    assert events[-1]["retrieval.fusion_mode"] == "dbsf"
+    assert "retrieval.rrf_k" not in events[-1]
+
+
+def test_hybrid_schema_check_uses_current_embedding_dimension(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Pass the live settings dimension instead of the storage default."""
+    hmod = importlib.import_module("src.retrieval.hybrid")
+    dimensions: list[int] = []
+
+    def _ensure(_client: object, _collection: str, *, dense_dim: int) -> object:
+        dimensions.append(dense_dim)
+        return SimpleNamespace(compatible=True)
+
+    monkeypatch.setattr(hmod, "ensure_hybrid_collection", _ensure)
+    monkeypatch.setattr(
+        hmod,
+        "settings",
+        SimpleNamespace(embedding=SimpleNamespace(dimension=1536)),
+    )
+
+    hmod.ServerHybridRetriever(
+        hmod.HybridParams(collection="c"),
+        client=SimpleNamespace(close=lambda: None),
+    )
+
+    assert dimensions == [1536]

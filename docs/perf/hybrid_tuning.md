@@ -15,7 +15,12 @@ Note: Fusion and deduplication are performed server-side via Qdrant Query API (`
 ## Tune by Observing
 
 - `retrieval.latency_ms` — keep within SLO (e.g., ≤ 200 ms)
-- `dedup.before/after/dropped` — high `dropped` with low recall may indicate lowering fused_top_k or rebalancing prefetch
+- `dedup.server_group_count` — count of unique groups returned by Qdrant after
+  server-side grouping; compare it with `retrieval.fused_limit` and recall when
+  tuning the prefetch limits
+- `dedup.before`, `dedup.after`, and `dedup.dropped` — multimodal client-fusion
+  cardinalities before and after configured-key deduplication; `dedup.after` is
+  measured before the final top-k limit
 - Rerank: gate at `reranking_top_k` 5–16; TEXT timeout 250 ms (CPU), use fp16 on GPU, SigLIP 150 ms budget
 
 ## Notes

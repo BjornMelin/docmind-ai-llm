@@ -142,6 +142,76 @@ class _LiveProcess:
         del timeout
 
 
+class _ClosableConnection:
+    """Minimal pipe endpoint that records deterministic cleanup."""
+
+    closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _StartFailureProcess:
+    """Process double that fails after becoming partially live."""
+
+    alive = False
+    terminated = False
+    joined = False
+    closed = False
+
+    def start(self) -> None:
+        self.alive = True
+        raise OSError("private worker startup detail")
+
+    def is_alive(self) -> bool:
+        return self.alive
+
+    def terminate(self) -> None:
+        self.terminated = True
+        self.alive = False
+
+    def kill(self) -> None:
+        self.alive = False
+
+    def join(self, timeout: float | None = None) -> None:
+        del timeout
+        self.joined = True
+
+    def close(self) -> None:
+        self.closed = True
+
+
+@pytest.mark.asyncio
+async def test_async_worker_start_failure_is_typed_and_closes_resources(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.md"
+    source.write_text("bounded", encoding="utf-8")
+    cfg = DocMindSettings(_env_file=None)  # type: ignore[arg-type]
+    receiver = _ClosableConnection()
+    sender = _ClosableConnection()
+    process = _StartFailureProcess()
+    context = SimpleNamespace(
+        Pipe=lambda **_kwargs: (receiver, sender),
+        Process=lambda **_kwargs: process,
+    )
+    monkeypatch.setattr(service.mp, "get_context", lambda _method: context)
+
+    with pytest.raises(DocumentParseError) as raised:
+        await service.parse_document(source, settings=cfg)
+
+    assert raised.value.stage == "parser_worker"
+    assert raised.value.reason == "worker_start_failed"
+    assert raised.value.cause_type == "OSError"
+    assert "private worker startup detail" not in str(raised.value)
+    assert receiver.closed is True
+    assert sender.closed is True
+    assert process.terminated is True
+    assert process.joined is True
+    assert process.closed is True
+
+
 @pytest.mark.asyncio
 async def test_async_parse_timeout_terminates_worker(
     monkeypatch: pytest.MonkeyPatch,

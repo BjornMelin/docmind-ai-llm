@@ -49,7 +49,14 @@ def read_direct_text(
         return payload.decode("utf-8", errors="strict")
     except DocumentParseError:
         raise
-    except (OSError, UnicodeError) as exc:
+    except OSError as exc:
+        raise DocumentParseError(
+            source,
+            stage="direct_text",
+            reason="direct_text_read_failed",
+            cause=exc,
+        ) from exc
+    except UnicodeError as exc:
         raise DocumentParseError(
             source,
             stage="direct_text",

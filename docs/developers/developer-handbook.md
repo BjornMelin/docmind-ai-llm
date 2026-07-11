@@ -939,7 +939,7 @@ Use `src.agents.coordinator.MultiAgentCoordinator` as the application boundary
 and `src.agents.supervisor_graph` as the graph owner. Do not add parallel custom
 coordinators, handwritten routing state machines, or direct provider clients.
 Tests should patch the consumer seams documented in
-`docs/developers/testing-notes.md`.
+the [testing guide](../testing/testing-guide.md).
 
 ## Performance optimization
 

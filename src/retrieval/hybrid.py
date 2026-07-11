@@ -19,6 +19,7 @@ from loguru import logger
 from qdrant_client import QdrantClient
 from qdrant_client import models as qmodels
 
+from src.config import settings
 from src.config.integrations import get_settings_embed_model
 from src.retrieval.sparse_query import encode_to_qdrant as _encode_sparse_query
 from src.utils.exceptions import IMPORT_EXCEPTIONS
@@ -86,6 +87,7 @@ class ServerHybridRetriever:
         compatibility = ensure_hybrid_collection(
             self._client,
             self.params.collection,
+            dense_dim=settings.embedding.dimension,
         )
         if not compatibility.compatible:
             raise QdrantCollectionIncompatibleError(
@@ -212,8 +214,7 @@ class ServerHybridRetriever:
         nodes: list[NodeWithScore],
         sparse_vec: Any | None,
         key_name: str,
-        input_count: int,
-        unique_count: int,
+        server_group_count: int,
     ) -> None:
         """Emit retrieval telemetry in a PII-safe form."""
         try:
@@ -227,26 +228,24 @@ class ServerHybridRetriever:
                 )
             except IMPORT_EXCEPTIONS:  # pragma: no cover - defensive
                 qdrant_timeout_s = 60
-            dropped = max(0, input_count - unique_count)
-            log_jsonl(
-                {
-                    "retrieval.backend": "qdrant",
-                    "retrieval.fusion_mode": fusion_mode,
-                    "retrieval.rrf_k": int(self.params.rrf_k),
-                    "retrieval.prefetch_dense_limit": self.params.prefetch_dense,
-                    "retrieval.prefetch_sparse_limit": self.params.prefetch_sparse,
-                    "retrieval.fused_limit": self.params.fused_top_k,
-                    "retrieval.return_count": len(nodes),
-                    "retrieval.latency_ms": latency_ms,
-                    "retrieval.sparse_fallback": sparse_vec is None,
-                    "retrieval.qdrant_timeout_s": qdrant_timeout_s,
-                    "dedup.key": key_name,
-                    "dedup.before": input_count,
-                    "dedup.after": unique_count,
-                    "dedup.dropped": dropped,
-                    "dedup.server_side": True,
-                }
-            )
+            event = {
+                "retrieval.backend": "qdrant",
+                "retrieval.fusion_mode": fusion_mode,
+                "retrieval.prefetch_dense_limit": self.params.prefetch_dense,
+                "retrieval.prefetch_sparse_limit": self.params.prefetch_sparse,
+                "retrieval.fused_limit": self.params.fused_top_k,
+                "retrieval.return_count": len(nodes),
+                "retrieval.latency_ms": latency_ms,
+                "retrieval.sparse_fallback": sparse_vec is None,
+                "retrieval.qdrant_timeout_s": qdrant_timeout_s,
+                "dedup.key": key_name,
+                "dedup.group_size": 1,
+                "dedup.server_group_count": server_group_count,
+                "dedup.server_side": True,
+            }
+            if fusion_mode == "rrf":
+                event["retrieval.rrf_k"] = int(self.params.rrf_k)
+            log_jsonl(event)
         except (OSError, ValueError, RuntimeError) as exc:
             redaction = build_pii_log_entry(str(exc), key_id="hybrid.telemetry.emit")
             logger.debug(
@@ -305,8 +304,7 @@ class ServerHybridRetriever:
             nodes=nodes,
             sparse_vec=sparse_vec,
             key_name=key_name,
-            input_count=len(points),
-            unique_count=len(points),
+            server_group_count=len(groups),
         )
 
         return nodes

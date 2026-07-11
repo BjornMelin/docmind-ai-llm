@@ -25,6 +25,6 @@ def test_sampling_drops_events(tmp_path, monkeypatch):
     monkeypatch.setattr(settings.telemetry, "jsonl_path", out)
     monkeypatch.setattr(settings.telemetry, "sample", 0.0)
     monkeypatch.setattr(settings.telemetry, "disabled", False)
-    telemetry.log_jsonl({"dedup.dropped": 1})
+    telemetry.log_jsonl({"dedup.server_group_count": 1})
     # With 0.0 sample rate, file should not exist / be empty
     assert (not out.exists()) or (out.read_text().strip() == "")

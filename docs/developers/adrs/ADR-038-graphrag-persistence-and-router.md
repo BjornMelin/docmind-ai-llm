@@ -56,9 +56,12 @@ GraphRAG was accepted (ADR‑019) as an optional enhancement, but lacked standar
 - Persistence: Implement SnapshotManager to write to `storage/_tmp-<uuid>`
   and atomically rename to `storage/<timestamp>`. Each snapshot contains
   `manifest.jsonl`, `manifest.meta.json`, and `manifest.checksum`.
-  `manifest.meta.json` owns `corpus_hash`, `config_hash`, `created_at`, and
-  `versions`. Use a lockfile to ensure a single writer. Load the latest
-  snapshot in Chat and show a staleness badge on mismatch.
+  `manifest.meta.json` owns `corpus_hash`, `config_hash`, `created_at`,
+  `versions`, and `complete`. The flag remains `false` while staged and through
+  the atomic rename; finalization then sets it to `true` and refreshes the
+  checksum. Readers ignore incomplete manifests. Use a lockfile to ensure a
+  single writer. Load the latest snapshot in Chat and show a staleness badge on
+  mismatch.
 - Exports: JSONL baseline (one relation per line from `get_rel_map`); Parquet
   optional if `pyarrow` is available. Metadata is recorded under
   `manifest.meta.json`'s `graph_exports` field with `seed_count`, `duration_ms`,

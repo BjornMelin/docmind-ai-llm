@@ -317,6 +317,9 @@ class MultimodalFusionRetriever:
                     "retrieval.fused_count": len(out),
                     "retrieval.rrf_k": int(k_constant),
                     "dedup.key": key_name,
+                    "dedup.before": len(fused),
+                    "dedup.after": len(dedup_sorted),
+                    "dedup.dropped": len(fused) - len(dedup_sorted),
                     "retrieval.latency_ms": latency_ms,
                 }
             )

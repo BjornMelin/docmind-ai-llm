@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import sys
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -110,6 +111,10 @@ def documents_app_test(
             "Rebuild should run once per test action."
         )
         snapshot_dir.mkdir(parents=True, exist_ok=False)
+        (snapshot_dir / "manifest.meta.json").write_text(
+            json.dumps({"complete": True}),
+            encoding="utf-8",
+        )
         rebuild_calls.append(snapshot_dir)
         return snapshot_dir
 

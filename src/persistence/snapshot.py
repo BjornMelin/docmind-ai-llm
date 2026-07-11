@@ -388,22 +388,39 @@ def finalize_snapshot(tmp_dir: Path, *, base_dir: Path | None = None) -> Path:
             _release_active_lock()
 
 
+def _load_complete_manifest(snapshot_dir: Path) -> dict[str, Any] | None:
+    """Load manifest metadata only after snapshot finalization completed."""
+    meta_path = snapshot_dir / "manifest.meta.json"
+    try:
+        payload: object = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict) or payload.get("complete") is not True:
+        return None
+    return cast(dict[str, Any], payload)
+
+
 def latest_snapshot_dir(base_dir: Path | None = None) -> Path | None:
-    """Return the most recent snapshot directory or ``None``."""
+    """Return the most recent complete snapshot directory or ``None``."""
     paths = _snapshot_paths(base_dir)
     if not paths.base_dir.exists():
         return None
     if paths.current_file.exists():
-        with suppress(OSError):
+        with suppress(OSError, UnicodeError):
             name = paths.current_file.read_text(encoding="utf-8").strip()
             if name:
                 candidate = paths.base_dir / name
-                if candidate.is_dir():
+                if (
+                    candidate.is_dir()
+                    and _load_complete_manifest(candidate) is not None
+                ):
                     return candidate
     versions = [
         p
         for p in paths.base_dir.iterdir()
-        if p.is_dir() and not p.name.startswith("_tmp-")
+        if p.is_dir()
+        and not p.name.startswith("_tmp-")
+        and _load_complete_manifest(p) is not None
     ]
     if not versions:
         return None
@@ -413,17 +430,11 @@ def latest_snapshot_dir(base_dir: Path | None = None) -> Path | None:
 def load_manifest(
     snapshot_dir: Path | None = None, *, base_dir: Path | None = None
 ) -> dict[str, Any] | None:
-    """Load snapshot metadata manifest."""
+    """Load metadata for a complete snapshot."""
     target = snapshot_dir or latest_snapshot_dir(base_dir)
     if target is None:
         return None
-    meta_path = target / "manifest.meta.json"
-    if not meta_path.exists():
-        return None
-    try:
-        return json.loads(meta_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:  # pragma: no cover - defensive
-        return None
+    return _load_complete_manifest(target)
 
 
 def persist_vector_index(index: Any, out_dir: Path) -> None:
@@ -503,14 +514,15 @@ def persist_graph_store(store: Any, out_dir: Path) -> None:
 
 def load_vector_index(snapshot_dir: Path | None = None) -> Any | None:
     """Load a persisted vector index from ``snapshot_dir`` when available."""
+    snap = snapshot_dir or latest_snapshot_dir()
+    if snap is None or _load_complete_manifest(snap) is None:
+        return None
+
     try:
         from llama_index.core import StorageContext, load_index_from_storage
     except (ImportError, ModuleNotFoundError, AttributeError):  # pragma: no cover
         return None
 
-    snap = snapshot_dir or latest_snapshot_dir()
-    if not snap:
-        return None
     vec_dir = snap / "vector"
     if not vec_dir.exists():
         return None
@@ -535,15 +547,16 @@ def load_vector_index(snapshot_dir: Path | None = None) -> Any | None:
 
 def load_property_graph_index(snapshot_dir: Path | None = None) -> Any | None:
     """Load a persisted property graph index from ``snapshot_dir`` when available."""
+    snap = snapshot_dir or latest_snapshot_dir()
+    if snap is None or _load_complete_manifest(snap) is None:
+        return None
+
     try:
         from llama_index.core import PropertyGraphIndex
         from llama_index.core.graph_stores import SimplePropertyGraphStore
     except (ImportError, ModuleNotFoundError, AttributeError):  # pragma: no cover
         return None
 
-    snap = snapshot_dir or latest_snapshot_dir()
-    if not snap:
-        return None
     graph_dir = snap / "graph"
     if not graph_dir.exists():
         return None
@@ -586,7 +599,7 @@ def is_stale(manifest: dict[str, Any] | None) -> bool:
 
 
 def recover_snapshots(base_dir: Path | None = None) -> None:
-    """Remove stale workspaces and repair the ``CURRENT`` pointer if missing."""
+    """Remove stale workspaces and repair an invalid ``CURRENT`` pointer."""
     paths = _snapshot_paths(base_dir)
     if not paths.base_dir.exists():
         return
@@ -605,11 +618,14 @@ def recover_snapshots(base_dir: Path | None = None) -> None:
 
     current_target: Path | None = None
     if paths.current_file.exists():
-        with suppress(OSError):
+        with suppress(OSError, UnicodeError):
             name = paths.current_file.read_text(encoding="utf-8").strip()
             if name:
                 candidate = paths.base_dir / name
-                if candidate.exists():
+                if (
+                    candidate.is_dir()
+                    and _load_complete_manifest(candidate) is not None
+                ):
                     current_target = candidate
 
     if current_target is not None:
@@ -619,7 +635,9 @@ def recover_snapshots(base_dir: Path | None = None) -> None:
     versions = sorted(
         p
         for p in paths.base_dir.iterdir()
-        if p.is_dir() and not p.name.startswith("_tmp-")
+        if p.is_dir()
+        and not p.name.startswith("_tmp-")
+        and _load_complete_manifest(p) is not None
     )
     if not versions:
         with suppress(FileNotFoundError):

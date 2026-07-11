@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from qdrant_client import QdrantClient, models
 
+from src.config.embedding_defaults import BGE_M3_EMBEDDING_DIMENSION
 from src.config.settings import DocMindSettings
 from src.processing.ingestion_api import load_documents
 from src.processing.parsing.service import parse_document_sync
@@ -22,6 +23,7 @@ _QDRANT_SYSTEM_URL = os.getenv("DOCMIND_QDRANT_SYSTEM_URL")
 
 
 @pytest.mark.system
+@pytest.mark.requires_network
 @pytest.mark.asyncio
 @pytest.mark.skipif(
     not _QDRANT_SYSTEM_URL,
@@ -42,12 +44,21 @@ async def test_text_ingest_index_query_qdrant_roundtrip(
 
     document = documents[0]
     content = document.get_content()
-    dense = [byte / 255.0 for byte in hashlib.sha256(content.encode()).digest()[:8]]
+    dense = [
+        byte / 255.0
+        for byte in hashlib.shake_256(content.encode()).digest(
+            BGE_M3_EMBEDDING_DIMENSION
+        )
+    ]
     collection = f"docmind-system-{uuid.uuid4().hex}"
     point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, document.doc_id))
     client = QdrantClient(url=_QDRANT_SYSTEM_URL, timeout=10, prefer_grpc=False)
     try:
-        compatibility = ensure_hybrid_collection(client, collection, dense_dim=8)
+        compatibility = ensure_hybrid_collection(
+            client,
+            collection,
+            dense_dim=BGE_M3_EMBEDDING_DIMENSION,
+        )
         assert compatibility.compatible is True
         assert compatibility.action == "created"
         client.upsert(

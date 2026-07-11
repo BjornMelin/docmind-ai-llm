@@ -11,6 +11,7 @@ defaults:
 version: 1
 ---
 {% chat role="system" %}
+{{ role.description }}
 {{ tone.description }}
 {% endchat %}
 

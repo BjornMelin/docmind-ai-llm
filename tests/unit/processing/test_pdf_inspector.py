@@ -14,6 +14,42 @@ from src.processing.parsing.pdf_inspector import inspect_pdf
 pytestmark = pytest.mark.unit
 
 
+@pytest.mark.parametrize(
+    (
+        "sample_pages",
+        "max_text_chars",
+        "max_pages",
+        "render_dpi",
+        "max_render_pixels",
+        "message",
+    ),
+    [
+        (-1, 8000, None, 200, None, "sample_pages"),
+        (3, -1, None, 200, None, "max_text_chars"),
+        (3, 8000, 0, 200, None, "max_pages"),
+        (3, 8000, None, 0, None, "render_dpi"),
+        (3, 8000, None, 200, 0, "max_render_pixels"),
+    ],
+)
+def test_inspect_pdf_rejects_invalid_numeric_limits(
+    sample_pages: int,
+    max_text_chars: int,
+    max_pages: int | None,
+    render_dpi: int,
+    max_render_pixels: int | None,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        inspect_pdf(
+            Path("sample.pdf"),
+            sample_pages=sample_pages,
+            max_text_chars=max_text_chars,
+            max_pages=max_pages,
+            render_dpi=render_dpi,
+            max_render_pixels=max_render_pixels,
+        )
+
+
 def test_inspect_pdf_samples_text_with_pypdfium2(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

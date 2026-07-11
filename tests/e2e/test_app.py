@@ -20,6 +20,7 @@ complete user workflows and application integration.
 """
 
 import sys
+from contextlib import suppress
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -33,7 +34,6 @@ from tests.e2e.helpers import (
     install_llama_index_core,
     install_mock_ollama,
     install_mock_torch,
-    patch_async_workflow_dependencies,
 )
 
 # Mark all tests in this module as E2E
@@ -186,8 +186,6 @@ def fixture_app_test(tmp_path, monkeypatch):
     monkeypatch.setattr("src.app.bootstrap_settings", MagicMock(return_value=None))
 
     # Ensure submodule attribute is present for patch traversal
-    from contextlib import suppress
-
     with suppress(Exception):
         __import__("src.utils.core")
 
@@ -355,111 +353,23 @@ def test_app_session_persistence_and_memory_management(
     assert not app.exception
 
 
-def test_complete_end_to_end_multi_agent_workflow(app_test, tmp_path):
-    """Test complete end-to-end workflow with multi-agent coordination system.
-
-    This comprehensive test validates the entire user workflow:
-    1. Application startup and configuration
-    2. Document upload and processing
-    3. Multi-agent analysis coordination
-    4. Chat functionality with agent system
-    5. Session persistence and memory management
-
-    Args:
-        mock_load_docs: Mock document loading function.
-        mock_coordinator_class: Mock MultiAgentCoordinator class.
-        mock_ollama_list: Mock Ollama models list.
-        mock_pull: Mock ollama.pull function.
-        app_test: Streamlit app test fixture.
-        tmp_path: Temporary directory for test files.
-    """
-    with (
-        patch("ollama.pull", return_value={"status": "success"}),
-        patch(
-            "ollama.list",
-            return_value={"models": [{"name": "qwen3-4b-instruct-2507:latest"}]},
-        ) as mock_ollama_list,
-        patch_async_workflow_dependencies() as (mock_load_docs, mock_coordinator_class),
-        patch("src.app.bootstrap_settings", return_value=None) as mock_bootstrap,
-    ):
-        # Setup comprehensive mocks for end-to-end testing
-        from llama_index.core import Document
-
-        # Mock successful document loading
-        mock_documents = [
-            Document(
-                text="DocMind AI implements advanced multi-agent coordination "
-                "for document analysis.",
-                metadata={"source": "test_document.pdf", "page": 1},
-            )
-        ]
-        mock_load_docs.return_value = mock_documents
-
-        # Mock multi-agent coordinator
-        mock_coordinator = MagicMock()
-        mock_response = MagicMock()
-        mock_response.content = (
-            "Complete multi-agent analysis: This document discusses "
-            "advanced AI coordination techniques."
-        )
-        mock_coordinator.process_query.return_value = mock_response
-        mock_coordinator_class.return_value = mock_coordinator
-
-        # Run the application
+def test_app_bootstrap_and_chat_contract(app_test: AppTest) -> None:
+    """Validate root app bootstrap and the default Chat page contract."""
+    with patch("src.app.bootstrap_settings", return_value=None) as mock_bootstrap:
         app = app_test.run()
 
-    # 1. Verify application startup
     assert not app.exception, f"Application failed to start: {app.exception}"
-
     assert mock_bootstrap.called
 
-    # Check main application components are present (robust title check)
     app_str = str(app)
     assert ("DocMind AI" in app_str) or ("docmind" in app_str.lower())
 
-    # 3. Verify model selection and backend configuration (non-strict)
-    # Listing models is optional in current app flow; tolerate absence
-    _ = mock_ollama_list.called
     sidebar_selectboxes = {element.label for element in app.sidebar.selectbox}
     assert {"Session", "Scope", "Mode"} <= sidebar_selectboxes
-
-    # 4. Verify document processing interface (non-brittle)
-    has_file_uploader = (
-        ("FileUploader" in app_str)
-        or ("upload" in app_str.lower())
-        or hasattr(app, "file_uploader")
+    assert any(button.label == "Run analysis" for button in app.sidebar.button), (
+        "Analysis interface not found"
     )
-    # Do not fail hard on renderer differences; primary check is no exception
-
-    # 5. Verify analysis options
-    has_analysis_options = any(
-        button.label == "Run analysis" for button in app.sidebar.button
-    )
-    assert has_analysis_options, "Analysis interface not found"
-
-    # 6. Verify chat functionality
-    has_chat_interface = bool(app.chat_input)
-    assert has_chat_interface, "Chat interface not found"
-
-    # 7. Verify session management
-
-    # 8. Verify session state initialization
-    # Non-brittle session state verification
-    try:
-        session_state_keys = list(app.session_state.keys())
-        assert session_state_keys is not None
-    except Exception:
-        # Some Streamlit test harness versions restrict direct access; tolerate
-        pass
-
-        # Final validation: Complete workflow loaded successfully
-        assert not app.exception
-        print("✅ End-to-end workflow test completed successfully")
-        print(f"   - Model list retrieval: {mock_ollama_list.called}")
-        print(f"   - Settings bootstrap: {mock_bootstrap.called}")
-        ui_components_loaded = bool(has_file_uploader and has_analysis_options)
-        print(f"   - UI components loaded: {ui_components_loaded}")
-        print(f"   - Chat interface: {has_chat_interface}")
+    assert app.chat_input, "Chat interface not found"
 
 
 @pytest.mark.asyncio

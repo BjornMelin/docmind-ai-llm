@@ -61,7 +61,23 @@ def inspect_pdf(
 
     Returns:
         PdfInspectionResult with page count and sampled page text.
+
+    Raises:
+        ValueError: If an inspection limit is invalid.
+        DocumentParseError: If pypdfium2 is unavailable, the PDF is malformed,
+            or a document resource limit is exceeded.
     """
+    if sample_pages < 0:
+        raise ValueError("sample_pages must be non-negative")
+    if max_text_chars < 0:
+        raise ValueError("max_text_chars must be non-negative")
+    if max_pages is not None and max_pages <= 0:
+        raise ValueError("max_pages must be positive when provided")
+    if render_dpi <= 0:
+        raise ValueError("render_dpi must be positive")
+    if max_render_pixels is not None and max_render_pixels <= 0:
+        raise ValueError("max_render_pixels must be positive when provided")
+
     try:
         import pypdfium2 as pdfium
     except ImportError as exc:  # pragma: no cover - dependency guard

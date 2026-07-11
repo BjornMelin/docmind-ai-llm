@@ -38,6 +38,11 @@ class _VecIdx:
         return _Retriever(self._ids)
 
 
+class _FailingPgIdx:
+    def as_retriever(self, **_kwargs: object) -> _Retriever:
+        raise RuntimeError("graph retriever unavailable")
+
+
 def test_seeds_prefer_pg_index_retriever() -> None:
     pg = _PgIdx(["1", "2", "3"])
     vec = _VecIdx(["9", "8", "7"])
@@ -49,6 +54,11 @@ def test_seeds_fallback_to_vector() -> None:
     pg = None
     vec = _VecIdx(["4", "5"])
     out = get_export_seed_ids(pg, vec, cap=2)
+    assert out == ["4", "5"]
+
+
+def test_seeds_fallback_to_vector_when_graph_retriever_fails() -> None:
+    out = get_export_seed_ids(_FailingPgIdx(), _VecIdx(["4", "5"]), cap=2)
     assert out == ["4", "5"]
 
 

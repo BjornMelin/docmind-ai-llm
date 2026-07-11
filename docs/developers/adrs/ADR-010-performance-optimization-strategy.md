@@ -65,7 +65,9 @@ graph TD
 
 ### Functional Requirements
 
-- FR‑1: Pass validated context and cache settings to the selected backend
+- FR‑1: Validate and record external vLLM context, cache, and attention settings
+  for operator-managed server launch; inference requests do not forward
+  server-only cache or attention controls
 - FR‑2: Execute independent tools with bounded parallelism
 
 ### Non-Functional Requirements
@@ -128,7 +130,9 @@ uv run pytest tests/unit/config/test_integrations.py \
 
 ### Positive Outcomes
 
-- Operators can tune an external vLLM server without adding it to the application environment
+- Operators can record external vLLM deployment values with
+  `DOCMIND_VLLM__*` and orchestration values with `DOCMIND_AGENTS__*`; the
+  application does not install vLLM or FlashInfer
 - Bounded parallelism is controlled at one orchestration boundary
 - Performance claims require reproducible evidence
 

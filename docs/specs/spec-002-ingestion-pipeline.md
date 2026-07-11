@@ -42,8 +42,10 @@ multimodal behavior and persistence invariants, see:
    raise `DocumentParseError`; source bytes MUST NOT be decoded as plaintext or
    published as partial documents.
 4. **Fail open after successful parsing**: optional post-parse enrichment,
-   searchable-PDF export, visual indexing, SigLIP, and Qdrant operations may be
-   skipped without invalidating already parsed text.
+   searchable-PDF export, visual indexing, SigLIP, and recoverable vector or
+   graph indexing failures may be skipped without invalidating already parsed
+   text. Contract and integrity failures, such as an incompatible Qdrant schema
+   or failed stale-point cleanup, still propagate.
 5. **Bound parser resources**: validate source bytes, page count, render pixels,
    and total extracted text. Async ingestion runs parsing in a killable worker
    process and terminates it when `parse_timeout_seconds` expires.
@@ -96,9 +98,13 @@ The current implementation lives in these modules:
   fallback path.
 - In-memory ingestion accepts canonical `payload_text: str` only. Binary inputs
   require a source path and format-aware parsing.
-- Failure: parser, inspection, dependency, and post-processing failures for all
-  path formats propagate as `DocumentParseError` before LlamaIndex documents or
-  artifacts are published.
+- Parser-boundary failure: inspection, dependency or model readiness, conversion,
+  required OCR and page-fidelity work, and required parser post-processing
+  propagate as `DocumentParseError` before LlamaIndex documents or artifacts are
+  published.
+- Optional post-parse failure: searchable-PDF export and the best-effort
+  enrichment and indexing stages follow the fail-open contract above; they are
+  not reclassified as `DocumentParseError` after canonical text parsing succeeds.
 - Model readiness: `scripts/parser_health.py --check` verifies dependency imports
   and every file in the source-controlled Docling and RapidOCR manifests.
 - Metadata hygiene:
@@ -203,9 +209,10 @@ DOCMIND_IMG_AES_KEY_BASE64=
 DOCMIND_IMG_KID=local-key-1
 DOCMIND_IMG_DELETE_PLAINTEXT=false
 
-# Parser/OCR contract
+# Fixed validation literals (not operator-selectable)
 DOCMIND_PARSING__FRAMEWORK=docling
 DOCMIND_PARSING__PROFILE=cpu_safe
+# Parser/OCR resource controls
 DOCMIND_PARSING__MAX_PAGES=500
 DOCMIND_PARSING__MAX_RENDER_PIXELS=40000000
 DOCMIND_PARSING__MAX_TOTAL_TEXT_CHARS=10000000
@@ -229,6 +236,10 @@ DOCMIND_DATABASE__QDRANT_COLLECTION=docmind_docs
 DOCMIND_DATABASE__QDRANT_IMAGE_COLLECTION=docmind_images
 DOCMIND_DATABASE__QDRANT_TIMEOUT=60
 ```
+
+`DOCMIND_PARSING__FRAMEWORK`, `DOCMIND_PARSING__PROFILE`, and
+`DOCMIND_OCR__ENGINE` state immutable validation literals, not backend selectors.
+Only `docling`, `cpu_safe`, and `rapidocr`, respectively, are accepted.
 
 ## Acceptance criteria
 

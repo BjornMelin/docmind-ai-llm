@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.config.settings import DocMindSettings
+from src.config.settings import DocMindSettings, OcrConfig
 
 pytestmark = pytest.mark.unit
 
@@ -25,6 +25,23 @@ def test_parsing_defaults_are_local_first() -> None:
     assert cfg.parsing.ocrmypdf_timeout_seconds == 300.0
     assert cfg.security.allow_remote_endpoints is False
     assert cfg.security.trust_remote_code is False
+
+
+@pytest.mark.parametrize("value", ["", " \t "])
+def test_ocr_config_rejects_blank_model_cache_dir(value: str) -> None:
+    with pytest.raises(ValueError, match="model_cache_dir must not be empty"):
+        OcrConfig(model_cache_dir=value)
+
+
+@pytest.mark.parametrize("value", ["", " \t "])
+def test_ocr_model_cache_env_rejects_blank_paths(
+    monkeypatch: pytest.MonkeyPatch,
+    value: str,
+) -> None:
+    monkeypatch.setenv("DOCMIND_OCR__MODEL_CACHE_DIR", value)
+
+    with pytest.raises(ValueError, match=r"ocr\.model_cache_dir"):
+        DocMindSettings(_env_file=None)  # type: ignore[arg-type]
 
 
 def test_legacy_profile_is_not_supported(monkeypatch: pytest.MonkeyPatch) -> None:

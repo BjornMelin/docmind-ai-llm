@@ -9,6 +9,7 @@ import signal
 import subprocess
 import tempfile
 from collections.abc import Callable
+from contextlib import suppress
 from importlib.metadata import PackageNotFoundError, version
 from multiprocessing.connection import Connection
 from multiprocessing.process import BaseProcess
@@ -67,7 +68,20 @@ async def parse_document(
     settings: DocMindSettings,
     document_id: str | None = None,
 ) -> DocumentParseResult:
-    """Parse one local document in a killable worker process."""
+    """Parse one local document in a killable worker process.
+
+    Args:
+        path: Local source document to parse.
+        settings: Application settings controlling parsing and OCR behavior.
+        document_id: Optional stable document identifier supplied by the caller.
+
+    Returns:
+        DocumentParseResult: Canonical parser output for the document.
+
+    Raises:
+        DocumentParseError: If the worker fails, times out, or returns invalid
+            parser output.
+    """
     timeout = float(settings.parsing.parse_timeout_seconds)
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout
@@ -140,16 +154,59 @@ def _start_parse_worker(
     document_id: str | None,
 ) -> tuple[BaseProcess, Connection]:
     """Start an isolated parser worker and return its receive channel."""
-    context = mp.get_context("spawn")
-    receiver, sender = context.Pipe(duplex=False)
-    process = context.Process(
-        target=_parse_worker,
-        args=(sender, str(path), settings.model_dump(mode="python"), document_id),
-        name="docmind-parser",
-    )
-    process.start()
-    sender.close()
-    return process, receiver
+    receiver: Connection | None = None
+    sender: Connection | None = None
+    process: BaseProcess | None = None
+    try:
+        context = mp.get_context("spawn")
+        receiver, sender = context.Pipe(duplex=False)
+        process = context.Process(
+            target=_parse_worker,
+            args=(sender, str(path), settings.model_dump(mode="python"), document_id),
+            name="docmind-parser",
+        )
+        process.start()
+        sender.close()
+        return process, receiver
+    except Exception as exc:
+        _close_failed_worker_start_resources(
+            receiver=receiver,
+            sender=sender,
+            process=process,
+        )
+        raise DocumentParseError(
+            path,
+            stage="parser_worker",
+            reason="worker_start_failed",
+            cause=exc,
+        ) from exc
+
+
+def _close_failed_worker_start_resources(
+    *,
+    receiver: Connection | None,
+    sender: Connection | None,
+    process: BaseProcess | None,
+) -> None:
+    """Close resources allocated before parser-worker startup failed."""
+    for connection in (receiver, sender):
+        if connection is not None:
+            with suppress(OSError):
+                connection.close()
+    if process is None:
+        return
+    with suppress(AssertionError, OSError, ValueError):
+        if process.is_alive():
+            process.terminate()
+    with suppress(AssertionError, OSError, ValueError):
+        process.join(timeout=1.0)
+    with suppress(AssertionError, OSError, ValueError):
+        if process.is_alive():
+            process.kill()
+    with suppress(AssertionError, OSError, ValueError):
+        process.join(timeout=1.0)
+    with suppress(OSError, ValueError):
+        process.close()
 
 
 def _parse_worker(
@@ -286,7 +343,23 @@ def parse_document_sync(
     document_id: str | None = None,
     _include_searchable_pdf: bool = True,
 ) -> DocumentParseResult:
-    """Parse one local document and return canonical parser output."""
+    """Parse one local document and return canonical parser output.
+
+    Args:
+        path: Local source document to parse.
+        settings: Application settings controlling parsing and OCR behavior.
+        document_id: Optional stable document identifier supplied by the caller.
+        _include_searchable_pdf: Whether to attach the optional searchable-PDF
+            artifact during synchronous parsing.
+
+    Returns:
+        DocumentParseResult: Canonical parser output for the document.
+
+    Raises:
+        DocumentParseError: If validation, inspection, conversion, OCR, or required
+            parser post-processing fails. Optional searchable-PDF artifact failures
+            remain fail-open.
+    """
     source_path = Path(path)
     _validate_document_size(source_path, settings=settings)
     if source_path.suffix.lower() == ".pdf":

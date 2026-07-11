@@ -23,6 +23,7 @@ from src.persistence.snapshot import (
     compute_config_hash,
     compute_corpus_hash,
     latest_snapshot_dir,
+    load_manifest,
 )
 from src.persistence.snapshot_utils import current_config_dict
 
@@ -88,10 +89,38 @@ def test_latest_snapshot_prefers_current_pointer(tmp_path: Path) -> None:
     second = storage / "20250102T000000-bbbb"
     for directory in (first, second):
         directory.mkdir()
+        (directory / "manifest.meta.json").write_text(
+            json.dumps({"complete": True}), encoding="utf-8"
+        )
     current = storage / "CURRENT"
     current.write_text(first.name, encoding="utf-8")
     resolved = latest_snapshot_dir(storage)
     assert resolved == first
+
+
+def test_snapshot_readers_ignore_incomplete_final_directory(tmp_path: Path) -> None:
+    """Readers fall back when CURRENT targets a promoted but incomplete snapshot."""
+    storage = tmp_path / "storage"
+    storage.mkdir()
+    complete = storage / "20250101T000000-aaaa"
+    incomplete = storage / "20250102T000000-bbbb"
+    complete.mkdir()
+    incomplete.mkdir()
+    (complete / "manifest.meta.json").write_text(
+        json.dumps({"complete": True, "index_id": "complete"}), encoding="utf-8"
+    )
+    (incomplete / "manifest.meta.json").write_text(
+        json.dumps({"complete": False, "index_id": "incomplete"}),
+        encoding="utf-8",
+    )
+    (storage / "CURRENT").write_text(incomplete.name, encoding="utf-8")
+
+    assert latest_snapshot_dir(storage) == complete
+    assert load_manifest(incomplete) is None
+    assert load_manifest(base_dir=storage) == {
+        "complete": True,
+        "index_id": "complete",
+    }
 
 
 def test_config_hash_matches_current_config(monkeypatch: pytest.MonkeyPatch) -> None:

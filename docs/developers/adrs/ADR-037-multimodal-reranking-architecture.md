@@ -167,7 +167,7 @@ Emit per‑stage metrics in JSONL with canonical keys:
 - `rerank.stage` = `text` | `visual` | `colpali`
 - `rerank.topk` (int), `rerank.latency_ms` (int), `rerank.timeout` (bool)
 - `retrieval.fusion_mode` and `retrieval.latency_ms` for surrounding stages
-- `dedup.before`/`dedup.after`/`dedup.dropped` for pre‑merge de‑duplication
+- `dedup.before`/`dedup.after`/`dedup.dropped` for post-fusion client-side deduplication (`dedup.after` is measured before the final top-k limit)
 ```
 
 ### Activation Policy (Heuristic)

@@ -130,7 +130,7 @@ Feature: Hybrid retrieval (server‑side fusion)
 - Default fusion mode: RRF; DBSF MAY be exposed behind an environment flag. No UI toggles for fusion modes.
 - Named vectors MUST exist: `text-dense` and `text-sparse`; the sparse vector SHOULD use IDF modifier when supported.
 - Grouping MUST occur in Qdrant by a configured key (default `page_id`) before the final fused cut.
-- Telemetry MUST include: `retrieval.fusion_mode`, `retrieval.prefetch_*`, `retrieval.fused_limit`, `retrieval.return_count`, `retrieval.latency_ms`, `retrieval.sparse_fallback`, and `dedup.*`.
+- Telemetry MUST include: `retrieval.fusion_mode`, `retrieval.prefetch_*`, `retrieval.fused_limit`, `retrieval.return_count`, `retrieval.latency_ms`, `retrieval.sparse_fallback`, `dedup.key`, `dedup.group_size`, `dedup.server_group_count`, and `dedup.server_side`. Emit `retrieval.rrf_k` only for RRF.
 
 ### Prohibited
 

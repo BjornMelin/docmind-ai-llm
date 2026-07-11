@@ -68,6 +68,31 @@ def test_build_graph_query_engine_uses_property_graph_index() -> None:
     }
 
 
+def test_build_graph_retriever_uses_property_graph_index_directly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    index = _FakePropertyGraphIndex()
+    monkeypatch.setattr(
+        graph_config,
+        "get_llama_index_adapter",
+        lambda: pytest.fail("retriever construction loaded query-engine dependencies"),
+    )
+
+    retriever = graph_config.build_graph_retriever(
+        index,
+        include_text=False,
+        path_depth=3,
+        similarity_top_k=7,
+    )
+
+    assert retriever is index.retriever
+    assert index.kwargs == {
+        "include_text": False,
+        "similarity_top_k": 7,
+        "path_depth": 3,
+    }
+
+
 def test_get_export_seed_ids_uses_graph_retriever() -> None:
     index = _FakePropertyGraphIndex()
 

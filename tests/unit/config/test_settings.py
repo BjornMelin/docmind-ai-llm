@@ -43,7 +43,10 @@ def test_embedding_config_uses_hardware_aware_device(
 ) -> None:
     """Resolve enabled acceleration through the canonical hardware selector."""
     monkeypatch.setattr("src.utils.core.select_device", lambda _prefer: "cpu")
-    settings = DocMindSettings(enable_gpu_acceleration=True, _env_file=None)  # type: ignore[arg-type]
+    settings = DocMindSettings(
+        enable_gpu_acceleration=True,
+        _env_file=None,  # type: ignore[arg-type]
+    )
 
     config = settings.get_embedding_config()
 

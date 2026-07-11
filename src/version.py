@@ -10,7 +10,12 @@ _DISTRIBUTION_NAME = "docmind_ai_llm"
 
 
 def get_version() -> str:
-    """Return installed metadata version or the source checkout version."""
+    """Return installed metadata version or the source checkout version.
+
+    Returns:
+        str: Installed distribution version, source-project version, or
+        ``"0+unknown"`` when neither can be resolved.
+    """
     try:
         return version(_DISTRIBUTION_NAME)
     except PackageNotFoundError:

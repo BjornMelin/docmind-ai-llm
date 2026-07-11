@@ -507,6 +507,13 @@ class OcrConfig(BaseModel):
     searchable_pdf_enabled: bool = Field(default=False)
     ocrmypdf_jobs: int = Field(default=1, ge=1, le=8)
 
+    @field_validator("model_cache_dir", mode="before")
+    @classmethod
+    def _reject_blank_model_cache_dir(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            raise ValueError("model_cache_dir must not be empty")
+        return value
+
 
 class ChatConfig(BaseModel):
     """Chat memory configuration (ADR-021)."""
@@ -842,7 +849,11 @@ class CacheConfig(BaseModel):
 
     @property
     def ingestion_db_path(self) -> Path:
-        """Return the canonical live ingestion DuckDB path."""
+        """Return the canonical live ingestion DuckDB path.
+
+        Returns:
+            Path: Cache directory, ingestion subdirectory, and configured filename.
+        """
         return self.dir / "ingestion" / self.filename
 
 
@@ -1364,7 +1375,11 @@ class DocMindSettings(BaseSettings):
     @computed_field
     @property
     def effective_model(self) -> str:
-        """Return the backend-aware model identifier."""
+        """Return the backend-aware model identifier.
+
+        Returns:
+            str: Explicit model override or the selected backend's default model.
+        """
         if self.model:
             return self.model
         if self.llm_backend == "ollama":
@@ -1633,7 +1648,11 @@ class DocMindSettings(BaseSettings):
     @computed_field
     @property
     def app_version(self) -> str:
-        """Return the release-owned package version."""
+        """Return the release-owned package version.
+
+        Returns:
+            str: Installed distribution or source-project version.
+        """
         return get_version()
 
 

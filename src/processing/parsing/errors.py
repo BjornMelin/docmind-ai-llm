@@ -25,6 +25,9 @@ class DocumentParseError(RuntimeError):
             reason: Stable machine-readable failure reason.
             cause: Optional originating exception. Only its type is retained.
             cause_type: Safe cause type received across a process boundary.
+
+        Raises:
+            ValueError: If both ``cause`` and ``cause_type`` are provided.
         """
         source = Path(path)
         self.source_filename = source.name

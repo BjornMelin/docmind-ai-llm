@@ -46,6 +46,23 @@ def test_validate_candidate_handles_type_errors(
 
 
 @pytest.mark.unit
+def test_validate_candidate_rejects_blank_model_cache_dir(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    page = _load_settings_page_module(monkeypatch)
+
+    validated, errors = page._validate_candidate(
+        {"ocr": {"model_cache_dir": ""}},
+    )
+
+    assert validated is None
+    assert any(
+        "ocr.model_cache_dir" in error and "must not be empty" in error
+        for error in errors
+    )
+
+
+@pytest.mark.unit
 def test_render_actions_rechecks_ui_errors_before_apply(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

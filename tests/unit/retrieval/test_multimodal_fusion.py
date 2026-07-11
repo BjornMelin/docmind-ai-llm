@@ -21,7 +21,15 @@ def _nws(*, node_id: str, score: float, page_id: str) -> NodeWithScore:
     return NodeWithScore(node=node, score=float(score))
 
 
-def test_multimodal_fusion_dedups_by_key_and_prefers_best_score(monkeypatch) -> None:
+@pytest.mark.parametrize(
+    ("fused_top_k", "expected_ids"),
+    [(10, ["n2", "n3"]), (1, ["n2"])],
+)
+def test_multimodal_fusion_dedups_by_key_and_prefers_best_score(
+    monkeypatch,
+    fused_top_k: int,
+    expected_ids: list[str],
+) -> None:
     fused = [
         _nws(node_id="n1", score=0.1, page_id="p1"),
         _nws(node_id="n2", score=0.9, page_id="p1"),
@@ -48,15 +56,25 @@ def test_multimodal_fusion_dedups_by_key_and_prefers_best_score(monkeypatch) -> 
         "rrf_merge",
         lambda _xs, k_constant=60: fused,
     )
+    events: list[dict[str, object]] = []
+    monkeypatch.setitem(
+        MultimodalFusionRetriever.retrieve.__globals__, "log_jsonl", events.append
+    )
 
     mm = MultimodalFusionRetriever(
         text_retriever=_Text(),  # type: ignore[arg-type]
         image_retriever=_Img(),  # type: ignore[arg-type]
-        fused_top_k=10,
+        fused_top_k=fused_top_k,
         dedup_key="page_id",
     )
     out = mm.retrieve("q")
-    assert [n.node.node_id for n in out] == ["n2", "n3"]
+    assert [n.node.node_id for n in out] == expected_ids
+    assert events
+    event = events[-1]
+    assert event["dedup.key"] == "page_id"
+    assert event["dedup.before"] == 3
+    assert event["dedup.after"] == 2
+    assert event["dedup.dropped"] == 1
 
 
 def test_image_siglip_retriever_queries_qdrant_and_wraps_results(monkeypatch) -> None:

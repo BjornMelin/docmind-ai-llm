@@ -1,6 +1,6 @@
 # Support policy
 
-DocMind AI is a community-maintained, local-first open source project. Support
+DocMind AI is a community-maintained, local-first open-source project. Support
 is best effort and has no response-time or resolution-time guarantee.
 
 ## Supported versions

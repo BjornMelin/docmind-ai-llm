@@ -79,8 +79,7 @@ def verify_rapidocr_models(model_cache_dir: Path) -> Path:
 
 def run_rapidocr(image_path: Path, *, model_cache_dir: Path) -> str:
     """Run RapidOCR on one image and return recognized text."""
-    files = rapidocr_model_files(model_cache_dir)
-    missing = [name for name, path in files.items() if not path.exists()]
+    missing = missing_rapidocr_onnx_models(model_cache_dir)
     if missing:
         raise RuntimeError(
             f"RapidOCR requires verified local model files: {', '.join(missing)}"

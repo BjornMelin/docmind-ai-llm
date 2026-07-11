@@ -11,7 +11,7 @@ from src.utils import telemetry
 pytestmark = pytest.mark.unit
 
 
-def test_canonical_keys_present(
+def test_server_hybrid_canonical_keys_present(
     tmp_path: Path, reset_settings_after_test: None
 ) -> None:
     out = tmp_path / "telemetry.jsonl"
@@ -26,10 +26,10 @@ def test_canonical_keys_present(
             "retrieval.fused_limit": 60,
             "retrieval.return_count": 10,
             "retrieval.latency_ms": 12,
-            "dedup.before": 12,
-            "dedup.after": 10,
-            "dedup.dropped": 2,
             "dedup.key": "page_id",
+            "dedup.group_size": 1,
+            "dedup.server_group_count": 10,
+            "dedup.server_side": True,
             "rerank.stage": "text",
             "rerank.topk": 5,
             "rerank.latency_ms": 5,
@@ -54,8 +54,10 @@ def test_canonical_keys_present(
     assert isinstance(e["retrieval.return_count"], int)
     assert isinstance(e["retrieval.latency_ms"], int)
     # Dedup keys
-    assert e["dedup.before"] >= e["dedup.after"]
     assert e["dedup.key"] == "page_id"
+    assert e["dedup.group_size"] == 1
+    assert e["dedup.server_group_count"] == 10
+    assert e["dedup.server_side"] is True
     # Rerank keys
     assert e["rerank.stage"] in {"text", "visual", "colpali", "final"}
     assert isinstance(e["rerank.topk"], int)
@@ -65,6 +67,33 @@ def test_canonical_keys_present(
         assert isinstance(e.get("rerank.batch_size", 0), int)
         assert isinstance(e.get("rerank.processed_count", 0), int)
         assert isinstance(e.get("rerank.processed_batches", 0), int)
+
+
+def test_multimodal_client_dedup_keys_present(
+    tmp_path: Path, reset_settings_after_test: None
+) -> None:
+    """Validate the client dedup stage reports real cardinality changes."""
+    out = tmp_path / "telemetry.jsonl"
+    settings.telemetry.jsonl_path = out
+    settings.telemetry.disabled = False
+    settings.telemetry.sample = 1.0
+    telemetry.log_jsonl(
+        {
+            "retrieval.multimodal": True,
+            "dedup.key": "page_id",
+            "dedup.before": 12,
+            "dedup.after": 9,
+            "dedup.dropped": 3,
+        }
+    )
+
+    event = json.loads(out.read_text().splitlines()[-1])
+    assert event["retrieval.multimodal"] is True
+    assert event["dedup.key"] == "page_id"
+    assert event["dedup.before"] == 12
+    assert event["dedup.after"] == 9
+    assert event["dedup.dropped"] == 3
+    assert event["dedup.before"] - event["dedup.after"] == event["dedup.dropped"]
 
 
 def test_log_jsonl_writes_event(

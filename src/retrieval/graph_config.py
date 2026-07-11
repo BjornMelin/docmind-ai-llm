@@ -75,13 +75,15 @@ def build_graph_retriever(
     path_depth: int = 1,
 ) -> Any:
     """Return the LlamaIndex graph retriever."""
-    artifacts = build_graph_query_engine(
-        property_graph_index,
+    if property_graph_index is None or not hasattr(
+        property_graph_index, "as_retriever"
+    ):
+        raise ValueError("property_graph_index must expose as_retriever()")
+    return property_graph_index.as_retriever(
         include_text=include_text,
         similarity_top_k=similarity_top_k,
         path_depth=path_depth,
     )
-    return artifacts.retriever
 
 
 def get_export_seed_ids(

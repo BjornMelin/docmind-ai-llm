@@ -156,6 +156,32 @@ def test_render_ingest_form_smoke(monkeypatch) -> None:
     assert submitted is True
 
 
+def test_render_parsing_overrides_disables_controls_for_global_defaults(
+    monkeypatch,
+) -> None:
+    import importlib
+
+    import streamlit as st  # type: ignore
+
+    page = importlib.import_module("src.pages.02_documents")
+    calls: list[tuple[str, bool | None]] = []
+
+    def _checkbox(label: str, **kwargs: object) -> bool:
+        calls.append((label, kwargs.get("disabled")))  # type: ignore[arg-type]
+        return label == "Use global parsing defaults"
+
+    monkeypatch.setattr(st, "checkbox", _checkbox, raising=False)
+
+    result = page._render_parsing_overrides()  # type: ignore[attr-defined]
+
+    assert result == page.ParsingOverrides()
+    assert calls == [
+        ("Use global parsing defaults", None),
+        ("Force RapidOCR", True),
+        ("Export searchable PDF", True),
+    ]
+
+
 def test_handle_ingest_submission_starts_job(monkeypatch) -> None:
     import importlib
 
@@ -181,8 +207,13 @@ def test_handle_ingest_submission_starts_job(monkeypatch) -> None:
     )
     monkeypatch.setattr(page, "_get_spacy_service", lambda *_a, **_k: None)
 
+    upload = SimpleNamespace(
+        name="doc.txt",
+        size=3,
+        getbuffer=lambda: memoryview(b"doc"),
+    )
     page._handle_ingest_submission(  # type: ignore[attr-defined]
-        [type("F", (), {"name": "doc.txt"})()],
+        [upload],
         use_graphrag=False,
         encrypt_images=False,
         parsing_overrides={"force_ocr": True},
@@ -192,6 +223,45 @@ def test_handle_ingest_submission_starts_job(monkeypatch) -> None:
     assert st.session_state.get("ingest_job_id") == "job-1"
     assert calls.get("owner_id") == "owner"
     assert callable(calls.get("fn"))
+
+
+def test_handle_ingest_submission_rejects_duplicate_ids_before_persistence(
+    monkeypatch,
+    streamlit_calls,
+) -> None:
+    import importlib
+
+    page = importlib.import_module("src.pages.02_documents")
+    payload = b"same document"
+    uploads = [
+        SimpleNamespace(
+            name=name,
+            size=len(payload),
+            getbuffer=lambda payload=payload: memoryview(payload),
+        )
+        for name in ("first.txt", "second.txt")
+    ]
+
+    monkeypatch.setattr(
+        page,
+        "save_uploaded_file",
+        lambda _file: pytest.fail("upload persisted before duplicate preflight"),
+    )
+    monkeypatch.setattr(
+        page,
+        "_load_optional_spacy_service",
+        lambda: pytest.fail("setup ran before duplicate preflight"),
+    )
+
+    page._handle_ingest_submission(  # type: ignore[attr-defined]
+        uploads,
+        use_graphrag=False,
+        encrypt_images=False,
+        parsing_overrides=page.ParsingOverrides(),
+        owner_id="owner",
+    )
+
+    assert streamlit_calls["errors"] == ["Failed to start ingestion job (ValueError)."]
 
 
 def test_render_ingest_results_sets_session_state(monkeypatch, tmp_path: Path) -> None:

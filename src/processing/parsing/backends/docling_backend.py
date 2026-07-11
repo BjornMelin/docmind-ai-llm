@@ -34,7 +34,25 @@ def convert_with_docling(
     max_file_size: int,
     versions: ParserVersions,
 ) -> DocumentParseResult:
-    """Convert a local document with Docling and return canonical output."""
+    """Convert a local document with Docling and return canonical output.
+
+    Args:
+        path: Local source document to convert.
+        document_id: Stable document identifier for canonical page IDs.
+        source_hash: SHA-256 digest of the source document.
+        model_cache_dir: Application-owned cache containing pinned layout models.
+        max_pages: Maximum number of physical pages to convert.
+        max_file_size: Maximum accepted source size in bytes.
+        versions: Parser package versions recorded in the result.
+
+    Returns:
+        DocumentParseResult: Canonical document and physical-page output.
+
+    Raises:
+        DocumentParseError: If Docling is unavailable or conversion is unsuccessful.
+        ModelIntegrityError: If the pinned layout model bundle fails verification.
+        RuntimeError: If required Docling converter components are unavailable.
+    """
     try:
         from docling.datamodel.base_models import ConversionStatus
     except ImportError as exc:  # pragma: no cover - dependency guard
@@ -76,12 +94,26 @@ def convert_with_docling(
 
 
 def docling_layout_model_files(model_cache_dir: Path) -> dict[str, Path]:
-    """Return required Docling layout model files in the app cache."""
+    """Return required Docling layout model files in the app cache.
+
+    Args:
+        model_cache_dir: Application-owned parser model cache.
+
+    Returns:
+        dict[str, Path]: Manifest-relative names mapped to local model paths.
+    """
     return model_files(model_cache_dir, DOCLING_LAYOUT_BUNDLE)
 
 
 def missing_docling_layout_models(model_cache_dir: Path) -> list[str]:
-    """Return Docling layout artifacts missing from the app cache."""
+    """Return Docling layout artifacts missing from the app cache.
+
+    Args:
+        model_cache_dir: Application-owned parser model cache.
+
+    Returns:
+        list[str]: Manifest-relative names for missing artifacts.
+    """
     return [
         name
         for name, path in docling_layout_model_files(model_cache_dir).items()
@@ -92,7 +124,19 @@ def missing_docling_layout_models(model_cache_dir: Path) -> list[str]:
 def prefetch_docling_layout_models(
     model_cache_dir: Path, *, force: bool = False
 ) -> Path:
-    """Download Docling layout artifacts into the app-owned cache."""
+    """Download Docling layout artifacts into the app-owned cache.
+
+    Args:
+        model_cache_dir: Application-owned parser model cache.
+        force: Download and replace the pinned bundle even when already valid.
+
+    Returns:
+        Path: Verified root directory for the installed layout bundle.
+
+    Raises:
+        RuntimeError: If Docling layout download support is unavailable.
+        ModelIntegrityError: If the downloaded bundle fails verification.
+    """
     try:
         from docling.models.stages.layout.layout_model import LayoutModel
     except ImportError as exc:  # pragma: no cover - dependency guard
@@ -121,7 +165,17 @@ def prefetch_docling_layout_models(
 
 
 def verify_docling_layout_models(model_cache_dir: Path) -> Path:
-    """Verify the exact pinned Docling layout bundle."""
+    """Verify the exact pinned Docling layout bundle.
+
+    Args:
+        model_cache_dir: Application-owned parser model cache.
+
+    Returns:
+        Path: Verified root directory for the pinned layout bundle.
+
+    Raises:
+        ModelIntegrityError: If an expected artifact is missing or mismatched.
+    """
     return verify_model_bundle(model_cache_dir, DOCLING_LAYOUT_BUNDLE)
 
 

@@ -190,13 +190,15 @@ Text uses BGE-M3. Sparse retrieval uses direct FastEmbed support. Images use Sig
 | `DOCMIND_EMBEDDING__NORMALIZE_TEXT` | `true` | Normalize dense vectors |
 | `DOCMIND_EMBEDDING__ENABLE_SPARSE` | `true` | Sparse retrieval |
 | `DOCMIND_EMBEDDING__SIGLIP_MODEL_ID` | `google/siglip-base-patch16-224` | Image model |
-| `DOCMIND_EMBEDDING__SIGLIP_MODEL_REVISION` | unset | Explicit custom revision |
+| `DOCMIND_EMBEDDING__SIGLIP_MODEL_REVISION` | effective `7fd15f0689c79d79e38b1c2e2e2370a7bf2761ed` for the default model | Revision override; custom models remain unpinned when unset |
 | `DOCMIND_EMBEDDING__BATCH_SIZE_TEXT_CPU` | `4` | CPU text batch |
 | `DOCMIND_EMBEDDING__BATCH_SIZE_TEXT_GPU` | `12` | GPU text batch |
 | `DOCMIND_EMBEDDING__BATCH_SIZE_IMAGE` | `8` | Image batch |
 
-The curated BGE-M3 and SigLIP models use repository-owned revision pins. A
-custom model ID remains unpinned unless you also set its revision. Set
+The curated BGE-M3 model uses its configured revision pin. When the SigLIP
+revision is unset and its model ID remains the default, the runtime applies the
+repository-owned revision shown above. A custom model ID remains unpinned unless
+you also set its revision. Set
 `DOCMIND_EMBEDDING__LOCAL_MODEL_PATH` to load a complete local BGE-M3 snapshot
 directly; this disables Hub model-ID and revision resolution. Missing local or
 cached models leave the embedding runtime unconfigured instead of installing a

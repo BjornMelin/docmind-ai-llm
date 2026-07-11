@@ -56,6 +56,17 @@ def test_read_direct_text_enforces_byte_limit_during_read(tmp_path: Path) -> Non
     assert raised.value.reason == "document_size_limit_exceeded"
 
 
+def test_read_direct_text_reports_io_failures_separately(tmp_path: Path) -> None:
+    source = tmp_path / "missing.txt"
+
+    with pytest.raises(DocumentParseError) as raised:
+        read_direct_text(source, max_bytes=100, probe_bytes=32)
+
+    assert raised.value.stage == "direct_text"
+    assert raised.value.reason == "direct_text_read_failed"
+    assert raised.value.cause_type == "FileNotFoundError"
+
+
 def test_parser_wraps_source_hash_io_failures(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

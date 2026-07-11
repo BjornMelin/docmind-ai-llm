@@ -105,6 +105,9 @@ def _render_ingest_form() -> tuple[
     list[Any] | None, bool, bool, ParsingOverrides, bool
 ]:
     """Render the ingestion form and return submitted values."""
+    # Keep dependent parser controls outside the form so changing the global
+    # defaults toggle reruns immediately and enables overrides before submit.
+    parsing_overrides = _render_parsing_overrides()
     with st.form("ingest_form", clear_on_submit=False):
         files = st.file_uploader("Add files", type=None, accept_multiple_files=True)
         col_opts = st.columns(2)
@@ -122,7 +125,6 @@ def _render_ingest_form() -> tuple[
                 "Encrypt page images (AES-GCM)",
                 value=bool(settings.processing.encrypt_page_images),
             )
-        parsing_overrides = _render_parsing_overrides()
         with st.expander("About snapshots", expanded=False):
             st.markdown(
                 "- Snapshots are created atomically in data/storage/<timestamp>.\n"
@@ -146,10 +148,15 @@ def _render_parsing_overrides() -> ParsingOverrides:
     """Render per-ingestion parser overrides."""
     with st.expander("Parsing overrides", expanded=False):
         use_global = st.checkbox("Use global parsing defaults", value=True)
-        force_ocr = st.checkbox("Force RapidOCR", value=False)
+        force_ocr = st.checkbox(
+            "Force RapidOCR",
+            value=False,
+            disabled=use_global,
+        )
         export_searchable_pdf = st.checkbox(
             "Export searchable PDF",
             value=False,
+            disabled=use_global,
         )
         if use_global:
             return ParsingOverrides()
@@ -182,6 +189,7 @@ def _handle_ingest_submission(
     if not _pdf_uploads_are_ready(files):
         return
     try:
+        _require_unique_upload_document_ids(files)
         nlp_service = _load_optional_spacy_service()
         saved_inputs = _save_ingestion_inputs(
             files,
@@ -209,6 +217,25 @@ def _handle_ingest_submission(
         )
         st.error(f"Failed to start ingestion job ({type(exc).__name__}).")
         st.caption(f"Error reference: {redaction.redacted}")
+
+
+def _require_unique_upload_document_ids(files: list[Any]) -> None:
+    """Reject duplicate upload content before any file is persisted."""
+    seen: set[str] = set()
+    for file_obj in files:
+        if file_obj is None or getattr(file_obj, "name", None) is None:
+            continue
+        file_size = getattr(file_obj, "size", None)
+        if isinstance(file_size, int) and file_size <= 0:
+            continue
+        try:
+            payload = file_obj.getbuffer()
+        except AttributeError as exc:
+            raise TypeError("Uploaded file must expose getbuffer()") from exc
+        document_id = document_id_from_sha256(hashlib.sha256(payload).hexdigest())
+        if document_id in seen:
+            raise ValueError(f"Duplicate document_id in ingestion batch: {document_id}")
+        seen.add(document_id)
 
 
 def _pdf_uploads_are_ready(files: list[Any]) -> bool:

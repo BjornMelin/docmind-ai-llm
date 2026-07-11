@@ -73,7 +73,7 @@ def get_cache_stats() -> dict[str, object]:
 - Inspect location: confirm `settings.cache.ingestion_db_path` exists.
 - Backup/restore: copy or move the single file while the app is stopped.
 - Relocate: change `DOCMIND_CACHE__DIR`; the file will be created on demand.
-- Clear: delete `docmind.duckdb`; it will be recreated on next use.
+- Clear: delete `settings.cache.ingestion_db_path`; it will be recreated on next use.
 
 ## Failure Modes and Fixes
 
@@ -84,7 +84,7 @@ def get_cache_stats() -> dict[str, object]:
 - File lock or DB busy
   - Stop concurrent writers; DuckDB is single-writer. Retry after closing processes.
 - Corrupted DB file
-  - Stop the app, delete `docmind.duckdb`, restart (cache will rebuild as needed).
+  - Stop the app, delete `settings.cache.ingestion_db_path`, and restart (the cache will rebuild as needed).
 
 ## Configuration
 

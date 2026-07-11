@@ -48,6 +48,10 @@ def documents_ingest_app_test(
     # Provide deterministic "uploaded files" for Streamlit's file_uploader.
     class _FakeUpload:
         name = "doc.txt"
+        size = 8
+
+        def getbuffer(self) -> memoryview:
+            return memoryview(b"document")
 
     monkeypatch.setattr(st, "file_uploader", lambda *_a, **_k: [_FakeUpload()])
 
@@ -131,6 +135,39 @@ def documents_ingest_app_test(
         app_settings.chat.sqlite_path = orig_chat_sqlite
         app_settings.database.sqlite_db_path = orig_db_sqlite
         # Note: monkeypatch.setenv auto-restores env vars on teardown.
+
+
+@pytest.mark.integration
+def test_parsing_overrides_are_reachable_before_submit(
+    documents_ingest_app_test: AppTest,
+) -> None:
+    """Enable per-ingestion parser controls without submitting the form."""
+    app = documents_ingest_app_test.run()
+    assert not app.exception
+
+    checkboxes = {checkbox.label: checkbox for checkbox in app.checkbox}
+    use_global = checkboxes["Use global parsing defaults"]
+    assert checkboxes["Force RapidOCR"].disabled is True
+    assert checkboxes["Export searchable PDF"].disabled is True
+
+    result = use_global.uncheck().run()
+    assert not result.exception
+
+    updated = {checkbox.label: checkbox for checkbox in result.checkbox}
+    assert updated["Use global parsing defaults"].value is False
+    assert updated["Force RapidOCR"].disabled is False
+    assert updated["Export searchable PDF"].disabled is False
+
+    configured = updated["Force RapidOCR"].check().run()
+    assert not configured.exception
+    configured_checkboxes = {
+        checkbox.label: checkbox for checkbox in configured.checkbox
+    }
+    assert configured_checkboxes["Force RapidOCR"].value is True
+    assert any(button.label == "Ingest" for button in configured.button)
+    assert not any(
+        "Snapshot created" in message.value for message in configured.success
+    )
 
 
 @pytest.mark.integration
