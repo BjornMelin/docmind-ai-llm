@@ -190,7 +190,7 @@ The following evidence exists for the current modernization branch:
 | Independent review | Final code, release/runtime, and documentation passes returned no findings |
 
 The parser benchmark artifact records clean source commit
-`00265f92accf9f08993c7366fa0baa8e9b14b680`, the runtime identity, fixture
+`8ce264845eb43bcf02526c37625dcd0358a3f1ba`, the runtime identity, fixture
 hashes, content assertions, and repeat-three output hashes. Its performance
 values are a workstation-specific regression baseline.
 
