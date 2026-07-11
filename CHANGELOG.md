@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [1.0.0](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.9.0...v1.0.0) (2026-07-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* **parser:** document IDs now use full lowercase SHA-256 values; legacy parser/OCR, custom embedding, GraphRAG adapter, compatibility alias, and graph-extra paths are removed, so existing collections must be re-ingested.
+
+### Features
+
+* **parser:** complete local-first v1 modernization ([58d7e9f](https://github.com/BjornMelin/docmind-ai-llm/commit/58d7e9f3f97767b24fdf43297c1acf3e4cc97030))
+
 ## [Unreleased]
 
 ### Changed
