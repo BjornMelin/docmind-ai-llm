@@ -19,11 +19,12 @@ Implemented behavior:
 - Parser model bundles use pinned revisions, file sizes, and SHA-256 hashes from `src/processing/parsing/model_artifacts.py`
 - Package wheels include the parser, version module, and prompt resources
 
-The current branch has passed focused validation, the fast test gate,
-dependency locking, wheel content validation, and the real local Qdrant system
-smoke. The benchmark code expects schema 3, and the final repeat-three artifact
-still needs regeneration. Full tests after the final combined edits, a live
-Docker build, fresh independent review, and shipping remain pending. Separate
+The current branch has passed focused and complete tiered tests, dependency
+locking, byte-identical wheel builds and isolated content smoke, the real local
+Qdrant system test, a production Docker build and container health smoke, and
+independent code, runtime, and documentation reviews. The checked-in schema 3
+parser artifact validates all eight fixtures over three deterministic isolated
+runs. Pull-request CI, merge, and release publication remain pending. Separate
 security hardening is tracked in issues #145–#150 and is not part of this
 release lane.
 
@@ -178,15 +179,20 @@ The following evidence exists for the current modernization branch:
 
 | Evidence | Result |
 | --- | --- |
-| Fast test gate | Passed before the final review-fix wave; final rerun required |
-| Parser benchmark | Schema 3 repeat-three artifact regeneration pending |
-| Package lock check | 308 locked packages validated |
-| Package-focused tests | Passed; final rerun required after release fixes |
-| Wheel build and isolated smoke | Passed with `--no-deps` installation and packaged prompt loading |
+| Fast and complete tiered test gates | Passed after the final review-fix wave |
+| Parser benchmark | Schema 3; 8/8 content-valid and deterministic over three isolated runs; zero errors |
+| Package lock check | 306 locked packages validated |
+| Package-focused tests | Passed after final release fixes |
+| Wheel build and isolated smoke | Byte-identical repeated builds passed with `--no-deps` installation and packaged prompt loading |
 | Parser-config hard cut | Focused tests passed |
-| Ruff and configured Pyright checks for completed slices | Passed |
+| Ruff and configured Pyright | Passed for the complete tree |
+| Runtime validation | Real Qdrant system test and production container health smoke passed |
+| Independent review | Final code, release/runtime, and documentation passes returned no findings |
 
-The parser benchmark code emits schema 3. The final repeat-three artifact has not been regenerated, so the existing artifact is not current release evidence.
+The parser benchmark artifact records clean source commit
+`00265f92accf9f08993c7366fa0baa8e9b14b680`, the runtime identity, fixture
+hashes, content assertions, and repeat-three output hashes. Its performance
+values are a workstation-specific regression baseline.
 
 ## Release acceptance
 
@@ -206,11 +212,11 @@ The parser benchmark code emits schema 3. The final repeat-three artifact has no
 
 - [x] Fast unit and integration gate
 - [x] Wheel build, metadata validation, and content smoke
-- [ ] Schema 3 repeat-three parser benchmark regeneration
-- [ ] Final full test suite after all combined edits
+- [x] Schema 3 repeat-three parser benchmark regeneration
+- [x] Final full test suite after all combined edits
 - [x] Explicit system test with local Qdrant
-- [ ] Live Docker build and canonical container health check
-- [ ] Fresh independent code and documentation review
+- [x] Live Docker build and canonical container health check
+- [x] Fresh independent code and documentation review
 - [ ] Commit, pull request, hosted continuous integration, and merge
 
 Security hardening outside this release lane is tracked in issues #145–#150.

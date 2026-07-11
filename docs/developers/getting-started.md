@@ -184,7 +184,9 @@ uv run python scripts/benchmark_parsing.py \
   --output docs/benchmarks/parser-runtime-validation.json
 ```
 
-The benchmark code expects schema 3. Do not use the existing stale artifact as current release evidence.
+The checked-in artifact uses schema 3 and records its clean source commit,
+runtime identity, fixture hashes, and repeat-three determinism evidence. Treat
+its measurements as a workstation-specific regression baseline.
 
 ## Diagnose common setup failures
 

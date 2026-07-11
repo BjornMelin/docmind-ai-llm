@@ -173,7 +173,9 @@ best effort until they have dedicated CI coverage.
      --output docs/benchmarks/parser-runtime-validation.json
    ```
 
-   The existing benchmark artifact is stale until schema 3 regeneration finishes. The validation record and its measurement limits live in `docs/developers/parser-runtime-validation.md`.
+   The checked-in schema 3 artifact is bound to its clean source commit and
+   runtime identity. The validation record, current baseline, and measurement
+   limits live in `docs/developers/parser-runtime-validation.md`.
 
    Start loopback-only Qdrant and run the system gate when you need end-to-end validation:
 
