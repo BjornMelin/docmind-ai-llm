@@ -26,8 +26,15 @@ class _ClientFake:
         self._points = points
         self.closed = False
 
-    def query_points(self, **_kwargs: Any) -> Any:  # pragma: no cover - simple
-        return type("_R", (), {"points": self._points})()
+    def query_points_groups(self, **kwargs: Any) -> Any:  # pragma: no cover - simple
+        key = kwargs["group_by"]
+        best: dict[str, _Point] = {}
+        for point in self._points:
+            value = str(point.payload[key])
+            if value not in best or point.score > best[value].score:
+                best[value] = point
+        groups = [type("_G", (), {"hits": [point]})() for point in best.values()]
+        return type("_R", (), {"groups": groups})()
 
     def close(self) -> None:  # pragma: no cover - trivial
         self.closed = True
@@ -36,6 +43,10 @@ class _ClientFake:
 @pytest.mark.unit
 def test_hybrid_di_and_dedup_ordering(monkeypatch: pytest.MonkeyPatch) -> None:
     # Avoid real embedding backends by patching retriever methods
+    monkeypatch.setattr(
+        "src.retrieval.hybrid.ensure_hybrid_collection",
+        lambda *_args, **_kwargs: type("_Compatibility", (), {"compatible": True})(),
+    )
 
     # Construct points with duplicate page_id and mixed scores
     pts = [
@@ -47,7 +58,10 @@ def test_hybrid_di_and_dedup_ordering(monkeypatch: pytest.MonkeyPatch) -> None:
     ]
 
     client = _ClientFake(pts)
-    retr = ServerHybridRetriever(HybridParams(collection="col"), client=client)
+    retr = ServerHybridRetriever(
+        HybridParams(collection="col"),
+        client=client,  # type: ignore[arg-type]
+    )
     retr._embed_dense = (  # type: ignore[attr-defined]
         lambda _t: np.asarray([0.0, 1.0], dtype=np.float32)
     )
@@ -56,6 +70,8 @@ def test_hybrid_di_and_dedup_ordering(monkeypatch: pytest.MonkeyPatch) -> None:
     # Dedup keeps one for p1 and c remains; total 2
     assert len(out) == 2
     # Ensure order by score desc then id
+    assert out[0].score is not None
+    assert out[1].score is not None
     assert out[0].score >= out[1].score
     retr.close()
     assert client.closed is True

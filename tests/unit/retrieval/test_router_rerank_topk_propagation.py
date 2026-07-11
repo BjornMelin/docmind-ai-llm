@@ -13,9 +13,6 @@ from typing import Any
 import pytest
 
 pytest.importorskip("llama_index.core", reason="requires llama_index.core")
-pytest.importorskip(
-    "llama_index.program.openai", reason="requires llama_index.program.openai"
-)
 
 pytestmark = pytest.mark.requires_llama
 

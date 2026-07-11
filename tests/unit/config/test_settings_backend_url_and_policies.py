@@ -2,9 +2,36 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 import pytest
 
-from src.config.settings import _DEFAULT_OPENAI_BASE_URL, DocMindSettings
+from src.config.settings import _DEFAULT_OPENAI_BASE_URL, DocMindSettings, VLLMConfig
+
+
+@pytest.mark.parametrize(
+    ("backend", "model", "vllm_model", "expected"),
+    [
+        ("ollama", None, "Qwen/Qwen3-4B-Instruct-2507-FP8", "qwen3:4b-instruct"),
+        ("vllm", None, "served-model", "served-model"),
+        ("ollama", "explicit-model", "served-model", "explicit-model"),
+    ],
+)
+def test_effective_model_is_backend_aware(
+    backend: Literal["ollama", "vllm"],
+    model: str | None,
+    vllm_model: str,
+    expected: str,
+) -> None:
+    """Resolve one model identity for every backend-agnostic consumer."""
+    settings = DocMindSettings(
+        llm_backend=backend,
+        model=model,
+        vllm=VLLMConfig(model=vllm_model),
+    )
+
+    assert settings.effective_model == expected
+    assert settings.get_model_config()["model_name"] == expected
 
 
 @pytest.mark.parametrize(

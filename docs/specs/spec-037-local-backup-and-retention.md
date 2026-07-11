@@ -48,7 +48,7 @@ Optional UI entry point (stretch, but recommended for a polished release):
 
 Minimum required:
 
-- `settings.cache_dir/<filename>` (DuckDB cache)
+- `settings.cache.ingestion_db_path` (DuckDB cache)
 - `settings.data_dir/storage/` (DocMind snapshot directories + CURRENT pointer)
 - `.env` (optional but recommended)
 

@@ -16,7 +16,7 @@ class _Point:
 
 class _Resp:
     def __init__(self, points):
-        self.points = points
+        self.groups = [type("_Group", (), {"hits": [point]})() for point in points]
 
 
 @pytest.fixture(autouse=True)
@@ -42,8 +42,8 @@ def _stub_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
             async def _aget_text_embedding(self, text: str):  # pragma: no cover
                 return self._get_text_embedding(text)
 
-            async def _aget_query_embedding(self, text: str):  # pragma: no cover
-                return self._get_query_embedding(text)
+            async def _aget_query_embedding(self, query: str):  # pragma: no cover
+                return self._get_query_embedding(query)
 
         Settings.embed_model = _Embed()  # type: ignore[attr-defined]
     except Exception:
@@ -63,21 +63,23 @@ def test_hybrid_retriever_dedup_and_order(monkeypatch: pytest.MonkeyPatch) -> No
         _Point("b", 0.9, {"page_id": "X", "text": "two"}),  # higher score for X
         _Point("c", 0.7, {"page_id": "Y", "text": "three"}),
     ]
-    resp = _Resp(pts)
+    # Qdrant group_size=1 returns only the best hit for each page_id.
+    resp = _Resp([pts[1], pts[2]])
 
-    # Patch QdrantClient.query_points on instance
-    def _fake_query_points(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+    def _fake_query_points_groups(*_args, **_kwargs):  # type: ignore[no-untyped-def]
         return resp
 
     params = HybridParams(collection="col", fused_top_k=10, dedup_key="page_id")
     retr = ServerHybridRetriever(params)
-    monkeypatch.setattr(retr._client, "query_points", _fake_query_points)  # type: ignore[attr-defined]
+    monkeypatch.setattr(  # type: ignore[attr-defined]
+        retr._client, "query_points_groups", _fake_query_points_groups, raising=False
+    )
 
     out = retr.retrieve("q")
     # Expect two nodes (X and Y) with deterministic ordering:
     # score descending, id ascending (by key mapping)
     assert len(out) == 2
-    texts = [n.node.text for n in out]
+    texts = [n.node.get_content() for n in out]
     # Highest for X is score 0.9 ("two") should appear first
     assert texts[0] == "two"
 
@@ -89,13 +91,15 @@ def test_hybrid_sparse_unavailable_fallback(monkeypatch: pytest.MonkeyPatch) -> 
     ]
     resp = _Resp(pts)
 
-    def _fake_query_points(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+    def _fake_query_points_groups(*_args, **_kwargs):  # type: ignore[no-untyped-def]
         return resp
 
     params = HybridParams(collection="c")
     retr = ServerHybridRetriever(params)
     monkeypatch.setattr(retr, "_encode_sparse", lambda _t: None)
-    monkeypatch.setattr(retr._client, "query_points", _fake_query_points)  # type: ignore[attr-defined]
+    monkeypatch.setattr(  # type: ignore[attr-defined]
+        retr._client, "query_points_groups", _fake_query_points_groups, raising=False
+    )
     out = retr.retrieve("q")
     assert len(out) == 1
-    assert out[0].node.text == "a"
+    assert out[0].node.get_content() == "a"

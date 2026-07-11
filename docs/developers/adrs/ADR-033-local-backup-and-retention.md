@@ -109,7 +109,8 @@ def create_backup(settings, include_docs=False, include_analytics=False):
     dest = Path(settings.data_dir)/"backups"/f"backup_{ts}"
     dest.mkdir(parents=True, exist_ok=False)
     (dest/"cache").mkdir()
-    shutil.copy2(Path(settings.cache_dir)/"docmind.duckdb", dest/"cache"/"docmind.duckdb")
+    cache_db = settings.cache.ingestion_db_path
+    shutil.copy2(cache_db, dest/"cache"/settings.cache.filename)
     client = qdrant_client.QdrantClient(url=settings.database.qdrant_url)
     # Prefer server-side snapshots over copying raw storage directories.
     snapshot = client.create_snapshot(collection_name=settings.database.qdrant_collection)

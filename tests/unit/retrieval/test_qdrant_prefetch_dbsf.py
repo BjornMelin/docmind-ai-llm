@@ -6,19 +6,25 @@ from qdrant_client import models as qmodels
 def test_dbsf_fusion_selected(monkeypatch):
     from src.retrieval.hybrid import HybridParams, ServerHybridRetriever
 
+    calls = {}
+
     class _Res:
         def __init__(self):
-            self.points = []
+            self.groups = []
 
     class _FakeClient:
         def __init__(self, **_kwargs):
             pass
 
-        def query_points(self, **kwargs):
-            test_dbsf_fusion_selected.kwargs = kwargs
+        def query_points_groups(self, **kwargs):
+            calls["kwargs"] = kwargs
             return _Res()
 
     monkeypatch.setattr("src.retrieval.hybrid.QdrantClient", _FakeClient)
+    monkeypatch.setattr(
+        "src.retrieval.hybrid.ensure_hybrid_collection",
+        lambda *_args, **_kwargs: type("_Compatibility", (), {"compatible": True})(),
+    )
 
     retr = ServerHybridRetriever(
         HybridParams(
@@ -38,6 +44,6 @@ def test_dbsf_fusion_selected(monkeypatch):
     )
 
     _ = retr.retrieve("q")
-    kw = test_dbsf_fusion_selected.kwargs
+    kw = calls["kwargs"]
     assert isinstance(kw["query"], qmodels.FusionQuery)
     assert kw["query"].fusion == qmodels.Fusion.DBSF

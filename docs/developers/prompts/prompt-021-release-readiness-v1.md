@@ -8,7 +8,7 @@ Use this prompt to implement **every** work package defined in `docs/specs/spec-
 - Requirements: `docs/specs/requirements.md`
 - RTM: `docs/specs/traceability.md`
 
-## Current completion status (as of 2026-01-16)
+## Current completion status (as of 2026-07-11)
 
 Use this table to avoid re-implementing already-shipped work packages. A work
 package is considered **done** when its prompt has been moved into
@@ -32,7 +32,7 @@ package is considered **done** when its prompt has been moved into
 | 14 | Document analysis modes (auto/separate/combined) | ADR-023 | SPEC-036 | ✅ Completed | `docs/developers/prompts/implemented/prompt-036-document-analysis-modes.md` |
 | 15 | Local backup & retention (snapshots + cache + Qdrant) | ADR-033 | SPEC-037 | ✅ Completed | `docs/developers/prompts/implemented/prompt-037-local-backup-and-retention.md` |
 | 16 | Semantic response cache (Qdrant-backed, guardrailed) | ADR-035 | SPEC-038 | ✅ Completed | `docs/developers/prompts/implemented/prompt-038-semantic-cache-qdrant.md` |
-| 17 | Operational metadata store (SQLite WAL) | ADR-055 | SPEC-039 | ✅ Completed | `docs/developers/prompts/implemented/prompt-039-operational-metadata-sqlite-wal.md` |
+| 17 | Operational metadata store (SQLite WAL) | ADR-055 | SPEC-039 | Future / deferred from v1 | `docs/developers/prompts/prompt-039-operational-metadata-sqlite-wal.md` |
 | 18 | Agent deadline propagation + router injection | ADR-056 | SPEC-040 | ✅ Completed | `docs/developers/prompts/implemented/prompt-040-agent-deadline-propagation-and-router-injection.md` |
 
 ### Extra completion (non-WP, polish)
@@ -51,8 +51,10 @@ Run only these remaining WPs, in order, until all are completed:
 - [x] WP14 — `docs/developers/prompts/implemented/prompt-036-document-analysis-modes.md`
 - [x] WP15 — `docs/developers/prompts/implemented/prompt-037-local-backup-and-retention.md`
 - [x] WP16 — `docs/developers/prompts/implemented/prompt-038-semantic-cache-qdrant.md`
-- [x] WP17 — `docs/developers/prompts/implemented/prompt-039-operational-metadata-sqlite-wal.md`
 - [x] WP18 — `docs/developers/prompts/implemented/prompt-040-agent-deadline-propagation-and-router-injection.md`
+
+WP17 is not a remaining v1 package. Its proposed ADR, draft spec, and deferred
+prompt are preserved as future design material.
 
 ### Marking a WP complete (required)
 

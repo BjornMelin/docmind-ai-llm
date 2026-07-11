@@ -22,11 +22,11 @@ def provider_badge(
         cfg: Current unified settings.
         graphrag_health: Optional cached GraphRAG health tuple to reuse.
     """
-    from src.retrieval.adapter_registry import get_default_adapter_health
+    from src.retrieval.llama_index_adapter import get_graphrag_health
 
     provider = cfg.llm_backend
     vllm_cfg = getattr(cfg, "vllm", None)
-    model = cfg.model or (getattr(vllm_cfg, "model", None) if vllm_cfg else None)
+    model = cfg.effective_model
     base_url: str | None = None
     if provider == "ollama":
         base_url = str(cfg.ollama_base_url).rstrip("/")
@@ -43,7 +43,7 @@ def provider_badge(
         )
 
     if graphrag_health is None:
-        graphrag_health = get_default_adapter_health()
+        graphrag_health = get_graphrag_health()
     supports_graphrag, adapter_name, hint = graphrag_health
     status_label = "enabled" if supports_graphrag else "disabled"
 

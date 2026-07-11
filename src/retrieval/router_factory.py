@@ -5,9 +5,9 @@ Builds a RouterQueryEngine with:
 - optional hybrid_search (server-side hybrid retriever)
 - optional knowledge_graph (GraphRAG)
 
-This module keeps imports dependency-light by routing all llama_index access via
-``src.retrieval.llama_index_adapter`` and GraphRAG access via the adapter
-registry-backed helpers in ``src.retrieval.graph_config``.
+This module keeps imports dependency-light by routing LlamaIndex access through
+``src.retrieval.llama_index_adapter`` and GraphRAG construction through
+``src.retrieval.graph_config``.
 """
 
 from __future__ import annotations
@@ -17,12 +17,9 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from src.config.settings import settings as default_settings
-from src.retrieval.adapter_registry import (
-    GRAPH_DEPENDENCY_HINT,
-    MissingGraphAdapterError,
-)
 from src.retrieval.graph_config import build_graph_query_engine
 from src.retrieval.llama_index_adapter import (
+    LLAMA_INDEX_INSTALL_HINT,
     LlamaIndexAdapterProtocol,
     MissingLlamaIndexError,
     get_llama_index_adapter,
@@ -200,6 +197,7 @@ def _maybe_add_hybrid_tool(
             prefetch_sparse=int(getattr(cfg.retrieval, "prefetch_sparse_limit", 400)),
             prefetch_dense=int(getattr(cfg.retrieval, "prefetch_dense_limit", 200)),
             fusion_mode=str(getattr(cfg.retrieval, "fusion_mode", "rrf")),
+            rrf_k=int(getattr(cfg.retrieval, "rrf_k", 60)),
             dedup_key=str(getattr(cfg.retrieval, "dedup_key", "page_id")),
         )
         retriever = ServerHybridRetriever(params)
@@ -297,8 +295,8 @@ def _maybe_add_graph_tool(
                 ),
             )
         )
-    except MissingGraphAdapterError as exc:
-        _warn_once("graph", GRAPH_DEPENDENCY_HINT, reason=str(exc))
+    except MissingLlamaIndexError as exc:
+        _warn_once("graph", LLAMA_INDEX_INSTALL_HINT, reason=str(exc))
     except (ValueError, TypeError, AttributeError, ImportError) as exc:
         from src.utils.log_safety import build_pii_log_entry
 
@@ -505,6 +503,5 @@ def build_router_engine(
 
 
 __all__ = [
-    "GRAPH_DEPENDENCY_HINT",
     "build_router_engine",
 ]

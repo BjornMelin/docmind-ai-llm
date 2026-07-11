@@ -45,8 +45,18 @@ def build_llm(settings: DocMindSettings) -> Any:
         ValueError: If ``settings.llm_backend`` is unsupported.
     """
     backend = settings.llm_backend
-    model_name = settings.model or settings.vllm.model
-    context_window = int(settings.context_window or settings.vllm.context_window)
+    supported_backends = {
+        "ollama",
+        "openai_compatible",
+        "vllm",
+        "lmstudio",
+        "llamacpp",
+    }
+    if backend not in supported_backends:
+        raise ValueError(f"Unsupported llm_backend: {backend}")
+
+    model_name = settings.effective_model
+    context_window = settings.effective_context_window
     timeout_s = float(
         getattr(
             settings, "llm_request_timeout_seconds", settings.ui.request_timeout_seconds

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import sys
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -52,7 +53,7 @@ def documents_app_test(
     from src.config.settings import settings as app_settings
 
     monkeypatch.setenv("DOCMIND_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("DOCMIND_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("DOCMIND_CACHE__DIR", str(tmp_path / "cache"))
     app_settings.data_dir = tmp_path
     app_settings.chat.sqlite_path = tmp_path / "chat.db"
     app_settings.database.sqlite_db_path = tmp_path / "docmind.db"
@@ -81,7 +82,7 @@ def documents_app_test(
     def _save_uploaded_file(*_, **__) -> tuple[Path, str]:
         dummy = tmp_path / "dummy"
         dummy.write_text("", encoding="utf-8")
-        return dummy, "0"
+        return dummy, "0" * 64
 
     _install_stub(
         "src.ui.ingest_adapter",
@@ -110,6 +111,10 @@ def documents_app_test(
             "Rebuild should run once per test action."
         )
         snapshot_dir.mkdir(parents=True, exist_ok=False)
+        (snapshot_dir / "manifest.meta.json").write_text(
+            json.dumps({"complete": True}),
+            encoding="utf-8",
+        )
         rebuild_calls.append(snapshot_dir)
         return snapshot_dir
 

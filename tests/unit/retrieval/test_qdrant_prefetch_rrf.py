@@ -10,18 +10,22 @@ def test_rrf_prefetch_and_limit(monkeypatch):
 
     class _Res:
         def __init__(self):
-            self.points = []
+            self.groups = []
 
     class _FakeClient:
         def __init__(self, **_kwargs):
             pass
 
-        def query_points(self, **kwargs):
+        def query_points_groups(self, **kwargs):
             calls["kwargs"] = kwargs
             return _Res()
 
     # Patch QdrantClient used inside retriever
     monkeypatch.setattr("src.retrieval.hybrid.QdrantClient", _FakeClient)
+    monkeypatch.setattr(
+        "src.retrieval.hybrid.ensure_hybrid_collection",
+        lambda *_args, **_kwargs: type("_Compatibility", (), {"compatible": True})(),
+    )
 
     retr = ServerHybridRetriever(
         HybridParams(
@@ -44,8 +48,8 @@ def test_rrf_prefetch_and_limit(monkeypatch):
 
     _ = retr.retrieve("q")
     kw = calls["kwargs"]
-    assert isinstance(kw["query"], qmodels.FusionQuery)
-    # RRF expected
-    assert kw["query"].fusion == qmodels.Fusion.RRF
-    # Headroom limit = max(prefetch_dense, prefetch_sparse, fused_top_k)
-    assert kw["limit"] == 5
+    assert isinstance(kw["query"], qmodels.RrfQuery)
+    assert kw["query"].rrf.k == 60
+    assert kw["group_by"] == "page_id"
+    assert kw["group_size"] == 1
+    assert kw["limit"] == 3

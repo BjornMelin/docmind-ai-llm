@@ -4,6 +4,10 @@ Date: 2026-05-01
 
 Status: Implemented in the dependency modernization working tree.
 
+Historical note: this plan records the dependency state at implementation time.
+Its `readers-file` references are not current architecture; the active parser uses
+the canonical Docling, pypdfium2, and RapidOCR path documented in the parser specs.
+
 ## Objective
 
 Upgrade the highest-leverage, resolver-compatible dependency group that improves
@@ -54,7 +58,7 @@ instrumentation regression, keep the core `opentelemetry-*` updates and defer
 | --- | ---: | --- | --- |
 | Analytics plus OpenTelemetry | 8.1 | Selected | User-selected scope. Shared telemetry/analytics surface. Resolver-compatible. |
 | Analytics only | 9.0 | Rejected by scope choice | Best minimal lane, but user selected adjacent OTel coverage. |
-| Add ingestion/Unstructured 0.22 | 6.7 | Defer | Parsing and table chunking behavior changes deserve a separate ingestion review. |
+| Expand into document parsing | 6.7 | Defer | Parsing and table fidelity required a separate, completed CPU-safe parser lane. |
 | pandas 3 | 3.4 | Defer | Latest `llama-index-readers-file==0.6.0` requires `pandas>=2.0.0,<3`. |
 | DuckDB 1.5 | 4.8 | Defer | Latest LlamaIndex DuckDB KV/vector integrations require `duckdb<1.4.0`. |
 | Custom DuckDB KV adapter | 6.9 | Reject | Would own cache concurrency, JSON extension setup, async facade, and migrations. |
@@ -62,10 +66,9 @@ instrumentation regression, keep the core `opentelemetry-*` updates and defer
 
 ## Evidence
 
-- `uv tree --outdated --frozen --all-groups --depth 1` shows Plotly,
-  PyArrow, OTel, DuckDB, pandas, Unstructured, spaCy, Torch, and Ruff as
-  outdated while LlamaIndex, LangGraph, Qdrant client, Streamlit, OpenAI, and
-  Transformers are already current or within their selected release lines.
+- The planning-time `uv tree --outdated --frozen --all-groups --depth 1`
+  snapshot showed Plotly, PyArrow, OTel, DuckDB, pandas, spaCy, Torch, and Ruff
+  as outdated. This historical snapshot is not the current dependency audit.
 - The local resolver accepts Plotly 6.7, PyArrow 24, OTel 1.41, and
   `llama-index-observability-otel` 0.6 together.
 - The same resolver rejects pandas 3 because
@@ -275,8 +278,9 @@ Stop and split the PR if any of these occur:
 ## Follow-Up Lanes
 
 1. Ingestion parsing modernization:
-   Evaluate `unstructured>=0.22,<0.23` for table chunking, formula markdown,
-   `unstructured doctor`, PDF render memory safety, and security updates.
+   Track Docling, pypdfium2, and RapidOCR releases for
+   table/formula fidelity, OCR model cache behavior, PDF render memory safety,
+   and security updates.
 2. DuckDB integration watch:
    Track LlamaIndex DuckDB KV/vector packages for a future cap lift to
    DuckDB 1.4 LTS or 1.5 current. Prefer upstream package support over a local

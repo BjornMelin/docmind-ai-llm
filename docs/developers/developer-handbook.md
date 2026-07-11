@@ -15,7 +15,7 @@ This comprehensive handbook provides practical implementation guidance for devel
 5. [Code Quality & Maintenance](#code-quality--maintenance)
 6. [Advanced Implementation Details](#advanced-implementation-details)
 7. [Performance Optimization](#performance-optimization)
-8. [Troubleshooting & Debugging](#troubleshooting--debugging)
+8. [Troubleshooting and Debugging](#troubleshooting-and-debugging)
 
 ## Development Standards
 
@@ -37,7 +37,7 @@ uv run ruff format . && uv run ruff check . --fix
 # Configuration in pyproject.toml
 [tool.ruff]
 line-length = 88
-target-version = "py313"
+target-version = "py312"
 select = ["E", "F", "I", "UP", "N", "S", "B", "A", "C4", "PT", "SIM", "TID", "D"]
 ignore = ["D203", "D213", "S301", "S603", "S607", "S108"]
 ```
@@ -467,10 +467,13 @@ def test_collect_paths_filters_extensions(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_load_documents_falls_back_when_unstructured_missing(
+async def test_load_documents_falls_back_when_parser_unavailable(
     monkeypatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setitem(sys.modules, "llama_index.readers.file", ModuleType("x"))
+    async def _explode(*_args, **_kwargs):
+        raise RuntimeError("parser unavailable")
+
+    monkeypatch.setattr(ingestion_api, "_parse_path", _explode)
 
     p = tmp_path / "a.txt"
     p.write_text("hello", encoding="utf-8")
@@ -888,16 +891,15 @@ async def process_document_with_monitoring(file_path: Path) -> ProcessedDocument
 ### Dependency Management
 
 ```bash
-# Update dependencies safely
-uv add package-name                      # Add new dependency
-uv add --dev package-name               # Add development dependency
-uv sync --all-extras                    # Update all dependencies
+# Add or synchronize dependencies
+uv add package-name
+uv add --dev package-name
+uv sync --frozen
 
-# Check for security vulnerabilities
-uv pip-audit
-
-# Update to latest compatible versions
-uv update
+# Refresh the lock within declared version ranges, then verify it
+uv lock --upgrade
+uv lock --check
+uv pip check
 ```
 
 ## Advanced Implementation Details
@@ -931,402 +933,39 @@ res = client.query_points(
 )
 ```
 
-```python
-def get_unified_embeddings(
-    self,
-    texts: List[str]
-) -> Dict[str, Any]:
-    """Generate both dense and sparse embeddings efficiently."""
-    
-    # Batch processing for efficiency
-    results = {"dense": [], "sparse": []}
-    
-    for i in range(0, len(texts), self._batch_size):
-        batch = texts[i:i + self._batch_size]
-        
-        # Generate all embedding types in one call
-        batch_embeddings = self.model.encode(
-            batch,
-            return_dense=True,
-            return_sparse=True,
-            # no colbert vectors in final architecture
-        )
-        
-        results["dense"].extend(batch_embeddings["dense_vecs"])
-        results["sparse"].extend(batch_embeddings["lexical_weights"])
-        
-    return results
+### Agent coordination
 
-def _optimize_sparse_embeddings(self, sparse_embeddings: List[Dict]) -> List[Dict]:
-    """Optimize sparse embeddings for storage efficiency."""
-    optimized = []
+Use `src.agents.coordinator.MultiAgentCoordinator` as the application boundary
+and `src.agents.supervisor_graph` as the graph owner. Do not add parallel custom
+coordinators, handwritten routing state machines, or direct provider clients.
+Tests should patch the consumer seams documented in
+the [testing guide](../testing/testing-guide.md).
 
-    for embedding in sparse_embeddings:
-        # Keep only top-k sparse dimensions
-        sorted_items = sorted(
-            embedding.items(),
-            key=lambda x: x[1],
-            reverse=True
-        )[:100]  # Top 100 dimensions
+## Performance optimization
 
-        optimized.append(dict(sorted_items))
+- Keep device and VRAM policy in `src/utils/core.py`.
+- Treat vLLM, LM Studio, llama.cpp, and Ollama as external model servers; the
+  application container remains CPU-first.
+- Profile a reproducible test or benchmark before changing performance-sensitive
+  code. Retain the command, fixture, environment, and result artifact.
+- Use LlamaIndex `IngestionCache` with `DuckDBKVStore` for document-processing
+  cache behavior. Do not add custom cache wrappers.
 
-    return optimized
-```
+## Troubleshooting and debugging
 
-### Hybrid Search with RRF Fusion
-
-```python
-class QdrantHybridRetriever:
-    """Advanced hybrid retrieval with RRF fusion."""
-    
-    async def hybrid_search(
-        self,
-        query: str,
-        top_k: int = 10,
-        alpha: float = 0.7,  # Dense weight
-        rerank: bool = True
-    ) -> List[Document]:
-        """Execute hybrid search with configurable fusion."""
-        
-        # Generate query embeddings
-        query_embeddings = await self.embedder.get_unified_embeddings([query])
-        dense_query = query_embeddings["dense"][0]
-        sparse_query = query_embeddings["sparse"][0]
-        
-        # Parallel search execution
-        dense_task = asyncio.create_task(
-            self._dense_search(dense_query, top_k * 2)
-        )
-        sparse_task = asyncio.create_task(
-            self._sparse_search(sparse_query, top_k * 2)
-        )
-        
-        dense_results, sparse_results = await asyncio.gather(
-            dense_task, sparse_task
-        )
-        
-        # RRF fusion
-        fused_results = self._rrf_fusion(
-            dense_results, sparse_results, alpha
-        )
-        
-        # Optional reranking
-        if rerank and len(fused_results) > 5:
-            fused_results = await self._rerank_results(
-                query, fused_results[:top_k * 2]
-            )
-        
-        return fused_results[:top_k]
-    
-    def _rrf_fusion(
-        self, 
-        dense_results: List[Document], 
-        sparse_results: List[Document], 
-        alpha: float
-    ) -> List[Document]:
-        """Reciprocal Rank Fusion implementation."""
-        
-        scores = defaultdict(float)
-        doc_map = {}
-        
-        # Dense ranking contribution
-        for rank, doc in enumerate(dense_results):
-            scores[doc.id] += alpha / (60 + rank + 1)  # RRF constant = 60
-            doc_map[doc.id] = doc
-            
-        # Sparse ranking contribution  
-        for rank, doc in enumerate(sparse_results):
-            scores[doc.id] += (1 - alpha) / (60 + rank + 1)
-            doc_map[doc.id] = doc
-            
-        # Sort by fused score
-        sorted_ids = sorted(scores.keys(), key=lambda x: scores[x], reverse=True)
-        
-        return [doc_map[doc_id] for doc_id in sorted_ids if doc_id in doc_map]
-```
-
-### Advanced Agent Coordination
-
-```python
-class AdvancedMultiAgentCoordinator:
-    """Advanced multi-agent coordination with state management."""
-    
-    def __init__(self, settings: DocMindSettings):
-        self.settings = settings
-        self.agents = {}
-        self.state_manager = AgentStateManager()
-        self.execution_graph = self._create_execution_graph()
-    
-    def _create_execution_graph(self):
-        """Create LangGraph execution graph."""
-        from langgraph.graph import StateGraph, MessagesState
-        
-        # Define agent workflow
-        workflow = StateGraph(MessagesState)
-        
-        # Add agent nodes
-        workflow.add_node("router", self._router_node)
-        workflow.add_node("planner", self._planner_node)
-        workflow.add_node("retrieval", self._retrieval_node)
-        workflow.add_node("synthesis", self._synthesis_node)
-        workflow.add_node("validator", self._validator_node)
-        
-        # Define conditional edges
-        workflow.add_conditional_edges(
-            "router",
-            self._should_plan,
-            {"plan": "planner", "direct": "retrieval"}
-        )
-        
-        workflow.add_edge("planner", "retrieval")
-        workflow.add_edge("retrieval", "synthesis")
-        workflow.add_edge("synthesis", "validator")
-        
-        # Set entry and exit points
-        workflow.set_entry_point("router")
-        workflow.set_finish_point("validator")
-        
-        return workflow.compile(checkpointer=MemorySaver())
-    
-    async def _router_node(self, state: MessagesState) -> Dict:
-        """Router agent node with complexity analysis."""
-        query = state["messages"][-1].content
-        
-        # Analyze query complexity
-        complexity_score = self._analyze_complexity(query)
-        routing_decision = RoutingDecision(
-            complexity=complexity_score,
-            strategy="hybrid" if complexity_score > 0.5 else "dense",
-            requires_planning=complexity_score > 0.7
-        )
-        
-        # Update state
-        state["routing_decision"] = routing_decision
-        state["complexity_score"] = complexity_score
-        
-        return state
-    
-    def _analyze_complexity(self, query: str) -> float:
-        """Analyze query complexity for routing decisions."""
-        complexity_indicators = [
-            len(query.split()) > 20,           # Long query
-            "compare" in query.lower(),        # Comparison request  
-            "analyze" in query.lower(),        # Analysis request
-            "relationship" in query.lower(),   # Relationship query
-            query.count("?") > 1,              # Multiple questions
-            "and" in query.lower() and "or" in query.lower()  # Complex logic
-        ]
-        
-        return sum(complexity_indicators) / len(complexity_indicators)
-```
-
-## Performance Optimization
-
-### GPU Memory Optimization
-
-```python
-# GPU memory management patterns
-class GPUMemoryManager:
-    """Manage GPU memory efficiently."""
-    
-    def __init__(self):
-        self.memory_threshold = 0.85  # 85% usage limit
-        self.cleanup_threshold = 0.95  # Force cleanup at 95%
-    
-    @contextmanager
-    def memory_context(self):
-        """Context manager for GPU memory management."""
-        initial_memory = torch.cuda.memory_allocated()
-        
-        try:
-            yield
-        finally:
-            current_memory = torch.cuda.memory_allocated()
-            memory_increase = current_memory - initial_memory
-            
-            if self._should_cleanup():
-                torch.cuda.empty_cache()
-                logger.info(f"GPU memory cleanup: freed {memory_increase / 1e6:.1f}MB")
-    
-    def _should_cleanup(self) -> bool:
-        """Check if GPU memory cleanup is needed."""
-        if not torch.cuda.is_available():
-            return False
-            
-        memory_used = torch.cuda.memory_allocated()
-        memory_total = torch.cuda.get_device_properties(0).total_memory
-        utilization = memory_used / memory_total
-        
-        return utilization > self.cleanup_threshold
-
-# Usage in agent coordination
-async def execute_with_memory_management(self, query: str) -> str:
-    """Execute query with GPU memory management."""
-    
-    with self.gpu_manager.memory_context():
-        # Execute agents in sequence to manage memory
-        routing = await self.router_agent.arun(query)
-        
-        if routing.requires_planning:
-            planning = await self.planner_agent.arun(query)
-            
-        retrieval = await self.retrieval_agent.arun(query)
-        
-        # Clear intermediate results to free memory
-        torch.cuda.empty_cache()
-        
-        synthesis = await self.synthesis_agent.arun(query, retrieval)
-        validation = await self.validator_agent.arun(synthesis)
-        
-        return validation.response
-```
-
-### Caching Strategies
-
-For document-processing cache, use LlamaIndex IngestionCache with DuckDBKVStore directly. Avoid custom cache wrappers in production. See the cache implementation guide for wiring, configuration, operations, and troubleshooting: [cache.md](cache.md).
-
-## Troubleshooting & Debugging
-
-### Comprehensive Debugging Setup
-
-```python
-# Logging configuration (Loguru + JSONL telemetry)
-from src.config import settings
-from src.utils.monitoring import async_performance_timer, logger, setup_logging
-
-setup_logging(log_level="DEBUG" if settings.debug else "INFO")
-
-# Usage in agent code
-async def debug_agent_execution(self, query: str) -> str:
-    """Execute with comprehensive debugging."""
-    
-    logger.bind(
-        query_length=len(query),
-        agent_timeout=self.settings.agents.decision_timeout,
-    ).info("Starting agent execution")
-    
-    try:
-        async with async_performance_timer("agent_coordination") as metrics:
-            result = await self._execute_coordination(query)
-            metrics["result_length"] = len(result)
-            metrics["agents_used"] = self._get_agents_used()
-            logger.info("Agent execution completed")
-            return result
-            
-    except Exception as e:
-        logger.bind(
-            error_type=type(e).__name__,
-            query_preview=query[:100],
-        ).exception("Agent execution failed")
-        raise
-```
-
-### Common Issue Resolution
-
-#### Configuration Issues
+Inspect the typed configuration without printing credentials or raw content:
 
 ```bash
-# Debug configuration loading
-uv run python -c "
-from src.config import settings
-import pprint
-pprint.pprint(settings.model_dump())
-"
-
-# Validate specific configuration sections
-uv run python -c "
-from src.config import settings
-print('vLLM Config:', settings.vllm.model_dump())
-print('Agent Config:', settings.agents.model_dump())
-print('Embedding Config:', settings.embedding.model_dump())
-"
+uv run python -c "from src.config import settings; print(settings.parsing.model_dump_json(indent=2))"
+uv run python scripts/parser_health.py --check
+uv run python scripts/run_tests.py --fast
 ```
 
-#### Performance Issues
-
-```python
-# Performance profiling
-import cProfile
-import pstats
-from src.agents.coordinator import MultiAgentCoordinator
-
-def profile_agent_execution():
-    """Profile agent execution for bottlenecks."""
-    coordinator = MultiAgentCoordinator(settings)
-    
-    profiler = cProfile.Profile()
-    profiler.enable()
-    
-    # Execute test query
-    result = asyncio.run(coordinator.arun("Test query for profiling"))
-    
-    profiler.disable()
-    
-    # Analyze results
-    stats = pstats.Stats(profiler)
-    stats.sort_stats('cumulative')
-    stats.print_stats(20)  # Top 20 functions
-    
-    return result
-
-# Memory profiling
-from memory_profiler import profile
-
-@profile
-def memory_profile_processing():
-    """Profile memory usage during document processing."""
-    documents = load_sample_documents()
-    processed = process_documents_batch(documents)
-    return processed
-```
-
-#### GPU Issues
-
-```python
-# GPU diagnostics
-def diagnose_gpu_setup():
-    """Comprehensive GPU setup diagnostics."""
-    import os
-
-    print("=== GPU DIAGNOSTICS ===")
-    
-    # CUDA availability
-    print(f"CUDA Available: {torch.cuda.is_available()}")
-    if torch.cuda.is_available():
-        print(f"CUDA Version: {torch.version.cuda}")
-        print(f"GPU Count: {torch.cuda.device_count()}")
-        print(f"Current Device: {torch.cuda.current_device()}")
-        print(f"Device Name: {torch.cuda.get_device_name()}")
-        
-        # Memory info
-        memory_total = torch.cuda.get_device_properties(0).total_memory / 1e9
-        memory_allocated = torch.cuda.memory_allocated() / 1e9
-        memory_reserved = torch.cuda.memory_reserved() / 1e9
-        
-        print(f"Total VRAM: {memory_total:.1f}GB")
-        print(f"Allocated: {memory_allocated:.1f}GB")
-        print(f"Reserved: {memory_reserved:.1f}GB")
-        print(f"Available: {memory_total - memory_reserved:.1f}GB")
-    
-    # vLLM diagnostics (external server)
-    base_url = os.environ.get("DOCMIND_OPENAI__BASE_URL") or os.environ.get("DOCMIND_VLLM__VLLM_BASE_URL")
-    if base_url:
-        print(f"vLLM Base URL (configured): {base_url}")
-        print("Tip: validate the server with: curl --fail --silent \"$DOCMIND_OPENAI__BASE_URL/models\"")
-    else:
-        print("vLLM Base URL not configured")
-    
-    # Environment variables
-    print("\n=== RELEVANT ENV VARS ===")
-    for key, value in os.environ.items():
-        if any(prefix in key for prefix in ['VLLM_', 'CUDA_', 'TORCH_']):
-            print(f"{key}: {value}")
-
-# Run diagnostics
-if __name__ == "__main__":
-    diagnose_gpu_setup()
-```
+Use metadata-only Loguru fields and the helpers in `src.utils.log_safety` for
+runtime diagnosis. Never log prompt text, document text, model output, endpoint
+credentials, or environment-variable values. For GPU and external-server setup,
+follow [GPU setup](gpu-setup.md) and the
+[operations guide](operations-guide.md).
 
 ---
 

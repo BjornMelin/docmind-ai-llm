@@ -3,10 +3,10 @@
 This module centralizes local filesystem ingestion primitives:
 
 - Path enumeration with deterministic ordering and strict symlink rejection.
-- File loading into LlamaIndex ``Document`` objects via UnstructuredReader when
-  available.
+- File loading into LlamaIndex ``Document`` objects via the CPU-safe DocMind
+  parser service.
 - Metadata sanitization to avoid persisting absolute paths.
-- Targeted ingestion cache cleanup under ``settings.cache_dir / "ingestion"``.
+- Targeted ingestion cache cleanup under ``settings.cache.dir / "ingestion"``.
 
 Per ADR-045 + SPEC-026 this is the single source of truth for loader behavior.
 """
@@ -21,15 +21,17 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from src.utils.hashing import sha256_file
+from src.models.processing import CANONICAL_DOCUMENT_ID_KEY, IngestionInput
+from src.processing.parsing.errors import DocumentParseError
+from src.utils.hashing import document_id_from_sha256, sha256_file
 from src.utils.log_safety import build_pii_log_entry
 
 if TYPE_CHECKING:  # pragma: no cover
     from llama_index.core import Document
 
-    from src.models.processing import IngestionInput
+    from src.processing.parsing.canonical_types import DocumentParseResult
 
-_DEFAULT_EXTENSIONS: set[str] = {".pdf", ".txt", ".md"}
+_DEFAULT_EXTENSIONS: set[str] = {".pdf", ".txt", ".md", ".markdown", ".rst"}
 
 
 def _normalize_extensions(extensions: set[str] | None) -> set[str]:
@@ -88,10 +90,30 @@ def generate_stable_id(file_path: str | Path) -> str:
         file_path: Local filesystem path to hash.
 
     Returns:
-        Stable document identifier in the form ``doc-<sha256[:16]>``.
+        Stable document identifier in the form ``doc-<full-sha256>``.
     """
-    digest = sha256_file(Path(file_path))
-    return f"doc-{digest[:16]}"
+    path = Path(file_path)
+    try:
+        digest = sha256_file(path)
+    except OSError as exc:
+        raise DocumentParseError(
+            path,
+            stage="source_hash",
+            reason="source_hash_failed",
+            cause=exc,
+        ) from exc
+    return document_id_from_sha256(digest)
+
+
+def require_unique_document_ids(inputs: Sequence[IngestionInput]) -> None:
+    """Reject ambiguous document ownership before ingestion performs work."""
+    seen: set[str] = set()
+    for item in inputs:
+        if item.document_id in seen:
+            raise ValueError(
+                f"Duplicate document_id in ingestion batch: {item.document_id}"
+            )
+        seen.add(item.document_id)
 
 
 def sanitize_document_metadata(
@@ -192,40 +214,29 @@ def collect_paths(
     return collected
 
 
-def _default_unstructured_reader() -> Any | None:
-    try:
-        from llama_index.readers.file import UnstructuredReader
-
-        return UnstructuredReader()
-    except (ImportError, ModuleNotFoundError, AttributeError):
-        return None
-
-
 async def load_documents(
     paths: Sequence[Path | str],
     *,
-    reader: Any | None = None,
     doc_id: str | None = None,
+    parsing_overrides: dict[str, Any] | None = None,
 ) -> list[Document]:
     """Load local files into LlamaIndex Documents (async-friendly).
 
     Args:
         paths: File paths to load.
-        reader: Optional Unstructured reader override.
         doc_id: Optional precomputed document ID (only used if paths has 1 item).
+        parsing_overrides: Optional per-ingestion parsing overrides.
 
     Returns:
         List of LlamaIndex ``Document`` objects.
 
     Notes:
         - Missing/non-file paths are skipped.
-        - UnstructuredReader is used when available; failures fall back to UTF-8
-          text read.
+        - The parser service uses Docling for binary formats and strict UTF-8
+          reads for the explicit text allowlist.
         - Symlink components are rejected to prevent traversal.
     """
     from llama_index.core import Document
-
-    resolved_reader = reader if reader is not None else _default_unstructured_reader()
 
     docs: list[Document] = []
     for raw in paths:
@@ -250,73 +261,58 @@ async def load_documents(
             doc_id_base = doc_id
         else:
             doc_id_base = await asyncio.to_thread(generate_stable_id, path)
-        if resolved_reader is not None:
-            try:
-                loaded = await asyncio.to_thread(
-                    resolved_reader.load_data,  # type: ignore[call-arg]
-                    file=path,
-                    unstructured_kwargs={"filename": path.name},
-                )
-                loaded_items = list(loaded or [])
-                for idx, item in enumerate(loaded_items):
-                    meta = getattr(item, "metadata", {}) or {}
-                    item.doc_id = (
-                        f"{doc_id_base}-{idx}" if len(loaded_items) > 1 else doc_id_base
-                    )
-                    item.metadata = sanitize_document_metadata(
-                        meta,
-                        source_filename=path.name,
-                    )
-                    docs.append(item)
-                if loaded_items:
-                    continue
-            except Exception as exc:
-                redaction = build_pii_log_entry(
-                    str(exc), key_id="ingestion.unstructured_reader"
-                )
-                logger.debug(
-                    "UnstructuredReader failed for {} (error_type={}, error={})",
-                    path.name,
-                    type(exc).__name__,
-                    redaction.redacted,
-                )
-
         try:
-            text = await asyncio.to_thread(
-                path.read_text, encoding="utf-8", errors="ignore"
+            parse_result = await _parse_path(
+                path,
+                document_id=doc_id_base,
+                parsing_overrides=parsing_overrides,
             )
+        except DocumentParseError:
+            raise
         except Exception as exc:
-            redaction = build_pii_log_entry(
-                str(exc), key_id="ingestion.fallback_text_read"
+            raise DocumentParseError(
+                path,
+                stage="ingestion_facade",
+                reason="parser_service_failed",
+                cause=exc,
+            ) from exc
+
+        page_count = len(parse_result.pages)
+        full_provenance = parse_result.provenance()
+        for idx, page in enumerate(parse_result.pages):
+            doc_identifier = f"{doc_id_base}-{idx}" if page_count > 1 else doc_id_base
+            doc = Document(
+                text=page.text_markdown,
+                doc_id=doc_identifier,
+                metadata=sanitize_document_metadata(
+                    {
+                        "document_id": doc_id_base,
+                        CANONICAL_DOCUMENT_ID_KEY: doc_id_base,
+                        "source_hash": parse_result.source_hash,
+                        "page_number": page.page_index + 1,
+                        "page_id": page.page_id,
+                        "parsing": (
+                            full_provenance
+                            if idx == 0
+                            else _page_parser_provenance(parse_result, page)
+                        ),
+                    },
+                    source_filename=parse_result.source_filename,
+                ),
             )
-            logger.debug(
-                "Fallback text read failed for {} (error_type={}, error={})",
-                path.name,
-                type(exc).__name__,
-                redaction.redacted,
-            )
-            text = ""
-        docs.append(
-            Document(
-                text=text,
-                doc_id=doc_id_base,
-                metadata=sanitize_document_metadata({}, source_filename=path.name),
-            )
-        )
+            _exclude_parser_metadata_from_embeddings(doc)
+            docs.append(doc)
     return docs
 
 
 async def load_documents_from_inputs(
     inputs: Sequence[IngestionInput],
-    *,
-    reader: Any | None = None,
 ) -> list[Document]:
     """Load Documents from normalized ingestion inputs.
 
     Args:
         inputs: Normalized ingestion inputs describing local files or in-memory
             payloads.
-        reader: Optional Unstructured reader override.
 
     Returns:
         List of loaded ``Document`` objects.
@@ -326,8 +322,7 @@ async def load_documents_from_inputs(
     """
     from llama_index.core import Document
 
-    resolved_reader = reader if reader is not None else _default_unstructured_reader()
-
+    require_unique_document_ids(inputs)
     documents: list[Document] = []
     for item in inputs:
         if item.source_path is not None:
@@ -349,7 +344,9 @@ async def load_documents_from_inputs(
                 )
                 continue
             file_docs = await load_documents(
-                [path], reader=resolved_reader, doc_id=item.document_id
+                [path],
+                doc_id=item.document_id,
+                parsing_overrides=item.parsing_overrides.model_dump(exclude_none=True),
             )
             for idx, doc in enumerate(file_docs):
                 doc.doc_id = (
@@ -357,34 +354,104 @@ async def load_documents_from_inputs(
                     if len(file_docs) > 1
                     else item.document_id
                 )
-                base_meta = dict(getattr(doc, "metadata", {}) or {})
-                base_meta.update(item.metadata)
-                base_meta.setdefault("document_id", item.document_id)
+                parser_meta = dict(getattr(doc, "metadata", {}) or {})
+                base_meta = dict(item.metadata)
+                base_meta.update(parser_meta)
+                base_meta["document_id"] = item.document_id
+                base_meta[CANONICAL_DOCUMENT_ID_KEY] = item.document_id
                 doc.metadata = sanitize_document_metadata(
                     base_meta,
                     source_filename=path.name,
                 )
+                _exclude_parser_metadata_from_embeddings(doc)
             documents.extend(file_docs)
             continue
 
-        payload = item.payload_bytes or b""
-        text = payload.decode("utf-8", errors="ignore")
-        meta = sanitize_document_metadata(item.metadata, source_filename="<bytes>")
-        meta.setdefault("document_id", item.document_id)
-        documents.append(Document(text=text, doc_id=item.document_id, metadata=meta))
+        text = item.payload_text
+        if text is None:  # pragma: no cover - enforced by IngestionInput
+            raise ValueError("IngestionInput requires source_path or payload_text")
+        meta = dict(item.metadata)
+        meta["document_id"] = item.document_id
+        meta[CANONICAL_DOCUMENT_ID_KEY] = item.document_id
+        meta = sanitize_document_metadata(meta, source_filename="<text>")
+        document = Document(text=text, doc_id=item.document_id, metadata=meta)
+        _exclude_parser_metadata_from_embeddings(document)
+        documents.append(document)
 
     return documents
+
+
+def _exclude_parser_metadata_from_embeddings(doc: Document) -> None:
+    excluded = {"parsing", CANONICAL_DOCUMENT_ID_KEY}
+    doc.excluded_embed_metadata_keys = sorted(
+        excluded.union(getattr(doc, "excluded_embed_metadata_keys", []) or [])
+    )
+    doc.excluded_llm_metadata_keys = sorted(
+        excluded.union(getattr(doc, "excluded_llm_metadata_keys", []) or [])
+    )
+
+
+def _page_parser_provenance(parse_result: Any, page: Any) -> dict[str, Any]:
+    """Return compact parser-owned provenance for non-leading pages."""
+    return {
+        "framework": parse_result.parser_framework.value,
+        "profile": parse_result.profile.value,
+        "ocr_engine": parse_result.ocr_engine.value,
+        "config_hash": parse_result.config_hash,
+        "page": {
+            "index": page.page_index,
+            "routing_reason": page.routing_reason,
+            "ocr_applied": page.ocr_applied,
+        },
+    }
+
+
+async def _parse_path(
+    path: Path,
+    *,
+    document_id: str,
+    parsing_overrides: dict[str, Any] | None = None,
+) -> DocumentParseResult:
+    from src.config.settings import settings
+    from src.processing.parsing.service import parse_document
+
+    effective_settings = _settings_with_parsing_overrides(
+        settings,
+        parsing_overrides or {},
+    )
+    return await parse_document(
+        path,
+        settings=effective_settings,
+        document_id=document_id,
+    )
+
+
+def _settings_with_parsing_overrides(
+    settings_obj: Any, overrides: dict[str, Any]
+) -> Any:
+    if not overrides:
+        return settings_obj
+    ocr_update: dict[str, Any] = {}
+    if overrides.get("force_ocr") is not None:
+        ocr_update["force_ocr"] = bool(overrides["force_ocr"])
+    if overrides.get("export_searchable_pdf") is not None:
+        ocr_update["searchable_pdf_enabled"] = bool(overrides["export_searchable_pdf"])
+    return settings_obj.model_copy(
+        update={
+            "ocr": settings_obj.ocr.model_copy(update=ocr_update),
+        }
+    )
 
 
 def clear_ingestion_cache() -> None:
     """Best-effort cleanup of the ingestion cache directory.
 
-    Security: only deletes ``settings.cache_dir / "ingestion"``.
+    Security: only deletes ``settings.cache.dir / "ingestion"``.
     """
     from src.config.settings import settings
 
-    base = Path(settings.cache_dir).expanduser()
-    target = base / "ingestion"
+    base = settings.cache.dir.expanduser()
+    target = settings.cache.ingestion_db_path.parent.expanduser()
 
     if not target.exists():
         return
@@ -426,5 +493,6 @@ __all__ = [
     "generate_stable_id",
     "load_documents",
     "load_documents_from_inputs",
+    "require_unique_document_ids",
     "sanitize_document_metadata",
 ]

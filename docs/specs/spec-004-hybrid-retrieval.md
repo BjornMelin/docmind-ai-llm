@@ -1,16 +1,15 @@
 ---
 spec: SPEC-004
 title: Hybrid Retrieval: Qdrant Named Vectors (dense+sparse) with Server‑Side Fusion (RRF default)
-version: 1.1.1
-date: 2025-09-09
+version: 1.2.0
+date: 2026-07-11
 owners: ["ai-arch"]
-status: Revised
+status: Implemented
 related_requirements:
   - FR-RET-001: Use Qdrant named vectors dense/sparse with server‑side hybrid fusion via Query API.
   - FR-RET-002: Deterministic point IDs and idempotent upserts.
   - FR-RET-003: Prefer FastEmbed BM42 for sparse; fallback to BM25 when unavailable.
-  - NFR-PERF-003: fused_top_k=60; server‑side hybrid latency ≤ 120–200 ms (dataset/hardware dependent).
-related_adrs: ["ADR-005","ADR-006","ADR-010","ADR-024"]
+related_adrs: ["ADR-005","ADR-006","ADR-010","ADR-024","ADR-034"]
 ---
 
 
@@ -33,7 +32,7 @@ from qdrant_client import QdrantClient, models
 
 client = QdrantClient(url="http://localhost:6333")
 
-result = client.query_points(
+result = client.query_points_groups(
     collection_name="doc_pages",
     prefetch=[
         models.Prefetch(
@@ -47,8 +46,10 @@ result = client.query_points(
             limit=200,
         ),
     ],
-    # env: HYBRID_FUSION_MODE=rrf|dbsf
-    query=models.FusionQuery(fusion=models.Fusion.RRF),
+    # env: DOCMIND_RETRIEVAL__FUSION_MODE=rrf|dbsf
+    query=models.RrfQuery(rrf=models.Rrf(k=60)),
+    group_by="page_id",
+    group_size=1,
     limit=60,
     with_payload=["doc_id", "page_id", "chunk_id", "text", "has_image"],
 )
@@ -62,9 +63,8 @@ result = client.query_points(
 
 ## Development Notes
 
-- De‑duplication: Collapse by `page_id` (default) or `doc_id` (configurable) before the final fused cut (`limit`) to prevent over‑representing a single page/document. Use a fused candidate buffer (e.g., fused_top_k=60), dedup, then slice to top_k.
-- Settings: `retrieval.dedup_key=page_id|doc_id` selects the dedup key; server `group_by` MAY be enabled in a future version (kept off by default for KISS).
-- Latency targets: p50 120–200 ms for fused_top_k=60 on typical local setup; tune prefetch limits to stay within SLOs.
+- De‑duplication: use Qdrant `query_points_groups()` with `group_by=page_id|doc_id`, `group_size=1`, and `limit=fused_top_k`. Do not overfetch or deduplicate fused points in Python.
+- Settings: `retrieval.dedup_key=page_id|doc_id` selects the server grouping key. `retrieval.rrf_k` is passed to Qdrant through `RrfQuery(Rrf(k=...))`; DBSF uses `FusionQuery(Fusion.DBSF)`.
 - Telemetry: log prefetch sizes, fusion mode, fused_top_k, query latency, and `retrieval.sparse_fallback=true` when sparse prefetch is skipped.
 
 ### Router Interop (Note)
@@ -87,10 +87,14 @@ from llama_index.core import StorageContext
 
 ### UPDATE / CREATE
 
-- `src/retrieval/hybrid.py`: implement `ServerHybridRetriever` using qdrant_client Query API with `prefetch` on `text-dense` and `text-sparse`, `fusion=Fusion.RRF` (DBSF optional), and `limit=fused_top_k` with deterministic de‑dup before final cut.
+- `src/retrieval/hybrid.py`: implement `ServerHybridRetriever` using qdrant_client Query API with `prefetch` on `text-dense` and `text-sparse`, native RRF/DBSF fusion, and server grouping before `limit=fused_top_k`.
 - `src/retrieval/router_factory.py`: register a `hybrid_search` tool by wrapping `ServerHybridRetriever` in `RetrieverQueryEngine`; compose with `semantic_search` and optional `knowledge_graph` tool.
 - `src/utils/storage.py`: precreate collections with named vectors `text-dense` (COSINE, BGE‑M3 1024D) and `text-sparse` (SparseIndexParams); prefer `fastembed_sparse_model="Qdrant/bm42-all-minilm-l6-v2-attentions"` else `"Qdrant/bm25"`.
-- `src/models/storage.py`: deterministic ID helpers `sha256_id(text)`; idempotent upserts.
+- `src/models/processing.py`: own the parser-reserved
+  `docmind_document_id` metadata key.
+- `src/ui/_ingest_adapter_impl.py`: assign deterministic UUIDv5 point IDs from
+  canonical document ID, page ID, and chunk position; after a successful
+  upsert, delete only stale IDs captured for the affected documents.
 
 ## Acceptance Criteria
 
@@ -122,11 +126,11 @@ Feature: Hybrid retrieval (server‑side fusion)
 
 ## Server‑Side Hybrid Only (Qdrant Query API)
 
-- All hybrid queries MUST be executed server‑side via Qdrant Query API using `Prefetch` (sparse+dense) and `FusionQuery`.
+- All hybrid queries MUST be executed server‑side via Qdrant Query API using `Prefetch` (sparse+dense), `RrfQuery` for RRF, and `FusionQuery` for DBSF.
 - Default fusion mode: RRF; DBSF MAY be exposed behind an environment flag. No UI toggles for fusion modes.
 - Named vectors MUST exist: `text-dense` and `text-sparse`; the sparse vector SHOULD use IDF modifier when supported.
-- Deduplication MUST occur by a configured key (default `page_id`) before the final fused cut.
-- Telemetry MUST include: `retrieval.fusion_mode`, `retrieval.prefetch_*`, `retrieval.fused_limit`, `retrieval.return_count`, `retrieval.latency_ms`, `retrieval.sparse_fallback`, and `dedup.*`.
+- Grouping MUST occur in Qdrant by a configured key (default `page_id`) before the final fused cut.
+- Telemetry MUST include: `retrieval.fusion_mode`, `retrieval.prefetch_*`, `retrieval.fused_limit`, `retrieval.return_count`, `retrieval.latency_ms`, `retrieval.sparse_fallback`, `dedup.key`, `dedup.group_size`, `dedup.server_group_count`, and `dedup.server_side`. Emit `retrieval.rrf_k` only for RRF.
 
 ### Prohibited
 

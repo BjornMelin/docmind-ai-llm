@@ -45,14 +45,12 @@ def _reset_router_and_graph_modules() -> Iterator[None]:
 
 @pytest.fixture(autouse=True)
 def _stub_graphrag_health_badge(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Avoid heavy GraphRAG adapter discovery during AppTest UI runs.
+    """Avoid GraphRAG imports during AppTest UI runs.
 
-    The Chat/Settings provider badge calls `get_default_adapter_health()`, which
-    can register/load optional GraphRAG adapters. UI tests should remain fast
-    and offline; dedicated unit tests cover adapter discovery.
+    Dedicated unit tests cover the required LlamaIndex API health check.
     """
     monkeypatch.setattr(
-        "src.retrieval.adapter_registry.get_default_adapter_health",
+        "src.retrieval.llama_index_adapter.get_graphrag_health",
         lambda *, force_refresh=False: (
             False,
             "unavailable",

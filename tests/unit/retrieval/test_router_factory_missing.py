@@ -9,6 +9,7 @@ import pytest
 
 from src.retrieval import router_factory as rf
 from src.retrieval.llama_index_adapter import (
+    LLAMA_INDEX_INSTALL_HINT,
     MissingLlamaIndexError,
     set_llama_index_adapter,
 )
@@ -51,7 +52,7 @@ def test_router_engine_requires_llama(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with pytest.raises(MissingLlamaIndexError) as exc_info:
         rf.build_router_engine(_VecIndex(), pg_index=None, settings=cfg)
-    assert "pip install docmind_ai_llm[llama]" in str(exc_info.value)
+    assert "llama-index-core is a required DocMind dependency" in str(exc_info.value)
 
 
 @pytest.mark.unit
@@ -59,14 +60,13 @@ def test_router_engine_warns_when_graph_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Emit a warning when GraphRAG is requested without dependency support."""
-    from src.retrieval.adapter_registry import MissingGraphAdapterError
 
     class _PgIndex:
         def __init__(self) -> None:
             self.property_graph_store = object()
 
     def _raise_graph_error(*_a: object, **_k: object) -> None:
-        raise MissingGraphAdapterError(rf.GRAPH_DEPENDENCY_HINT)
+        raise MissingLlamaIndexError(LLAMA_INDEX_INSTALL_HINT)
 
     monkeypatch.setattr(
         rf,
@@ -102,6 +102,6 @@ def test_router_engine_warns_when_graph_disabled(
         logger.remove(token)
 
     assert get_router_tool_names(router) == ["semantic_search", "multimodal_search"]
-    assert any(rf.GRAPH_DEPENDENCY_HINT in message for message in captured), (
-        f"Expected warning containing '{rf.GRAPH_DEPENDENCY_HINT}', got: {captured}"
+    assert any(LLAMA_INDEX_INSTALL_HINT in message for message in captured), (
+        f"Expected warning containing '{LLAMA_INDEX_INSTALL_HINT}', got: {captured}"
     )

@@ -14,9 +14,6 @@ import pytest
 from src.retrieval.router_factory import build_router_engine
 
 pytest.importorskip("llama_index.core", reason="requires llama_index.core")
-pytest.importorskip(
-    "llama_index.program.openai", reason="requires llama_index.program.openai"
-)
 
 pytestmark = pytest.mark.requires_llama
 
@@ -50,6 +47,15 @@ def _tool_count(router) -> int:
         if tools is not None:
             return len(list(tools))
     return 0
+
+
+def _tool_names(router) -> set[str]:
+    """Return the registered router tool names."""
+    for attr in ("query_engine_tools", "_query_engine_tools"):
+        tools = getattr(router, attr, None)
+        if tools is not None:
+            return {tool.metadata.name for tool in tools}
+    return set()
 
 
 @pytest.mark.integration
@@ -93,4 +99,5 @@ def test_router_fallbacks_to_vector_only_when_graph_missing(monkeypatch) -> None
         "src.retrieval.reranking.get_postprocessors", lambda *_a, **_k: []
     )
     router = build_router_engine(vec, pg, settings=None)
-    assert _tool_count(router) == 1
+    assert "semantic_search" in _tool_names(router)
+    assert "knowledge_graph" not in _tool_names(router)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import sys
 import types
+from contextlib import nullcontext
 
 import pytest
 
@@ -42,6 +43,48 @@ def test_validate_candidate_handles_type_errors(
 
     assert validated is None
     assert errors
+
+
+@pytest.mark.unit
+def test_validate_candidate_rejects_blank_model_cache_dir(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    page = _load_settings_page_module(monkeypatch)
+
+    validated, errors = page._validate_candidate(
+        {"ocr": {"model_cache_dir": ""}},
+    )
+
+    assert validated is None
+    assert any(
+        "ocr.model_cache_dir" in error and "must not be empty" in error
+        for error in errors
+    )
+
+
+@pytest.mark.unit
+def test_render_actions_rechecks_ui_errors_before_apply(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    page = _load_settings_page_module(monkeypatch)
+    applied: list[object] = []
+    errors: list[str] = []
+
+    monkeypatch.setattr(
+        page.st, "columns", lambda _count: [nullcontext(), nullcontext()]
+    )
+    monkeypatch.setattr(
+        page.st,
+        "button",
+        lambda label, **_kwargs: label == "Apply runtime",
+    )
+    monkeypatch.setattr(page.st, "error", lambda message: errors.append(str(message)))
+    monkeypatch.setattr(page, "_apply_validated_runtime", applied.append)
+
+    page._render_actions(page.settings, ["openai.default_headers: invalid JSON"])
+
+    assert applied == []
+    assert errors == ["Cannot apply: invalid settings."]
 
 
 @pytest.mark.unit

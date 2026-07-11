@@ -54,7 +54,7 @@ class TestIngestionInput:
             IngestionInput(
                 document_id="doc-1",
                 source_path=tmp_path / "file.txt",
-                payload_bytes=b"content",
+                payload_text="content",
             )
 
     def test_source_path_normalised(self, tmp_path: Path) -> None:
@@ -64,11 +64,33 @@ class TestIngestionInput:
         inp = IngestionInput(document_id="doc-1", source_path=file_path)
         assert inp.source_path == file_path.expanduser()
 
-    def test_payload_bytes_allowed(self) -> None:
-        """In-memory payloads are accepted."""
-        inp = IngestionInput(document_id="doc-raw", payload_bytes=b"data")
-        assert inp.payload_bytes == b"data"
+    def test_payload_text_allowed(self) -> None:
+        """In-memory text payloads are accepted."""
+        inp = IngestionInput(document_id="doc-raw", payload_text="data")
+        assert inp.payload_text == "data"
         assert inp.source_path is None
+
+    @pytest.mark.parametrize("payload", ["", " ", "\n\t"])
+    def test_payload_text_must_not_be_blank(self, payload: str) -> None:
+        """In-memory text payloads contain usable text."""
+        with pytest.raises(ValidationError):
+            IngestionInput(document_id="doc-raw", payload_text=payload)
+
+    def test_payload_text_rejects_bytes(self) -> None:
+        """In-memory bytes cannot bypass format-aware parsing."""
+        with pytest.raises(ValidationError):
+            IngestionInput(
+                document_id="doc-binary",
+                payload_text=b"%PDF-1.7\n",  # type: ignore[arg-type]
+            )
+
+    def test_payload_text_rejects_bytearray(self) -> None:
+        """Mutable binary payloads cannot be coerced into canonical text."""
+        with pytest.raises(ValidationError):
+            IngestionInput(
+                document_id="doc-binary",
+                payload_text=bytearray(b"%PDF-1.7\n"),  # type: ignore[arg-type]
+            )
 
 
 class TestIngestionResult:

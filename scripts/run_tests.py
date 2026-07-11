@@ -1,17 +1,15 @@
 #!/usr/bin/env python
-"""Comprehensive test runner with tiered testing strategy for DocMind AI.
+"""Tiered unit and integration test runner for DocMind AI.
 
 This script implements a two-tier testing strategy based on ML engineering
 best practices:
 
-Tier 1 - Unit Tests (Fast):
+Tier 1 - Unit tests:
     - Mocked dependencies, no external services
-    - <5 seconds per test, total suite <30 seconds
     - Run on every code change
 
-Tier 2 - Integration Tests:
-    - Lightweight models, minimal GPU usage
-    - <30 seconds per test, total suite <5 minutes
+Tier 2 - Integration tests:
+    - Local dependency integration without required external services
     - Run on feature branches and PRs
 
 GPU Smoke Tests:
@@ -20,15 +18,13 @@ GPU Smoke Tests:
     - Real hardware testing for releases
 
 Usage:
-    uv run python run_tests.py                  # Run tiered tests (unit -> integration)
-    uv run python run_tests.py --unit           # Run unit tests only
-    uv run python run_tests.py --integration    # Run integration tests only
-    uv run python run_tests.py --gpu            # Run GPU tests only
-    uv run python run_tests.py --fast           # Run unit + integration tests
-    uv run python run_tests.py --performance    # Run performance benchmarks
-    uv run python run_tests.py --smoke          # Run basic smoke tests
-    uv run python run_tests.py --coverage       # Generate detailed coverage report
-    uv run python run_tests.py --clean          # Clean test artifacts
+    uv run python scripts/run_tests.py               # Run unit then integration
+    uv run python scripts/run_tests.py --unit        # Run unit tests only
+    uv run python scripts/run_tests.py --integration # Run integration tests only
+    uv run python scripts/run_tests.py --gpu         # Run GPU tests only
+    uv run python scripts/run_tests.py --fast        # Run unit + integration tests
+    uv run python scripts/run_tests.py --coverage    # Generate coverage report
+    uv run python scripts/run_tests.py --clean       # Clean test artifacts
 """
 
 import argparse
@@ -259,7 +255,7 @@ class TestRunner:
                 result.errors = int(error_match.group(1))
 
     def run_unit_tests(self) -> TestResult:
-        """Run fast unit tests with mocked dependencies (<5s each)."""
+        """Run unit tests with mocked dependencies."""
         command = [
             "uv",
             "run",
@@ -276,7 +272,7 @@ class TestRunner:
         return self.run_command(command, "Unit Tests (Tier 1 - Fast with mocks)")
 
     def run_integration_tests(self) -> TestResult:
-        """Run integration tests with lightweight models (<30s each)."""
+        """Run integration tests without required external services."""
         command = [
             "uv",
             "run",
@@ -292,60 +288,6 @@ class TestRunner:
         return self.run_command(
             command, "Integration Tests (Tier 2 - Lightweight models)"
         )
-
-    def run_extras_tests(self) -> TestResult:
-        """Run tests that require optional llama_index extras."""
-        description = "Extras Tests (llama_index extras)"
-        try:
-            has_extras = (
-                importlib.util.find_spec("llama_index.program.openai") is not None
-            )
-        except ModuleNotFoundError:
-            has_extras = False
-
-        if not has_extras:
-            print(f"\n{'=' * 60}")
-            print(f"TEST: {description}")
-            print("=" * 60)
-            print(
-                "SKIP: llama_index.program.openai not installed; extras tests will be "
-                "skipped."
-            )
-            result = TestResult()
-            result.command = "pytest -m requires_llama (skipped - dependency missing)"
-            result.exit_code = 0
-            result.skipped = 1
-            result.output = "Dependencies missing; skipped extras test lane."
-            self.results.append(result)
-            return result
-
-        command = [
-            "uv",
-            "run",
-            "pytest",
-            "tests/",
-            "-v",
-            "--tb=short",
-            "--no-cov",
-            "-m",
-            "requires_llama",
-        ]
-        return self.run_command(command, description)
-
-    def run_performance_tests(self) -> TestResult:
-        """Run performance and benchmark tests."""
-        command = [
-            "uv",
-            "run",
-            "pytest",
-            "tests/performance/",
-            "-v",
-            "--tb=short",
-            "--durations=10",
-            "-m",
-            "performance",
-        ]
-        return self.run_command(command, "Performance Tests")
 
     def run_gpu_tests(self) -> TestResult:
         """Run GPU-required tests with hardware validation."""
@@ -388,20 +330,6 @@ class TestRunner:
             else:
                 print("pytest-xdist not available; running coverage tests serially.")
         return self.run_command(command, "All Tests with Coverage (unit+integration)")
-
-    def run_smoke_tests(self) -> TestResult:
-        """Run basic smoke tests to verify system health."""
-        command = [
-            "uv",
-            "run",
-            "pytest",
-            "tests/unit/models/test_models.py",
-            "tests/unit/config/test_validation.py",
-            "-v",
-            "--tb=line",
-            "--maxfail=3",  # Stop after 3 failures for smoke tests
-        ]
-        return self.run_command(command, "Smoke Tests (Basic system health)")
 
     def run_fast_tests(self) -> TestResult:
         """Run unit and integration tests (excludes system tests)."""
@@ -596,7 +524,7 @@ else:
             # Identify critical files
             critical_files = [
                 "src/config/settings.py",
-                "src/models/embeddings.py",
+                "src/config/integrations.py",
                 "src/persistence/chat_db.py",
                 "src/persistence/memory_store.py",
                 "src/persistence/snapshot.py",
@@ -699,10 +627,10 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser for the tiered test runner."""
     parser = argparse.ArgumentParser(
         description="DocMind AI Tiered Test Runner",
-        epilog="""Three-Tier Testing Strategy:
-  Tier 1 (Unit): Fast tests with mocks (<5s each)
-  Tier 2 (Integration): Lightweight models (<30s each)
-  Tier 3 (System): Real models + GPU (<5min each)
+        epilog="""Two-tier test strategy:
+  Tier 1 (unit): mocked dependencies
+  Tier 2 (integration): local dependency integration
+  GPU validation: explicit manual hardware lane
 
 Examples:
   uv run python scripts/run_tests.py                    # Run all tiers in sequence
@@ -728,22 +656,9 @@ Examples:
         help="Run unit + integration tests (exclude system)",
     )
     parser.add_argument(
-        "--performance", action="store_true", help="Run performance benchmark tests"
-    )
-    parser.add_argument(
         "--gpu",
         action="store_true",
         help="Run GPU-required tests with hardware validation",
-    )
-    parser.add_argument(
-        "--extras",
-        action="store_true",
-        help="Run tests that require optional llama_index extras",
-    )
-    parser.add_argument(
-        "--smoke",
-        action="store_true",
-        help="Run basic smoke tests (quick system health check)",
     )
     parser.add_argument(
         "--coverage", action="store_true", help="Generate detailed coverage report"
@@ -772,7 +687,6 @@ def _print_default_tiers() -> None:
     print("   --integration: Lightweight models (PR validation)")
     print("   --gpu: Manual GPU smoke tests (staging/release)")
     print("   --fast: Unit + Integration only")
-    print("   --extras: Optional-dependency tests (requires llama_index extras)")
 
 
 def _run_direct_paths(runner: TestRunner, args: argparse.Namespace) -> None:
@@ -792,18 +706,12 @@ def _run_selected_tests(runner: TestRunner, args: argparse.Namespace) -> None:
         return
     if args.validate_imports:
         runner.validate_imports()
-    elif args.smoke:
-        runner.run_smoke_tests()
     elif args.unit:
         runner.run_unit_tests()
     elif args.integration:
         runner.run_integration_tests()
-    elif args.extras:
-        runner.run_extras_tests()
     elif args.fast:
         runner.run_fast_tests()
-    elif args.performance:
-        runner.run_performance_tests()
     elif args.gpu:
         runner.run_gpu_tests()
     elif args.coverage:
@@ -825,10 +733,7 @@ def _should_generate_coverage(args: argparse.Namespace) -> bool:
             args.fast,
             args.unit,
             args.integration,
-            args.extras,
-            args.performance,
             args.gpu,
-            args.smoke,
             args.validate_imports,
         )
     )

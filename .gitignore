@@ -225,6 +225,8 @@ embeddings_cache/
 # models/
 qdrant_storage/
 data/qdrant/
+data/qdrant-local/
+data/artifacts/
 .archived/
 
 # docs/adrs/archived/
@@ -312,7 +314,8 @@ temporary/
 relative/
 
 # Additional cache and runtime patterns
-.streamlit/
+.streamlit/*
+!.streamlit/config.toml
 *.sqlite
 *.sqlite3
 *.pickle

@@ -1,463 +1,212 @@
-# Getting Started with DocMind AI Development
+# Set up DocMind development
 
-## Overview
+This guide creates the locked development environment, starts local dependencies, validates parser models, and runs the application and test gates.
 
-This guide helps you set up a working development environment and run DocMind AI locally using the unified configuration and local-first architecture.
+## Install prerequisites
 
-## Table of Contents
+Install these tools before you clone the repository:
 
-1. [Quick Start (5 minutes)](#quick-start-5-minutes)
-2. [Prerequisites](#prerequisites)
-3. [Installation](#installation)
-4. [Environment Configuration](#environment-configuration)
-5. [First Run Validation](#first-run-validation)
-6. [Development Environment Setup](#development-environment-setup)
-7. [Common Issues & Troubleshooting](#common-issues--troubleshooting)
-
-## Quick Start (5 minutes)
-
-### Prerequisites - Quick Start
-
-- Python 3.12.13
-- CUDA-compatible GPU (RTX 4060+ recommended)
-- Docker for Qdrant vector database
+- Python 3.12 or 3.13
+- uv
 - Git
+- Docker when you need local Qdrant or container validation
 
-### Setup Commands
+A graphics processing unit (GPU) is optional. The default dependency profile
+uses official CPU-only PyTorch wheels. Linux x86_64 is release-validated; WSL2
+and macOS paths are best effort until dedicated CI exists.
 
-```bash
-# 1. Clone and enter directory
-git clone https://github.com/BjornMelin/docmind-ai-llm.git
-cd docmind-ai-llm
+## Create the locked environment
 
-# 2. Install dependencies
-uv sync --frozen
-
-# If you have a CUDA-compatible NVIDIA GPU and want local accelerated inference,
-# prefer the GPU extras install:
-uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
-
-# 3. Start services
-docker compose up -d qdrant
-
-# 4. Copy environment template
-cp .env.example .env
-
-# 5. Run application
-uv run streamlit run app.py
-```
-
-### Validate Setup
-
-```bash
-# Check configuration loads correctly
-uv run python -c "from src.config import settings; print(f'✅ {settings.app_name} v{settings.app_version}')"
-
-# Verify 2026 Reference Alignment
-uv run python -c "
-from src.config import settings
-print(f'Model: {settings.model or settings.vllm.model}')
-print(f'Embedding: {settings.embedding.model_name}')
-print(f'Timeout: {settings.agents.decision_timeout}ms')
-assert settings.embedding.model_name == 'BAAI/bge-m3', 'Should use BGE-M3'
-"
-
-# Test system health
-uv run python scripts/performance_monitor.py --run-tests --check-regressions
-```
-
-## Prerequisites
-
-### Required Software
-
-- **Python**: 3.12.13
-- **uv**: For package management (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
-- **Git**: Version control
-- **Docker**: Optional, for Qdrant database
-- **NVIDIA CUDA**: 12.8+ for GPU testing with RTX 4090
-
-### Hardware Requirements
-
-#### Minimum Requirements
-
-- **GPU**: NVIDIA GPU with CUDA Compute Capability 6.0+
-- **VRAM**: 16GB minimum (RTX 4090 recommended)
-- **System RAM**: 16GB minimum
-- **Storage**: 50GB available space
-
-#### Optimal Configuration (RTX 4090)
-
-- **VRAM Usage**: 12-14GB with **FP8 KV Cache** optimization
-- **System Memory**: 32GB+ recommended
-- **CUDA Toolkit**: 12.8+ (for CUDA-enabled PyTorch wheels)
-- **Drive**: NVMe SSD (required for low-latency model loading)
-- **vLLM serving**: FlashInfer/FP8 optimizations are configured on the vLLM server (external)
-
-## Installation
-
-### 1. Clone Repository
+Clone the repository and sync the lockfile:
 
 ```bash
 git clone https://github.com/BjornMelin/docmind-ai-llm.git
 cd docmind-ai-llm
-```
-
-### 2. Install Dependencies
-
-#### Standard Installation
-
-```bash
-# Install core dependencies
 uv sync --frozen
-
-# Install with GPU support (recommended)
-uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
-
-# Install with test dependencies
-uv sync --frozen --group test
 ```
 
-Note: development and test tooling live in dependency groups (`[dependency-groups]`, PEP 735) and
-are installed with `--group`. Optional runtime features are published as extras
-(`project.optional-dependencies`, PEP 621) and are installed with `--extra`.
-
-#### GPU-Optimized Installation (Recommended)
-
-For optimal performance with RTX 4090:
+Confirm that the default environment is CPU-only:
 
 ```bash
-# Install app GPU extras (CUDA-enabled PyTorch wheels)
-uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+uv run python -c \
+  "import torch; assert torch.version.cuda is None; print(torch.__version__)"
 ```
 
-If you use vLLM, run it as an external OpenAI-compatible server and point DocMind at it via
-`DOCMIND_LLM_BACKEND=vllm` + `DOCMIND_OPENAI__BASE_URL`.
-
-### 3. Start Required Services
+Use the locked NVIDIA profile only on a compatible Linux x86_64 host. It
+accelerates PyTorch-based dense/image embeddings, reranking, and spaCy; sparse
+FastEmbed remains CPU-based:
 
 ```bash
-# Start Qdrant vector database
+uv sync --frozen --no-group cpu --extra gpu
+uv run python -c \
+  "import torch; print(torch.__version__, torch.cuda.is_available())"
+```
+
+The `gpu` extra and default `cpu` group conflict by design. uv selects the official CUDA 12.8 or CPU wheel index from `pyproject.toml`.
+
+## Start loopback-only Qdrant
+
+Use the repository launcher when the host application needs Qdrant on `127.0.0.1:6333`:
+
+```bash
+./scripts/start_qdrant_local.sh
+uv run python scripts/qdrant_schema.py check
+```
+
+The launcher refuses to reuse an existing container unless its REST and gRPC ports match the expected loopback bindings. It preserves unsafe containers for operator inspection.
+
+Docker Compose keeps Qdrant inside its network. Use Compose when you run the application as a container:
+
+```bash
 docker compose up -d qdrant
-
-# Verify service is running
-curl -f http://localhost:6333/health || echo "Qdrant not ready"
 ```
 
-## Environment Configuration
+## Prefetch and verify required local models
 
-### 1. Basic Configuration Setup
+Dense indexing requires BGE-M3. PDF parsing requires the pinned Docling and
+RapidOCR model bundles:
 
 ```bash
-# Copy the example configuration
+uv run python tools/models/pull.py \
+  --bge-m3 \
+  --cache_dir ./models_cache \
+  --parser-defaults \
+  --rapidocr-cache-dir ./cache/models
+uv run python scripts/parser_health.py --check
+```
+
+The health command hashes every file in both canonical manifests. A missing, extra, linked, truncated, or modified file blocks PDF readiness.
+
+The parser framework, parser profile, and optical character recognition (OCR) engine are fixed. Configure parser resource limits and OCR behavior, but do not treat those fixed literals as backend selectors.
+
+## Configure a language model backend
+
+Copy the typed configuration template:
+
+```bash
 cp .env.example .env
 ```
 
-### 2. Essential Environment Variables
+Use a loopback Ollama service for the default local backend:
 
-Start from `.env.example` and override only what you need. For a full list of all 100+ variables, see the **[Configuration Reference](configuration.md)**.
-
-```bash
-# --- 1. Global & Core ---
-DOCMIND_DEBUG=false
-DOCMIND_LOG_LEVEL=INFO
-DOCMIND_DATA_DIR=./data
-DOCMIND_CACHE_DIR=./cache
-
-# --- 2. LLM Backend (Bridge Vars) ---
+```env
 DOCMIND_LLM_BACKEND=ollama
 DOCMIND_OLLAMA_BASE_URL=http://localhost:11434
-# DOCMIND_MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8  # Top-level Alias
-
-# --- 3. Vector Storage (Nested Schema) ---
-DOCMIND_DATABASE__QDRANT_URL=http://localhost:6333
-DOCMIND_DATABASE__QDRANT_COLLECTION=docmind_docs
-
-# --- 4. Security & Privacy ---
-DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false
-DOCMIND_HASHING__HMAC_SECRET=your-32-character-secret-key-here
-DOCMIND_PROCESSING__ENCRYPT_PAGE_IMAGES=false
+DOCMIND_MODEL=qwen3:4b-instruct
 ```
 
-> **Note:** If enabling encryption, generate a secure 256-bit AES key:
->
-> ```bash
-> uv run python -c "import os, base64; print(base64.b64encode(os.urandom(32)).decode())"
-> ```
-
-### 3. Key Configuration Concepts
-
-- **Single Truth**: All configuration is managed via `src.config.settings`. See the **[Configuration Reference](configuration.md)** for exhaustive details.
-- **Convention-Over-Configuration**: Double underscores map to nested Pydantic models (e.g., `DOCMIND_VLLM__MODEL`).
-- **Path Relocation**: Bare filenames in DB paths are automatically moved under `DOCMIND_DATA_DIR` at startup.
-
-## First Run Validation
-
-### 1. Configuration Validation
-
 ```bash
-# Test configuration loads correctly
-uv run python - <<'PY'
-from src.config import settings
-
-print(f"✅ App: {settings.app_name} v{settings.app_version}")
-print(f"✅ Model: {settings.model or settings.vllm.model}")
-print(f"✅ SQLite: {settings.database.sqlite_db_path}")
-print(f"✅ Qdrant: {settings.database.qdrant_url}")
-PY
+ollama pull qwen3:4b-instruct
 ```
 
-### 2. System Health Check
+Use an external vLLM service through its OpenAI-compatible endpoint:
 
-```bash
-# Comprehensive validation
-uv run python scripts/performance_monitor.py --run-tests --check-regressions --report
-
-# Quick environment check (no full test suite)
-uv run python scripts/performance_monitor.py --collection-only --report
+```env
+DOCMIND_LLM_BACKEND=vllm
+DOCMIND_OPENAI__BASE_URL=http://localhost:8000/v1
+DOCMIND_OPENAI__API_KEY=local_api_key_not_used
 ```
 
-### 3. Start the Application
+Configure vLLM model, cache, and hardware options on the server process. DocMind does not install or start vLLM.
+
+An approved remote endpoint changes the privacy boundary:
+
+```env
+DOCMIND_LLM_BACKEND=openai_compatible
+DOCMIND_OPENAI__BASE_URL=https://api.openai.com/v1
+DOCMIND_OPENAI__API_KEY=your_api_key_here
+DOCMIND_OPENAI__API_MODE=responses
+DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true
+```
+
+Never commit `.env` or credentials.
+
+## Run the application
+
+Start Streamlit from the locked environment:
 
 ```bash
-# Start development server
 uv run streamlit run app.py
-
-# Application will be available at http://localhost:8501
 ```
 
-### 4. Verify Core Functionality
+Open `http://localhost:8501`, upload a supported document, then query its indexed content.
 
-1. **Upload a document** (PDF, DOCX, TXT)
-2. **Verify document processing** - document should be parsed and chunked
-3. **Test query functionality** - ask a question about the document
-4. **Check multi-agent coordination** - verify agents are working correctly
+## Run focused development checks
 
-## Development Environment Setup
-
-### 1. Essential Development Commands
+Run checks that cover the files you changed:
 
 ```bash
-# Format and lint code (run before commits)
-uv run ruff format . && uv run ruff check .
-
-# Run tests
-uv run pytest tests/unit/ -v             # Fast unit tests
-uv run pytest tests/integration/ -v      # Cross-component tests
-uv run python scripts/run_tests.py       # Full test suite
-
-# Performance testing
-uv run python scripts/performance_monitor.py --run-tests --report
+uv run ruff format --check path/to/file.py
+uv run ruff check path/to/file.py
+uv run pyright --threads 4 path/to/file.py
+uv run pytest tests/path/to/test_file.py -q
 ```
 
-### 2. IDE Setup
-
-#### VS Code (Recommended)
-
-1. Install Python extension
-2. Install Pylance for type checking
-3. Configure workspace settings:
-
-   ```json
-   {
-     "python.defaultInterpreterPath": "./.venv/bin/python",
-     "python.linting.ruffEnabled": true,
-     "python.formatting.provider": "ruff"
-   }
-   ```
-
-#### PyCharm
-
-1. Set interpreter to project venv
-2. Enable Ruff for code quality
-3. Configure run configurations for streamlit
-
-### 3. Development Workflow
+Use the repository runners for broader gates:
 
 ```bash
-# 1. Create feature branch
-git checkout -b feature/your-feature-name
-
-# 2. Make changes following coding standards
-
-# 3. Test changes
-uv run pytest tests/ -v
-uv run ruff format . && uv run ruff check .
-
-# 4. Commit changes
-git add .
-git commit -m "feat: your feature description"
-
-# 5. Push and create PR
-git push origin feature/your-feature-name
+uv run python scripts/run_tests.py --fast
+uv run python scripts/run_quality_gates.py --ci --report
 ```
 
-## Common Issues & Troubleshooting
-
-### GPU Setup Issues
-
-**Issue**: CUDA not detected
+Before shipping a branch, run the full static and test gates:
 
 ```bash
-# Check CUDA installation
-nvcc --version
-nvidia-smi
-
-# Verify PyTorch CUDA support
-uv run python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+uv run ruff format --check .
+uv run ruff check .
+uv run pyright --threads 4
+uv run python scripts/run_tests.py
 ```
 
-**Solution**:
+## Validate system boundaries
+
+Run the explicit Qdrant system test when ingestion, retrieval, persistence, or schema behavior changes:
 
 ```bash
-# Reinstall PyTorch with correct CUDA version
-uv pip install torch==2.8.0 --torch-backend cu128
+DOCMIND_RUN_SYSTEM=1 \
+  uv run pytest tests/system/test_e2e_offline.py -q
 ```
 
-### vLLM Server Issues
-
-**Issue**: DocMind cannot connect to your vLLM server
-
-**Solution**:
+Run the canonical container health command inside a running application container:
 
 ```bash
-export DOCMIND_LLM_BACKEND=vllm
-export DOCMIND_OPENAI__BASE_URL=http://localhost:8000/v1
-export DOCMIND_OPENAI__API_KEY=not-needed
-curl --fail --silent "$DOCMIND_OPENAI__BASE_URL/models" | head
+python scripts/container_health.py
 ```
 
-### Configuration Issues
+The container command verifies parser model integrity and a TCP connection to Streamlit. It does not issue an HTTP request.
 
-**Issue**: Configuration not loading
+Regenerate the parser benchmark only after the working tree is frozen:
 
 ```bash
-# Debug configuration loading and prefix detection
-uv run python - <<'PY'
-from src.config import settings
-
-print("Config loaded successfully:", hasattr(settings, "app_name"))
-PY
+uv run python scripts/benchmark_parsing.py \
+  --generate-minimal-fixtures \
+  --repeat 3 \
+  --output docs/benchmarks/parser-runtime-validation.json
 ```
 
-**Solution**:
+The checked-in artifact uses schema 3 and records its clean source commit,
+runtime identity, fixture hashes, and repeat-three determinism evidence. Treat
+its measurements as a workstation-specific regression baseline.
 
-1. Verify `.env` file exists and has correct format
-2. Check `DOCMIND_` prefix on all variables
-3. Validate nested delimiter usage (`__`)
+## Diagnose common setup failures
 
-### Service Connection Issues
-
-**Issue**: Cannot connect to Qdrant
+Use these checks before changing configuration:
 
 ```bash
-# Check Qdrant status
-curl -f http://localhost:6333/health
-docker compose ps
+uv run python -c "from src.config import settings; print(settings.llm_backend)"
+uv run python scripts/parser_health.py --check
+uv run python scripts/qdrant_schema.py check
 ```
 
-**Solution**:
+If CUDA is unavailable, confirm the driver with `nvidia-smi`, then repeat the locked GPU sync. If Qdrant reports an incompatible schema, inspect it with `scripts/qdrant_schema.py check`. Never delete or rebuild a nonempty collection automatically.
 
-```bash
-# Restart Qdrant service
-docker compose restart qdrant
-docker compose logs qdrant
-```
+## Continue development
 
-### Qdrant Dimension Mismatch (SigLIP image collection)
+Read the owning references before changing a subsystem:
 
-**Issue**: Image indexing fails with an error like `expected dim: 768, got 1024`.
-
-This usually means your existing Qdrant image collection was created with a
-different vector size than the SigLIP embedder expects (768D).
-
-**Solution**:
-
-1. **Inspect the collection config**:
-
-   ```bash
-   curl http://localhost:6333/collections/docmind_images
-   ```
-
-2. **Recreate the image collection** if the `siglip` vector size is not `768`:
-
-   ```bash
-   curl -X DELETE http://localhost:6333/collections/docmind_images
-   ```
-
-   The collection is recreated automatically on the next ingestion run.
-
-3. **Reindex images** by re-running ingestion for the affected documents.
-
-See `docs/developers/adrs/ADR-058-final-multimodal-pipeline-and-persistence.md`
-for the full multimodal indexing workflow.
-
-### Performance Issues
-
-**Issue**: Slow model loading or inference
-
-```bash
-# Check GPU memory usage
-nvidia-smi
-
-# Check model configuration
-uv run python - <<'PY'
-from src.config import settings
-
-print(f"Model: {settings.vllm.model}")
-print(f"GPU memory: {settings.vllm.gpu_memory_utilization}")
-print(f"Attention backend: {settings.vllm.attention_backend}")
-PY
-```
-
-**Solution**:
-
-1. Verify FP8 quantization is enabled
-2. Verify vLLM server is configured for FlashInfer (server-side)
-3. Optimize GPU memory utilization settings
-
-### Import Errors
-
-**Issue**: Module not found errors
-
-```bash
-# Check Python path
-uv run python -c "import sys; print('\\n'.join(sys.path))"
-
-# Verify installation
-uv pip list | grep -E "(torch|streamlit)"
-```
-
-**Solution**:
-
-```bash
-# Reinstall dependencies
-uv sync --frozen --force-reinstall
-
-# Verify correct Python version
-uv run python -c "import sys; print(sys.version)"  # uv run uses the project's configured interpreter, so this should be 3.12.13
-```
-
-## Next Steps
-
-Once you have the system running:
-
-1. **Read the System Architecture Guide** - Understand how the multi-agent system works
-2. **Review the Developer Handbook** - Learn implementation patterns and best practices
-3. **Check the Configuration Guide** - Understand advanced configuration options
-4. **Explore the Operations Guide** - Learn about production deployment and optimization
-
-## Getting Help
-
-1. **Setup Issues**: Review troubleshooting section above
-2. **Architecture Questions**: See system-architecture.md
-3. **Implementation Help**: See developer-handbook.md
-4. **Performance Issues**: See operations-guide.md and configuration.md
-5. **ADR References**: Check [ADRs](./adrs/README.md) for architectural decisions
-
----
-
-**Welcome to DocMind AI development!**
-
-This documentation represents a production-ready system with 95% ADR compliance and excellent code quality. The unified architecture ensures you only need to learn one pattern: `from src.config import settings`.
-
-You're now ready to contribute to a world-class AI document analysis system.
+- [Architecture overview](architecture-overview.md)
+- [System architecture](system-architecture.md)
+- [Configuration reference](configuration.md)
+- [Operations guide](operations-guide.md)
+- [Testing guide](../testing/testing-guide.md)
+- [Architecture decisions](adrs/README.md)

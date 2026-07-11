@@ -131,16 +131,23 @@ def build_adaptive_query_engine(
 ### Configuration
 
 ```env
-# Retrieval routing and strategies
-DOCMIND_RETRIEVAL__ROUTER=auto                 # auto|simple|hierarchical|graph
-DOCMIND_RETRIEVAL__TOP_K=10                    # per‑retriever default
-DOCMIND_RETRIEVAL__HYBRID=true                 # dense+sparse with RRF
-DOCMIND_RETRIEVAL__HIERARCHY=true              # RAPTOR‑Lite signals only
-DOCMIND_RETRIEVAL__GRAPH=false                 # PropertyGraphIndex routing (ADR‑019)
+# Retrieval tool registration
+DOCMIND_RETRIEVAL__TOP_K=10                    # final candidate count
+DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=false  # opt in to Qdrant server fusion
+
+# Graph tool registration requires both gates
+DOCMIND_ENABLE_GRAPHRAG=true
+DOCMIND_GRAPHRAG_CFG__ENABLED=true
 
 # Reranking (ADR‑037)
-DOCMIND_RETRIEVAL__RERANKING_TOP_K=5           # always-on; single integration path (no mode toggle)
+DOCMIND_RETRIEVAL__USE_RERANKING=true           # set false to disable
+DOCMIND_RETRIEVAL__RERANKING_TOP_K=5            # final reranked candidate count
 ```
+
+Router tool composition is automatic. Server-side hybrid registration uses
+Qdrant Query API fusion when explicitly enabled. Graph registration additionally
+requires a healthy `PropertyGraphIndex`; there is no separate hierarchy or graph
+toggle under `retrieval`.
 
 ### Using MetadataFilters for Advanced Retrieval
 

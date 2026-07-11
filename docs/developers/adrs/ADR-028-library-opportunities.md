@@ -2,8 +2,8 @@
 ADR: 028
 Title: Library Opportunities (Consolidation and Upgrades)
 Status: Accepted
-Version: 1.2
-Date: 2025-08-19
+Version: 1.4
+Date: 2026-07-11
 Supersedes:
 Superseded-by:
 Related: 002, 003, 024
@@ -15,7 +15,7 @@ References:
 
 ## Description
 
-Prefer modern built‑ins (e.g., LlamaIndex plugins, FlagEmbedding) over custom code; periodically review releases for simplifications.
+Prefer modern library integrations over custom model wrappers; periodically review releases for simplifications.
 
 ## Context
 
@@ -34,7 +34,7 @@ Adopt “library‑first” reviews each milestone; remove custom layers when eq
 
 | Candidate Area | Library Feature | Simplicity (40%) | Risk (20%) | Gain (40%) | Total | Decision |
 | --- | --- | --- | --- | --- | --- | --- |
-| Embeddings | FlagEmbedding BGEM3 | 9 | 8 | 9 | 8.9 | Selected |
+| Dense embeddings | LlamaIndex Hugging Face adapter with BGE-M3 | 9 | 9 | 9 | 9.0 | Selected |
 | Retrieval helpers | LlamaIndex retrievers | 9 | 8 | 9 | 8.9 | Selected |
 | Cache adapters | IngestionCache + DuckDB | 9 | 9 | 9 | 9.0 | Selected |
 
@@ -94,9 +94,13 @@ Not applicable — exploration ADR; track adoption via follow‑up PRs and bench
 
 ### Dependencies
 
-- pin: `llama-index>=0.10`, `FlagEmbedding>=1.2`, `qdrant-client>=1.6`
+- Pin direct dependencies: `llama-index-core>=0.14.21,<0.15.0`, selected LlamaIndex integrations, `sentence-transformers>=5.2.0,<6.0.0`, and `qdrant-client>=1.15.1,<2.0.0`.
 
 ## Changelog
+
+- 1.4 (2026-07-11): Removed the unused parallel FlagEmbedding stack and selected the existing LlamaIndex Hugging Face adapter as the single dense embedding owner.
+
+- 1.3 (2026-07-10): Replace the removed LlamaIndex meta-package with the direct core and selected-integration contract.
 
 - 1.2 (2025‑09‑12): Acknowledged consolidation of reranking stack per SPEC‑005/ADR‑037: removed legacy adapters, unified device policy and SigLIP loader, added encrypted image helper; library‑first replacements now canonical.
 

@@ -21,6 +21,14 @@ class _StubCoordinator:
     def process_query(self, *_a: object, **_kw: object) -> SimpleNamespace:
         return SimpleNamespace(content="stub")
 
+    def list_checkpoints(self, *_a: object, **_kw: object) -> list[dict[str, object]]:
+        """Return no persisted checkpoints for isolated UI tests."""
+        return []
+
+    def get_state_values(self, *_a: object, **_kw: object) -> dict[str, object]:
+        """Return empty persisted state for isolated UI tests."""
+        return {}
+
 
 class _StubToolFactory:
     """Stubbed ToolFactory with no-op tool creation."""

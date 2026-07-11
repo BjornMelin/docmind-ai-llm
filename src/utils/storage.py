@@ -25,7 +25,8 @@ import asyncio
 import gc
 from collections.abc import AsyncGenerator, Callable, Generator
 from contextlib import asynccontextmanager, contextmanager, suppress
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
 
 try:  # Optional torch; CPU-only environments must not fail at import
     import torch  # type: ignore
@@ -47,273 +48,271 @@ from src.config import settings
 from src.utils.log_safety import build_pii_log_entry, safe_url_for_log
 from src.utils.qdrant_exceptions import (
     QDRANT_SCHEMA_EXCEPTIONS,
-    QDRANT_TRANSPORT_EXCEPTIONS,
 )
 from src.utils.qdrant_utils import get_collection_params
 
 # Preferred sparse models (logging/telemetry; selection handled by fastembed if present)
 PREFERRED_SPARSE_MODEL = "Qdrant/bm42-all-minilm-l6-v2-attentions"
 FALLBACK_SPARSE_MODEL = "Qdrant/bm25"
+DENSE_VECTOR_NAME = "text-dense"
+SPARSE_VECTOR_NAME = "text-sparse"
 
 
-def ensure_sparse_idf_modifier(client: QdrantClient, collection_name: str) -> None:
-    """Ensure the sparse vector config uses the IDF modifier.
+@dataclass(frozen=True, slots=True)
+class CollectionCompatibilityResult:
+    """Explicit named-vector collection compatibility result."""
 
-    If the collection exists and the sparse vector modifier is not IDF, this
-    updates the collection configuration in-place to set it to IDF. This is a
-    no-op when the modifier is already IDF or when the sparse vector head is
-    absent.
+    compatible: bool
+    action: Literal["unchanged", "created", "recreated", "blocked", "error"]
+    reason: str
+    point_count: int | None = None
 
-    Args:
-        client (QdrantClient): Qdrant client instance.
-        collection_name (str): Name of the collection to check or update.
 
-    Returns:
-        None
-    """
-    try:
-        info = client.get_collection(collection_name)
-        cfg = getattr(info.config.params, "sparse_vectors", None)
-        if isinstance(cfg, dict) and "text-sparse" in cfg:
-            cur = cfg["text-sparse"]
-            # cur is SparseVectorParams; getattr safe for older clients
-            cur_mod = getattr(cur, "modifier", None)
-            if cur_mod is None or cur_mod != qmodels.Modifier.IDF:
-                logger.info(
-                    "Updating sparse modifier to IDF for collection '{}'",
-                    collection_name,
-                )
-                client.update_collection(
-                    collection_name=collection_name,
-                    sparse_vectors_config={
-                        "text-sparse": SparseVectorParams(
-                            index=SparseIndexParams(on_disk=False),
-                            modifier=qmodels.Modifier.IDF,
-                        )
-                    },
-                )
-    except (
-        OSError,
-        RuntimeError,
-        ValueError,
-    ) as e:  # pragma: no cover - defensive path
-        redaction = build_pii_log_entry(str(e), key_id="storage.sparse_idf_modifier")
-        logger.warning(
-            "ensure_sparse_idf_modifier skipped (error_type={}, error={})",
-            type(e).__name__,
-            redaction.redacted,
+class QdrantCollectionIncompatibleError(Exception):
+    """Raised before indexing into an incompatible Qdrant collection."""
+
+    def __init__(
+        self,
+        collection_name: str,
+        result: CollectionCompatibilityResult,
+    ) -> None:
+        """Store the incompatible collection name and compatibility result.
+
+        Args:
+            collection_name: Qdrant collection that cannot be indexed safely.
+            result: Compatibility evidence describing the blocking condition.
+        """
+        self.collection_name = collection_name
+        self.result = result
+        super().__init__(
+            f"Qdrant collection {collection_name!r} is incompatible: {result.reason}"
         )
 
 
-def _safe_collection_exists(client: QdrantClient, name: str) -> bool:
-    """Safely check whether a Qdrant collection exists.
-
-    Args:
-        client (QdrantClient): Configured Qdrant client.
-        name (str): Target collection name.
-
-    Returns:
-        bool: True if the collection exists; False if it does not or if an
-        error occurs while checking.
-    """
-    try:
-        return bool(client.collection_exists(name))
-    except (
-        *QDRANT_TRANSPORT_EXCEPTIONS,
-        ValueError,
-    ) as exc:  # pragma: no cover - defensive
-        redaction = build_pii_log_entry(str(exc), key_id="storage.collection_exists")
-        logger.warning(
-            "collection_exists check failed (error_type={}, error={})",
-            type(exc).__name__,
-            redaction.redacted,
-        )
-        return False
-
-
-def _create_hybrid_collection(client: QdrantClient, name: str, dense_dim: int) -> None:
-    """Create a hybrid collection with named dense and sparse vectors.
-
-    The dense head is created as ``text-dense`` using cosine distance; the
-    sparse head is created as ``text-sparse`` with the IDF modifier.
-
-    Args:
-        client (QdrantClient): Configured Qdrant client.
-        name (str): Collection name to create.
-        dense_dim (int): Dense vector dimensionality.
-
-    Returns:
-        None
-
-    Raises:
-        ResponseHandlingException: If the server returns a malformed response.
-        UnexpectedResponse: If the client cannot parse the response.
-        ConnectionError: On connection failures.
-        TimeoutError: On request timeout.
-        OSError: On local system I/O errors.
-        ValueError: On invalid parameters.
-    """
+def _create_hybrid_collection(
+    client: QdrantClient,
+    name: str,
+    dense_dim: int,
+) -> None:
+    """Create a collection with canonical named dense and sparse vectors."""
     client.create_collection(
         collection_name=name,
         vectors_config={
-            "text-dense": VectorParams(size=dense_dim, distance=Distance.COSINE),
+            DENSE_VECTOR_NAME: VectorParams(
+                size=dense_dim,
+                distance=Distance.COSINE,
+            ),
         },
         sparse_vectors_config={
-            "text-sparse": SparseVectorParams(
+            SPARSE_VECTOR_NAME: SparseVectorParams(
                 index=SparseIndexParams(on_disk=False),
                 modifier=qmodels.Modifier.IDF,
             ),
         },
     )
-    logger.info("Created hybrid collection '{}' (dense={})", name, dense_dim)
+    logger.info("Created hybrid collection {} (dense={})", name, dense_dim)
 
 
-def _compute_hybrid_patches(
-    dense_cfg: dict | None, sparse_cfg: dict | None, dense_dim: int
-) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-    """Compute schema patches for named vectors and the IDF modifier.
-
-    Args:
-        dense_cfg (dict | None): Existing dense vectors configuration (may be
-            ``params.vectors`` or ``params.vectors_config`` depending on client
-            version). Use ``None`` when unavailable.
-        sparse_cfg (dict | None): Existing sparse vectors configuration (may be
-            ``params.sparse_vectors`` or ``params.sparse_vectors_config``).
-        dense_dim (int): Desired dimensionality for the ``text-dense`` head.
-
-    Returns:
-        tuple[dict[str, Any] | None, dict[str, Any] | None]: A pair of optional
-        patch dictionaries:
-        - First element is the ``vectors_config`` to add/update ``text-dense`` or
-          ``None`` when no change is required.
-        - Second element is the ``sparse_vectors_config`` to add/update
-          ``text-sparse`` with the IDF modifier, or ``None`` when no change is
-          required.
-    """
-    patch_vectors: dict[str, Any] | None = None
-    if not isinstance(dense_cfg, dict) or "text-dense" not in dense_cfg:
-        patch_vectors = {
-            "text-dense": VectorParams(size=dense_dim, distance=Distance.COSINE)
-        }
-
-    patch_sparse: dict[str, Any] | None = None
-    needs_sparse_patch = True
-    if isinstance(sparse_cfg, dict) and "text-sparse" in sparse_cfg:
-        # Present: only patch if modifier not IDF
-        try:
-            cur = sparse_cfg["text-sparse"]
-            cur_mod = getattr(cur, "modifier", None)
-            needs_sparse_patch = cur_mod != qmodels.Modifier.IDF
-        except (AttributeError, TypeError, ValueError):  # pragma: no cover - defensive
-            needs_sparse_patch = True
-
-    if needs_sparse_patch:
-        patch_sparse = {
-            "text-sparse": SparseVectorParams(
-                index=SparseIndexParams(on_disk=False),
-                modifier=qmodels.Modifier.IDF,
-            )
-        }
-
-    return patch_vectors, patch_sparse
-
-
-def ensure_hybrid_collection(
+def check_hybrid_collection(
     client: QdrantClient,
     collection_name: str,
     dense_dim: int = settings.embedding.dimension,
-) -> None:
-    """Ensure a hybrid collection schema exists (idempotent).
-
-    This function guarantees the presence of the named dense (``text-dense``)
-    and sparse (``text-sparse`` with IDF) vector heads. It creates the
-    collection when missing, or patches the schema in-place when needed. It
-    logs a warning if the existing ``text-dense`` size differs from ``dense_dim``
-    but does not force a dimensionality change.
+) -> CollectionCompatibilityResult:
+    """Inspect named-vector compatibility without mutating Qdrant.
 
     Args:
-        client (QdrantClient): Configured Qdrant client.
-        collection_name (str): Target collection name.
-        dense_dim (int): Expected dimension of the dense embedding vector.
+        client: Qdrant client used to inspect collection state.
+        collection_name: Collection whose named-vector schema is inspected.
+        dense_dim: Required dimension for the canonical dense vector.
 
     Returns:
-        None
+        CollectionCompatibilityResult: Compatibility evidence and required action.
     """
-    if not _safe_collection_exists(client, collection_name):
-        try:
-            _create_hybrid_collection(client, collection_name, dense_dim)
-        except (
-            *QDRANT_TRANSPORT_EXCEPTIONS,
-            ValueError,
-        ) as exc:  # pragma: no cover - defensive
-            redaction = build_pii_log_entry(
-                str(exc), key_id="storage.create_collection"
-            )
-            logger.warning(
-                "create_collection failed for '{}' (error_type={}, error={})",
-                collection_name,
-                type(exc).__name__,
-                redaction.redacted,
-            )
-        return
-
     try:
+        if not client.collection_exists(collection_name):
+            return CollectionCompatibilityResult(
+                compatible=False,
+                action="blocked",
+                reason="collection_missing",
+            )
+        info = client.get_collection(collection_name)
         params = get_collection_params(client, collection_name)
-
         dense_cfg = getattr(params, "vectors", None) or getattr(
             params, "vectors_config", None
         )
         sparse_cfg = getattr(params, "sparse_vectors", None) or getattr(
             params, "sparse_vectors_config", None
         )
-
-        # Warn on size mismatch if present
-        try:
-            if isinstance(dense_cfg, dict) and "text-dense" in dense_cfg:
-                cur_size = int(getattr(dense_cfg["text-dense"], "size", dense_dim))
-                if cur_size != dense_dim:
-                    logger.warning(
-                        "Collection '{}' text-dense size mismatch (have={}, want={})",
-                        collection_name,
-                        cur_size,
-                        dense_dim,
-                    )
-        except (
-            AttributeError,
-            TypeError,
-            ValueError,
-            KeyError,
-        ) as exc:  # pragma: no cover - defensive
-            redaction = build_pii_log_entry(
-                str(exc), key_id="storage.dense_size_verify"
-            )
-            logger.debug(
-                "dense size verify skipped (error_type={}, error={})",
-                type(exc).__name__,
-                redaction.redacted,
-            )
-
-        patch_vecs, patch_sprs = _compute_hybrid_patches(
-            dense_cfg, sparse_cfg, dense_dim
+        raw_count = getattr(info, "points_count", None)
+        point_count = raw_count if isinstance(raw_count, int) else None
+        incompatibility = _hybrid_collection_incompatibility(
+            dense_cfg,
+            sparse_cfg,
+            dense_dim=dense_dim,
         )
-        if patch_vecs or patch_sprs:
-            logger.info("Updating collection '{}' schema", collection_name)
-            client.update_collection(
-                collection_name=collection_name,
-                vectors_config=patch_vecs,
-                sparse_vectors_config=patch_sprs,
+        if incompatibility is not None:
+            return CollectionCompatibilityResult(
+                False, "blocked", incompatibility, point_count
             )
-        else:
-            logger.debug("Hybrid schema already present for '{}'", collection_name)
-    except QDRANT_SCHEMA_EXCEPTIONS as exc:  # pragma: no cover - defensive
+        return CollectionCompatibilityResult(
+            True, "unchanged", "compatible", point_count
+        )
+    except QDRANT_SCHEMA_EXCEPTIONS as exc:
         redaction = build_pii_log_entry(
-            str(exc), key_id="storage.ensure_hybrid_collection"
+            str(exc), key_id="storage.check_hybrid_collection"
         )
         logger.warning(
-            "ensure_hybrid_collection skipped (error_type={}, error={})",
+            "Qdrant compatibility check failed (error_type={}, error={})",
             type(exc).__name__,
             redaction.redacted,
         )
+        return CollectionCompatibilityResult(
+            False, "error", "compatibility_check_failed"
+        )
+
+
+def _hybrid_collection_incompatibility(
+    dense_cfg: object,
+    sparse_cfg: object,
+    *,
+    dense_dim: int,
+) -> str | None:
+    """Return the first canonical hybrid-schema incompatibility, if any."""
+    if not isinstance(dense_cfg, dict):
+        return "legacy_unnamed_dense_vector"
+    if DENSE_VECTOR_NAME not in dense_cfg:
+        return "text_dense_head_missing"
+    if not isinstance(sparse_cfg, dict) or SPARSE_VECTOR_NAME not in sparse_cfg:
+        return "text_sparse_head_missing"
+    dense_vector = dense_cfg[DENSE_VECTOR_NAME]
+    dense_incompatibility = (
+        "text_dense_dimension_mismatch"
+        if int(dense_vector.size) != dense_dim
+        else "text_dense_distance_mismatch"
+        if getattr(dense_vector, "distance", None) != Distance.COSINE
+        else None
+    )
+    if dense_incompatibility is not None:
+        return dense_incompatibility
+    if (
+        getattr(sparse_cfg[SPARSE_VECTOR_NAME], "modifier", None)
+        != qmodels.Modifier.IDF
+    ):
+        return "text_sparse_idf_missing"
+    return None
+
+
+def ensure_hybrid_collection(
+    client: QdrantClient,
+    collection_name: str,
+    dense_dim: int = settings.embedding.dimension,
+) -> CollectionCompatibilityResult:
+    """Create a missing collection and reject every existing mismatch.
+
+    Args:
+        client: Qdrant client used to inspect and create collection state.
+        collection_name: Collection to validate or create.
+        dense_dim: Required dimension for the canonical dense vector.
+
+    Returns:
+        CollectionCompatibilityResult: Compatibility evidence and performed action.
+    """
+    result = check_hybrid_collection(client, collection_name, dense_dim)
+    if result.compatible or result.reason != "collection_missing":
+        return result
+    try:
+        _create_hybrid_collection(client, collection_name, dense_dim)
+        return CollectionCompatibilityResult(True, "created", "compatible", 0)
+    except QDRANT_SCHEMA_EXCEPTIONS as exc:
+        redaction = build_pii_log_entry(str(exc), key_id="storage.create_collection")
+        logger.warning(
+            "Qdrant collection creation failed (error_type={}, error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
+        rechecked = check_hybrid_collection(client, collection_name, dense_dim)
+        if rechecked.reason != "collection_missing":
+            return rechecked
+        return CollectionCompatibilityResult(
+            False,
+            "error",
+            "collection_create_failed",
+            result.point_count,
+        )
+
+
+def rebuild_empty_hybrid_collection(
+    client: QdrantClient,
+    collection_name: str,
+    dense_dim: int = settings.embedding.dimension,
+) -> CollectionCompatibilityResult:
+    """Rebuild an incompatible collection only after an exact empty count.
+
+    Collection writers must be stopped by the operator. Qdrant does not
+    atomically lock the exact-count/delete sequence.
+    """
+    result = check_hybrid_collection(client, collection_name, dense_dim)
+    if result.compatible or result.action == "error":
+        return result
+    if result.reason == "collection_missing":
+        return ensure_hybrid_collection(client, collection_name, dense_dim)
+
+    try:
+        raw_count = getattr(
+            client.count(collection_name=collection_name, exact=True),
+            "count",
+            None,
+        )
+    except QDRANT_SCHEMA_EXCEPTIONS as exc:
+        redaction = build_pii_log_entry(str(exc), key_id="storage.exact_count")
+        logger.warning(
+            "Qdrant exact collection count failed (error_type={}, error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
+        result = CollectionCompatibilityResult(
+            False,
+            "error",
+            "exact_count_failed",
+        )
+    else:
+        if type(raw_count) is not int:
+            result = CollectionCompatibilityResult(
+                False,
+                "error",
+                "exact_count_unavailable",
+            )
+        elif raw_count != 0:
+            result = CollectionCompatibilityResult(
+                False,
+                "blocked",
+                "collection_nonempty_exact",
+                raw_count,
+            )
+        else:
+            try:
+                client.delete_collection(collection_name)
+                _create_hybrid_collection(client, collection_name, dense_dim)
+            except QDRANT_SCHEMA_EXCEPTIONS as exc:
+                redaction = build_pii_log_entry(
+                    str(exc), key_id="storage.rebuild_collection"
+                )
+                logger.warning(
+                    "Qdrant empty collection rebuild failed (error_type={}, error={})",
+                    type(exc).__name__,
+                    redaction.redacted,
+                )
+                result = CollectionCompatibilityResult(
+                    False,
+                    "error",
+                    "empty_collection_rebuild_failed",
+                    raw_count,
+                )
+            else:
+                result = CollectionCompatibilityResult(
+                    True, "recreated", "compatible", 0
+                )
+    return result
 
 
 # =============================================================================
@@ -428,154 +427,6 @@ async def create_async_client() -> AsyncGenerator[AsyncQdrantClient]:
                 )
 
 
-async def setup_hybrid_collection_async(
-    client: AsyncQdrantClient,
-    collection_name: str,
-    dense_embedding_size: int = settings.embedding.dimension,
-    recreate: bool = False,
-) -> QdrantVectorStore:
-    """Setup Qdrant collection for hybrid search (async).
-
-    Args:
-        client: AsyncQdrantClient instance
-        collection_name: Name of collection to create/configure
-        dense_embedding_size: Size of dense embeddings
-        recreate: Whether to recreate if exists
-
-    Returns:
-        QdrantVectorStore configured for hybrid search
-    """
-    logger.info("Setting up hybrid collection: {}", collection_name)
-
-    if recreate and await client.collection_exists(collection_name):
-        await client.delete_collection(collection_name)
-        logger.info("Deleted existing collection: {}", collection_name)
-
-    if not await client.collection_exists(collection_name):
-        # Create collection with both dense and sparse vectors
-        await client.create_collection(
-            collection_name=collection_name,
-            vectors_config={
-                "text-dense": VectorParams(
-                    size=dense_embedding_size,
-                    distance=Distance.COSINE,
-                )
-            },
-            sparse_vectors_config={
-                "text-sparse": SparseVectorParams(
-                    index=SparseIndexParams(on_disk=False),
-                    modifier=qmodels.Modifier.IDF,
-                )
-            },
-        )
-        logger.success("Created hybrid collection: {}", collection_name)
-        logger.info(
-            "Sparse model preference: {} (fallback {})",
-            PREFERRED_SPARSE_MODEL,
-            FALLBACK_SPARSE_MODEL,
-        )
-        if settings.retrieval.named_vectors_multi_head_enabled:
-            logger.info("Named-vectors multi-head feature flag is enabled (no-op)")
-
-    # Create sync client for QdrantVectorStore compatibility
-    config = get_client_config()
-    sync_client = QdrantClient(**config)
-
-    try:
-        return QdrantVectorStore(
-            client=sync_client,
-            collection_name=collection_name,
-            enable_hybrid=True,
-            batch_size=settings.monitoring.default_batch_size,
-        )
-    except ImportError as e:  # fastembed optional for hybrid sparse
-        redaction = build_pii_log_entry(str(e), key_id="storage.fastembed_async")
-        logger.warning(
-            "Hybrid vector store requires FastEmbed; falling back to dense-only "
-            "(error_type={}, error={})",
-            type(e).__name__,
-            redaction.redacted,
-        )
-        return QdrantVectorStore(
-            client=sync_client,
-            collection_name=collection_name,
-            enable_hybrid=False,
-            batch_size=settings.monitoring.default_batch_size,
-        )
-
-
-def setup_hybrid_collection(
-    client: QdrantClient,
-    collection_name: str,
-    dense_embedding_size: int = settings.embedding.dimension,
-    recreate: bool = False,
-) -> QdrantVectorStore:
-    """Setup Qdrant collection for hybrid search (sync).
-
-    Args:
-        client: QdrantClient instance
-        collection_name: Name of collection to create/configure
-        dense_embedding_size: Size of dense embeddings
-        recreate: Whether to recreate if exists
-
-    Returns:
-        QdrantVectorStore configured for hybrid search
-    """
-    logger.info("Setting up hybrid collection: {}", collection_name)
-
-    if recreate and client.collection_exists(collection_name):
-        client.delete_collection(collection_name)
-        logger.info("Deleted existing collection: {}", collection_name)
-
-    if not client.collection_exists(collection_name):
-        # Create collection with both dense and sparse vectors
-        client.create_collection(
-            collection_name=collection_name,
-            vectors_config={
-                "text-dense": VectorParams(
-                    size=dense_embedding_size,
-                    distance=Distance.COSINE,
-                )
-            },
-            sparse_vectors_config={
-                "text-sparse": SparseVectorParams(
-                    index=SparseIndexParams(on_disk=False),
-                    modifier=qmodels.Modifier.IDF,
-                )
-            },
-        )
-        logger.success("Created hybrid collection: {}", collection_name)
-        logger.info(
-            "Sparse model preference: {} (fallback {})",
-            PREFERRED_SPARSE_MODEL,
-            FALLBACK_SPARSE_MODEL,
-        )
-        if settings.retrieval.named_vectors_multi_head_enabled:
-            logger.info("Named-vectors multi-head feature flag is enabled (no-op)")
-
-    try:
-        return QdrantVectorStore(
-            client=client,
-            collection_name=collection_name,
-            enable_hybrid=True,
-            batch_size=settings.monitoring.default_batch_size,
-        )
-    except ImportError as e:  # fastembed optional for hybrid sparse
-        redaction = build_pii_log_entry(str(e), key_id="storage.fastembed_sync")
-        logger.warning(
-            "Hybrid vector store requires FastEmbed; falling back to dense-only "
-            "(error_type={}, error={})",
-            type(e).__name__,
-            redaction.redacted,
-        )
-        return QdrantVectorStore(
-            client=client,
-            collection_name=collection_name,
-            enable_hybrid=False,
-            batch_size=settings.monitoring.default_batch_size,
-        )
-
-
 def create_vector_store(
     collection_name: str,
     _dense_embedding_size: int = settings.embedding.dimension,
@@ -592,18 +443,16 @@ def create_vector_store(
         Configured QdrantVectorStore
     """
     client = QdrantClient(**get_client_config())
-    # Ensure named vectors schema exists when hybrid is enabled (idempotent)
-    if enable_hybrid:
-        try:
-            ensure_hybrid_collection(
-                client,
-                collection_name,
-                dense_dim=_dense_embedding_size,
-            )
-        except QDRANT_TRANSPORT_EXCEPTIONS:  # pragma: no cover - defensive ensure
-            logger.warning(
-                "ensure_hybrid_collection failed; proceeding with store creation"
-            )
+    # QdrantVectorStore uses the named dense vector by default even when sparse
+    # hybrid search is disabled, so the schema must exist for both modes.
+    compatibility = ensure_hybrid_collection(
+        client,
+        collection_name,
+        dense_dim=_dense_embedding_size,
+    )
+    if not compatibility.compatible:
+        client.close()
+        raise QdrantCollectionIncompatibleError(collection_name, compatibility)
 
     try:
         store = QdrantVectorStore(
@@ -611,10 +460,9 @@ def create_vector_store(
             collection_name=collection_name,
             enable_hybrid=enable_hybrid,
             batch_size=settings.monitoring.default_batch_size,
+            dense_vector_name=DENSE_VECTOR_NAME,
+            sparse_vector_name=SPARSE_VECTOR_NAME,
         )
-        # Ensure sparse IDF modifier on existing collections where supported
-        with suppress(Exception):
-            ensure_sparse_idf_modifier(client, collection_name)
         return store
     except ImportError as e:  # fastembed optional for hybrid sparse
         redaction = build_pii_log_entry(str(e), key_id="storage.fastembed_store")
@@ -624,12 +472,23 @@ def create_vector_store(
             type(e).__name__,
             redaction.redacted,
         )
-        return QdrantVectorStore(
-            client=client,
-            collection_name=collection_name,
-            enable_hybrid=False,
-            batch_size=settings.monitoring.default_batch_size,
-        )
+        try:
+            return QdrantVectorStore(
+                client=client,
+                collection_name=collection_name,
+                enable_hybrid=False,
+                batch_size=settings.monitoring.default_batch_size,
+                dense_vector_name=DENSE_VECTOR_NAME,
+                sparse_vector_name=SPARSE_VECTOR_NAME,
+            )
+        except Exception:
+            with suppress(Exception):
+                client.close()
+            raise
+    except Exception:
+        with suppress(Exception):
+            client.close()
+        raise
 
 
 def persist_image_metadata(

@@ -10,19 +10,24 @@ The recommended starting points for hybrid retrieval.
 - sparse prefetch: 400
 - fused_top_k: 60
   
-Note: Fusion is performed server‑side via Qdrant Query API (Prefetch + FusionQuery). There are no client‑side fusion knobs (no alpha/rrf_k). DBSF may be enabled via environment when supported.
+Note: Fusion and deduplication are performed server-side via Qdrant Query API (`Prefetch` plus `RrfQuery`/`FusionQuery` and `query_points_groups`). RRF uses `DOCMIND_RETRIEVAL__RRF_K`; DBSF may be enabled via environment when supported.
 
 ## Tune by Observing
 
 - `retrieval.latency_ms` — keep within SLO (e.g., ≤ 200 ms)
-- `dedup.before/after/dropped` — high `dropped` with low recall may indicate lowering fused_top_k or rebalancing prefetch
+- `dedup.server_group_count` — count of unique groups returned by Qdrant after
+  server-side grouping; compare it with `retrieval.fused_limit` and recall when
+  tuning the prefetch limits
+- `dedup.before`, `dedup.after`, and `dedup.dropped` — multimodal client-fusion
+  cardinalities before and after configured-key deduplication; `dedup.after` is
+  measured before the final top-k limit
 - Rerank: gate at `reranking_top_k` 5–16; TEXT timeout 250 ms (CPU), use fp16 on GPU, SigLIP 150 ms budget
 
 ## Notes
 
 - Use `DOCMIND_RETRIEVAL__FUSION_MODE=rrf|dbsf` to evaluate DBSF; prefer RRF as default
 - BM42 requires sparse `modifier=IDF`; verify collection schema
-- Consider enabling server group_by (future) for page/doc dominance; current build dedups by `retrieval.dedup_key`
+- `retrieval.dedup_key` controls Qdrant `group_by` (`page_id` or `doc_id`); each group returns its best hit.
 
 ## When to prefer DBSF (experimental)
 

@@ -115,7 +115,7 @@ Add/extend `tests/integration/test_settings_page.py` (or create a new file) to a
   `AppTest.from_file(..., default_timeout=...)` and override with
   `TEST_TIMEOUT=<seconds>` when reproducing CI slowness locally.
 - Keep UI tests offline and import-light: stub the provider badge health check
-  (`adapter_registry.get_default_adapter_health`) unless the adapter itself is
+  (`llama_index_adapter.get_graphrag_health`) unless LlamaIndex health itself is
   under test.
 
 ### Unit

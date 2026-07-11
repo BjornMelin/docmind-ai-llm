@@ -208,6 +208,7 @@ class MultimodalFusionRetriever:
                 prefetch_sparse=settings.retrieval.prefetch_sparse_limit,
                 prefetch_dense=settings.retrieval.prefetch_dense_limit,
                 fusion_mode=settings.retrieval.fusion_mode,
+                rrf_k=settings.retrieval.rrf_k,
                 dedup_key=settings.retrieval.dedup_key,
             )
         )
@@ -316,6 +317,9 @@ class MultimodalFusionRetriever:
                     "retrieval.fused_count": len(out),
                     "retrieval.rrf_k": int(k_constant),
                     "dedup.key": key_name,
+                    "dedup.before": len(fused),
+                    "dedup.after": len(dedup_sorted),
+                    "dedup.dropped": len(fused) - len(dedup_sorted),
                     "retrieval.latency_ms": latency_ms,
                 }
             )

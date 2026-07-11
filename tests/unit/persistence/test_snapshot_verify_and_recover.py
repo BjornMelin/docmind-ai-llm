@@ -14,6 +14,12 @@ from src.persistence import snapshot_writer as writer
 pytestmark = pytest.mark.unit
 
 
+def _write_complete_manifest(snapshot_dir: Path) -> None:
+    (snapshot_dir / "manifest.meta.json").write_text(
+        '{"complete":true}', encoding="utf-8"
+    )
+
+
 def test_verify_snapshot_roundtrip_and_mismatch(tmp_path: Path) -> None:
     snapshot_dir = tmp_path / "snap"
     snapshot_dir.mkdir()
@@ -34,6 +40,8 @@ def test_recover_snapshots_keeps_current_when_valid(tmp_path: Path) -> None:
     newer = base / "20250102T000000-bbbb"
     older.mkdir()
     newer.mkdir()
+    _write_complete_manifest(older)
+    _write_complete_manifest(newer)
     (base / "CURRENT").write_text(older.name, encoding="utf-8")
 
     snap.recover_snapshots(base)
@@ -53,6 +61,8 @@ def test_recover_snapshots_repairs_current_and_removes_stale_artifacts(
     v2 = base / "20250102T000000-bbbb"
     v1.mkdir()
     v2.mkdir()
+    _write_complete_manifest(v1)
+    _write_complete_manifest(v2)
 
     snap.recover_snapshots(base)
 
@@ -60,6 +70,25 @@ def test_recover_snapshots_repairs_current_and_removes_stale_artifacts(
     assert not (base / ".lock.stale-1").exists()
     assert not (base / ".lock.meta.json.stale-1").exists()
     assert (base / "CURRENT").read_text(encoding="utf-8").strip() == v2.name
+
+
+def test_recover_snapshots_ignores_incomplete_final_directory(tmp_path: Path) -> None:
+    """Recovery never repairs CURRENT to a final-named incomplete snapshot."""
+    base = tmp_path / "storage"
+    base.mkdir()
+    complete = base / "20250101T000000-aaaa"
+    incomplete = base / "20250102T000000-bbbb"
+    complete.mkdir()
+    incomplete.mkdir()
+    _write_complete_manifest(complete)
+    (incomplete / "manifest.meta.json").write_text(
+        '{"complete":false}', encoding="utf-8"
+    )
+    (base / "CURRENT").write_text(incomplete.name, encoding="utf-8")
+
+    snap.recover_snapshots(base)
+
+    assert (base / "CURRENT").read_text(encoding="utf-8").strip() == complete.name
 
 
 def test_persist_graph_store_falls_back_to_positional_persist(tmp_path: Path) -> None:
@@ -101,6 +130,7 @@ def test_loaders_return_none_when_payload_dirs_missing(
 ) -> None:
     snapshot_dir = tmp_path / "snap"
     snapshot_dir.mkdir()
+    _write_complete_manifest(snapshot_dir)
     monkeypatch.setattr(
         snap, "latest_snapshot_dir", lambda *_a, **_k: snapshot_dir, raising=True
     )
@@ -114,3 +144,38 @@ def test_loaders_return_none_when_payload_dirs_missing(
     monkeypatch.setitem(sys.modules, "llama_index.core", core_mod)
     monkeypatch.setitem(sys.modules, "llama_index.core.graph_stores", graph_mod)
     assert snap.load_property_graph_index(None) is None
+
+
+def test_index_loaders_ignore_explicit_incomplete_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Explicit index loads cannot bypass the complete-manifest gate."""
+    snapshot_dir = tmp_path / "snap"
+    (snapshot_dir / "vector").mkdir(parents=True)
+    (snapshot_dir / "graph").mkdir()
+    (snapshot_dir / "manifest.meta.json").write_text(
+        '{"complete":false}', encoding="utf-8"
+    )
+
+    core_mod = ModuleType("llama_index.core")
+    graph_mod = ModuleType("llama_index.core.graph_stores")
+
+    class _UnexpectedStorageContext:
+        @classmethod
+        def from_defaults(cls, *, persist_dir: str) -> None:
+            raise AssertionError(f"unexpected vector load from {persist_dir}")
+
+    class _UnexpectedGraphStore:
+        @classmethod
+        def from_persist_dir(cls, persist_dir: str) -> None:
+            raise AssertionError(f"unexpected graph load from {persist_dir}")
+
+    core_mod.StorageContext = _UnexpectedStorageContext  # type: ignore[attr-defined]
+    core_mod.load_index_from_storage = object()  # type: ignore[attr-defined]
+    core_mod.PropertyGraphIndex = object()  # type: ignore[attr-defined]
+    graph_mod.SimplePropertyGraphStore = _UnexpectedGraphStore  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "llama_index.core", core_mod)
+    monkeypatch.setitem(sys.modules, "llama_index.core.graph_stores", graph_mod)
+
+    assert snap.load_vector_index(snapshot_dir) is None
+    assert snap.load_property_graph_index(snapshot_dir) is None

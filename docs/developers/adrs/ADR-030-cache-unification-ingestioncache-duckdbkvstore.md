@@ -46,7 +46,7 @@ Unify document‑processing cache on LlamaIndex IngestionCache with a local Duck
 
 ## Decision
 
-Adopt **LlamaIndex IngestionCache + DuckDBKVStore** as the single cache for document processing. Remove custom caches and JSON-based persistence. Store cache file at `settings.cache_dir/docmind.duckdb`.
+Adopt **LlamaIndex IngestionCache + DuckDBKVStore** as the single cache for document processing. Remove custom caches and JSON-based persistence. Store the configured cache file at `settings.cache.ingestion_db_path`.
 
 ## High-Level Architecture
 
@@ -88,7 +88,7 @@ graph TD
 
 ### Architecture Overview
 
-- Cache file: `settings.cache_dir/docmind.duckdb` (single‑file DB)
+- Cache file: `settings.cache.ingestion_db_path` (single-file DB)
 - Namespace: `docmind_processing`
 - Removal: delete `src/cache/simple_cache.py`
 
@@ -97,11 +97,10 @@ graph TD
 In `src/processing/ingestion_pipeline.py` (pipeline wiring):
 
 ```python
-from pathlib import Path
 from llama_index.core.ingestion import IngestionCache
 from llama_index.storage.kvstore.duckdb import DuckDBKVStore
 
-cache_db = Path(settings.cache_dir) / "docmind.duckdb"
+cache_db = settings.cache.ingestion_db_path
 kv = DuckDBKVStore(database_name=str(cache_db))
 self.cache = IngestionCache(cache=kv, collection="docmind_processing")
 ```

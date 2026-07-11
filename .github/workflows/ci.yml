@@ -19,49 +19,73 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.12.13"]
-        profile: [base, llama]
+    services:
+      qdrant:
+        image: qdrant/qdrant:v1.18.2
+        ports:
+          - 6333:6333
+        options: >-
+          --health-cmd "bash -c ':> /dev/tcp/127.0.0.1/6333'"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 30
     env:
       HF_HUB_OFFLINE: '1'
+      REQUIRE_REAL_LLAMA: '1'
       TRANSFORMERS_OFFLINE: '1'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.12.13'
 
       - name: Install uv (with cache)
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           enable-cache: true
+          cache-suffix: build-test-py312
 
-      - name: Sync environment (matrix aware)
-        run: |
-          if [ "${{ matrix.profile }}" = "llama" ]; then
-            uv sync --group test --extra observability --extra graph --extra eval --group quality --frozen
-          else
-            uv sync --group test --extra observability --extra eval --group quality --frozen
-          fi
+      - name: Sync canonical environment
+        run: uv sync --group test --extra observability --extra eval --group quality --frozen
+
+      - name: Verify CPU dependency profile
+        run: uv run python -c "import torch; assert torch.version.cuda is None, torch.__version__"
 
       - name: Quality Gate - Ruff (format+lint)
         run: |
-          uvx ruff format --check .
-          uvx ruff check --fix --exit-non-zero-on-fix .
+          uv run ruff format --check .
+          uv run ruff check .
 
       - name: Quality Gate - Ruff (core limits)
         run: |
-          uvx ruff check src --config ruff-core.toml
+          uv run ruff check src --config ruff-core.toml
           echo "::notice::Core lint uses stricter max-positional-args; review core API surfaces periodically."
 
       - name: Quality Gate - Pyright
         run: |
           uv run pyright --threads 4
+
+      - name: Run enabled application E2E suite
+        env:
+          DOCMIND_RUN_E2E: '1'
+        run: uv run pytest tests/e2e -q --no-cov
+
+      - name: Run Qdrant ingest-index-query system smoke
+        env:
+          DOCMIND_QDRANT_SYSTEM_URL: http://127.0.0.1:6333
+          DOCMIND_RUN_SYSTEM: '1'
+        run: uv run pytest tests/system/test_e2e_offline.py -q --no-cov
+
+      - name: Build and smoke-test wheel contents
+        run: |
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct HEAD)"
+          umask 022
+          rm -rf build docmind_ai_llm.egg-info
+          uv build --wheel --clear
+          uv run python scripts/smoke_built_wheel.py
 
       - name: Quality Gate - No TODO/FIXME/XXX placeholders
         run: |
@@ -72,34 +96,106 @@ jobs:
             echo "No TODO/FIXME/XXX placeholders found."
           fi
 
-      - name: Run tiered unit/integration tests (fast gate)
-        env:
-          REQUIRE_REAL_LLAMA: ${{ matrix.profile == 'llama' && '1' || '0' }}
-        run: |
-          uv run python scripts/run_tests.py --fast
-
       - name: Run unit/integration with coverage
-        if: ${{ matrix.profile == 'base' }}
-        env:
-          REQUIRE_REAL_LLAMA: ${{ matrix.profile == 'llama' && '1' || '0' }}
         run: |
           uv run python scripts/run_tests.py --coverage
 
       - name: Validate evaluation leaderboard schemas (if present)
-        if: ${{ matrix.profile == 'base' }}
         run: |
-          uv run python scripts/validate_schemas.py || true
+          uv run python scripts/validate_schemas.py
 
       - name: Upload coverage artifacts
-        if: ${{ always() && matrix.profile == 'base' }}
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-${{ matrix.profile }}-${{ matrix.python-version }}
+          name: coverage-python-3.12.13
           path: |
             htmlcov
             coverage.xml
             coverage.json
           if-no-files-found: ignore
+
+  compatibility-python-313:
+    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release-please--') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      HF_HUB_OFFLINE: '1'
+      REQUIRE_REAL_LLAMA: '1'
+      TRANSFORMERS_OFFLINE: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13.12'
+
+      - name: Install uv (with cache)
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          enable-cache: true
+          cache-suffix: compatibility-py313
+
+      - name: Sync base environment
+        run: uv sync --frozen
+
+      - name: Verify core-owned GraphRAG dependencies
+        run: |
+          uv run python -c "import importlib.util; assert importlib.util.find_spec('llama_index.core'); assert importlib.util.find_spec('kuzu') is None"
+
+      - name: Run full unit suite
+        run: uv run python scripts/run_tests.py --unit
+
+      - name: Run focused GraphRAG integrations
+        run: |
+          uv run pytest --no-cov \
+            tests/unit/retrieval/test_llama_index_adapter.py \
+            tests/unit/retrieval/test_graph_rag_factory.py \
+            tests/unit/retrieval/test_router_factory_contract.py \
+            tests/integration/test_graph.py \
+            tests/integration/test_graphrag_exports.py
+
+  qdrant-fusion:
+    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release-please--') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    services:
+      qdrant:
+        image: qdrant/qdrant:v1.18.2
+        ports:
+          - 6333:6333
+        options: >-
+          --health-cmd "bash -c ':> /dev/tcp/127.0.0.1/6333'"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12.13'
+
+      - name: Install uv (with cache)
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          enable-cache: true
+          cache-suffix: qdrant-fusion-py312
+
+      - name: Smoke-test pinned client RRF and DBSF support
+        run: |
+          set -euo pipefail
+          version="$(uv tree --frozen --no-dev --package qdrant-client --depth 0 | sed -n 's/^qdrant-client v//p')"
+          test -n "$version"
+          uv run --no-project --with "qdrant-client==$version" \
+            python scripts/qdrant_fusion_smoke.py
 
   container-static:
     if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release-please--') }}
@@ -110,10 +206,10 @@ jobs:
       EXPECTED_PYTHON_VERSION: '3.12.13'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12.13'
 
@@ -136,14 +232,26 @@ jobs:
           from pathlib import Path
 
           lines = Path(".dockerignore").read_text(encoding="utf-8-sig").splitlines()
+          normalized = {line.strip() for line in lines}
           expected = {".env", ".env.*", ".env*"}
-          if not any(line.strip() in expected for line in lines):
+          if not normalized.intersection(expected):
             raise SystemExit(
               "Expected at least one .env pattern (.env, .env.*, or .env*) in .dockerignore"
             )
+          required_inclusions = {
+            "!scripts/container_entrypoint.sh",
+            "!scripts/container_health.py",
+            "!scripts/parser_health.py",
+            "!tools/models/pull.py",
+          }
+          missing = sorted(required_inclusions.difference(normalized))
+          if missing:
+            raise SystemExit(
+              "Dockerfile COPY sources remain ignored: " + ", ".join(missing)
+            )
           PY
 
-          latest_targets=(Dockerfile docker-compose.yml)
+          latest_targets=(Dockerfile docker-compose.yml docker-compose.gpu.yml)
           if [ -f docker-compose.prod.yml ]; then
             latest_targets+=(docker-compose.prod.yml)
           fi
@@ -247,7 +355,11 @@ jobs:
             rg -n 'tmpfs:' docker-compose.prod.yml || { echo "docker-compose.prod.yml must set tmpfs"; exit 1; }
             rg -n '/tmp' docker-compose.prod.yml || { echo "docker-compose.prod.yml tmpfs must include /tmp"; exit 1; }
           fi
-          compose_files=(docker-compose.yml)
+          docker compose -f docker-compose.yml -f docker-compose.gpu.yml config >/dev/null 2>&1 || { echo "docker compose -f gpu config failed:"; docker compose -f docker-compose.yml -f docker-compose.gpu.yml config 2>&1; exit 1; }
+          if [ -f docker-compose.prod.yml ]; then
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.gpu.yml config >/dev/null 2>&1 || { echo "docker compose -f prod+gpu config failed:"; docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.gpu.yml config 2>&1; exit 1; }
+          fi
+          compose_files=(docker-compose.yml docker-compose.gpu.yml)
           if [ -f docker-compose.prod.yml ]; then
             compose_files+=(docker-compose.prod.yml)
           fi
@@ -265,3 +377,60 @@ jobs:
           fi
 
           echo "Static checks: OK"
+
+  container-build:
+    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release-please--') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build production image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: docmind:ci
+          cache-from: type=gha,scope=docmind-production-image
+          cache-to: type=gha,mode=max,scope=docmind-production-image
+
+      - name: Smoke-test canonical container liveness
+        run: |
+          set -euo pipefail
+          container_name="docmind-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup() {
+            docker rm --force "$container_name" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker run --detach --name "$container_name" docmind:ci >/dev/null
+          for _ in $(seq 1 60); do
+            running="$(docker inspect --format '{{.State.Running}}' "$container_name")"
+            if [ "$running" != "true" ]; then
+              exit_code="$(docker inspect --format '{{.State.ExitCode}}' "$container_name")"
+              docker logs "$container_name"
+              echo "Container PID 1 exited before liveness passed (exit code $exit_code)."
+              exit 1
+            fi
+            status="$(docker inspect --format '{{.State.Health.Status}}' "$container_name")"
+            case "$status" in
+              healthy)
+                exit 0
+                ;;
+              unhealthy)
+                docker logs "$container_name"
+                exit 1
+                ;;
+            esac
+            sleep 5
+          done
+
+          docker logs "$container_name"
+          echo "Container did not become healthy within 300 seconds."
+          exit 1

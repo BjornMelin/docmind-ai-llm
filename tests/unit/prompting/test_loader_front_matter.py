@@ -9,7 +9,7 @@ import yaml
 
 
 @pytest.mark.unit
-def test_split_front_matter_cases(tmp_path):
+def test_split_front_matter_cases(tmp_path, monkeypatch):
     mod = importlib.import_module("src.prompting.loader")
 
     # No front matter
@@ -29,7 +29,7 @@ def test_split_front_matter_cases(tmp_path):
     d.write_text(content, encoding="utf-8")
 
     # Point loader to tmp dir and load
-    mod._TPL_DIR = tmp_path  # type: ignore[attr-defined]
+    monkeypatch.setattr(mod, "_TPL_DIR", tmp_path)
     specs = mod.load_templates()
     assert len(specs) == 1
     sp = specs[0]
@@ -44,7 +44,7 @@ def test_split_front_matter_cases(tmp_path):
 def test_load_preset_known_and_unknown(tmp_path, monkeypatch):
     mod = importlib.import_module("src.prompting.loader")
 
-    mod._PRESETS_DIR = tmp_path  # type: ignore[attr-defined]
+    monkeypatch.setattr(mod, "_PRESETS_DIR", tmp_path)
     (tmp_path / "tones.yaml").write_text("professional: true\n", encoding="utf-8")
 
     tones = mod.load_preset("tones")

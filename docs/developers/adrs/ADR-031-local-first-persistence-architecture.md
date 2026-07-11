@@ -2,8 +2,8 @@
 ADR: 031
 Title: Local-First Persistence Architecture (Vectors, Cache, Operational Data)
 Status: Accepted (Amended)
-Version: 1.6
-Date: 2026-01-09
+Version: 1.7
+Date: 2026-07-10
 Supersedes:
 Superseded-by:
 Related: 026, 030, 033, 035, 038
@@ -45,14 +45,14 @@ Earlier designs mixed concerns and introduced multiple storage backends. To redu
 
 ## Decision
 
-Adopt Qdrant for vectors, LlamaIndex IngestionCache with DuckDBKVStore for processing cache (single file at `settings.cache_dir/docmind.duckdb`), and optionally SQLite for operational metadata. No test-only hooks in src; rely on library clients.
+Adopt Qdrant for vectors, LlamaIndex IngestionCache with DuckDBKVStore for processing cache (single configured file at `settings.cache.ingestion_db_path`), and optionally SQLite for operational metadata. No test-only hooks in src; rely on library clients.
 
 Hybrid Retrieval Schema (Qdrant Collections):
 
 - Qdrant collections SHALL define named vectors to support server-side hybrid queries via the Query API:
   - `text-dense`: `VectorParams(distance=COSINE, size=<embed_dim>)`
   - `text-sparse`: `SparseVectorParams(modifier=IDF)`
-- Collection ensure is idempotent at startup; schema updates warn when dimensions differ.
+- Collection ensure is idempotent at startup. A missing collection is created, while any incompatible existing dense or sparse schema fails closed. Only the explicit `scripts/qdrant_schema.py rebuild-empty` command may replace an empty collection after all writers stop.
 - See SPEC‑004 for hybrid query and fusion details (Prefetch + FusionQuery; RRF default; DBSF optional via env).
 
 ### SnapshotManager (Amendment — GraphRAG)
@@ -112,12 +112,11 @@ graph TD
 In `src/processing/ingestion_pipeline.py` (illustrative wiring):
 
 ```python
-from pathlib import Path
 from llama_index.core.ingestion import IngestionCache
 from llama_index.storage.kvstore.duckdb import DuckDBKVStore
 
 def build_cache(settings):
-    cache_db = Path(settings.cache_dir) / "docmind.duckdb"
+    cache_db = settings.cache.ingestion_db_path
     cache_db.parent.mkdir(parents=True, exist_ok=True)
     return IngestionCache(cache=DuckDBKVStore(database_name=str(cache_db)), collection="docmind_processing")
 ```
@@ -163,10 +162,11 @@ def test_cache_roundtrip(cache):
 
 ### Dependencies
 
-- Python: `llama-index>=0.13`, `llama-index-storage-kvstore-duckdb`, `llama-index-vector-stores-qdrant`, `duckdb`
+- Python: `llama-index-core>=0.14.21,<0.15.0`, `llama-index-storage-kvstore-duckdb`, `llama-index-vector-stores-qdrant`, and `duckdb`
 
 ## Changelog
 
+- 1.7 (2026-07-10): Align the Qdrant contract with fail-closed named-vector schema validation and replace the removed LlamaIndex meta-package with direct dependencies.
 - 1.6 (2026-01-09): Docs-only: align observability section with SPEC-012 and shipped telemetry (no implicit console fallback; remove lock_takeover mention).
 - 1.5 (2025-09-16): Clarified SnapshotLock heartbeat/takeover semantics, retention discipline, and OpenTelemetry logging requirements.
 - 1.4 (2025-09-16): Documented portalocker-based locking with TTL metadata, fallback locking, graph export telemetry, and removal of legacy `manifest.json`.

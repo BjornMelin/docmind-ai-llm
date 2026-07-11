@@ -23,7 +23,11 @@ opensrc/
 docs/
 tests/
 tests_agents/
-tools/
-scripts/*
-!scripts/docker_fetch_torch_wheel.py
+tools/**
+!tools/models/
+!tools/models/pull.py
+scripts/**
+!scripts/container_entrypoint.sh
+!scripts/container_health.py
+!scripts/parser_health.py
 .github/

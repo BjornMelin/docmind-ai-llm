@@ -1,30 +1,35 @@
 """PDF page image emission utilities.
 
 Generates page-image artifacts for PDFs with stable filenames and bounding
-boxes, and provides a convenience converter to LlamaIndex ImageDocument nodes
-for downstream pipeline usage.
+boxes.
 """
 
 from __future__ import annotations
 
 import contextlib
 import os
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
-import fitz  # PyMuPDF
 import numpy as np
-from llama_index.core.schema import ImageDocument
-from loguru import logger
 from PIL import Image  # type: ignore
 from PIL.Image import Resampling  # type: ignore
 
 from src.config import settings
-from src.persistence.artifacts import ArtifactStore
-from src.utils.log_safety import build_pii_log_entry
 from src.utils.security import encrypt_file, get_image_kid
 
 _PAGE_TEXT_MAX_CHARS = 8000
+
+
+@dataclass(frozen=True, slots=True)
+class PageRect:
+    """PDF page bounding box in PDF canvas units."""
+
+    x0: float
+    y0: float
+    x1: float
+    y1: float
 
 
 def _phash(img: Image.Image, hash_size: int = 8) -> str:
@@ -50,7 +55,7 @@ def _phash(img: Image.Image, hash_size: int = 8) -> str:
 
 
 def _save_with_format(
-    pix: fitz.Pixmap, target_stem: Path, *, encrypt: bool | None = None
+    pix: Any, target_stem: Path, *, encrypt: bool | None = None
 ) -> tuple[Path, str]:
     """Persist a rendered page as WebP (preferred) or JPEG fallback.
 
@@ -58,7 +63,8 @@ def _save_with_format(
     ``settings.processing.encrypt_page_images``), yielding ``*.enc`` outputs.
 
     Args:
-        pix: PyMuPDF pixmap for the rendered page.
+        pix: Rendered page bitmap. pypdfium2 bitmaps and legacy pixmap-like
+            test doubles are supported.
         target_stem: Path stem used to derive the output filename.
         encrypt: Whether to encrypt the rendered output; ``None`` uses settings.
 
@@ -68,13 +74,11 @@ def _save_with_format(
     if encrypt is None:
         encrypt = getattr(settings.processing, "encrypt_page_images", False)
 
-    # Convert to PIL Image from raw samples
-    mode = "RGB" if pix.n < 4 else "RGBA"
-    img = Image.frombytes(mode, (pix.width, pix.height), pix.samples)
+    img = _rendered_to_pil(pix)
     # Strip EXIF/metadata explicitly
     if hasattr(img, "info"):
         img.info.pop("exif", None)
-    if mode == "RGBA":
+    if img.mode == "RGBA":
         img = img.convert("RGB")
 
     # Resize to long-edge ~2000 px
@@ -102,7 +106,7 @@ def _save_with_format(
 
 def _render_pdf_pages(
     pdf_path: Path, out_dir: Path, dpi: int = 200, *, encrypt: bool | None = None
-) -> list[tuple[int, Path, fitz.Rect, str, str]]:
+) -> list[tuple[int, Path, PageRect, str, str]]:
     """Render PDF pages to image files while preserving deterministic names.
 
     Output filenames follow the ``<stem>__page-<n>`` convention and reuse
@@ -116,7 +120,7 @@ def _render_pdf_pages(
         encrypt: Whether to encrypt rendered outputs; ``None`` defers to settings.
 
     Returns:
-        list[tuple[int, Path, fitz.Rect, str, str]]: One entry per page containing
+        list[tuple[int, Path, PageRect, str, str]]: One entry per page containing
         the 1-based page number, output image path, page rectangle, phash, and
         extracted page text (best-effort).
     """
@@ -124,183 +128,158 @@ def _render_pdf_pages(
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    results: list[tuple[int, Path, fitz.Rect, str, str]] = []
+    try:
+        import pypdfium2 as pdfium
+    except ImportError as exc:  # pragma: no cover - dependency guard
+        raise RuntimeError("pypdfium2 is required for PDF page rendering") from exc
+
+    results: list[tuple[int, Path, PageRect, str, str]] = []
     pdf_mtime = pdf_path.stat().st_mtime if pdf_path.exists() else 0.0
 
-    with fitz.open(pdf_path) as doc:
-        zoom = dpi / 72.0
-        mat = fitz.Matrix(zoom, zoom)
-        for idx in range(doc.page_count):
-            page_num = idx + 1
-            page = doc.load_page(idx)
-            # Best-effort page text extraction for downstream grounding.
+    with pdfium.PdfDocument(pdf_path) as doc:
+        if len(doc) > settings.parsing.max_pages:
+            raise ValueError("PDF exceeds configured page limit")
+        scale = dpi / 72.0
+        for idx in range(len(doc)):
+            page = doc[idx]
             try:
-                page_text = (cast(Any, page).get_text("text") or "").strip()
-            except Exception:  # pragma: no cover - PyMuPDF quirks
-                page_text = ""
-            if len(page_text) > _PAGE_TEXT_MAX_CHARS:
-                page_text = page_text[:_PAGE_TEXT_MAX_CHARS]
-            img_stem = f"{pdf_path.stem}__page-{page_num}"
-            # Paths depend on chosen format/encryption; select an existing file
-            # if present to avoid re-render loops for encrypted outputs.
-            base = out_dir / img_stem
-            candidates = [
-                base.with_suffix(".webp.enc"),
-                base.with_suffix(".webp"),
-                base.with_suffix(".jpg.enc"),
-                base.with_suffix(".jpg"),
-                base.with_suffix(".jpeg.enc"),
-                base.with_suffix(".jpeg"),
-            ]
-            existing = next((p for p in candidates if p.exists()), None)
-            img_path = existing or base.with_suffix(".webp")
-
-            # Refresh if missing, source PDF is newer, or encryption flag changed.
-            # Otherwise we can incorrectly reuse plaintext when encryption is enabled
-            # (or vice versa), breaking expectations and downstream consumers.
-            wants_encrypt = (
-                getattr(settings.processing, "encrypt_page_images", False)
-                if encrypt is None
-                else bool(encrypt)
-            )
-            needs_render = True
-            if existing is not None:
-                existing_is_enc = img_path.suffix == ".enc"
-                try:
-                    needs_render = (img_path.stat().st_mtime < pdf_mtime) or (
-                        existing_is_enc != wants_encrypt
+                results.append(
+                    _render_or_reuse_page(
+                        page=page,
+                        page_num=idx + 1,
+                        pdf_path=pdf_path,
+                        out_dir=out_dir,
+                        pdf_mtime=pdf_mtime,
+                        scale=scale,
+                        encrypt=encrypt,
                     )
-                except OSError:
-                    needs_render = True
-
-            if needs_render:
-                pix = cast(Any, page).get_pixmap(matrix=mat)
-                # Save as WebP or JPEG fallback
-                img_path, phash = _save_with_format(
-                    pix, out_dir / img_stem, encrypt=encrypt
                 )
-                # Ensure deterministic mtime ordering for downstream caches/tests:
-                # set the image mtime to at least the source PDF's mtime.
-                with contextlib.suppress(OSError):
-                    os.utime(img_path, (pdf_mtime, pdf_mtime))
-                results.append((page_num, img_path, page.rect, phash, page_text))
-            else:
-                # If not re-rendered, recompute phash on the fly for metadata.
-                # Handle encrypted images by decrypting to a temporary file.
-                ph = ""
-                try:
-                    from src.utils.images import open_image_encrypted
-
-                    with open_image_encrypted(str(img_path)) as im:
-                        ph = _phash(im) if im is not None else ""
-                except (OSError, ValueError, RuntimeError):
-                    ph = ""
-                results.append((page_num, img_path, page.rect, ph, page_text))
+            finally:
+                page.close()
 
     return results
 
 
-def pdf_pages_to_image_documents(
-    pdf_path: Path,
-    dpi: int = 200,
-    output_dir: Path | None = None,
-    document_id: str | None = None,
+def _render_or_reuse_page(
     *,
-    encrypt: bool | None = None,
-) -> tuple[list[ImageDocument], Path]:
-    """Render PDF pages to images and return ImageDocument nodes.
+    page: Any,
+    page_num: int,
+    pdf_path: Path,
+    out_dir: Path,
+    pdf_mtime: float,
+    scale: float,
+    encrypt: bool | None,
+) -> tuple[int, Path, PageRect, str, str]:
+    page_text = _extract_page_text(page)
+    rect = _page_rect(page)
+    render_pixels = int((rect.x1 - rect.x0) * scale) * int((rect.y1 - rect.y0) * scale)
+    if render_pixels > settings.parsing.max_render_pixels:
+        raise ValueError("PDF page exceeds configured render pixel limit")
+    img_stem = f"{pdf_path.stem}__page-{page_num}"
+    base = out_dir / img_stem
+    existing = next((p for p in _page_image_candidates(base) if p.exists()), None)
+    img_path = existing or base.with_suffix(".webp")
 
-    Args:
-        pdf_path: Path to the PDF file
-        dpi: Render resolution (dots per inch)
-        output_dir: Directory to save images. Created if ``None``.
-        document_id: Optional stable document identifier for metadata linkage.
-        encrypt: Whether to encrypt rendered outputs (defaults to settings).
-
-    Returns:
-        tuple[list[ImageDocument], Path]: Generated image documents and the
-        directory containing the rendered assets.
-    """
-    pdf_path = Path(pdf_path)
-    if output_dir:
-        out_dir = Path(output_dir)
-    else:
-        # Prefer a stable cache location under settings.cache_dir rather than a
-        # temp directory that could leak in logs/persistence.
-        out_dir = settings.cache_dir / "page_images" / pdf_path.stem
-    out_dir.mkdir(parents=True, exist_ok=True)
-    entries = _render_pdf_pages(pdf_path, out_dir, dpi, encrypt=encrypt)
-    docs: list[ImageDocument] = []
-    failed_pages: list[tuple[int, str]] = []
-    # Store rendered images as content-addressed artifacts and reference jailed
-    # artifact paths in ImageDocument nodes.
-    store = ArtifactStore.from_settings(settings)
-    doc_id = str(document_id or pdf_path.stem or "document")
-
-    for i, path, _rect, phash, page_text in entries:
-        step = "put_file"
-        ref = None
+    if _needs_render(img_path, existing=existing, pdf_mtime=pdf_mtime, encrypt=encrypt):
+        bitmap = page.render(scale=scale)
         try:
-            ref = store.put_file(path)
-            step = "resolve_path"
-            resolved_path = store.resolve_path(ref)
-        except (OSError, ValueError) as exc:
-            redaction = build_pii_log_entry(str(exc), key_id=f"pdf_pages:{step}")
-            logger.error(
-                "ArtifactStore.{} failed for PDF page image "
-                "(page={}, file={}, phash={}, ref_sha256={}, error_type={}, error={})",
-                step,
-                i,
-                path.name,
-                phash,
-                getattr(ref, "sha256", "") if ref is not None else "",
-                type(exc).__name__,
-                redaction.redacted,
+            img_path, phash = _save_with_format(
+                bitmap, out_dir / img_stem, encrypt=encrypt
             )
-            failed_pages.append((i, step))
-            continue
+        finally:
+            bitmap.close()
+        with contextlib.suppress(OSError):
+            os.utime(img_path, (pdf_mtime, pdf_mtime))
+        return page_num, img_path, rect, phash, page_text
 
-        meta: dict[str, Any] = {
-            "page": i,
-            "modality": "pdf_page_image",
-            # Avoid persisting raw filesystem paths in metadata.
-            "source": pdf_path.name,
-            "source_filename": pdf_path.name,
-            "phash": phash,
-            "page_text": page_text,
-        }
-        meta.update(
-            {
-                "doc_id": doc_id,
-                "document_id": doc_id,
-                "page_id": f"{doc_id}::page::{i}",
-            }
-        )
-        if path.suffix == ".enc":
-            meta.update(
-                {
-                    "encrypted": True,
-                    "kid": get_image_kid(),
-                }
-            )
-        meta.update(
-            {
-                "image_artifact_id": ref.sha256,
-                "image_artifact_suffix": ref.suffix,
-            }
-        )
-        docs.append(ImageDocument(image_path=str(resolved_path), metadata=meta))
+    return page_num, img_path, rect, _phash_existing(img_path), page_text
 
-    if failed_pages:
-        pages = [page for page, _step in failed_pages]
-        steps = sorted({step for _page, step in failed_pages})
-        logger.warning(
-            "Failed to store {} page(s) (pages={}, steps={})",
-            len(failed_pages),
-            pages,
-            steps,
+
+def _page_image_candidates(base: Path) -> list[Path]:
+    return [
+        base.with_suffix(".webp.enc"),
+        base.with_suffix(".webp"),
+        base.with_suffix(".jpg.enc"),
+        base.with_suffix(".jpg"),
+        base.with_suffix(".jpeg.enc"),
+        base.with_suffix(".jpeg"),
+    ]
+
+
+def _needs_render(
+    img_path: Path,
+    *,
+    existing: Path | None,
+    pdf_mtime: float,
+    encrypt: bool | None,
+) -> bool:
+    if existing is None:
+        return True
+    wants_encrypt = (
+        getattr(settings.processing, "encrypt_page_images", False)
+        if encrypt is None
+        else bool(encrypt)
+    )
+    try:
+        return (img_path.stat().st_mtime < pdf_mtime) or (
+            (img_path.suffix == ".enc") != wants_encrypt
         )
-    return docs, out_dir
+    except OSError:
+        return True
+
+
+def _phash_existing(img_path: Path) -> str:
+    try:
+        from src.utils.images import open_image_encrypted
+
+        with open_image_encrypted(str(img_path)) as im:
+            return _phash(im) if im is not None else ""
+    except (OSError, ValueError, RuntimeError):
+        return ""
+
+
+def _rendered_to_pil(rendered: Any) -> Image.Image:
+    """Convert a pypdfium2 bitmap or pixmap-like object to a PIL image."""
+    to_pil = getattr(rendered, "to_pil", None)
+    if callable(to_pil):
+        img = to_pil()
+        if isinstance(img, Image.Image):
+            return img
+    mode = "RGB" if int(getattr(rendered, "n", 3)) < 4 else "RGBA"
+    return Image.frombytes(
+        mode,
+        (int(rendered.width), int(rendered.height)),
+        rendered.samples,
+    )
+
+
+def _extract_page_text(page: Any) -> str:
+    text = ""
+    try:
+        textpage = page.get_textpage()
+        try:
+            text = str(textpage.get_text_range() or "").strip()
+        finally:
+            textpage.close()
+    except Exception:  # pragma: no cover - PDFium quirks
+        text = ""
+    if len(text) > _PAGE_TEXT_MAX_CHARS:
+        return text[:_PAGE_TEXT_MAX_CHARS]
+    return text
+
+
+def _page_rect(page: Any) -> PageRect:
+    try:
+        bbox = page.get_bbox()
+        return PageRect(
+            x0=float(bbox[0]),
+            y0=float(bbox[1]),
+            x1=float(bbox[2]),
+            y1=float(bbox[3]),
+        )
+    except (AttributeError, TypeError, ValueError, IndexError):
+        width, height = page.get_size()
+        return PageRect(x0=0.0, y0=0.0, x1=float(width), y1=float(height))
 
 
 def save_pdf_page_images(
@@ -345,4 +324,4 @@ def save_pdf_page_images(
     ]
 
 
-__all__ = ["pdf_pages_to_image_documents", "save_pdf_page_images"]
+__all__ = ["save_pdf_page_images"]

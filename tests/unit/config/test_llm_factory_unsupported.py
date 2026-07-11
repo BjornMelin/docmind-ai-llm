@@ -17,6 +17,7 @@ from src.config import llm_factory
 def test_build_llm_unsupported_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_settings = types.SimpleNamespace(
         llm_backend="unsupported",
+        effective_model="qwen",
         model=None,
         context_window=None,
         vllm=types.SimpleNamespace(context_window=1024, model="qwen"),

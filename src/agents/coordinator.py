@@ -341,9 +341,9 @@ class MultiAgentCoordinator:
 
     def __init__(
         self,
-        model_path: str = "Qwen/Qwen3-4B-Instruct-2507-FP8",
+        model_path: str | None = None,
         *,
-        max_context_length: int = settings.vllm.context_window,
+        max_context_length: int | None = None,
         backend: str = "vllm",
         enable_fallback: bool = True,
         max_agent_timeout: float = settings.agents.decision_timeout,
@@ -366,8 +366,12 @@ class MultiAgentCoordinator:
             store: LangGraph BaseStore for long-term memory access.
         """
         configure_observability(settings)
-        self.model_path = model_path
-        self.max_context_length = max_context_length
+        self.model_path = settings.effective_model if model_path is None else model_path
+        self.max_context_length = (
+            settings.effective_context_window
+            if max_context_length is None
+            else max_context_length
+        )
         self.backend = backend
         self.enable_fallback = enable_fallback
         self.max_agent_timeout = max_agent_timeout
@@ -383,13 +387,13 @@ class MultiAgentCoordinator:
         env_vars = settings.get_vllm_env_vars()
 
         self.vllm_config = {
-            "model": model_path,
-            "max_model_len": max_context_length,
+            "model": self.model_path,
+            "max_model_len": self.max_context_length,
             **env_vars,
         }
 
         # Context management with unified settings
-        self.context_window = settings.vllm.context_window
+        self.context_window = self.max_context_length
         self.max_tokens = settings.vllm.max_tokens
         self.context_manager = ContextManager(
             max_context_tokens=self.max_context_length
@@ -434,7 +438,7 @@ class MultiAgentCoordinator:
         )
         self._semantic_cache_executor_closed = False
 
-        logger.info("MultiAgentCoordinator initialized (model: {})", model_path)
+        logger.info("MultiAgentCoordinator initialized (model: {})", self.model_path)
 
     def close(self) -> None:
         """Releases system resources, including the memory consolidation executor."""
@@ -473,8 +477,9 @@ class MultiAgentCoordinator:
             # Use LLM from unified configuration (LlamaIndex Settings)
             from llama_index.core import Settings
 
-            if Settings.llm is not None:
-                self.llamaindex_llm = Settings.llm
+            configured_llm = getattr(Settings, "_llm", None)
+            if configured_llm is not None:
+                self.llamaindex_llm = configured_llm
                 if self.use_shared_llm_client:
                     retries = _shared_llm_retries()
                     # Prefer native retry configuration when supported (e.g.,
@@ -953,7 +958,7 @@ class MultiAgentCoordinator:
             )
             cfg_hash = config_hash_for_semcache(settings)
 
-            model_id = str(settings.model or settings.vllm.model or "") or "unknown"
+            model_id = settings.effective_model
             semantic_cache_key = build_cache_key(
                 query=str(query),
                 namespace=str(settings.semantic_cache.namespace),
@@ -2134,8 +2139,8 @@ class MultiAgentCoordinator:
 
 # Factory function for coordinator
 def create_multi_agent_coordinator(
-    model_path: str = "Qwen/Qwen3-4B-Instruct-2507-FP8",
-    max_context_length: int = settings.vllm.context_window,
+    model_path: str | None = None,
+    max_context_length: int | None = None,
     enable_fallback: bool = True,
     *,
     tool_registry: ToolRegistry | None = None,
@@ -2154,8 +2159,12 @@ def create_multi_agent_coordinator(
         A fully configured MultiAgentCoordinator instance.
     """
     return MultiAgentCoordinator(
-        model_path=model_path,
-        max_context_length=max_context_length,
+        model_path=settings.effective_model if model_path is None else model_path,
+        max_context_length=(
+            settings.effective_context_window
+            if max_context_length is None
+            else max_context_length
+        ),
         enable_fallback=enable_fallback,
         tool_registry=tool_registry,
         use_shared_llm_client=use_shared_llm_client,

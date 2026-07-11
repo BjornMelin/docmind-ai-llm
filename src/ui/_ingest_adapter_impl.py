@@ -5,20 +5,42 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import logging
+import os
+import tempfile
+from collections import defaultdict
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from uuid import NAMESPACE_URL, uuid5
 
+try:
+    from grpc import RpcError
+except ImportError:  # pragma: no cover - qdrant-client normally installs grpc
+    RpcError = RuntimeError  # type: ignore[assignment]
 from llama_index.core import StorageContext, VectorStoreIndex
+from pydantic import JsonValue
+from qdrant_client import models as qmodels
 
 from src.config import setup_llamaindex
 from src.config.integrations import get_settings_embed_model
 from src.config.settings import settings
-from src.models.processing import IngestionConfig, IngestionInput
-from src.processing.ingestion_pipeline import ingest_documents_sync
+from src.models.processing import (
+    CANONICAL_DOCUMENT_ID_KEY,
+    IngestionConfig,
+    IngestionInput,
+)
+from src.processing.ingestion_api import require_unique_document_ids
+from src.processing.ingestion_pipeline import (
+    embedding_allowed_for_ingestion,
+    ingest_documents_sync,
+)
 from src.telemetry.opentelemetry import configure_observability
-from src.utils.storage import create_vector_store
+from src.utils.hashing import document_id_from_sha256
+from src.utils.storage import (
+    QdrantCollectionIncompatibleError,
+    create_vector_store,
+)
 
 try:
     from llama_index.core import PropertyGraphIndex
@@ -75,20 +97,20 @@ def ingest_files(
     )
     for file_obj in files:
         stored_path, digest = save_uploaded_file(file_obj)
-        metadata = {
-            "source_filename": getattr(file_obj, "name", stored_path.name),
+        metadata: dict[str, JsonValue] = {
             "uploaded_at": datetime.now(UTC).isoformat(),
             "sha256": digest,
         }
         saved_inputs.append(
             IngestionInput(
-                document_id=f"doc-{digest[:16]}",
+                document_id=document_id_from_sha256(digest),
                 source_path=stored_path,
                 metadata=metadata,
                 encrypt_images=default_encrypt,
             )
         )
 
+    require_unique_document_ids(saved_inputs)
     return ingest_inputs(
         saved_inputs,
         enable_graphrag=enable_graphrag,
@@ -127,6 +149,7 @@ def ingest_inputs(
             "documents": [],
         }
 
+    require_unique_document_ids(inputs)
     setup_llamaindex(force_embed=False)
     embed_model_before = get_settings_embed_model()
 
@@ -152,8 +175,17 @@ def ingest_inputs(
                 "Embedding configured during ingestion; vector index will be built"
             )
 
+    embedding_usable = embedding_allowed_for_ingestion(embed_model_after)
+    if embed_model_after is not None and not embedding_usable:
+        _LOG.warning("Configured embedding is blocked by endpoint policy")
+    loaded_document_ids = _loaded_document_ids(result.documents)
     vector_index = (
-        _build_vector_index(result.nodes) if embed_model_after is not None else None
+        _build_vector_index(
+            result.nodes,
+            document_ids=loaded_document_ids,
+        )
+        if embedding_usable
+        else None
     )
     pg_index = _build_property_graph(result.documents) if enable_graphrag else None
 
@@ -180,6 +212,17 @@ def ingest_inputs(
     }
 
 
+def _loaded_document_ids(documents: Sequence[Any]) -> set[str]:
+    """Return canonical IDs for documents that completed the loading boundary."""
+    document_ids: set[str] = set()
+    for document in documents:
+        metadata = getattr(document, "metadata", None) or {}
+        document_id = metadata.get(CANONICAL_DOCUMENT_ID_KEY)
+        if isinstance(document_id, str) and document_id:
+            document_ids.add(document_id)
+    return document_ids
+
+
 def save_uploaded_file(file_obj: Any) -> tuple[Path, str]:
     """Persist an uploaded file into ``data/uploads`` and return its path and hash."""
     uploads_dir = settings.data_dir / "uploads"
@@ -187,19 +230,45 @@ def save_uploaded_file(file_obj: Any) -> tuple[Path, str]:
 
     original_name = getattr(file_obj, "name", "document")
     safe_name = Path(original_name).name or "document"
-    data = _read_bytes(file_obj)
-    digest = hashlib.sha256(data).hexdigest()
+    max_bytes = int(settings.processing.max_document_size_mb) * 1024 * 1024
+    digest = hashlib.sha256()
+    size = 0
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            prefix=".upload-",
+            dir=uploads_dir,
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            for chunk in _iter_upload_chunks(file_obj):
+                size += len(chunk)
+                if size > max_bytes:
+                    raise ValueError("Upload exceeds configured max_document_size_mb")
+                digest.update(chunk)
+                handle.write(chunk)
+        digest_hex = digest.hexdigest()
 
-    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    stem = Path(safe_name).stem or "document"
-    suffix = Path(safe_name).suffix
-    dest = uploads_dir / f"{stem}-{timestamp}-{digest[:8]}{suffix}"
-    counter = 1
-    while dest.exists():
-        dest = uploads_dir / f"{stem}-{timestamp}-{digest[:8]}-{counter}{suffix}"
-        counter += 1
-    dest.write_bytes(data)
-    return dest, digest
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        stem = Path(safe_name).stem or "document"
+        suffix = Path(safe_name).suffix
+        dest = uploads_dir / f"{stem}-{timestamp}-{digest_hex[:8]}{suffix}"
+        counter = 1
+        while dest.exists():
+            dest = uploads_dir / (
+                f"{stem}-{timestamp}-{digest_hex[:8]}-{counter}{suffix}"
+            )
+            counter += 1
+        os.replace(temp_path, dest)
+        temp_path = None
+        return dest, digest_hex
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        if hasattr(file_obj, "seek"):
+            with contextlib.suppress(Exception):
+                file_obj.seek(0)
 
 
 def _build_ingestion_config(encrypt_images: bool | None) -> IngestionConfig:
@@ -209,9 +278,8 @@ def _build_ingestion_config(encrypt_images: bool | None) -> IngestionConfig:
         if encrypt_images is not None
         else settings.processing.encrypt_page_images
     )
-    cache_dir = settings.cache_dir / "ingestion"
+    cache_dir = settings.cache.ingestion_db_path.parent
     cache_dir.mkdir(parents=True, exist_ok=True)
-    docstore_path = cache_dir / "docstore.json"
 
     observability = settings.observability
     enable_observability = bool(observability.enabled and observability.endpoint)
@@ -222,29 +290,39 @@ def _build_ingestion_config(encrypt_images: bool | None) -> IngestionConfig:
         enable_image_encryption=enable_encryption,
         cache_dir=cache_dir,
         cache_collection="docmind_ingestion",
-        docstore_path=docstore_path,
         enable_observability=enable_observability,
         observability_sample_rate=observability.sampling_ratio,
         span_exporter_endpoint=observability.endpoint if enable_observability else None,
     )
 
 
-def _build_vector_index(nodes: list[Any]) -> Any | None:
-    """Instantiate a vector index over the ingested nodes."""
-    if not nodes:
+def _build_vector_index(
+    nodes: list[Any],
+    *,
+    document_ids: set[str],
+) -> Any | None:
+    """Upsert ingested nodes and remove stale points for the same documents."""
+    if not document_ids:
         return None
+    if not nodes:
+        raise ValueError("Cannot replace document vectors with an empty node set")
+    store: Any | None = None
     try:
-        store = create_vector_store(
+        _assign_stable_node_ids(nodes)
+        vector_store = create_vector_store(
             settings.database.qdrant_collection,
             enable_hybrid=getattr(settings.retrieval, "enable_server_hybrid", True),
         )
-        storage_context = StorageContext.from_defaults(vector_store=store)
+        store = vector_store
+        previous_ids = _existing_text_point_ids(vector_store, document_ids)
+        storage_context = StorageContext.from_defaults(vector_store=vector_store)
         index = VectorStoreIndex(
             nodes,
             storage_context=storage_context,
             show_progress=False,
         )
-        return index
+    except QdrantCollectionIncompatibleError:
+        raise
     except (
         RuntimeError,
         ValueError,
@@ -254,9 +332,74 @@ def _build_vector_index(nodes: list[Any]) -> Any | None:
         OSError,
         FileNotFoundError,
         TypeError,
+        RpcError,
     ) as exc:  # pragma: no cover - defensive
         _LOG.warning("Vector index creation failed: %s", exc)
+        if store is not None:
+            with contextlib.suppress(Exception):
+                store.client.close()
         return None
+
+    current_ids = {node.node_id for node in nodes}
+    stale_ids = previous_ids.difference(current_ids)
+    if stale_ids:
+        try:
+            vector_store.delete_nodes(node_ids=sorted(stale_ids, key=str))
+        except Exception as exc:
+            with contextlib.suppress(Exception):
+                vector_store.client.close()
+            raise RuntimeError(
+                "Text vector upsert succeeded but stale-point deletion failed"
+            ) from exc
+    return index
+
+
+def _assign_stable_node_ids(nodes: list[Any]) -> None:
+    """Assign deterministic Qdrant-compatible IDs within each source page."""
+    positions: defaultdict[tuple[str, str], int] = defaultdict(int)
+    for node in nodes:
+        metadata = getattr(node, "metadata", None) or {}
+        document_id = metadata.get(CANONICAL_DOCUMENT_ID_KEY)
+        if not isinstance(document_id, str) or not document_id:
+            continue
+        page_id = str(metadata.get("page_id") or "")
+        position_key = (document_id, page_id)
+        position = positions[position_key]
+        positions[position_key] += 1
+        node.id_ = str(
+            uuid5(
+                NAMESPACE_URL,
+                f"docmind:{document_id}:{page_id}:{position}",
+            )
+        )
+
+
+def _existing_text_point_ids(store: Any, document_ids: set[str]) -> set[str]:
+    """Return existing Qdrant point IDs owned by the supplied documents."""
+    point_ids: set[str] = set()
+    for document_id in sorted(document_ids):
+        offset: Any | None = None
+        while True:
+            points, next_offset = store.client.scroll(
+                collection_name=store.collection_name,
+                scroll_filter=qmodels.Filter(
+                    must=[
+                        qmodels.FieldCondition(
+                            key=CANONICAL_DOCUMENT_ID_KEY,
+                            match=qmodels.MatchValue(value=document_id),
+                        )
+                    ]
+                ),
+                limit=256,
+                offset=offset,
+                with_payload=False,
+                with_vectors=False,
+            )
+            point_ids.update(str(point.id) for point in points)
+            if next_offset is None:
+                break
+            offset = next_offset
+    return point_ids
 
 
 def _build_property_graph(documents: list[Any]) -> Any | None:
@@ -275,19 +418,21 @@ def _build_property_graph(documents: list[Any]) -> Any | None:
         return None
 
 
-def _read_bytes(file_obj: Any) -> bytes:
-    """Return file contents as bytes without consuming the original stream."""
+def _iter_upload_chunks(file_obj: Any) -> Any:
+    """Yield upload bytes without materializing a second full copy."""
+    chunk_size = 1024 * 1024
     if hasattr(file_obj, "getbuffer"):
         buffer = file_obj.getbuffer()
-        data = bytes(buffer)
-    else:
-        data = file_obj.read()
-    if hasattr(file_obj, "seek"):
-        with contextlib.suppress(Exception):  # pragma: no cover - defensive
-            file_obj.seek(0)
-    if not isinstance(data, (bytes, bytearray)):
-        data = bytes(data)
-    return bytes(data)
+        for offset in range(0, len(buffer), chunk_size):
+            yield buffer[offset : offset + chunk_size]
+        return
+    while True:
+        chunk = file_obj.read(chunk_size)
+        if not chunk:
+            return
+        if not isinstance(chunk, bytes | bytearray | memoryview):
+            raise TypeError("Uploaded file stream must return bytes")
+        yield chunk
 
 
 def _build_nlp_preview(nodes: list[Any]) -> dict[str, Any] | None:

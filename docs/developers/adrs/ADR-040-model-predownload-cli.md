@@ -2,8 +2,8 @@
 ADR: 040
 Title: Model Pre-download CLI for Offline-First Operation
 Status: Accepted
-Version: 1.0
-Date: 2026-01-09
+Version: 1.1
+Date: 2026-07-11
 Supersedes:
 Superseded-by:
 Related: SPEC-013
@@ -48,7 +48,12 @@ This ADR documents an existing decision already reflected in SPEC-013 and implem
 
 ## Decision
 
-Implement a CLI `tools/models/pull.py` that can download a default set of model artifacts (embeddings, rerankers, sparse encoders) into a configured cache directory.
+Implement `tools/models/pull.py` with complete, pinned snapshot downloads for
+the canonical BGE-M3 dense embedding and SigLIP model, verified parser-model
+prefetch commands, and an explicit `--add` escape hatch for individual files.
+Do not advertise isolated weight files as runnable reranker or sparse-encoder
+models; those optional stages fail open when their complete local artifacts are
+absent.
 
 The repository MUST document offline flags:
 

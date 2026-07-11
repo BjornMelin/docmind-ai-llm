@@ -125,7 +125,11 @@ def test_handle_ingest_submission_no_files(monkeypatch, streamlit_calls) -> None
 
     page = importlib.import_module("src.pages.02_documents")
     page._handle_ingest_submission(  # type: ignore[attr-defined]
-        None, use_graphrag=False, encrypt_images=False, owner_id="owner"
+        None,
+        use_graphrag=False,
+        encrypt_images=False,
+        parsing_overrides=page.ParsingOverrides(),
+        owner_id="owner",
     )
     assert streamlit_calls["warnings"] == ["No files selected."]
 
@@ -142,11 +146,40 @@ def test_render_ingest_form_smoke(monkeypatch) -> None:
     monkeypatch.setattr(st, "checkbox", lambda *_a, **_k: True, raising=False)
     monkeypatch.setattr(st, "form_submit_button", lambda *_a, **_k: True, raising=False)
 
-    out_files, use_graphrag, encrypt_images, submitted = page._render_ingest_form()  # type: ignore[attr-defined]
+    out_files, use_graphrag, encrypt_images, parsing_overrides, submitted = (
+        page._render_ingest_form()  # type: ignore[attr-defined]
+    )
     assert out_files == files
     assert use_graphrag is True
     assert encrypt_images is True
+    assert isinstance(parsing_overrides, page.ParsingOverrides)
     assert submitted is True
+
+
+def test_render_parsing_overrides_disables_controls_for_global_defaults(
+    monkeypatch,
+) -> None:
+    import importlib
+
+    import streamlit as st  # type: ignore
+
+    page = importlib.import_module("src.pages.02_documents")
+    calls: list[tuple[str, bool | None]] = []
+
+    def _checkbox(label: str, **kwargs: object) -> bool:
+        calls.append((label, kwargs.get("disabled")))  # type: ignore[arg-type]
+        return label == "Use global parsing defaults"
+
+    monkeypatch.setattr(st, "checkbox", _checkbox, raising=False)
+
+    result = page._render_parsing_overrides()  # type: ignore[attr-defined]
+
+    assert result == page.ParsingOverrides()
+    assert calls == [
+        ("Use global parsing defaults", None),
+        ("Force RapidOCR", True),
+        ("Export searchable PDF", True),
+    ]
 
 
 def test_handle_ingest_submission_starts_job(monkeypatch) -> None:
@@ -174,16 +207,61 @@ def test_handle_ingest_submission_starts_job(monkeypatch) -> None:
     )
     monkeypatch.setattr(page, "_get_spacy_service", lambda *_a, **_k: None)
 
+    upload = SimpleNamespace(
+        name="doc.txt",
+        size=3,
+        getbuffer=lambda: memoryview(b"doc"),
+    )
     page._handle_ingest_submission(  # type: ignore[attr-defined]
-        [type("F", (), {"name": "doc.txt"})()],
+        [upload],
         use_graphrag=False,
         encrypt_images=False,
+        parsing_overrides={"force_ocr": True},
         owner_id="owner",
     )
 
     assert st.session_state.get("ingest_job_id") == "job-1"
     assert calls.get("owner_id") == "owner"
     assert callable(calls.get("fn"))
+
+
+def test_handle_ingest_submission_rejects_duplicate_ids_before_persistence(
+    monkeypatch,
+    streamlit_calls,
+) -> None:
+    import importlib
+
+    page = importlib.import_module("src.pages.02_documents")
+    payload = b"same document"
+    uploads = [
+        SimpleNamespace(
+            name=name,
+            size=len(payload),
+            getbuffer=lambda payload=payload: memoryview(payload),
+        )
+        for name in ("first.txt", "second.txt")
+    ]
+
+    monkeypatch.setattr(
+        page,
+        "save_uploaded_file",
+        lambda _file: pytest.fail("upload persisted before duplicate preflight"),
+    )
+    monkeypatch.setattr(
+        page,
+        "_load_optional_spacy_service",
+        lambda: pytest.fail("setup ran before duplicate preflight"),
+    )
+
+    page._handle_ingest_submission(  # type: ignore[attr-defined]
+        uploads,
+        use_graphrag=False,
+        encrypt_images=False,
+        parsing_overrides=page.ParsingOverrides(),
+        owner_id="owner",
+    )
+
+    assert streamlit_calls["errors"] == ["Failed to start ingestion job (ValueError)."]
 
 
 def test_render_ingest_results_sets_session_state(monkeypatch, tmp_path: Path) -> None:
@@ -352,7 +430,25 @@ def test_sha256_for_file_and_doc_id_for_upload(monkeypatch, tmp_path: Path) -> N
     monkeypatch.setattr(page, "_sha256_for_file", page._sha256_for_file.__wrapped__)  # type: ignore[attr-defined]
     doc_id = page._doc_id_for_upload(p)  # type: ignore[attr-defined]
     assert doc_id.startswith("doc-")
-    assert len(doc_id) == 4 + 16
+    assert len(doc_id) == 4 + 64
+
+
+def test_sha256_cache_invalidates_on_file_stat_change(tmp_path: Path) -> None:
+    import importlib
+
+    page = importlib.import_module("src.pages.02_documents")
+    path = tmp_path / "mutable.txt"
+    try:
+        page._sha256_for_file.clear()  # type: ignore[attr-defined]
+        path.write_text("a", encoding="utf-8")
+        first = page._doc_id_for_upload(path)  # type: ignore[attr-defined]
+
+        path.write_text("different content", encoding="utf-8")
+        second = page._doc_id_for_upload(path)  # type: ignore[attr-defined]
+
+        assert first != second
+    finally:
+        page._sha256_for_file.clear()  # type: ignore[attr-defined]
 
 
 def test_handle_delete_upload_refuses_outside_uploads(
@@ -391,6 +487,7 @@ def test_handle_delete_upload_deletes_and_reports(
     # Stub qdrant_client module to avoid network.
     qdrant = ModuleType("qdrant_client")
     qmodels = ModuleType("qdrant_client.models")
+    filter_keys: list[str] = []
 
     class _Client:
         def __init__(self, **_kwargs):  # type: ignore[no-untyped-def]
@@ -411,8 +508,8 @@ def test_handle_delete_upload_deletes_and_reports(
             return None
 
     class _FieldCondition:
-        def __init__(self, **_kwargs):  # type: ignore[no-untyped-def]
-            return None
+        def __init__(self, **kwargs):  # type: ignore[no-untyped-def]
+            filter_keys.append(str(kwargs["key"]))
 
     class _MatchValue:
         def __init__(self, **_kwargs):  # type: ignore[no-untyped-def]
@@ -447,6 +544,7 @@ def test_handle_delete_upload_deletes_and_reports(
     assert streamlit_calls["success"]
     assert "image_points=2" in streamlit_calls["success"][-1]
     assert "text_points≈4" in streamlit_calls["success"][-1]
+    assert page.CANONICAL_DOCUMENT_ID_KEY in filter_keys
 
 
 def test_render_latest_snapshot_summary(
@@ -674,6 +772,7 @@ def test_handle_reindex_page_images_smoke(
     import importlib
 
     from src.config.settings import settings
+    from src.models.processing import IngestionInput
 
     page = importlib.import_module("src.pages.02_documents")
     monkeypatch.setattr(settings, "data_dir", tmp_path, raising=False)
@@ -684,28 +783,23 @@ def test_handle_reindex_page_images_smoke(
     pdf = uploads / "a.pdf"
     pdf.write_bytes(b"%PDF-1.4\n%fake\n")
 
-    models_processing = ModuleType("src.models.processing")
-
-    class _Cfg:
-        def __init__(self, **kwargs):  # type: ignore[no-untyped-def]
-            self.kwargs = kwargs
-
-    class _Input(SimpleNamespace):
-        pass
-
-    models_processing.IngestionConfig = _Cfg  # type: ignore[attr-defined]
-    models_processing.IngestionInput = _Input  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "src.models.processing", models_processing)
-
+    captured_inputs: list[IngestionInput] = []
     ingestion_pipeline = ModuleType("src.processing.ingestion_pipeline")
-    ingestion_pipeline.reindex_page_images_sync = lambda _cfg, _inputs: {  # type: ignore[attr-defined]
-        "metadata": {"image_index.indexed": 1, "image_index.skipped": 0}
-    }
+
+    def _reindex(_cfg: object, inputs: list[IngestionInput]) -> dict[str, object]:
+        captured_inputs.extend(inputs)
+        return {"metadata": {"image_index.indexed": 1, "image_index.skipped": 0}}
+
+    ingestion_pipeline.reindex_page_images_sync = _reindex  # type: ignore[attr-defined]
     monkeypatch.setitem(
         sys.modules, "src.processing.ingestion_pipeline", ingestion_pipeline
     )
 
     page._handle_reindex_page_images(uploads_dir=uploads, limit=1, encrypt=False)  # type: ignore[attr-defined]
+    assert len(captured_inputs) == 1
+    assert isinstance(captured_inputs[0], IngestionInput)
+    assert captured_inputs[0].source_path == pdf
+    assert captured_inputs[0].metadata == {}
     assert any("Reindexed" in s for s in streamlit_calls["success"])
 
 

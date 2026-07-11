@@ -134,8 +134,11 @@ Canonical event keys used by requirements/tests:
 
 - Retrieval + fusion:
   - `retrieval.fusion_mode`, `retrieval.prefetch_dense_limit`, `retrieval.prefetch_sparse_limit`, `retrieval.fused_limit`, `retrieval.return_count`, `retrieval.latency_ms`
-- Dedup:
-  - `dedup.before`, `dedup.after`, `dedup.dropped`, `dedup.key`
+  - `retrieval.rrf_k` when `retrieval.fusion_mode` is `rrf`; omit it for DBSF
+- Server hybrid dedup:
+  - `dedup.key`, `dedup.group_size`, `dedup.server_group_count`, `dedup.server_side`
+- Multimodal client dedup:
+  - `dedup.key`, `dedup.before`, `dedup.after`, `dedup.dropped`
 - Rerank:
   - `rerank.stage`, `rerank.topk`, `rerank.latency_ms`, `rerank.timeout` (+ optional `rerank.batch_size`, `rerank.processed_count`, `rerank.processed_batches`)
 - Routing event:

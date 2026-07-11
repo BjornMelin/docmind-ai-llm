@@ -9,7 +9,9 @@
 
 - `langgraph-checkpoint-sqlite>=3.0.3,<4.0.0` (versions `<3.0.3` have known CVEs affecting checkpoint integrity)
 - `sqlite-vec` (runtime dependency used by LangGraph checkpointing; required for vector-backed SQLite)
-- Optional multimodal deps (fail-open): `transformers` + `torch` (SigLIP model execution/embeddings; multimodal search is disabled if unavailable)
+- Core multimodal dependencies: `transformers` + `torch` for the canonical SigLIP path. ColPali remains optional through the `multimodal` extra.
+- PDF page-image rendering uses pypdfium2 in the default path. PyMuPDF is not
+  part of the default runtime dependency set.
 
 Verification (upstream snapshot reference): `opensrc/langgraph-checkpoint-sqlite@3.0.3/`.
 
@@ -45,6 +47,10 @@ We implement a **local-first, thin-payload, end-to-end multimodal pipeline** wit
 #### Ingestion → Image indexing (SigLIP)
 
 - During ingestion, rendered PDF page images are converted to `ArtifactRef`s.
+- Parser provenance (fixed Docling framework, fixed CPU-safe profile, fixed RapidOCR engine,
+  package versions, page routing, and model-integrity readiness) is included in
+  ingestion result metadata and snapshot config hashing, with no raw paths,
+  document bytes, or base64 payloads.
 - Images are indexed into a dedicated Qdrant collection (`settings.database.qdrant_image_collection`) using SigLIP text/image embeddings.
 - Qdrant payload is **thin** (ids + artifact refs + page metadata) and explicitly excludes base64 and raw paths.
 
@@ -97,7 +103,7 @@ Weighted decision criteria:
 - **Performance:** RRF (rank-based reciprocal rank fusion) fusion adds latency compared to single-retrieval approaches. Future optimization: implement late-interaction fusion at the Qdrant level for reduced app-side processing.
 - **Storage:** Duplicate artifacts (original images + thumbnails) increase storage requirements. Mitigation: aggressive artifact pruning policies and optional S3 offload.
 - **Complexity:** Content-addressed artifact storage adds cognitive overhead for developers working with images/artifacts. Mitigation: stable `ArtifactRef` API hides complexity; comprehensive examples in docs.
-- **Migration:** Existing deployments with pre-ArtifactRef data require explicit migration path. Approach: implement `migrate_legacy_artifact_paths()` in snapshot upgrade procedures.
+- **Compatibility:** Existing pre-ArtifactRef snapshots are outside this forward-only contract and require an explicit operator decision.
 
 ### Future Extensions (not required for baseline correctness)
 
@@ -124,7 +130,7 @@ Key files:
 
 ### Verification Tiers
 
-#### Fast tier (local, <60s)
+#### Fast tier
 
 ```bash
 uv run ruff format .
@@ -135,7 +141,7 @@ uv run python scripts/run_tests.py --fast
 
 **Success criteria:** All checks pass, unit tests complete without errors.
 
-#### Integration tier (local or CI, ~5min)
+#### Integration tier
 
 ```bash
 uv run python scripts/run_tests.py --integration
@@ -144,7 +150,7 @@ uv run python scripts/run_tests.py --integration
 **Validates:**
 
 - `tests/integration/test_ingestion_pipeline_pdf_images.py` — PDF image rendering, artifact creation, SigLIP indexing
-- `tests/integration/test_unified_embeddings_in_retrieval_integration.py` — retrieval wiring for unified embeddings
+- `tests/unit/retrieval/embeddings/test_embeddings_refactored.py` and `tests/unit/utils/siglip_adapter/` — canonical dense and visual embedding wiring
 - `tests/integration/ui/test_chat_persistence_time_travel.py` — LangGraph SqliteSaver, session persistence
 - Memory store coverage is in unit tests (`tests/unit/persistence/test_memory_store_*`)
 

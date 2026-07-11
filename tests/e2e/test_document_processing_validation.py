@@ -1,12 +1,12 @@
 """Document processing workflow validation tests.
 
 This module provides focused tests for the document processing pipeline,
-validating that the core document processing functionality works correctly
-with the unified architecture post-ADR-009.
+    validating that the core document processing functionality works correctly
+    with the CPU-safe parser architecture.
 
 These tests focus on:
 - Document loading and processing functionality
-- Integration with unstructured document processing
+- Integration with the canonical parser service
 - Validation of document metadata and structure
 - Core document processing workflow integrity
 
@@ -46,7 +46,6 @@ def setup_document_processing_dependencies(monkeypatch):
 
     # Mock heavy external dependencies
     heavy_dependencies = [
-        "unstructured",
         "nltk",
         "transformers",
         "sentence_transformers",
@@ -108,7 +107,7 @@ async def test_document_loading_functionality():
                     "source": "test_document.pdf",
                     "page": 1,
                     "chunk_id": "chunk_001",
-                    "processing_type": "unstructured",
+                    "processing_type": "docling",
                 },
             ),
             Document(
@@ -120,7 +119,7 @@ async def test_document_loading_functionality():
                     "source": "test_document.pdf",
                     "page": 1,
                     "chunk_id": "chunk_002",
-                    "processing_type": "unstructured",
+                    "processing_type": "docling",
                 },
             ),
         ]
@@ -221,7 +220,7 @@ def test_configuration_system_integration():
             assert hasattr(settings, "log_level")
             assert hasattr(settings, "enable_gpu_acceleration")
             assert hasattr(settings, "data_dir")
-            assert hasattr(settings, "cache_dir")
+            assert hasattr(settings.cache, "dir")
             assert hasattr(settings.vllm, "model")
             assert hasattr(settings.vllm, "context_window")
 

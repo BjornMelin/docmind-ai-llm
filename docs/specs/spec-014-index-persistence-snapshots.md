@@ -80,7 +80,7 @@ storage/
 
 - Write all artifacts under `storage/_tmp-<uuid>` and `fsync` + atomic rename to `storage/<timestamp>`.
 - Acquire a single-writer lock via `storage/.lock` using `portalocker.Lock` (cross-platform). Persist sidecar metadata `{owner_id, created_at, last_heartbeat, ttl_seconds, takeover_count, schema_version}` and refresh heartbeats during long-running work. When the heartbeat exceeds `ttl_seconds + grace_seconds`, contenders SHALL rotate stale lock/meta files to `.stale-*` suffixes before acquiring the lock. If `portalocker` is unavailable, fall back to an `os.O_EXCL` sentinel with identical metadata semantics.
-- Update `CURRENT.tmp` → `CURRENT` via atomic rename. Readers MUST resolve the pointer first and only fall back to lexicographic ordering when `CURRENT` is missing.
+- Update `CURRENT.tmp` → `CURRENT` via atomic rename. Readers MUST resolve the pointer first and only fall back to lexicographic ordering when `CURRENT` is missing, malformed, or targets a manifest whose `complete` field is not exactly `true`.
 - On promotion failure, append a structured record to `errors.jsonl` (stage, snapshot_id, error_code, error message) to aid diagnostics.
 
 ## UI Integration
@@ -142,10 +142,11 @@ Promotion & CURRENT Pointer Discipline
 - `_tmp-` workspaces and final snapshot directories MUST reside on the same filesystem (validated via `stat().st_dev`) to preserve `os.replace` atomicity.
 - Promotion sequence:
   1. Write manifest artifacts with `complete=false` and `fsync` each file.
-  2. `os.replace` `_tmp-<uuid>` with `<timestamp>`; `fsync` the parent directory.
-  3. Write `CURRENT.tmp` containing the promoted directory name; `fsync` file then parent.
-  4. `os.replace` `CURRENT.tmp` -> `CURRENT`.
-- Readers MUST resolve `CURRENT` and only fall back to lexicographic snapshot lookup when the pointer is absent or corrupted.
+  2. `fsync` the workspace and `os.replace` `_tmp-<uuid>` with `<timestamp>`.
+  3. Atomically set `complete=true`, refresh the manifest checksum, and `fsync` the finalized directory and its parent.
+  4. Write and `fsync` `CURRENT.tmp`, then `os.replace` it with `CURRENT` and `fsync` the replaced file.
+  5. `fsync` the parent directory.
+- Readers MUST resolve `CURRENT` and only fall back to lexicographic snapshot lookup when the pointer is absent, malformed, or targets a manifest whose `complete` field is not exactly `true`.
 
 Retention & Cleanup
 

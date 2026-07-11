@@ -148,14 +148,11 @@ def _progress(
 def _build_doc_filters(doc_ids: list[str]) -> Any | None:
     if not doc_ids:
         return None
-    try:
-        from llama_index.core.vector_stores import (
-            FilterCondition,
-            MetadataFilter,
-            MetadataFilters,
-        )
-    except Exception:  # pragma: no cover - optional llama-index
-        return None
+    from llama_index.core.vector_stores import (
+        FilterCondition,
+        MetadataFilter,
+        MetadataFilters,
+    )
 
     filters: list[Any] = []
     for doc_id in doc_ids:
@@ -220,10 +217,6 @@ def _run_combined_mode(
 ) -> AnalysisResult:
     _check_cancel(cancel_event)
     filters = _build_doc_filters(doc_ids)
-    if doc_ids and filters is None:
-        warnings.append(
-            "filters_unavailable: running combined analysis without doc filters"
-        )
     answer, _citations = _query_vector_index(
         vector_index=vector_index,
         query=query,

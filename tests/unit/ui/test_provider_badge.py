@@ -68,3 +68,4 @@ def test_provider_badge_uses_config_values(monkeypatch: pytest.MonkeyPatch) -> N
         isinstance(entry, tuple) and entry[0] == f"Provider: {settings.llm_backend}"
         for entry in calls["badge"]
     )
+    assert f"Model: {settings.effective_model}" in calls["caption"]

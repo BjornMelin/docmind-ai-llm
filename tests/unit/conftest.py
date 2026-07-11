@@ -1,7 +1,6 @@
 """Unit test fixtures for document processing and utilities.
 
 Provides specialized fixtures for unit-level testing with focus on:
-- Document processing mock factories
 - Image processing utilities
 - File format testing helpers
 - Lightweight mock objects for fast unit tests
@@ -57,64 +56,6 @@ def sample_images_data(sample_image_base64: str) -> list[dict[str, Any]]:
             "image_path": "test_image.png",
         }
     ]
-
-
-@pytest.fixture
-def mock_fitz_document(mocker) -> Mock:
-    """Create a mock fitz.Document with proper spec.
-
-    Returns:
-        Mock: Mock PyMuPDF Document with proper interface.
-    """
-    try:
-        import fitz
-
-        return mocker.Mock(spec=fitz.Document)
-    except ImportError:
-        # Fallback for when PyMuPDF is not available
-        return mocker.Mock()
-
-
-@pytest.fixture
-def mock_fitz_page(mocker) -> Mock:
-    """Create a mock fitz.Page with proper spec.
-
-    Returns:
-        Mock: Mock PyMuPDF Page with proper interface.
-    """
-    try:
-        import fitz
-
-        return mocker.Mock(spec=fitz.Page)
-    except ImportError:
-        # Fallback for when PyMuPDF is not available
-        return mocker.Mock()
-
-
-@pytest.fixture
-def mock_fitz_pixmap(mocker) -> Mock:
-    """Create a mock fitz.Pixmap with proper spec.
-
-    Returns:
-        Mock: Mock PyMuPDF Pixmap with proper interface.
-    """
-    try:
-        import fitz
-
-        return mocker.Mock(spec=fitz.Pixmap)
-    except ImportError:
-        # Fallback for when PyMuPDF is not available
-        return mocker.Mock()
-
-
-@pytest.fixture
-def mock_unstructured_partition(mocker) -> Mock:
-    """Create a mock for unstructured partition function.
-
-    Returns:
-        Mock: Mock unstructured partition function for document processing.
-    """
-    return mocker.Mock()
 
 
 @pytest.fixture

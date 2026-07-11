@@ -5,7 +5,10 @@ This page outlines CI/CD practices for DocMind AI.
 ## Targets
 
 - Python 3.12.13 (project constraint: `>=3.12,<3.14`)
-- Offline‑deterministic unit/integration tests (no network)
+- Lean CPython 3.13.12 compatibility lane: base install, full unit suite, and
+  focused GraphRAG tests
+- Offline-configured deterministic unit/integration tests; zero egress is a
+  separate measurement, not inferred from test flags
 - Lint and format: Ruff (format + check); Ruff enforces pylint-equivalent rules via `PL*` selectors in `pyproject.toml`
 
 ## Suggested Steps
@@ -46,7 +49,7 @@ Notes:
   (`apptest_timeout_sec()`); avoid per-test ad-hoc values.
 - The suite pre-warms AppTest once in `tests/integration/conftest.py`.
 - UI tests stub the provider badge health check in `tests/integration/ui/conftest.py`
-  to avoid optional GraphRAG adapter discovery during UI renders.
+  to avoid importing LlamaIndex Property Graph APIs during UI renders.
 
 1) Coverage (scoped to changed subsystems)
 

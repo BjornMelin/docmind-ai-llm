@@ -1,22 +1,23 @@
 """Template loader utilities.
 
-Scans the templates/ directory for prompt files, parses YAML front matter,
+Scans package resources for prompt files, parses YAML front matter,
 and returns typed template specifications. Validation is minimal by design
 (SPEC-020: KISS/DRY/YAGNI).
 """
 
 from __future__ import annotations
 
-from pathlib import Path
+from importlib.resources import files
+from importlib.resources.abc import Traversable
 from typing import Any
 
 import yaml
 
 from .models import TemplateMeta, TemplateSpec
 
-_ROOT = Path(__file__).resolve().parents[2]
-_TPL_DIR = _ROOT / "templates" / "prompts"
-_PRESETS_DIR = _ROOT / "templates" / "presets"
+_RESOURCE_ROOT = files("src.prompting").joinpath("templates")
+_TPL_DIR: Traversable = _RESOURCE_ROOT.joinpath("prompts")
+_PRESETS_DIR: Traversable = _RESOURCE_ROOT.joinpath("presets")
 
 # Template body length threshold for auto-generating description
 _MIN_BODY_LENGTH_FOR_DESCRIPTION = 40
@@ -49,14 +50,25 @@ def load_templates() -> list[TemplateSpec]:
         List of TemplateSpec objects for each `*.prompt.md` under templates/.
     """
     specs: list[TemplateSpec] = []
-    if not _TPL_DIR.exists():
+    if not _TPL_DIR.is_dir():
         return specs
-    for path in sorted(_TPL_DIR.glob("*.prompt.md")):
+    paths = sorted(
+        (
+            path
+            for path in _TPL_DIR.iterdir()
+            if path.is_file() and path.name.endswith(".prompt.md")
+        ),
+        key=lambda path: path.name,
+    )
+    for path in paths:
         text = path.read_text(encoding="utf-8")
         fm, body = _split_front_matter(text)
         meta = TemplateMeta(
-            id=str(fm.get("id") or path.stem),
-            name=str(fm.get("name") or path.stem.replace("-", " ").title()),
+            id=str(fm.get("id") or path.name.removesuffix(".prompt.md")),
+            name=str(
+                fm.get("name")
+                or path.name.removesuffix(".prompt.md").replace("-", " ").title()
+            ),
             description=str(fm.get("description") or ""),
             tags=list(fm.get("tags") or []),
             required=list(fm.get("required") or []),
@@ -82,7 +94,7 @@ def load_preset(kind: str) -> dict[str, Any]:
     Returns:
         Dictionary of preset entries.
     """
-    path = _PRESETS_DIR / f"{kind}.yaml"
-    if not path.exists():
+    path = _PRESETS_DIR.joinpath(f"{kind}.yaml")
+    if not path.is_file():
         return {}
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}

@@ -81,15 +81,17 @@ def test_build_versions_falls_back_to_unknown_embed_model(
     li_core = ModuleType("llama_index.core")
     li_core.Settings = SimpleNamespace(embed_model=None)  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "llama_index.core", li_core)
+    monkeypatch.setattr(svc, "get_version", lambda: "x")
+    monkeypatch.setattr(svc.metadata, "version", lambda _dist: "0.14.21")
 
     settings_obj = SimpleNamespace(
-        app_version="x",
         data_dir=tmp_path,
         database=SimpleNamespace(client_version="1", vector_store_type="qdrant"),
     )
     vector_index = object()
     versions = svc._build_versions(settings_obj, vector_index, embed_model=None)
     assert versions["app"] == "x"
+    assert versions["llama_index"] == "0.14.21"
     assert versions["embed_model"] == "unknown"
     assert versions["vector_client"] == "1"
 

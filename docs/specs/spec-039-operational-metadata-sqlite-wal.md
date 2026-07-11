@@ -6,13 +6,17 @@ date: 2026-01-09
 owners: ["ai-arch"]
 status: Draft
 related_requirements:
-  - FR-015: Persist operational metadata via SQLite WAL.
   - FR-025: Background jobs record progress/cancellation safely.
   - NFR-REL-001: Recovery after restart without corruption.
   - NFR-SEC-001: Offline-first; local-only by default.
 related_adrs: ["ADR-055", "ADR-052", "ADR-031", "ADR-033", "ADR-032", "ADR-024"]
-notes: "ADR-055 and ADR-052 are currently 'Proposed' status (verified 2026-01-17); update references when they advance to 'Accepted'."
+notes: "Future design, deferred from the v1 release; ADR-055 remains Proposed."
 ---
+
+This draft is future design material. It is not implemented and is not part of
+the v1 release contract. The current background-job coordinator is
+process-local; durable chat, snapshot, and ingestion-cache state use their
+existing stores.
 
 ## Goals
 
@@ -164,6 +168,6 @@ All tests must run offline and deterministic.
 
 ## RTM Updates
 
-Update `docs/specs/traceability.md`:
-
-- Add/expand `FR-015` mapping to `src/persistence/ops_db.py` + tests above once implemented.
+If this proposal is accepted, add a distinct requirement and RTM row mapping
+`src/persistence/ops_db.py` and its tests. Do not repurpose FR-015, which owns
+the existing persistent ingestion-cache contract.

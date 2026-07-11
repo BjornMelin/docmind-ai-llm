@@ -2,8 +2,8 @@
 ADR: 019
 Title: Optional GraphRAG Module
 Status: Accepted (Amended)
-Version: 3.4
-Date: 2025-09-09
+Version: 3.7
+Date: 2026-07-11
 Supersedes:
 Superseded-by:
 Related: 001, 003, 009, 031, 038
@@ -45,6 +45,10 @@ Vector‑only RAG struggles with multi‑hop and relationship queries. PropertyG
 ## Decision
 
 Provide a feature‑flagged PropertyGraphIndex path using in‑memory store and Qdrant vectors. Keep code minimal and library‑first. Use only documented LlamaIndex APIs (e.g., `PropertyGraphIndex.from_documents`, `as_retriever`, `as_query_engine`, `SimplePropertyGraphStore.get` / `get_rel_map`) and avoid mutating index instances.
+
+LlamaIndex core is the sole graph implementation. Construct its retriever and
+query engine directly; do not retain a backend registry, one-implementation
+factory protocol, exporter abstraction, or no-op telemetry hooks.
 
 Amendment: Align with ADR‑038 by composing GraphRAG through a RouterQueryEngine toolset (vector + graph), and persisting via SnapshotManager with atomic snapshot directories and a manifest for staleness detection. Exports use `get_rel_map` to JSONL baseline and Parquet optionally (pyarrow).
 
@@ -88,7 +92,7 @@ graph TD
 - Graph construction: `PropertyGraphIndex.from_documents(nodes/docs, property_graph_store=SimplePropertyGraphStore(), kg_extractors=[...])`.
 - Retrieval: `index.as_retriever(include_text=False, path_depth=...)` and `index.as_query_engine(...)` for NL queries.
 - Exports: Build edges from `property_graph_store.get_rel_map(seeds, depth=...)` and persist to JSONL (1 record per line) and Parquet (if PyArrow available). A `save_networkx_graph` HTML may be produced for inspection.
-- No index mutation: expose helpers via a small wrapper or pure functions; keep any legacy attachment solely for tests.
+- No index mutation: expose helpers as pure functions over LlamaIndex objects.
 
 ### Configuration
 
@@ -136,10 +140,13 @@ def test_graph_build_smoke():
 
 ### Dependencies
 
-- Python: `llama-index`
+- Python: `llama-index-core>=0.14.21,<0.15.0`; `PropertyGraphIndex` and `SimplePropertyGraphStore` are core-owned
 
 ## Changelog
 
+- 3.7 (2026-07-11): Hard-cut the unused graph adapter registry and protocols; construct LlamaIndex GraphRAG directly and retain the real OpenTelemetry path.
+- 3.6 (2026-07-11): Remove the unused Kuzu adapter and graph extra; use LlamaIndex core's property graph store as the single implementation.
+- 3.5 (2026-07-10): Replace the removed LlamaIndex meta-package with the direct core and optional graph-store dependencies.
 - 3.4 (2025-09-16): Documented snapshot manifest integration and OpenTelemetry instrumentation requirements
 - 3.3 (2025-09-09): Amended by ADR‑038 — router composition (vector+graph), SnapshotManager persistence, staleness badge, exports clarified
 - 3.2 (2025-09-08): Library-first API policy; no index mutation; exports via get_rel_map JSONL/Parquet; updated tests

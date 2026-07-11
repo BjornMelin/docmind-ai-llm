@@ -1,9 +1,9 @@
 ---
 ADR: 034
 Title: Idempotent Indexing & Embedding Reuse
-Status: Proposed (Amended)
-Version: 1.1
-Date: 2025-09-09
+Status: Implemented
+Version: 1.2
+Date: 2026-07-11
 Supersedes:
 Superseded-by:
 Related: 002, 009, 030, 031, 038
@@ -16,7 +16,9 @@ References:
 
 ## Description
 
-Avoid re-embedding and re-indexing unchanged content by using stable content hashing, deterministic node IDs, and Qdrant upserts keyed by stable IDs. No separate "embedding cache" is introduced; this policy complements ADR‑030’s processing cache.
+Avoid duplicate or stale Qdrant points with LlamaIndex transformation caching,
+deterministic point IDs, a DocMind-owned canonical document key, and scoped
+post-upsert deletion. No separate embedding cache is introduced.
 
 ## Context
 
@@ -30,50 +32,67 @@ Re-indexing unchanged content wastes compute and I/O. Prior ADRs unified process
 
 ## Alternatives
 
-- A: Dedicated embedding cache — Pros: explicit; Cons: duplicates ADR‑030; added complexity
-- B: Ad-hoc skip logic — Pros: easy start; Cons: inconsistent, error-prone
-- C: Stable hash + upsert (Selected) — Pros: simple, robust, library-first
+- A: Deterministic IDs plus document-scoped stale deletion (selected)
+- B: LlamaIndex `UPSERTS_AND_DELETE` across the persistent docstore
+- C: Random IDs plus delete-before-insert
 
 ### Decision Framework
 
-| Model / Option | Simplicity (35%) | Correctness (35%) | Performance (20%) | Maintenance (10%) | Total Score | Decision |
+| Model / Option | Solution leverage (35%) | Application value (30%) | Maintenance (25%) | Adaptability (10%) | Total Score | Decision |
 | --- | --- | --- | --- | --- | --- | --- |
-| Stable hash + upsert (Sel.) | 9 | 9 | 9 | 9 | **9.0** | Selected |
-| Dedicated embedding cache | 6 | 8 | 8 | 5 | 6.9 | Rejected |
-| Ad-hoc skip logic | 7 | 5 | 6 | 6 | 6.1 | Rejected |
+| Deterministic scoped upsert | 9.2 | 9.5 | 9.0 | 8.5 | **9.2** | Selected |
+| LlamaIndex whole-docstore delete | 9.0 | 5.5 | 8.5 | 7.0 | 7.6 | Rejected for partial batches |
+| Delete before random-ID insert | 7.0 | 7.0 | 7.5 | 7.0 | 7.1 | Rejected |
 
 ## Decision
 
-Compute content hashes (document- and node-level) and use deterministic node IDs. Store hashes in node metadata and Qdrant payloads. On re-index, skip embedding and upsert when hashes are unchanged; otherwise, re-embed and upsert using the same stable ID.
+Use four coordinated owners:
+
+1. `IngestionCache` reuses repeated batch transformations. The pipeline does
+   not attach a LlamaIndex docstore because its duplicate filter omits
+   unchanged nodes that the scoped replacement batch still owns.
+2. Every parsed document and node carries its base ID in the parser-owned
+   `docmind_document_id` metadata key. LlamaIndex remains free to own its generic
+   document ID payload keys.
+3. Text nodes receive deterministic Qdrant-compatible UUIDv5 IDs from canonical
+   document ID, page ID, and chunk position. `VectorStoreIndex` performs the
+   Qdrant upsert.
+4. Before insertion, capture existing point IDs only for successfully loaded
+   canonical documents. After a successful insertion, delete the captured IDs
+   not present in the new node set. Never delete unrelated, missing, or rejected
+   documents in a partial upload batch.
 
 ### Staleness & Snapshot Manifest (Amendment)
 
 Define and use:
 
 - `corpus_hash`: SHA‑256 of sorted `(relative_path, size, mtime_ns)` for all ingested files
-- `config_hash`: SHA‑256 of canonical JSON with retrieval/chunking/embedding settings
+- `config_hash`: SHA‑256 of canonical JSON with ingestion, parsing, OCR, PDF,
+  and sorted per-input parser overrides
 
-Persist both in `manifest.json` within each snapshot (ADR‑038; SPEC‑014) and surface a staleness badge in Chat when they mismatch current environment.
+Persist both in `manifest.meta.json` within each tri-file snapshot (ADR‑038;
+SPEC‑014) and surface a staleness badge in Chat when they mismatch the current
+environment.
 
 ## High-Level Architecture
 
 ```mermaid
 graph TD
-  A["File"] --> B["Process (ADR-009)"]
-  B --> C["Hash + Stable IDs"]
-  C -->|changed| D["Embed + Upsert"]
-  C -->|unchanged| E["Skip Embed; Upsert/No-op"]
-  D --> Q["Qdrant"]
-  E --> Q
+  A["Input batch"] --> B["Parse + cached transforms"]
+  B --> C["Canonical document key + stable UUIDs"]
+  C --> D["Capture existing IDs for affected documents"]
+  D --> E["Qdrant upsert"]
+  E -->|success| F["Delete stale captured IDs"]
+  E -->|failure| G["Preserve prior IDs"]
 ```
 
 ## Related Requirements
 
 ### Functional Requirements
 
-- FR‑1: Compute and persist document and node content hashes
+- FR‑1: Preserve a canonical base-document ID across multi-page parsing
 - FR‑2: Generate deterministic node IDs across runs
-- FR‑3: Upsert to Qdrant keyed by stable ID; update when changed
+- FR‑3: Upsert current points, then delete only stale points for affected documents
 
 ### Non-Functional Requirements
 
@@ -92,37 +111,18 @@ graph TD
 
 ### Architecture Overview
 
-- Hash at document (bytes) and node (text + salient metadata) levels
-- Deterministic node IDs (e.g., normalized_path + chunk_index) if not provided
-- Qdrant upsert keyed by ID; compare stored hash to decide work
-
-### Implementation Details
-
-In `src/core/indexing.py` (illustrative):
-
-```python
-import hashlib
-
-def node_hash(text: str, meta: dict) -> str:
-    h = hashlib.sha256()
-    h.update(text.encode("utf-8"))
-    h.update(meta.get("section","?").encode("utf-8"))
-    return h.hexdigest()
-```
-
-### Configuration
-
-```env
-DOCMIND_INDEX__FORCE_REINDEX=false
-```
+- `src/models/processing.py` owns `docmind_document_id`.
+- `src/processing/ingestion_api.py` attaches the key to every source document.
+- `src/ui/_ingest_adapter_impl.py` owns stable point IDs and stale-point cleanup.
+- Qdrant owns point upserts; LlamaIndex owns payload serialization.
+- No compatibility key, force-reindex flag, or second cache is introduced.
 
 ## Testing
 
-```python
-def test_reuse_policy(indexer, tmp_docs):
-    # initial index -> re-run is no-op; modify one file -> only changed nodes update
-    pass
-```
+- Prove the custom key survives LlamaIndex payload conversion for multi-page input.
+- Prove stable UUIDs repeat for the same document/page/chunk position.
+- Prove successful insertion deletes captured stale IDs.
+- Prove manifest hashes change when per-input parser overrides change.
 
 ## Consequences
 
@@ -133,13 +133,15 @@ def test_reuse_policy(indexer, tmp_docs):
 
 ### Negative Consequences / Trade-offs
 
-- Requires consistent ID/hash behavior across versions
-- Force rebuilds needed when parameters change
+- Point IDs intentionally change if the ID schema changes; that requires a
+  versioned migration or explicit rebuild.
+- A failed partial upsert can leave new and prior points together until retry,
+  but it never deletes the last known-good prior set.
 
 ### Ongoing Maintenance & Considerations
 
-- Keep hash inputs stable; version if schema changes
-- Provide explicit force-reindex path
+- Keep deterministic ID inputs stable and version the scheme before changing it.
+- Keep stale deletion scoped to explicit canonical document IDs.
 
 ### Dependencies
 
@@ -147,6 +149,7 @@ def test_reuse_policy(indexer, tmp_docs):
 
 ## Changelog
 
+- 1.2 (2026-07-11): Implemented canonical document ownership, deterministic UUIDv5 point IDs, scoped post-upsert stale deletion, and parser-override-aware manifest hashing.
 - 1.1 (2025-09-09): Added corpus/config hash definitions for snapshot manifests; linked ADR‑038/SPEC‑014
 
 - **v1.0 (2025-09-02)**: Initial proposal for idempotent indexing and reuse policy.

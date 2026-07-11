@@ -41,6 +41,20 @@ def test_render_prompt_and_messages() -> None:
     assert msgs, "Expected at least one chat message"
 
 
+def test_key_insights_renders_role_and_tone_descriptions() -> None:
+    text = render_prompt(
+        "key-insights",
+        {
+            "context": "Example context",
+            "role": {"description": "Provide custom actionable guidance."},
+            "tone": {"description": "Use a concise tone."},
+        },
+    )
+
+    assert "Provide custom actionable guidance." in text
+    assert "Use a concise tone." in text
+
+
 def test_render_raises_on_missing_required_vars(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -48,7 +48,7 @@ def test_build_llm_openai_like_and_ollama(
         kwargs = _CaptureOllama.last_kwargs or {}
         assert isinstance(out, _CaptureOllama)
         assert kwargs["base_url"] == str(cfg.ollama_base_url).rstrip("/")
-        assert kwargs["model"] == cfg.vllm.model
+        assert kwargs["model"] == cfg.effective_model
         assert float(kwargs["request_timeout"]) == float(
             cfg.llm_request_timeout_seconds
         )
@@ -74,6 +74,33 @@ def test_build_llm_openai_like_and_ollama(
         assert kwargs["is_chat_model"] is True
         assert kwargs["is_function_calling_model"] is False
         assert kwargs["context_window"] == cfg.vllm.context_window
+
+
+@pytest.mark.unit
+def test_build_llm_uses_effective_context_window_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The shared settings cap owns the context sent to backend adapters."""
+    ollama_mod = ModuleType("llama_index.llms.ollama")
+
+    class _CaptureOllama:
+        last_kwargs: dict[str, object] | None = None
+
+        def __init__(self, **kwargs: object) -> None:
+            type(self).last_kwargs = dict(kwargs)
+
+    ollama_mod.Ollama = _CaptureOllama  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "llama_index.llms.ollama", ollama_mod)
+
+    cfg = DocMindSettings(
+        llm_backend="ollama",
+        context_window=16_384,
+        llm_context_window_max=8_192,
+    )
+
+    build_llm(cfg)
+
+    assert (_CaptureOllama.last_kwargs or {})["context_window"] == 8_192
 
 
 @pytest.mark.unit

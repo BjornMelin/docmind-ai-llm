@@ -2,8 +2,8 @@
 ADR: 066
 Title: LlamaIndex Workflows Evaluation Without Runtime Replacement
 Status: Accepted
-Version: 1.0
-Date: 2026-05-01
+Version: 1.1
+Date: 2026-07-11
 Supersedes:
 Superseded-by:
 Related: 001, 003, 011, 024, 035, 056, 058, 063
@@ -51,7 +51,7 @@ Repository snapshot facts were verified from `uv.lock` and `pyproject.toml`.
 Local installed source on 2026-04-30 was used only as a cross-check, not as the
 authoritative source for this ADR.
 
-- The repo snapshot pins `llama-index==0.14.21` and `llama-index-core==0.14.21`.
+- The repo snapshot pins `llama-index-core==0.14.21` and selected adapters directly; the `llama-index` meta-package is absent.
 - The repo snapshot already contains `llama-index-workflows==2.20.0`
   transitively through `llama-index-core==0.14.21`.
 - The repo snapshot pins `langgraph==1.1.10`,
@@ -186,6 +186,7 @@ checking, and broader quality gates before adoption.
 
 ## Changelog
 
+- 1.1 (2026-07-11): Aligned dependency evidence with the direct `llama-index-core` and selected-adapter contract.
 - 1.0 (2026-05-01): Accepted issue #86 decision: keep LangGraph as default,
   defer runtime replacement, and define strict future LlamaIndex Workflows pilot
   conditions.

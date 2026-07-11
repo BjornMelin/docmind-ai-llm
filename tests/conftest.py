@@ -211,6 +211,12 @@ def _mock_qdrant_client(monkeypatch: pytest.MonkeyPatch) -> None:
             """Query points from the collection."""
             return SimpleNamespace(points=[])
 
+        def query_points_groups(
+            self, **kwargs: object
+        ) -> SimpleNamespace:  # pragma: no cover
+            """Query grouped points from the collection."""
+            return SimpleNamespace(groups=[])
+
         def close(self) -> None:  # pragma: no cover
             """Close the client connection."""
             return None

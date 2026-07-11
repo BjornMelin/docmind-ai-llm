@@ -31,7 +31,7 @@ def build_chat_model(cfg: DocMindSettings) -> ChatOpenAI:
     Raises:
         ValueError: If no model name or base URL is configured.
     """
-    model_name = cfg.model or cfg.vllm.model
+    model_name = cfg.effective_model
     if not model_name:
         raise ValueError("No model name configured for LangChain model")
     timeout_s = float(

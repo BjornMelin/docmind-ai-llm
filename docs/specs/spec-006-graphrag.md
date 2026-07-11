@@ -73,7 +73,7 @@ Feature: GraphRAG with Router and Persistence
 - LlamaIndex Property Graph Guide: <https://docs.llamaindex.ai/en/stable/module_guides/indexing/lpg_index_guide>
 - Property Graph Examples: <https://docs.llamaindex.ai/en/stable/examples/property_graph/property_graph_basic>
 - Graph store API (`get`, `get_rel_map`, `save_networkx_graph`): see LlamaIndex examples (Context7 snippets)
-- Developer guide (adapter protocol, registry, optional dependency lanes): `docs/developers/guides/graphrag-adapters.md`
+- Developer guide (direct LlamaIndex runtime and health checks): `docs/developers/guides/graphrag.md`
 
 ## Changelog
 

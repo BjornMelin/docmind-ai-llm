@@ -56,7 +56,7 @@ def fixture_settings_env(tmp_path):
 
     env_vars = {
         "DOCMIND_DATA_DIR": str(test_data_dir),
-        "DOCMIND_CACHE_DIR": str(test_cache_dir),
+        "DOCMIND_CACHE__DIR": str(test_cache_dir),
         "DOCMIND_LOG_FILE": str(test_log_file),
         "DOCMIND_DEBUG": "true",
     }
@@ -87,8 +87,8 @@ class TestSettingsRealIntegration:
             assert isinstance(settings.data_dir, Path)
 
             # Test cache directory path is accessible
-            assert hasattr(settings, "cache_dir")
-            assert isinstance(settings.cache_dir, Path)
+            assert hasattr(settings.cache, "dir")
+            assert isinstance(settings.cache.dir, Path)
 
     def test_settings_environment_integration(self, settings_env):
         """Test settings properly integrate with environment variables."""
@@ -100,7 +100,8 @@ class TestSettingsRealIntegration:
                 str(settings.data_dir) == settings_env["env_vars"]["DOCMIND_DATA_DIR"]
             )
             assert (
-                str(settings.cache_dir) == settings_env["env_vars"]["DOCMIND_CACHE_DIR"]
+                str(settings.cache.dir)
+                == settings_env["env_vars"]["DOCMIND_CACHE__DIR"]
             )
             assert settings.debug is True  # From DOCMIND_DEBUG=true
 
@@ -111,7 +112,7 @@ class TestSettingsRealIntegration:
 
             # Ensure directories exist
             settings.data_dir.mkdir(parents=True, exist_ok=True)
-            settings.cache_dir.mkdir(parents=True, exist_ok=True)
+            settings.cache.dir.mkdir(parents=True, exist_ok=True)
 
             # Test file creation in settings-defined directories
             test_file = settings.data_dir / "integration_test.txt"
@@ -121,7 +122,7 @@ class TestSettingsRealIntegration:
             assert test_file.read_text() == "Settings integration test"
 
             # Test cache directory usage
-            cache_file = settings.cache_dir / "test_cache.json"
+            cache_file = settings.cache.dir / "test_cache.json"
             cache_file.write_text('{"test": "cache"}')
 
             assert cache_file.exists()
@@ -139,7 +140,8 @@ class TestSettingsRealIntegration:
 
                 # Test that Path objects are handled properly
                 assert "data_dir" in settings_dict
-                assert "cache_dir" in settings_dict
+                assert "cache" in settings_dict
+                assert settings_dict["cache"]["dir"] == settings.cache.dir
 
     @pytest.mark.asyncio
     async def test_settings_async_integration(self, settings_env):
@@ -346,7 +348,7 @@ class TestSettingsErrorHandling:
         missing_dirs_env = {
             **settings_env["env_vars"],
             "DOCMIND_DATA_DIR": str(settings_env["data_dir"]) + "_missing",
-            "DOCMIND_CACHE_DIR": str(settings_env["cache_dir"]) + "_missing",
+            "DOCMIND_CACHE__DIR": str(settings_env["cache_dir"]) + "_missing",
         }
 
         with patch.dict(os.environ, missing_dirs_env):
@@ -357,10 +359,10 @@ class TestSettingsErrorHandling:
 
             # Directories should be createable
             settings.data_dir.mkdir(parents=True, exist_ok=True)
-            settings.cache_dir.mkdir(parents=True, exist_ok=True)
+            settings.cache.dir.mkdir(parents=True, exist_ok=True)
 
             assert settings.data_dir.exists()
-            assert settings.cache_dir.exists()
+            assert settings.cache.dir.exists()
 
 
 # Skip entire module if settings not available

@@ -1,4 +1,4 @@
-"""Ensure create_vector_store enforces hybrid schema and sparse modifier calls."""
+"""Ensure create_vector_store enforces the canonical hybrid schema."""
 
 from __future__ import annotations
 
@@ -9,10 +9,10 @@ import pytest
 
 @pytest.mark.unit
 def test_create_vector_store_calls_ensure(monkeypatch):
-    """Test that create_vector_store calls ensure functions for hybrid schema."""
+    """Test that create_vector_store checks the canonical hybrid schema."""
     mod = importlib.import_module("src.utils.storage")
 
-    calls = {"ensure_hybrid": 0, "ensure_idf": 0}
+    calls = {"ensure_hybrid": 0}
 
     # Stub client and store
     class _Client:
@@ -20,27 +20,112 @@ def test_create_vector_store_calls_ensure(monkeypatch):
             return None
 
     class _Store:
-        def __init__(self, client, collection_name, enable_hybrid, batch_size):
-            self.args = (client, collection_name, enable_hybrid, batch_size)
+        def __init__(
+            self,
+            client,
+            collection_name,
+            enable_hybrid,
+            batch_size,
+            dense_vector_name,
+            sparse_vector_name,
+        ):
+            self.args = (
+                client,
+                collection_name,
+                enable_hybrid,
+                batch_size,
+                dense_vector_name,
+                sparse_vector_name,
+            )
 
     monkeypatch.setattr(mod, "QdrantClient", lambda **_: _Client())
     monkeypatch.setattr(mod, "QdrantVectorStore", _Store)
 
-    # Count calls to ensure helpers
+    # Count calls to the canonical schema helper.
+    def _ensure(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        calls["ensure_hybrid"] += 1
+        return mod.CollectionCompatibilityResult(True, "unchanged", "compatible", 1)
+
+    monkeypatch.setattr(mod, "ensure_hybrid_collection", _ensure)
+    out = mod.create_vector_store("col", enable_hybrid=True)
+    assert isinstance(out, _Store)
+    assert calls["ensure_hybrid"] == 1
+    assert out.args[-2:] == (mod.DENSE_VECTOR_NAME, mod.SPARSE_VECTOR_NAME)
+
+
+@pytest.mark.unit
+def test_create_vector_store_closes_client_when_schema_is_blocked(monkeypatch):
+    """A blocked schema check must not leak the temporary Qdrant client."""
+    mod = importlib.import_module("src.utils.storage")
+
+    class _Client:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    client = _Client()
+    monkeypatch.setattr(mod, "QdrantClient", lambda **_: client)
     monkeypatch.setattr(
         mod,
         "ensure_hybrid_collection",
-        lambda *_, **__: calls.__setitem__("ensure_hybrid", calls["ensure_hybrid"] + 1),
-    )
-    monkeypatch.setattr(
-        mod,
-        "ensure_sparse_idf_modifier",
-        lambda *_, **__: calls.__setitem__("ensure_idf", calls["ensure_idf"] + 1),
+        lambda *_args, **_kwargs: mod.CollectionCompatibilityResult(
+            False,
+            "blocked",
+            "text_dense_dimension_mismatch",
+            4,
+        ),
     )
 
-    out = mod.create_vector_store("col", enable_hybrid=True)
-    assert isinstance(out, _Store)
-    # Called once each
-    assert calls["ensure_hybrid"] == 1
-    # IDF modifier ensure is best-effort; expect it attempts once
-    assert calls["ensure_idf"] >= 1
+    with pytest.raises(mod.QdrantCollectionIncompatibleError):
+        mod.create_vector_store("col")
+
+    assert client.closed is True
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("hybrid_error", [ImportError, RuntimeError])
+def test_create_vector_store_closes_client_when_construction_fails(
+    monkeypatch,
+    hybrid_error,
+):
+    """Constructor failures must not leak the Qdrant client."""
+    mod = importlib.import_module("src.utils.storage")
+
+    class _Client:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    client = _Client()
+    calls = 0
+    vector_names = []
+
+    def _store(**kwargs):
+        nonlocal calls
+        calls += 1
+        vector_names.append((kwargs["dense_vector_name"], kwargs["sparse_vector_name"]))
+        if kwargs["enable_hybrid"]:
+            raise hybrid_error("store failed")
+        raise RuntimeError("dense fallback failed")
+
+    monkeypatch.setattr(mod, "QdrantClient", lambda **_: client)
+    monkeypatch.setattr(mod, "QdrantVectorStore", _store)
+    monkeypatch.setattr(
+        mod,
+        "ensure_hybrid_collection",
+        lambda *_args, **_kwargs: mod.CollectionCompatibilityResult(
+            True,
+            "unchanged",
+            "compatible",
+            1,
+        ),
+    )
+
+    with pytest.raises(RuntimeError):
+        mod.create_vector_store("col")
+
+    assert calls == (2 if hybrid_error is ImportError else 1)
+    assert vector_names == [(mod.DENSE_VECTOR_NAME, mod.SPARSE_VECTOR_NAME)] * calls
+    assert client.closed is True

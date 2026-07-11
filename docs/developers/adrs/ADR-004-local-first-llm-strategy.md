@@ -1,9 +1,9 @@
 ---
 ADR: 004
-Title: Local-First LLM with Enforced 128K Context (vLLM + Qwen3‑4B FP8)
-Status: Implemented
-Version: 12.1
-Date: 2025-09-04
+Title: Local-first LLM provider strategy
+Status: Implemented (Amended)
+Version: 12.2
+Date: 2026-07-10
 Supersedes:
 Superseded-by:
 Related: 001, 003, 010, 011, 024, 037
@@ -16,35 +16,39 @@ References:
 
 ## Description
 
-Adopt a local-first LLM strategy using vLLM serving of **Qwen/Qwen3-4B-Instruct-2507-FP8**, enforcing a fixed 131,072-token (128K) context via `--max-model-len 131072` and FP8 KV cache. Targets consumer GPUs (RTX 4090 Laptop 16GB) with 100–160 tok/s decode and 800–1300 tok/s prefill.
+Default to a local Ollama large language model (LLM) endpoint. Support local OpenAI-compatible servers, including vLLM, LM Studio, and llama.cpp. Treat remote providers as opt-in endpoints governed by the central security policy.
 
 ## Context
 
-We lacked a unified, explicit policy for local LLM selection, context limits, and performance on consumer hardware. External APIs introduce latency, cost, and privacy risks. Modern small dense LLMs deliver solid reasoning and function-calling while fitting 16GB VRAM when carefully configured. We constrain context to 128K for reliability on RTX 4090 Laptop GPUs using FP8 weights and FP8 KV cache. This reduces memory while preserving quality and throughput.
+DocMind needs one policy for local LLM selection, context limits, and optional remote access. Hosted APIs introduce cost and move data across a trust boundary. Local servers preserve the default offline posture but vary in model support, memory use, and latency.
+
+The original decision selected a Qwen FP8 model on vLLM for a specific laptop GPU. That remains an available deployment profile, not the application default. The current application defaults to Ollama. vLLM runs as a separately installed OpenAI-compatible server and is not part of the Python application environment.
 
 Key forces and constraints:
 
 - Privacy/cost: Avoid external API reliance for core features.
-- Hardware: 16GB VRAM target; avoid swapping/OOM at large contexts.
+- Hardware: Avoid swapping and out-of-memory failures at the configured context size.
 - Capability: Reasoning + function calling for agentic RAG (ADR-001/011).
 - Simplicity: Library-first, minimal custom glue (ADR-024 config model).
 
 ## Decision Drivers
 
 - Local-first and offline operation for core flows
-- Low latency on consumer GPUs (decode ≥100 tok/s)
-- Extended context with predictable memory ceiling (128K enforced)
+- Measured latency on the operator's model, backend, and hardware
+- A validated context limit that the selected server supports
 - Maintainability via settings and proven libraries (vLLM, LlamaIndex)
 - Clear integration with agent stack and retrieval (ADR-003/011/024)
 
 ## Alternatives
 
-- A: Cloud APIs (OpenAI/Claude) — Pros: quality, zero local setup; Cons: cost, privacy, vendor lock-in. Rejected.
-- B: Qwen3‑14B + YaRN via llama.cpp/vLLM — Pros: higher quality; Cons: more VRAM/latency, extra tuning. Rejected for baseline due to 16GB VRAM constraints.
-- C: Smaller local models (Phi‑3‑Mini/Llama3‑8B) — Pros: faster, cheaper; Cons: weaker reasoning/function calling. Rejected for primary.
-- D: Large dense/MoE (Qwen3‑32B/Mixtral) — Pros: strong quality; Cons: heavy VRAM, slower. Optional advanced path.
+- A: Cloud APIs (OpenAI/Claude). Pros: quality and no local model setup. Cons: cost, privacy, and vendor lock-in. Retained as an explicit opt-in path.
+- B: Qwen3-14B plus YaRN via llama.cpp or vLLM. Pros: higher quality. Cons: more memory, latency, and tuning. Rejected for the original laptop profile.
+- C: Smaller local models. Pros: lower resource use. Cons: weaker reasoning and function calling. Rejected as the original primary model.
+- D: Large dense or mixture-of-experts models. Pros: stronger quality. Cons: higher resource use. Retained as an optional path.
 
-### Decision Framework
+### Historical decision framework
+
+The scores capture the original model evaluation. They do not select the current default backend or represent benchmark results.
 
 | Model / Option | Local-First (35%) | Performance (25%) | Quality (20%) | Maintainability (20%) | Total Score | Decision |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -54,19 +58,19 @@ Key forces and constraints:
 
 ## Decision
 
-We will adopt **Qwen/Qwen3-4B-Instruct-2507-FP8** on **vLLM** with enforced 128K context and FP8 KV cache. This standardizes a local-first baseline for agents and retrieval. Key parameters: `--max-model-len 131072`, `--kv-cache-dtype fp8_e5m2`, FlashInfer attention, chunked prefill. Typical VRAM at 128K: ~12–14GB.
+Default to Ollama on a loopback endpoint. Use the provider factory for Ollama, vLLM, LM Studio, llama.cpp, and generic OpenAI-compatible endpoints.
+
+Operators may run Qwen on an external vLLM server with FP8 key-value cache and chunked prefill. The configured 131,072-token window is a vLLM profile default, not a runtime guarantee. Validate model support and measure memory, time to first token, prefill throughput, and decode throughput on the target environment.
 
 ## High-Level Architecture
 
 ```mermaid
 flowchart LR
-  UI["Streamlit UI"] -->|prompts| AG["Agents (ADR-011)"]
-  RAG["RAG + Router (ADR-003)"] -->|context chunks| AG
-  AG -->|chat/completions| VLLM["vLLM Server<br/>Qwen3-4B FP8 @128K"]
-  VLLM -->|tokens| AG
-  subgraph GPU
-    VLLM
-  end
+  UI["Streamlit UI"] --> AG["Agents and retrieval"]
+  AG --> FACTORY["Provider factory"]
+  FACTORY --> OLLAMA["Local Ollama<br/>default"]
+  FACTORY --> LOCAL["Local OpenAI-compatible server"]
+  FACTORY --> REMOTE["Approved remote endpoint<br/>opt-in"]
 ```
 
 ## Related Requirements
@@ -74,61 +78,55 @@ flowchart LR
 ### Functional Requirements
 
 - **FR-1:** Support function calling for agentic RAG flows.
-- **FR-2:** Handle up to 131,072 tokens with FP8 KV cache.
+- **FR-2:** Pass the configured context window to the selected provider adapter.
 - **FR-3:** Provide reasoning for routing and result validation.
 - **FR-4:** Retain multi-turn context with trimming at thresholds.
 - **FR-5:** Enable adaptive context strategies per ADR-003.
 
 ### Non-Functional Requirements
 
-- **NFR-1 (Performance):** P95 time-to-first-token <1.5s on RTX 4090 Laptop.
-- **NFR-2 (Memory):** ~12–14GB VRAM at 128K with FP8 weights + FP8 KV cache.
-- **NFR-3 (Quality):** ≥95% of GPT‑3.5 on reasoning via retrieval augmentation.
-- **NFR-4 (Local-First):** No external API dependency for core operations.
-- **NFR-5 (Throughput):** 100–160 tok/s decode, 800–1300 tok/s prefill (FP8).
+- **NFR-1 (Performance):** Record the model, backend, hardware, and context size with every result.
+- **NFR-2 (Memory):** Refuse deployment profiles that exhaust host or accelerator memory.
+- **NFR-3 (Quality):** Evaluate answer quality against a versioned task corpus.
+- **NFR-4 (Local-first):** Keep local endpoints as the default and require explicit endpoint policy configuration for remote endpoints.
+- **NFR-5 (Throughput):** Measure prefill and decode throughput in the target environment.
 
 ### Performance Requirements
 
-- **PR-1:** Interactive queries return first token <1.5s, full response <4s median.
-- **PR-2:** VRAM ≤14GB sustained at 128K context; no swap.
+- **PR-1:** Establish a release baseline before publishing latency or throughput figures.
+- **PR-2:** Capture peak host and accelerator memory at the configured context size.
 
 ### Integration Requirements
 
 - **IR-1:** Integrates via LlamaIndex OpenAI-like client with central `DocMindSettings` (ADR‑024).
 - **IR-2:** Supports async calls for streaming and tool execution.
-- **IR-3:** Enforces `context_window` cap consistently across UI and agents.
+- **IR-3:** Uses the effective context configuration consistently across clients and agents.
 
 ## Design
 
 ### Architecture Overview
 
-- vLLM serves Qwen3‑4B FP8 with FlashInfer; single-GPU target.
-- Agents (ADR‑011) call the OpenAI-like client via LlamaIndex.
-- Retrieval (ADR‑003) trims to fit 128K; UI reflects the enforced cap.
+- Ollama is the default local backend.
+- vLLM, LM Studio, and llama.cpp use an OpenAI-compatible HTTP boundary.
+- Remote OpenAI-compatible providers require explicit endpoint policy configuration.
+- Agents call the selected provider through LlamaIndex adapters.
 
 ### Implementation Details
 
 ```python
-# src/config/llm_factory.py (skeleton usage)
+# src/config/llm_factory.py
 from src.config.settings import DocMindSettings
 from src.config.llm_factory import build_llm
 
 def setup_llm_for_agents(settings: DocMindSettings):
-    """Create vLLM-backed LLM with enforced 128K window."""
-    llm = build_llm(settings)
-    # Optional: apply streaming/structured outputs wrappers here
-    return llm
-
-# Example: creating settings from env and building the client
-if __name__ == "__main__":
-    from src.config.settings import settings
-    llm = setup_llm_for_agents(settings)
+    """Build the configured provider client."""
+    return build_llm(settings)
 ```
 
 ### Configuration
 
 ```env
-# vLLM model and limits (ADR-004)
+DOCMIND_LLM_BACKEND=vllm
 DOCMIND_VLLM__MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8
 DOCMIND_VLLM__CONTEXT_WINDOW=131072
 DOCMIND_VLLM__KV_CACHE_DTYPE=fp8_e5m2
@@ -136,66 +134,52 @@ DOCMIND_VLLM__GPU_MEMORY_UTILIZATION=0.90
 DOCMIND_LLM_REQUEST_TIMEOUT_SECONDS=120
 DOCMIND_LLM_STREAMING_ENABLED=true
 
-# vLLM server environment (optional helpers)
+# Configure and validate these separately in the external vLLM process.
 VLLM_ATTENTION_BACKEND=FLASHINFER
 VLLM_MAX_MODEL_LEN=131072
 ```
 
 ## Testing
 
-```python
-# tests/unit/test_llm_local_first.py (skeleton)
-import time
-import pytest
-from src.config.settings import DocMindSettings
-from src.config.llm_factory import build_llm
-
-
-@pytest.mark.unit
-def test_context_window_enforced():
-    s = DocMindSettings(vllm={"context_window": 200000})
-    assert s.llm_context_window_max == 131072
-    # factory should respect the cap via settings usage
-    llm = build_llm(s)
-    # spot-check attribute when available; otherwise rely on settings
-    assert s.vllm.context_window <= s.llm_context_window_max
-
-
-@pytest.mark.asyncio
-async def test_latency_smoke(async_llm_client):
-    start = time.monotonic()
-    _ = await async_llm_client.acomplete("Say hi in one word.")
-    assert (time.monotonic() - start) < 1.5  # P95 target
+```bash
+uv run pytest tests/unit/config/test_llm_factory.py \
+  tests/unit/config/test_settings_backend_url_and_policies.py -q
 ```
+
+Run a separate inference benchmark against the target server before publishing performance figures. The tracked parser benchmark does not measure LLM inference.
 
 ## Consequences
 
 ### Positive Outcomes
 
-- Local-first baseline with predictable latency and VRAM usage on 16GB GPUs.
-- Standardized 128K context across UI/agents/retrieval; fewer OOMs.
-- Library-first integration (vLLM + LlamaIndex) reduces custom code.
-- Clear knobs in settings; easier ops and reproducible performance.
+- Local-first default with explicit remote-provider controls.
+- One provider factory for supported local and OpenAI-compatible endpoints.
+- Library-first integration reduces custom provider code.
+- Operator-controlled model and context settings.
 
 ### Negative Consequences / Trade-offs
 
-- 4B model quality below larger 14B+/Mixture models on complex tasks.
-- FP8 path ties us to vLLM features (FlashInfer, KV cache dtype).
-- Single‑GPU target may limit batch throughput for heavy workloads.
+- Model quality and resource use depend on the selected deployment.
+- The optional FP8 profile depends on vLLM and accelerator compatibility.
+- Remote providers cross a trust boundary and can add cost.
 
 ### Ongoing Maintenance & Considerations
 
 - Track vLLM releases for FP8/attention backend changes.
 - Re‑validate latency/VRAM after dependency bumps and driver updates.
 - Monitor token utilization; keep trim thresholds aligned with 128K cap.
-- Keep manual cloud fallbacks out of core path; evaluate via separate ADRs.
+- Keep remote providers explicit and subject to endpoint validation.
 
 ### Dependencies
 
-- System: NVIDIA driver + CUDA/cuDNN compatible with vLLM; RTX 4090 Laptop (16GB VRAM).
-- Python (app env): `llama-index-core>=0.14.12,<0.15.0`, `torch==2.8.0`, `tenacity>=9.1.2,<10.0.0`.
+- Optional vLLM profile: a compatible external vLLM installation and accelerator runtime.
+- Python application environment: `llama-index-core>=0.14.21,<0.15.0`,
+  selected LlamaIndex LLM adapters, `torch==2.8.0`, and
+  `tenacity>=9.1.2,<10.0.0`.
 - vLLM: external OpenAI-compatible server process (installed and managed separately from the app env).
-- Removed: Custom LLM wrappers; prefer LlamaIndex official integrations.
+- Package exclusions: no `llama-index` meta-package, `llama` extra, or in-process
+  vLLM dependency.
+- Removed: Custom LLM wrappers; prefer the selected LlamaIndex integrations.
 
 ## Addendum — Ollama Native Capabilities (ADR-059)
 
@@ -209,7 +193,7 @@ for other backends. See ADR-059 and SPEC-043.
 
 ## High-Level Architecture (Operational Detail)
 
-- vLLM launch example (one-liner):
+- Optional vLLM launch example:
 
 ```bash
 VLLM_ATTENTION_BACKEND=FLASHINFER \
@@ -218,11 +202,15 @@ vllm serve Qwen/Qwen3-4B-Instruct-2507-FP8 \
   --kv-cache-dtype fp8_e5m2 \
   --enable-chunked-prefill \
   --gpu-memory-utilization 0.90 \
-  --host 0.0.0.0 --port 8000 \
+  --host 127.0.0.1 --port 8000 \
   --served-model-name docmind-qwen3-fp8
 ```
 
 ## Changelog
+
+- 2026-07-10
+
+  - 12.2: Amend the ADR for Ollama as the local default, external OpenAI-compatible vLLM, opt-in remote providers, and environment-specific performance evidence.
 
 - 2025-09-04
 
@@ -238,7 +226,7 @@ vllm serve Qwen/Qwen3-4B-Instruct-2507-FP8 \
 
 - 2025-08-19
 
-  - 11.0: Corrected to Qwen3‑4B‑FP8; enforce 128K; FP8 KV cache; performance/memory updates.
+  - 11.0: Selected Qwen3‑4B‑FP8, an extended context, and FP8 KV cache as a deployment profile; its performance and memory assumptions were not backed by a reproducible repository benchmark.
   - 10.0: INT8 KV cache optimization analysis.
   - 9.0: Initial reality check.
   - 8.0: Initial Qwen3‑4B evaluation.

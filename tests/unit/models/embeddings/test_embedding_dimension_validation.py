@@ -19,8 +19,6 @@ import numpy as np
 import pytest
 from llama_index.core.embeddings import MockEmbedding
 
-from src.models.embeddings import EmbeddingParameters
-
 # MOCK REDUCTION: Import real test settings instead of Mock
 from tests.fixtures.test_settings import MockDocMindSettings as TestDocMindSettings
 
@@ -50,19 +48,6 @@ def test_settings_1024d():
         enable_gpu_acceleration=True,
         # Real validation catches configuration errors
         debug=True,  # Test-optimized setting
-    )
-
-
-@pytest.fixture
-def bgem3_parameters_1024d():
-    """EmbeddingParameters configured for BGE-M3 1024D validation."""
-    return EmbeddingParameters(
-        max_length=8192,
-        use_fp16=True,
-        return_dense=True,
-        return_sparse=True,
-        return_colbert=False,
-        normalize_embeddings=True,
     )
 
 
