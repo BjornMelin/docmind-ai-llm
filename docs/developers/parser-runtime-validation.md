@@ -59,16 +59,16 @@ Latency covers isolated parser-worker execution. It does not include application
 ### Current release baseline
 
 The checked-in schema 3 artifact was generated from clean commit
-`8ce264845eb43bcf02526c37625dcd0358a3f1ba` on Linux under WSL2 with
+`90e20793afe882976712b617197af7d8cf4ac1aa` on Linux under WSL2 with
 CPython 3.12.13. It records Docling 2.92.0, pypdfium2 5.7.1, RapidOCR
 3.8.1, and ONNX Runtime 1.23.2.
 
 - 8 of 8 fixtures passed their content assertions.
 - All 8 fixtures produced identical output hashes across three isolated runs.
 - No parser errors occurred.
-- `summary.latency_ms_median` is 4217.030 ms and
-  `summary.latency_ms_max` is 4776.168 ms.
-- `summary.rss_mb_max` is 1245.434 MiB.
+- `summary.latency_ms_median` is 4225.272 ms and
+  `summary.latency_ms_max` is 4857.878 ms.
+- `summary.rss_mb_max` is 1242.629 MiB.
 
 These values are a workstation-specific regression baseline, not a
 cross-platform performance promise. The fixture hashes, individual results,
