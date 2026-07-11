@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [Unreleased]
+
 ## [1.0.0](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.9.0...v1.0.0) (2026-07-11)
 
 
@@ -14,8 +16,6 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ### Features
 
 * **parser:** complete local-first v1 modernization ([58d7e9f](https://github.com/BjornMelin/docmind-ai-llm/commit/58d7e9f3f97767b24fdf43297c1acf3e4cc97030))
-
-## [Unreleased]
 
 ### Changed
 
