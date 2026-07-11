@@ -43,7 +43,7 @@ jobs:
           python-version: '3.12.13'
 
       - name: Install uv (with cache)
-        uses: astral-sh/setup-uv@v8
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           enable-cache: true
           cache-suffix: build-test-py312
@@ -134,7 +134,7 @@ jobs:
           python-version: '3.13.12'
 
       - name: Install uv (with cache)
-        uses: astral-sh/setup-uv@v8
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           enable-cache: true
           cache-suffix: compatibility-py313
@@ -184,7 +184,7 @@ jobs:
           python-version: '3.12.13'
 
       - name: Install uv (with cache)
-        uses: astral-sh/setup-uv@v8
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           enable-cache: true
           cache-suffix: qdrant-fusion-py312
