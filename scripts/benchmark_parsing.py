@@ -17,7 +17,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
@@ -210,9 +210,10 @@ def _write_text_pdf_pages(path: Path, pages: list[list[str]]) -> None:
 def _write_image_pdf(path: Path, lines: list[str], *, skew: bool = False) -> None:
     image = Image.new("RGB", (900, 1200), "white")
     draw = ImageDraw.Draw(image)
+    font = ImageFont.load_default(size=24)
     y = 160
     for line in lines:
-        draw.text((120, y), line, fill="black")
+        draw.text((120, y), line, fill="black", font=font)
         y += 70
     if skew:
         image = image.rotate(5, expand=True, fillcolor="white")
