@@ -117,3 +117,30 @@ def test_isolated_result_combiner_preserves_any_failed_repetition() -> None:
     assert combined["repetition_output_hashes"] == ["hash"]
     assert combined["deterministic"] is False
     assert "private detail" not in str(combined)
+
+
+def test_summary_reports_the_maximum_repetition_latency() -> None:
+    """Aggregate maximum latency must not collapse to a maximum of medians."""
+    results = [
+        {
+            "content_validation": {"passed": True},
+            "deterministic": True,
+            "error": None,
+            "latency_ms_max": 25.0,
+            "latency_ms_median": 10.0,
+            "rss_mb": 100.0,
+        },
+        {
+            "content_validation": {"passed": True},
+            "deterministic": True,
+            "error": None,
+            "latency_ms_max": 22.0,
+            "latency_ms_median": 20.0,
+            "rss_mb": 110.0,
+        },
+    ]
+
+    summary = benchmark_parsing._summary(results)
+
+    assert summary["latency_ms_median"] == 15.0
+    assert summary["latency_ms_max"] == 25.0

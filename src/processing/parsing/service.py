@@ -9,11 +9,13 @@ import signal
 import subprocess
 import tempfile
 from collections.abc import Callable
+from concurrent.futures import Future
 from contextlib import suppress
 from importlib.metadata import PackageNotFoundError, version
 from multiprocessing.connection import Connection
 from multiprocessing.process import BaseProcess
 from pathlib import Path
+from threading import Lock, Thread
 from types import FrameType
 from typing import Any
 
@@ -60,6 +62,7 @@ _VERSION_PACKAGES = (
     "ocrmypdf",
 )
 _killpg: Callable[[int, int], None] | None = getattr(os, "killpg", None)
+_ParserWorker = tuple[BaseProcess, Connection]
 
 
 async def parse_document(
@@ -85,13 +88,17 @@ async def parse_document(
     timeout = float(settings.parsing.parse_timeout_seconds)
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout
-    process, receiver = _start_parse_worker(
-        path,
-        settings=settings,
-        document_id=document_id,
-    )
+    worker: _ParserWorker | None = None
     completed = False
+    primary_error: BaseException | None = None
     try:
+        worker = await _start_parse_worker_async(
+            path,
+            settings=settings,
+            document_id=document_id,
+            timeout_seconds=max(0.0, deadline - loop.time()),
+        )
+        process, receiver = worker
         while not receiver.poll():
             if not process.is_alive():
                 raise DocumentParseError(
@@ -107,16 +114,11 @@ async def parse_document(
                     reason="parse_timeout_exceeded",
                 )
             await asyncio.sleep(min(0.05, remaining))
-        try:
-            payload = receiver.recv()
-        except (EOFError, OSError) as exc:
-            raise DocumentParseError(
-                path,
-                stage="parser_worker",
-                reason="worker_result_unavailable",
-                cause=exc,
-            ) from exc
-        result = _decode_worker_payload(path, payload)
+        result = await _receive_worker_before_deadline(
+            path,
+            receiver,
+            timeout_seconds=deadline - loop.time(),
+        )
         remaining = deadline - loop.time()
         if remaining <= 0:
             raise DocumentParseError(
@@ -142,9 +144,265 @@ async def parse_document(
                 )
         completed = True
         return result
+    except BaseException as exc:
+        primary_error = exc
+        raise
     finally:
+        if worker is not None:
+            await _cleanup_parse_worker_preserving_error(
+                path,
+                worker=worker,
+                force=not completed,
+                primary_error=primary_error,
+            )
+
+
+async def _start_parse_worker_async(
+    path: Path,
+    *,
+    settings: DocMindSettings,
+    document_id: str | None,
+    timeout_seconds: float,
+) -> _ParserWorker:
+    """Start a worker off-loop and transfer cleanup if the caller stops waiting."""
+    owner = _WorkerStartOwner(
+        path,
+        settings=settings,
+        document_id=document_id,
+    )
+    wrapped_start = asyncio.wrap_future(owner.future)
+    try:
+        worker = await asyncio.wait_for(
+            asyncio.shield(wrapped_start),
+            timeout=max(0.0, timeout_seconds),
+        )
+    except TimeoutError as exc:
+        wrapped_start.add_done_callback(_consume_task_result)
+        owner.abandon()
+        raise DocumentParseError(
+            path,
+            stage="parse_timeout",
+            reason="parse_timeout_exceeded",
+            cause=exc,
+        ) from exc
+    except asyncio.CancelledError:
+        wrapped_start.add_done_callback(_consume_task_result)
+        owner.abandon()
+        raise
+    owner.claim()
+    return worker
+
+
+async def _receive_worker_before_deadline(
+    path: Path,
+    receiver: Connection,
+    *,
+    timeout_seconds: float,
+) -> DocumentParseResult:
+    """Receive and decode off-loop without exceeding the parser deadline."""
+    if timeout_seconds <= 0:
+        raise DocumentParseError(
+            path,
+            stage="parse_timeout",
+            reason="parse_timeout_exceeded",
+        )
+    receive_task = asyncio.create_task(
+        asyncio.to_thread(_receive_and_decode_worker_payload, path, receiver)
+    )
+    try:
+        return await asyncio.wait_for(
+            asyncio.shield(receive_task),
+            timeout=timeout_seconds,
+        )
+    except TimeoutError as exc:
+        receive_task.add_done_callback(_consume_task_result)
+        raise DocumentParseError(
+            path,
+            stage="parse_timeout",
+            reason="parse_timeout_exceeded",
+            cause=exc,
+        ) from exc
+    except asyncio.CancelledError:
+        receive_task.add_done_callback(_consume_task_result)
+        raise
+
+
+def _consume_task_result(task: asyncio.Future[Any]) -> None:
+    """Observe a detached task result so its exception is not leaked."""
+    with suppress(asyncio.CancelledError, Exception):
+        task.result()
+
+
+class _WorkerStartOwner:
+    """Own a blocking worker start until the async caller claims or abandons it."""
+
+    def __init__(
+        self,
+        path: Path,
+        *,
+        settings: DocMindSettings,
+        document_id: str | None,
+    ) -> None:
+        self._path = path
+        self._settings = settings
+        self._document_id = document_id
+        self._future: Future[_ParserWorker] = Future()
+        self._future.set_running_or_notify_cancel()
+        self._lock = Lock()
+        self._abandoned = False
+        self._claimed = False
+        self._cleanup_started = False
+        self._thread = Thread(
+            target=self._run,
+            name="docmind-parser-start",
+        )
+        try:
+            self._thread.start()
+        except Exception as exc:
+            self._future.set_exception(exc)
+            raise DocumentParseError(
+                path,
+                stage="parser_worker",
+                reason="worker_start_failed",
+                cause=exc,
+            ) from exc
+
+    @property
+    def future(self) -> Future[_ParserWorker]:
+        """Return the loop-independent startup result future."""
+        return self._future
+
+    def claim(self) -> None:
+        """Transfer worker ownership to the successful async caller."""
+        with self._lock:
+            self._claimed = True
+
+    def abandon(self) -> None:
+        """Ensure an unclaimed worker is reaped even after event-loop shutdown."""
+        worker: _ParserWorker | None = None
+        with self._lock:
+            if self._claimed or self._abandoned:
+                return
+            self._abandoned = True
+            if self._future.done() and not self._cleanup_started:
+                with suppress(BaseException):
+                    worker = self._future.result()
+                if worker is not None:
+                    self._cleanup_started = True
+        if worker is not None:
+            _spawn_worker_cleanup(worker)
+
+    def _run(self) -> None:
+        try:
+            worker = _start_parse_worker(
+                self._path,
+                settings=self._settings,
+                document_id=self._document_id,
+            )
+        except BaseException as exc:
+            self._future.set_exception(exc)
+            return
+        cleanup = False
+        with self._lock:
+            self._future.set_result(worker)
+            if self._abandoned and not self._cleanup_started:
+                self._cleanup_started = True
+                cleanup = True
+        if cleanup:
+            _close_and_stop_worker(worker)
+
+
+def _spawn_worker_cleanup(worker: _ParserWorker) -> None:
+    """Start loop-independent cleanup for an already completed abandoned start."""
+    cleanup_thread = Thread(
+        target=_close_and_stop_worker,
+        args=(worker,),
+        name="docmind-parser-abandoned-cleanup",
+    )
+    try:
+        cleanup_thread.start()
+    except RuntimeError:
+        _close_and_stop_worker(worker)
+
+
+def _close_and_stop_worker(worker: _ParserWorker) -> None:
+    """Best-effort synchronous cleanup owned independently of the event loop."""
+    process, receiver = worker
+    with suppress(Exception):
         receiver.close()
-        _stop_parse_worker(process, force=not completed)
+    with suppress(Exception):
+        _stop_parse_worker(process, force=True)
+
+
+def _receive_and_decode_worker_payload(
+    path: Path,
+    receiver: Connection,
+) -> DocumentParseResult:
+    """Receive and validate a worker result outside the event-loop thread."""
+    try:
+        payload = receiver.recv()
+    except (EOFError, OSError) as exc:
+        raise DocumentParseError(
+            path,
+            stage="parser_worker",
+            reason="worker_result_unavailable",
+            cause=exc,
+        ) from exc
+    return _decode_worker_payload(path, payload)
+
+
+async def _cleanup_parse_worker(
+    *,
+    process: BaseProcess,
+    receiver: Connection,
+    force: bool,
+) -> None:
+    """Close the receive channel and reap the worker without blocking the loop."""
+    cleanup_error: Exception | None = None
+    try:
+        receiver.close()
+    except Exception as exc:
+        cleanup_error = exc
+    stop_task = asyncio.create_task(
+        asyncio.to_thread(_stop_parse_worker, process, force=force)
+    )
+    try:
+        await asyncio.shield(stop_task)
+    except asyncio.CancelledError:
+        stop_task.add_done_callback(_consume_task_result)
+        raise
+    except Exception as exc:
+        if cleanup_error is None:
+            cleanup_error = exc
+    if cleanup_error is not None:
+        raise cleanup_error
+
+
+async def _cleanup_parse_worker_preserving_error(
+    path: Path,
+    *,
+    worker: _ParserWorker,
+    force: bool,
+    primary_error: BaseException | None,
+) -> None:
+    """Clean a worker without replacing an in-flight parse failure."""
+    process, receiver = worker
+    try:
+        await _cleanup_parse_worker(
+            process=process,
+            receiver=receiver,
+            force=force,
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        if primary_error is None:
+            raise DocumentParseError(
+                path,
+                stage="parser_worker",
+                reason="worker_cleanup_failed",
+                cause=exc,
+            ) from exc
 
 
 def _start_parse_worker(

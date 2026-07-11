@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import signal
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -145,21 +147,40 @@ class _LiveProcess:
 class _ClosableConnection:
     """Minimal pipe endpoint that records deterministic cleanup."""
 
-    closed = False
+    def __init__(self) -> None:
+        self.close_calls = 0
+
+    @property
+    def closed(self) -> bool:
+        return self.close_calls > 0
 
     def close(self) -> None:
-        self.closed = True
+        self.close_calls += 1
+
+
+def _successful_worker_payload(source: Path) -> tuple[str, str]:
+    result = DocumentParseResult(
+        document_id="doc-1",
+        source_filename=source.name,
+        source_hash="abc",
+        profile=ParserProfile.CPU_SAFE,
+        parser_framework=ParserFramework.DOCLING,
+    )
+    return ("ok", result.model_dump_json())
 
 
 class _StartFailureProcess:
     """Process double that fails after becoming partially live."""
 
-    alive = False
-    terminated = False
-    joined = False
-    closed = False
+    def __init__(self) -> None:
+        self.alive = False
+        self.terminated = False
+        self.joined = False
+        self.closed = False
+        self.start_thread_id: int | None = None
 
     def start(self) -> None:
+        self.start_thread_id = threading.get_ident()
         self.alive = True
         raise OSError("private worker startup detail")
 
@@ -192,6 +213,7 @@ async def test_async_worker_start_failure_is_typed_and_closes_resources(
     receiver = _ClosableConnection()
     sender = _ClosableConnection()
     process = _StartFailureProcess()
+    event_loop_thread_id = threading.get_ident()
     context = SimpleNamespace(
         Pipe=lambda **_kwargs: (receiver, sender),
         Process=lambda **_kwargs: process,
@@ -210,6 +232,7 @@ async def test_async_worker_start_failure_is_typed_and_closes_resources(
     assert process.terminated is True
     assert process.joined is True
     assert process.closed is True
+    assert process.start_thread_id != event_loop_thread_id
 
 
 @pytest.mark.asyncio
@@ -227,18 +250,34 @@ async def test_async_parse_timeout_terminates_worker(
         "_start_parse_worker",
         lambda *_args, **_kwargs: (process, receiver),
     )
-    times = iter((0.0, 301.0))
+    times = iter((0.0, 0.0, 301.0))
     loop = SimpleNamespace(time=lambda: next(times))
     monkeypatch.setattr(
         service,
         "asyncio",
-        SimpleNamespace(get_running_loop=lambda: loop),
+        SimpleNamespace(
+            CancelledError=asyncio.CancelledError,
+            create_task=asyncio.create_task,
+            get_running_loop=lambda: loop,
+            shield=asyncio.shield,
+            sleep=asyncio.sleep,
+            to_thread=asyncio.to_thread,
+            wait_for=asyncio.wait_for,
+            wrap_future=asyncio.wrap_future,
+        ),
     )
-    cleanup: list[tuple[object, bool]] = []
+
+    event_loop_thread_id = threading.get_ident()
+    cleanup: list[tuple[object, bool, int]] = []
+
+    def _record_cleanup(stopped: object, *, force: bool) -> None:
+        cleanup.append((stopped, force, threading.get_ident()))
+        raise RuntimeError("cleanup failure must not replace the parser timeout")
+
     monkeypatch.setattr(
         service,
         "_stop_parse_worker",
-        lambda stopped, *, force: cleanup.append((stopped, force)),
+        _record_cleanup,
     )
 
     with pytest.raises(DocumentParseError) as raised:
@@ -246,7 +285,10 @@ async def test_async_parse_timeout_terminates_worker(
 
     assert raised.value.stage == "parse_timeout"
     assert receiver.closed is True
-    assert cleanup == [(process, True)]
+    assert [(stopped, force) for stopped, force, _thread_id in cleanup] == [
+        (process, True)
+    ]
+    assert cleanup[0][2] != event_loop_thread_id
 
 
 @pytest.mark.asyncio
@@ -272,8 +314,14 @@ async def test_async_parse_cancellation_stops_the_worker_tree(
         service,
         "asyncio",
         SimpleNamespace(
+            CancelledError=asyncio.CancelledError,
+            create_task=asyncio.create_task,
             get_running_loop=lambda: SimpleNamespace(time=lambda: 0.0),
+            shield=asyncio.shield,
             sleep=_cancel,
+            to_thread=asyncio.to_thread,
+            wait_for=asyncio.wait_for,
+            wrap_future=asyncio.wrap_future,
         ),
     )
     cleanup: list[tuple[object, bool]] = []
@@ -288,6 +336,316 @@ async def test_async_parse_cancellation_stops_the_worker_tree(
 
     assert receiver.closed is True
     assert cleanup == [(process, True)]
+
+
+@pytest.mark.asyncio
+async def test_cancellation_during_worker_start_cleans_up_exactly_once(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "cancelled-during-start.md"
+    source.write_text("bounded", encoding="utf-8")
+    cfg = DocMindSettings(_env_file=None)  # type: ignore[arg-type]
+    process = _LiveProcess()
+
+    class _CloseFailureConnection(_ClosableConnection):
+        def close(self) -> None:
+            super().close()
+            raise RuntimeError("abandoned receiver close failed")
+
+    receiver = _CloseFailureConnection()
+    started = threading.Event()
+    release = threading.Event()
+    cleanup_done = threading.Event()
+
+    def _blocked_start(
+        *_args: object,
+        **_kwargs: object,
+    ) -> tuple[_LiveProcess, _ClosableConnection]:
+        started.set()
+        if not release.wait(timeout=2.0):
+            raise AssertionError("worker-start test was not released")
+        return process, receiver
+
+    cleanup: list[tuple[object, bool, int]] = []
+
+    def _record_cleanup(stopped: object, *, force: bool) -> None:
+        cleanup.append((stopped, force, threading.get_ident()))
+        cleanup_done.set()
+
+    monkeypatch.setattr(service, "_start_parse_worker", _blocked_start)
+    monkeypatch.setattr(service, "_stop_parse_worker", _record_cleanup)
+
+    event_loop_thread_id = threading.get_ident()
+    parse_task = asyncio.create_task(service.parse_document(source, settings=cfg))
+    assert await asyncio.wait_for(asyncio.to_thread(started.wait, 1.0), timeout=2.0)
+    assert parse_task.cancel() is True
+    assert parse_task.cancel() is True
+
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(parse_task, timeout=0.5)
+
+    release.set()
+    assert await asyncio.wait_for(
+        asyncio.to_thread(cleanup_done.wait, 1.0),
+        timeout=2.0,
+    )
+
+    assert receiver.close_calls == 1
+    assert [(stopped, force) for stopped, force, _thread_id in cleanup] == [
+        (process, True)
+    ]
+    assert cleanup[0][2] != event_loop_thread_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("abandonment", ["cancellation", "timeout"])
+async def test_abandoned_worker_start_observes_late_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    abandonment: str,
+) -> None:
+    source = tmp_path / f"{abandonment}-start-failure.md"
+    source.write_text("bounded", encoding="utf-8")
+    cfg = DocMindSettings(_env_file=None)  # type: ignore[arg-type]
+    started = threading.Event()
+    release = threading.Event()
+
+    def _blocked_start(*_args: object, **_kwargs: object) -> None:
+        started.set()
+        if not release.wait(timeout=2.0):
+            raise AssertionError("late-failure test was not released")
+        raise RuntimeError("late worker-start failure")
+
+    result_observed = asyncio.Event()
+    consume_result = service._consume_task_result
+
+    def _record_result_observation(future: asyncio.Future[object]) -> None:
+        consume_result(future)
+        result_observed.set()
+
+    monkeypatch.setattr(service, "_start_parse_worker", _blocked_start)
+    monkeypatch.setattr(service, "_consume_task_result", _record_result_observation)
+    loop = asyncio.get_running_loop()
+    loop_errors: list[dict[str, object]] = []
+    previous_handler = loop.get_exception_handler()
+    loop.set_exception_handler(lambda _loop, context: loop_errors.append(context))
+
+    try:
+        start_task = asyncio.create_task(
+            service._start_parse_worker_async(
+                source,
+                settings=cfg,
+                document_id=None,
+                timeout_seconds=0.02 if abandonment == "timeout" else 1.0,
+            )
+        )
+        assert await asyncio.wait_for(
+            asyncio.to_thread(started.wait, 1.0),
+            timeout=2.0,
+        )
+        if abandonment == "cancellation":
+            start_task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await start_task
+        else:
+            with pytest.raises(DocumentParseError) as raised:
+                await start_task
+            assert raised.value.stage == "parse_timeout"
+
+        release.set()
+        await asyncio.wait_for(result_observed.wait(), timeout=2.0)
+        await asyncio.sleep(0)
+        gc.collect()
+        await asyncio.sleep(0)
+    finally:
+        release.set()
+        loop.set_exception_handler(previous_handler)
+
+    assert not [
+        context
+        for context in loop_errors
+        if context.get("message") == "Future exception was never retrieved"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_worker_start_timeout_transfers_eventual_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "timed-out-during-start.md"
+    source.write_text("bounded", encoding="utf-8")
+    cfg = DocMindSettings(_env_file=None)  # type: ignore[arg-type]
+    process = _LiveProcess()
+    receiver = _ClosableConnection()
+    started = threading.Event()
+    release = threading.Event()
+    cleanup_done = threading.Event()
+
+    def _blocked_start(
+        *_args: object,
+        **_kwargs: object,
+    ) -> tuple[_LiveProcess, _ClosableConnection]:
+        started.set()
+        if not release.wait(timeout=2.0):
+            raise AssertionError("worker-start timeout test was not released")
+        return process, receiver
+
+    cleanup: list[tuple[object, bool]] = []
+
+    def _record_cleanup(stopped: object, *, force: bool) -> None:
+        cleanup.append((stopped, force))
+        cleanup_done.set()
+
+    monkeypatch.setattr(service, "_start_parse_worker", _blocked_start)
+    monkeypatch.setattr(service, "_stop_parse_worker", _record_cleanup)
+
+    with pytest.raises(DocumentParseError) as raised:
+        await asyncio.wait_for(
+            service._start_parse_worker_async(
+                source,
+                settings=cfg,
+                document_id=None,
+                timeout_seconds=0.02,
+            ),
+            timeout=0.5,
+        )
+
+    assert started.is_set()
+    assert raised.value.stage == "parse_timeout"
+    release.set()
+    assert await asyncio.wait_for(
+        asyncio.to_thread(cleanup_done.wait, 1.0),
+        timeout=2.0,
+    )
+    assert receiver.close_calls == 1
+    assert cleanup == [(process, True)]
+
+
+def test_cancelled_start_cleanup_survives_event_loop_shutdown(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "loop-shutdown-during-start.md"
+    source.write_text("bounded", encoding="utf-8")
+    cfg = DocMindSettings(_env_file=None)  # type: ignore[arg-type]
+    process = _LiveProcess()
+    receiver = _ClosableConnection()
+    started = threading.Event()
+    release = threading.Event()
+    cleanup_done = threading.Event()
+
+    def _blocked_start(
+        *_args: object,
+        **_kwargs: object,
+    ) -> tuple[_LiveProcess, _ClosableConnection]:
+        started.set()
+        if not release.wait(timeout=2.0):
+            raise AssertionError("loop-shutdown test was not released")
+        return process, receiver
+
+    cleanup: list[tuple[object, bool]] = []
+
+    def _record_cleanup(stopped: object, *, force: bool) -> None:
+        cleanup.append((stopped, force))
+        cleanup_done.set()
+
+    monkeypatch.setattr(service, "_start_parse_worker", _blocked_start)
+    monkeypatch.setattr(service, "_stop_parse_worker", _record_cleanup)
+
+    async def _cancel_before_loop_shutdown() -> None:
+        parse_task = asyncio.create_task(service.parse_document(source, settings=cfg))
+        assert await asyncio.wait_for(
+            asyncio.to_thread(started.wait, 1.0),
+            timeout=2.0,
+        )
+        parse_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await parse_task
+
+    asyncio.run(_cancel_before_loop_shutdown())
+    release.set()
+
+    assert cleanup_done.wait(timeout=2.0)
+    assert receiver.close_calls == 1
+    assert cleanup == [(process, True)]
+
+
+@pytest.mark.asyncio
+async def test_worker_receive_and_decode_runs_off_the_event_loop(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "off-loop-receive.md"
+    source.write_text("bounded", encoding="utf-8")
+    started = threading.Event()
+    release = threading.Event()
+    receive_thread_id: int | None = None
+
+    class _BlockedResultConnection:
+        def recv(self) -> tuple[str, str]:
+            nonlocal receive_thread_id
+            receive_thread_id = threading.get_ident()
+            started.set()
+            if not release.wait(timeout=2.0):
+                raise AssertionError("worker receive test was not released")
+            return _successful_worker_payload(source)
+
+    event_loop_thread_id = threading.get_ident()
+    receive_task = asyncio.create_task(
+        service._receive_worker_before_deadline(
+            source,
+            _BlockedResultConnection(),  # type: ignore[arg-type]
+            timeout_seconds=1.0,
+        )
+    )
+    assert await asyncio.wait_for(asyncio.to_thread(started.wait, 1.0), timeout=2.0)
+    await asyncio.wait_for(asyncio.sleep(0), timeout=0.1)
+    assert receive_task.done() is False
+    release.set()
+
+    result = await asyncio.wait_for(receive_task, timeout=2.0)
+    assert result.document_id == "doc-1"
+    assert receive_thread_id != event_loop_thread_id
+
+
+@pytest.mark.asyncio
+async def test_successful_parse_reports_typed_cleanup_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "cleanup-failure.md"
+    source.write_text("bounded", encoding="utf-8")
+    cfg = DocMindSettings(_env_file=None)  # type: ignore[arg-type]
+    process = _LiveProcess()
+
+    class _ReadyConnection(_ClosableConnection):
+        def poll(self) -> bool:
+            return True
+
+        def recv(self) -> tuple[str, str]:
+            return _successful_worker_payload(source)
+
+    receiver = _ReadyConnection()
+    monkeypatch.setattr(
+        service,
+        "_start_parse_worker",
+        lambda *_args, **_kwargs: (process, receiver),
+    )
+
+    def _failed_cleanup(_process: object, *, force: bool) -> None:
+        assert force is False
+        raise RuntimeError("private cleanup detail")
+
+    monkeypatch.setattr(service, "_stop_parse_worker", _failed_cleanup)
+
+    with pytest.raises(DocumentParseError) as raised:
+        await service.parse_document(source, settings=cfg)
+
+    assert raised.value.stage == "parser_worker"
+    assert raised.value.reason == "worker_cleanup_failed"
+    assert raised.value.cause_type == "RuntimeError"
+    assert "private cleanup detail" not in str(raised.value)
 
 
 def test_worker_cleanup_kills_residual_process_group_members(

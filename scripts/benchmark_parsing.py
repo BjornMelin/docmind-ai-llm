@@ -578,7 +578,7 @@ def _summary(results: list[dict[str, Any]]) -> dict[str, Any]:
             1 for item in results if item.get("deterministic") is True
         ),
         "latency_ms_median": statistics.median(latencies),
-        "latency_ms_max": max(latencies),
+        "latency_ms_max": max(float(item["latency_ms_max"]) for item in results),
         "rss_mb_max": max(float(item["rss_mb"]) for item in results),
         "error_count": sum(1 for item in results if item.get("error")),
     }

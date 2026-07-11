@@ -147,6 +147,7 @@ def test_parsing_overrides_are_reachable_before_submit(
 
     checkboxes = {checkbox.label: checkbox for checkbox in app.checkbox}
     use_global = checkboxes["Use global parsing defaults"]
+    assert use_global.value is True
     assert checkboxes["Force RapidOCR"].disabled is True
     assert checkboxes["Export searchable PDF"].disabled is True
 
