@@ -17,6 +17,13 @@ from llama_index.core.base.embeddings.base import BaseEmbedding
 
 from src.models.processing import IngestionConfig, IngestionInput
 from src.processing.ingestion_pipeline import ingest_documents_sync
+from src.processing.parsing.canonical_types import (
+    DocumentParseResult,
+    PageParseResult,
+    ParserFramework,
+    ParserProfile,
+)
+from src.utils.hashing import document_id_from_sha256
 
 
 class DummyEmbedding(BaseEmbedding):
@@ -44,21 +51,13 @@ class DummyEmbedding(BaseEmbedding):
         return [self._get_text_embedding(t) for t in texts]
 
 
-def _skip_if_no_pymupdf() -> None:
-    import importlib.util
-
-    if importlib.util.find_spec("fitz") is None:
-        pytest.skip("PyMuPDF not available")
-
-
 def _make_pdf(path: Path) -> None:
-    import fitz  # type: ignore
+    from pypdf import PdfWriter
 
-    doc = fitz.open()  # type: ignore[no-untyped-call]
-    page = doc.new_page(width=200, height=100)  # type: ignore[attr-defined]
-    page.insert_text((20, 50), "Hello multimodal")
-    doc.save(str(path))
-    doc.close()
+    writer = PdfWriter()
+    writer.add_blank_page(width=200, height=100)
+    with path.open("wb") as handle:
+        writer.write(handle)
 
 
 @pytest.mark.integration
@@ -67,25 +66,51 @@ def test_ingestion_pdf_images_exports_and_index_wiring(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, batch_size: int
 ) -> None:
     """Ingest a tiny PDF and assert page-image exports reach image indexer."""
-    _skip_if_no_pymupdf()
-
     from src.config.settings import settings as app_settings
 
     monkeypatch.setattr(app_settings, "data_dir", tmp_path)
     cache_dir = tmp_path / "cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(app_settings, "cache_dir", cache_dir)
+    monkeypatch.setattr(app_settings.cache, "dir", cache_dir)
 
     pdf_path = tmp_path / "doc.pdf"
     _make_pdf(pdf_path)
 
-    doc_id = "doc-" + hashlib.sha256(pdf_path.read_bytes()).hexdigest()[:16]
+    doc_id = document_id_from_sha256(hashlib.sha256(pdf_path.read_bytes()).hexdigest())
+
+    async def _parse(
+        path: Path,
+        *,
+        document_id: str,
+        parsing_overrides: dict[str, Any] | None = None,
+    ) -> DocumentParseResult:
+        """Keep this image-wiring test independent of parser model runtimes."""
+        assert path == pdf_path
+        assert document_id == doc_id
+        assert parsing_overrides == {}
+        return DocumentParseResult(
+            document_id=document_id,
+            source_filename=path.name,
+            source_hash=hashlib.sha256(path.read_bytes()).hexdigest(),
+            profile=ParserProfile.CPU_SAFE,
+            parser_framework=ParserFramework.DOCLING,
+            page_count=1,
+            pages=[
+                PageParseResult(
+                    page_id=f"{document_id}::page::1",
+                    page_index=0,
+                    text_markdown="PDF page",
+                    routing_reason="test_fixture",
+                )
+            ],
+        )
+
+    monkeypatch.setattr("src.processing.ingestion_api._parse_path", _parse)
 
     cfg = IngestionConfig(
         chunk_size=128,
         chunk_overlap=16,
         cache_dir=tmp_path / "cache" / "ingestion",
-        docstore_path=tmp_path / "cache" / "ingestion" / "docstore.json",
         enable_image_indexing=True,
         enable_image_encryption=False,
         image_index_batch_size=batch_size,
@@ -95,16 +120,15 @@ def test_ingestion_pdf_images_exports_and_index_wiring(
     # Stub the heavy ingestion pipeline execution.
     class _Pipeline:  # pragma: no cover - test stub
         def __init__(self) -> None:
-            self.docstore = SimpleNamespace(persist=lambda _: None)
             self.transformations = []
 
         async def arun(self, documents: Sequence[object]) -> list[object]:
             del documents
-            return []
+            return [SimpleNamespace(metadata={})]
 
     monkeypatch.setattr(
         "src.processing.ingestion_pipeline.build_ingestion_pipeline",
-        lambda *_a, **_k: (_Pipeline(), tmp_path / "cache.duckdb", None),  # pyright: ignore[unused-param]
+        lambda *_a, **_k: (_Pipeline(), tmp_path / "cache.duckdb"),  # pyright: ignore[unused-param]
     )
     monkeypatch.setattr(
         "src.processing.ingestion_pipeline._resolve_embedding",

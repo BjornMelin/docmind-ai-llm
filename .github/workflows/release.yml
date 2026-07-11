@@ -4,6 +4,14 @@ on:
   push:
     branches:
       - main
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag whose wheel should be rebuilt and uploaded
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -12,6 +20,7 @@ permissions:
 
 jobs:
   release-please:
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     steps:
       - name: Require release identity configuration
@@ -51,3 +60,52 @@ jobs:
             echo "Release Please could not parse release notes for the tag."
             exit 1
           fi
+
+  release-artifacts:
+    if: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - name: Require nonblank release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          body=""
+          for attempt in 1 2 3 4 5; do
+            body="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json body --jq '.body // ""' 2>/dev/null || true)"
+            if [[ "$body" =~ [^[:space:]] ]]; then
+              break
+            fi
+            if [ "$attempt" -lt 5 ]; then
+              sleep "$attempt"
+            fi
+          done
+          if [[ ! "$body" =~ [^[:space:]] ]]; then
+            echo "Release $RELEASE_TAG has a blank body; refusing artifact upload."
+            exit 1
+          fi
+      - name: Checkout released source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12.13'
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+      - name: Build and smoke-test release wheel
+        run: |
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct HEAD)"
+          umask 022
+          rm -rf build docmind_ai_llm.egg-info
+          uv build --wheel --clear
+          python scripts/smoke_built_wheel.py
+      - name: Upload wheel to GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$RELEASE_TAG" dist/*.whl --repo "$GITHUB_REPOSITORY" --clobber

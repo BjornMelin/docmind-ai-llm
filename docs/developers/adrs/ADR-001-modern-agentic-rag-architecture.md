@@ -1,9 +1,9 @@
 ---
 ADR: 001
-Title: Modern Agentic RAG Architecture
-Status: Implemented
-Version: 7.0
-Date: 2025-08-19
+Title: Modern agentic RAG architecture
+Status: Implemented (Amended)
+Version: 7.1
+Date: 2026-07-10
 Supersedes:
 Superseded-by:
 Related: 003, 004, 010, 011, 018, 019, 024, 037
@@ -15,11 +15,13 @@ References:
 
 ## Description
 
-Adopt a lightweight, supervisor‑based, multi‑agent RAG architecture that routes queries, plans sub‑tasks, retrieves, synthesizes, and validates responses. Prioritize simple orchestration, local‑first operation, and correctness via self‑checks.
+Adopt a lightweight supervisor-based retrieval-augmented generation (RAG) architecture. It routes queries, plans subtasks, retrieves evidence, synthesizes answers, and validates results. Keep orchestration local-first and measure performance in each deployment environment.
 
 ## Context
 
-Fixed RAG pipelines fail to adapt to query complexity or recover from poor retrieval. A small set of specialized agents coordinated by a supervisor improves robustness while keeping implementation simple and local‑first. Targets: fast decisions (<200ms), low end‑to‑end latency (<2s), and predictable memory (~12–14GB VRAM with 128K context, ADR‑004/010).
+Fixed RAG pipelines cannot adapt to query complexity or recover from poor retrieval. A small set of specialized agents coordinated by a supervisor improves robustness while keeping implementation local-first.
+
+The application defaults to a local Ollama backend. It can also use local or approved remote OpenAI-compatible endpoints. Model, backend, hardware, context size, and retrieval work all affect latency and memory. The repository does not contain an LLM benchmark that supports a fixed latency, throughput, or video memory guarantee.
 
 ## Decision Drivers
 
@@ -78,14 +80,14 @@ graph TD
 
 ### Non-Functional Requirements
 
-- NFR‑1: Local‑first; no external services
-- NFR‑2: Agent decision latency <200ms on RTX 4090 Laptop
-- NFR‑3: VRAM usage ~12–14GB at 128K context with FP8 optimizations
+- NFR‑1: Default to local endpoints; require explicit policy configuration for remote providers
+- NFR‑2: Treat `settings.agents.decision_timeout` as an execution budget, not a measured latency objective
+- NFR‑3: Record hardware, model, backend, and context size with every performance result
 
 ### Performance Requirements
 
-- PR‑1: End‑to‑end typical latency <2s for single‑step tasks
-- PR‑2: Parallel tool paths reduce tokens by 50–87%
+- PR‑1: Measure time to first token and end-to-end latency per environment
+- PR‑2: Compare parallel and sequential tool paths before claiming a reduction
 
 ### Integration Requirements
 
@@ -191,7 +193,7 @@ def test_router_picks_strategy(router):
 ### Positive Outcomes
 
 - Robust answers via routing + validation
-- Local‑first reliability and predictable performance
+- Local-first operation with explicit provider boundaries
 - Small, composable agents simplify maintenance
 
 ### Negative Consequences / Trade-offs
@@ -206,11 +208,12 @@ def test_router_picks_strategy(router):
 
 ### Dependencies
 
-- Python: `langgraph`, `llama-index`, `sentence-transformers`
+- Python: `langgraph`, `llama-index-core`, selected LlamaIndex adapters, and `sentence-transformers`
 
 ## Changelog
 
-- 7.0 (2025-08-19): FP8 model transition; 128K context with FP8 KV cache and parallel tools; <200ms decisions; <2s E2E; ~12–14GB VRAM
+- 7.1 (2026-07-10): Mark fixed latency, throughput, and memory figures as unverified historical targets; align provider language with the local-first default and opt-in remote endpoints
+- 7.0 (2025-08-19): Record the FP8 model, extended-context, and parallel-tool planning targets; no reproducible LLM benchmark accompanied these targets
 - 6.0 (2025-08-18): Hardware upgrade; 128K via YaRN; latency targets updated
 - 5.1 (2025-08-18): Reverted to Qwen3‑14B after 30B MoE experiment
 - 5.0 (2025-08-18): Experimental 30B change (later reverted)

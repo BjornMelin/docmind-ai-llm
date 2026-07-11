@@ -1,104 +1,138 @@
 ---
 spec: SPEC-026
-title: Unified Ingestion API (Canonical)
-version: 2.0.0
-date: 2026-01-15
+title: Canonical ingestion API
+version: 2.5.0
+date: 2026-07-11
 owners: ["ai-arch"]
 status: Implemented
 related_requirements:
-  - FR-024: Provide a canonical programmatic ingestion API (local-only).
-  - NFR-MAINT-003: No split logic; single ownership domain.
-  - NFR-SEC-001: Offline-first defaults MUST remain intact.
+  - FR-024: Provide one canonical programmatic ingestion API.
+  - NFR-MAINT-003: Keep file loading and metadata sanitation under one owner.
+  - NFR-SEC-001: Preserve local-first and fail-closed parser behavior.
 related_adrs: ["ADR-045"]
 ---
 
 ## Objective
 
-Refactor the ingestion "loading" layer into a single canonical module `src/processing/ingestion_api.py` and remove the legacy `src/utils/document.py`.
+`src/processing/ingestion_api.py` owns local path collection, stable identifier generation, canonical document loading, and metadata sanitation. `src/utils/hashing.py` owns the shared `doc-<full lowercase SHA-256>` formatter used by ingestion callers. Package `__init__.py` modules do not re-export this domain API.
 
-## User stories
+## Public contract
 
-1. As a developer, I import all ingestion capabilities from `src.processing` (e.g., `from src.processing import collect_paths, load_documents`).
-2. As a maintainer, I verify file loading and path sanitization logic in exactly one place.
-3. As an operator, I rely on deterministic hashing and secure path validation that is enforced centrally.
-
-## Technical design
-
-### 1. New Module: `src/processing/ingestion_api.py`
-
-This module accepts **Paths** and produces **LlamaIndex Documents** or **IngestionInputs**.
-
-**Core Responsibilities:**
-
-- **Path Enumeration**: `collect_paths(root: Path, ...)`
-  - Recursive globbing.
-  - **Security**: strict symlink rejection (parents and leaf).
-  - **Determinism**: Sort results by path.
-- **File Loading**: `load_documents(paths: Sequence[Path], ...)`
-  - Detects file type.
-  - Uses `UnstructuredReader` (if available and compatible).
-  - fallback to `read_text` (UTF-8).
-  - **Security**: Sanitize metadata (remove absolute paths).
-- **ID Generation**: `generate_stable_id(file_path)` -> `doc-<sha256[:16]>`.
-  - Streaming file hash.
-- **Helper Exports**:
-  - `clear_ingestion_cache()`: targeted cleanup of `settings.cache_dir / "ingestion"`.
-
-### 2. Migration (Refactor)
-
-The implementation agent must:
-
-1. **Extract** the working logic from `src/utils/document.py`.
-2. **Adapt** it to `src/processing/ingestion_api.py`.
-    - Ensure imports (like `hashing`, `settings`) are aligned.
-3. **Delete** `src/utils/document.py`.
-4. **Update Call Sources**:
-    - `src/processing/ingestion_pipeline.py` -> call `ingestion_api` functions (instead of internal duplicates or utils).
-    - `src/ui/_ingest_adapter_impl.py` -> update imports.
-    - `tests/` -> update imports.
-
-### 3. API Signature (Target)
+The module exports these functions:
 
 ```python
-# src/processing/ingestion_api.py
-
 def collect_paths(
     root: Path | str,
     *,
     recursive: bool = True,
-    extensions: set[str] | None = None
-) -> list[Path]:
-    ...
+    extensions: set[str] | None = None,
+) -> list[Path]: ...
 
 async def load_documents(
     paths: Sequence[Path | str],
     *,
-    reader: Any | None = None
-) -> list[Document]:
-    ...
+    doc_id: str | None = None,
+    parsing_overrides: dict[str, Any] | None = None,
+) -> list[Document]: ...
+
+async def load_documents_from_inputs(
+    inputs: Sequence[IngestionInput],
+) -> list[Document]: ...
 ```
 
-### 4. `src/processing/__init__.py`
+The remaining exports are:
 
-Update `__all__` to include these new primitives.
+- `generate_stable_id(file_path)`, which returns `doc-<full lowercase SHA-256>`
+- `sanitize_document_metadata(meta, *, source_filename)`
+- `clear_ingestion_cache()`
 
-### 5. Documentation Updates (Critical)
+## Input behavior
 
-The implementation is not complete until **ALL** documentation referencing the removed legacy document module is updated.
+`collect_paths`:
 
-- **Search**: `rg "utils\\.document" docs/`
-- **Update**: Replace with `src.processing.ingestion_api` or `src.processing`.
-- **Verify**: `grep` should return zero matches in `docs/` (except changelogs/ADRs).
+- Returns an empty list when the root does not exist
+- Requires an existing directory when the root exists
+- Rejects a symlink root
+- Rejects symlinks between the root and each file
+- Rejects resolved paths outside the root
+- Filters by normalized extension and returns a deterministic sort order
 
-## Security & Verification
+`load_documents`:
 
-- **Symlinks**: Must be explicitly rejected. `path.resolve(strict=True)` check against `path.absolute()`.
-- **Absolute Paths**: Metadata MUST NOT contain absolute paths (PII/Environment leakage). Use `Path(p).name`.
+- Accepts local file paths
+- Skips missing paths and non-files
+- Uses the parser service for every supported format
+- Propagates every parser-service failure as `DocumentParseError`
+- Has no direct-text fallback; the parser service alone owns UTF-8 text loading
+- Applies `doc_id` only when loading one path
+- Applies only the supported `force_ocr` and `export_searchable_pdf` overrides
+- Emits one LlamaIndex `Document` per physical parser page
 
-## Testing
+`load_documents_from_inputs`:
 
-- **Move** `tests/unit/utils/document/test_document_helpers.py` to `tests/unit/processing/test_ingestion_api.py`.
-- **Verify** that `load_documents` correctly handles:
-  - Missing files (skip/warn).
-  - Unstructured missing (fallback).
-  - Symlinks (raise/skip).
+- Accepts normalized `IngestionInput` values
+- Requires exactly one `source_path` or strict `payload_text` value per input
+- Routes path inputs through `load_documents`
+- Converts explicit text payloads without a binary coercion path
+- Preserves the caller’s stable document identifier
+- Rejects parser-owned metadata keys through the input model
+
+## Metadata contract
+
+The ingestion API removes path-like keys before persistence. It stores a safe basename as `source_filename` and excludes parser provenance from embedding and language-model metadata strings.
+
+Parser provenance can include:
+
+- Framework and profile
+- Observed PDF and OCR backends (omitted for direct text, where neither runs)
+- Package versions
+- Page routing and OCR decisions
+- Searchable-PDF artifact references
+- Configuration hash
+- Component health
+
+## Breaking identity migration
+
+`doc-<full lowercase SHA-256>` deliberately replaces the former truncated
+document IDs without a compatibility layer. Existing ingestion caches,
+docstores, snapshots, and Qdrant collections must be retired or rebuilt before
+the upgraded corpus is served. Follow the canonical
+[migration runbook](spec-002-ingestion-pipeline.md#breaking-full-sha-identity-migration).
+
+## Package boundary
+
+Callers import the owner directly:
+
+```python
+from src.processing.ingestion_api import load_documents
+from src.processing.ingestion_api import load_documents_from_inputs
+```
+
+Import-light package initializers prevent parser-only processes from loading ingestion, Qdrant, or Torch stacks before they need them.
+
+## Security requirements
+
+- Reject symlink traversal
+- Never persist an absolute source path
+- Never decode a failed binary source as text
+- Never publish a partial binary parse
+- Never accept arbitrary in-memory bytes
+- Never copy parser-owned provenance from user metadata
+
+## Verification
+
+The canonical tests are:
+
+- `tests/unit/processing/test_ingestion_api.py`
+- `tests/unit/processing/test_parser_contract.py`
+- `tests/unit/models/test_ingestion_models.py`
+- `tests/integration/test_ingestion_pipeline_pdf_images.py`
+
+Run:
+
+```bash
+uv run pytest \
+  tests/unit/processing/test_ingestion_api.py \
+  tests/unit/processing/test_parser_contract.py \
+  tests/unit/models/test_ingestion_models.py
+```

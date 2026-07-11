@@ -1,43 +1,16 @@
-"""Adapters for interacting with LlamaIndex with minimal hard dependencies.
-
-This module serves two distinct callers:
-
-1) Router factory: needs a small surface area from ``llama_index.core`` to build
-   RouterQueryEngine instances without importing LlamaIndex at module import
-   time (tests can inject stubs).
-2) GraphRAG adapter registry: provides an ``AdapterFactoryProtocol`` for
-   GraphRAG capabilities when LlamaIndex is installed.
-"""
+"""Lazy LlamaIndex router imports and GraphRAG availability checks."""
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
-from importlib import import_module, metadata, util
+from functools import lru_cache
+from importlib import import_module, util
 from types import SimpleNamespace
 from typing import Any, Protocol, runtime_checkable
 
-from packaging.version import InvalidVersion, Version
-
-from src.retrieval.adapters.protocols import (
-    AdapterFactoryProtocol,
-    GraphIndexBuilderProtocol,
-    GraphQueryArtifacts,
-    GraphRetrieverProtocol,
-    TelemetryHooksProtocol,
+LLAMA_INDEX_INSTALL_HINT = (
+    "llama-index-core is a required DocMind dependency. Reinstall DocMind with "
+    "its required dependencies or provide a stub adapter for isolated tests."
 )
-
-_LLAMA_INSTALL_HINT = (
-    "llama_index.core is required for this feature. Install it via "
-    "`pip install docmind_ai_llm[llama]` or provide a stub adapter."
-)
-
-_GRAPH_INSTALL_HINT = (
-    "GraphRAG is disabled: install optional extras 'docmind_ai_llm[graph]' "
-    "to enable knowledge graph retrieval."
-)
-
-_MIN_LLAMA_INDEX_VERSION = Version("0.13.0")
 
 
 class MissingLlamaIndexError(ImportError):
@@ -45,7 +18,7 @@ class MissingLlamaIndexError(ImportError):
 
     def __init__(self, message: str | None = None) -> None:
         """Initialise the error with an optional custom message."""
-        super().__init__(message or _LLAMA_INSTALL_HINT)
+        super().__init__(message or LLAMA_INDEX_INSTALL_HINT)
 
 
 @runtime_checkable
@@ -64,7 +37,7 @@ class LlamaIndexAdapterProtocol(Protocol):
 
 
 def llama_index_available() -> bool:
-    """Return ``True`` when the optional ``llama_index.core`` package exists."""
+    """Return ``True`` when the required ``llama_index.core`` package exists."""
     # `importlib.util.find_spec()` can raise `ValueError` when a test injects a
     # stub module into `sys.modules` with `__spec__ = None` (a common pattern
     # when mocking optional dependencies). Treat that as "not available".
@@ -141,176 +114,30 @@ def set_llama_index_adapter(adapter: LlamaIndexAdapterProtocol | None) -> None:
     _set_cached_adapter(adapter)
 
 
-def _resolve_llama_index_version() -> str:
-    """Return the installed llama-index version string when available."""
-    for dist in ("llama-index", "llama-index-core"):
-        try:
-            raw = metadata.version(dist)
-        except metadata.PackageNotFoundError:
-            continue
-        try:
-            parsed = Version(raw)
-        except InvalidVersion:  # pragma: no cover - defensive
-            return raw
-        if parsed < _MIN_LLAMA_INDEX_VERSION:
-            raise MissingLlamaIndexError(
-                f"{dist}>={_MIN_LLAMA_INDEX_VERSION} is required; detected {raw}. "
-                "Upgrade your dependency set."
-            )
-        return raw
-    raise MissingLlamaIndexError(_GRAPH_INSTALL_HINT)
-
-
-class _NoopTelemetry(TelemetryHooksProtocol):
-    """Telemetry hooks that deliberately perform no side effects."""
-
-    def router_built(
-        self,
-        *,
-        adapter_name: str,
-        supports_graphrag: bool,
-        tools: Sequence[str],
-    ) -> None:
-        return None
-
-    def graph_exported(
-        self,
-        *,
-        adapter_name: str,
-        fmt: str,
-        bytes_written: int,
-        depth: int,
-        seed_count: int,
-    ) -> None:
-        return None
-
-
-class _PropertyGraphIndexBuilder(GraphIndexBuilderProtocol):
-    """Thin wrapper delegating to a ``PropertyGraphIndex`` constructor."""
-
-    def __init__(self, cls: Any) -> None:
-        self._cls = cls
-
-    def build_from_documents(
-        self,
-        *,
-        documents: Iterable[Any],
-        storage_context: Any | None = None,
-        llm: Any | None = None,
-        embed_model: Any | None = None,
-        **kwargs: Any,
-    ) -> Any:
-        if not hasattr(self._cls, "from_documents"):
-            raise MissingLlamaIndexError(_GRAPH_INSTALL_HINT)
-        return self._cls.from_documents(
-            documents=documents,
-            storage_context=storage_context,
-            llm=llm,
-            embed_model=embed_model,
-            **kwargs,
-        )
-
-
-@dataclass(frozen=True)
-class _GraphModules:
-    property_graph_index_cls: Any | None
-
-
-def _load_graph_modules() -> _GraphModules:
-    """Import modules needed to build graph indices when available."""
+@lru_cache(maxsize=1)
+def _cached_graphrag_health() -> tuple[bool, str, str]:
+    """Return whether required LlamaIndex PropertyGraph APIs are available."""
     try:
-        property_graph = import_module("llama_index.core.indices.property_graph")
-    except ImportError:  # pragma: no cover - optional dependency path
-        return _GraphModules(property_graph_index_cls=None)
-    return _GraphModules(
-        property_graph_index_cls=getattr(property_graph, "PropertyGraphIndex", None)
-    )
+        module = import_module("llama_index.core.indices.property_graph")
+    except ImportError:
+        return False, "unavailable", LLAMA_INDEX_INSTALL_HINT
+    if getattr(module, "PropertyGraphIndex", None) is None:
+        return False, "unavailable", LLAMA_INDEX_INSTALL_HINT
+    return True, "llama_index", "LlamaIndex core PropertyGraphIndex is available."
 
 
-class LlamaIndexAdapterFactory(AdapterFactoryProtocol):
-    """GraphRAG adapter factory backed by documented LlamaIndex APIs."""
-
-    def __init__(self) -> None:
-        """Initialise the factory and cache optional module lookups."""
-        self.version = _resolve_llama_index_version()
-        self.name = "llama_index"
-        self.supports_graphrag = True
-        self.dependency_hint = _GRAPH_INSTALL_HINT
-        self._telemetry: TelemetryHooksProtocol = _NoopTelemetry()
-        self._modules_cache: _GraphModules | None = None
-
-    @property
-    def _modules(self) -> _GraphModules:
-        if self._modules_cache is None:
-            self._modules_cache = _load_graph_modules()
-        return self._modules_cache
-
-    def build_graph_artifacts(
-        self,
-        *,
-        property_graph_index: Any,
-        llm: Any | None = None,
-        include_text: bool = True,
-        similarity_top_k: int = 10,
-        path_depth: int = 1,
-        node_postprocessors: Sequence[Any] | None = None,
-        response_mode: str = "compact",
-    ) -> GraphQueryArtifacts:
-        """Return runtime graph services for router integration."""
-        if property_graph_index is None or not hasattr(
-            property_graph_index, "as_retriever"
-        ):
-            raise ValueError("property_graph_index must expose as_retriever()")
-
-        retriever: GraphRetrieverProtocol = property_graph_index.as_retriever(
-            include_text=include_text,
-            similarity_top_k=similarity_top_k,
-            path_depth=path_depth,
-        )
-
-        adapter = get_llama_index_adapter()
-        engine_kwargs: dict[str, Any] = {
-            "retriever": retriever,
-            "llm": llm,
-            "response_mode": response_mode,
-            "verbose": False,
-        }
-        if node_postprocessors:
-            engine_kwargs["node_postprocessors"] = list(node_postprocessors)
-        query_engine = adapter.RetrieverQueryEngine.from_args(**engine_kwargs)
-
-        telemetry = self.get_telemetry_hooks()
-        return GraphQueryArtifacts(
-            retriever=retriever,
-            query_engine=query_engine,
-            exporter=None,
-            telemetry=telemetry,
-        )
-
-    def get_index_builder(self) -> GraphIndexBuilderProtocol | None:
-        """Return a PropertyGraphIndex builder when available."""
-        cls = self._modules.property_graph_index_cls
-        if cls is None:
-            return None
-        return _PropertyGraphIndexBuilder(cls)
-
-    def get_telemetry_hooks(self) -> TelemetryHooksProtocol:
-        """Return telemetry hook implementation (no-op by default)."""
-        return self._telemetry
-
-
-def build_llama_index_factory() -> LlamaIndexAdapterFactory:
-    """Return the default LlamaIndex GraphRAG factory when installed."""
-    if not llama_index_available():
-        raise MissingLlamaIndexError(_GRAPH_INSTALL_HINT)
-    return LlamaIndexAdapterFactory()
+def get_graphrag_health(*, force_refresh: bool = False) -> tuple[bool, str, str]:
+    """Return GraphRAG support, backend name, and operator guidance."""
+    if force_refresh:
+        _cached_graphrag_health.cache_clear()
+    return _cached_graphrag_health()
 
 
 __all__ = [
-    "LlamaIndexAdapterFactory",
+    "LLAMA_INDEX_INSTALL_HINT",
     "LlamaIndexAdapterProtocol",
     "MissingLlamaIndexError",
-    "build_llama_index_factory",
+    "get_graphrag_health",
     "get_llama_index_adapter",
     "llama_index_available",
     "set_llama_index_adapter",

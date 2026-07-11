@@ -8,9 +8,8 @@ readme = "README.md"
 requires-python = ">=3.12,<3.14" # Python 3.12-3.13 baseline (ADR-065)
 keywords = ["ai", "rag", "document-analysis", "llm", "hybrid-search"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
@@ -26,8 +25,10 @@ dependencies = [
     # UI / App Framework
     "streamlit>=1.52.2,<2.0.0",
     # Document Processing & NLP
-    "unstructured[all-docs]>=0.18.26,<0.19.0",  # Multiformat parsing (PDF, DOCX, HTML, etc.)
-    "pymupdf==1.26.4",                   # PDF rendering/text extraction
+    "docling>=2.92,<3",                  # Local multiformat document conversion
+    "pypdfium2>=5.7,<6",                 # PDF inspection and rasterization
+    "rapidocr>=3.8,<4",                  # CPU-safe local OCR
+    "onnxruntime>=1.23,<2",              # RapidOCR CPU inference backend
     "pillow>=12.2.0,<13.0.0",            # Image handling
     "pyarrow>=24.0.0,<25.0.0",           # Columnar data interchange
     "spacy==3.8.11",                     # NLP pipeline (pinned for reproducibility)
@@ -37,13 +38,12 @@ dependencies = [
     "transformers>=5.0.0,<6.0.0",        # HF model interfaces (Torch 2.8-compatible)
     "tiktoken==0.12.0",
     "openai>=2.8.0,<3.0.0",
-    "openai-whisper==20250625",          # Whisper speech-to-text (optional)
     # Local LLM Backends (CPU defaults; GPU in [gpu] extra)
     "ollama==0.6.2",
     # Vector Databases & Clients
     "qdrant-client>=1.15.1,<2.0.0",
-    # LlamaIndex (meta + selected integrations)
-    "llama-index>=0.14.21,<0.15.0",
+    # LlamaIndex (core + selected integrations)
+    "llama-index-core>=0.14.21,<0.15.0",
     "llama-index-vector-stores-qdrant>=0.10.0,<0.11.0",
     "llama-index-vector-stores-duckdb>=0.6.0,<0.7.0",
     "llama-index-storage-kvstore-duckdb>=0.3.0,<0.4.0",
@@ -51,11 +51,7 @@ dependencies = [
     "llama-index-llms-ollama>=0.9.1,<1.0.0",
     "llama-index-llms-openai-like>=0.7.2,<0.8.0",
     "llama-index-embeddings-huggingface>=0.7.0,<0.8.0",
-    "llama-index-embeddings-clip>=0.6.0,<0.7.0",
-    "llama-index-embeddings-fastembed>=0.6.0,<0.7.0",
-    "llama-index-embeddings-openai>=0.6.0,<0.7.0",
     "fastembed>=0.5.1",                     # Sparse vectors (BM42) CPU support (FR-005)
-    "llama-index-readers-file>=0.6.0,<0.7.0",
     # Agentic Orchestration
     "langgraph>=1.0.10,<2.0.0",             # Graph-based orchestration
     "langgraph-checkpoint-sqlite>=3.0.3,<4.0.0",  # Durable checkpoints (ADR-058)
@@ -64,7 +60,6 @@ dependencies = [
     "langchain-core>=1.2.28,<2.0.0",
     "langchain-openai>=1.1.14,<2.0.0",
     # Retrieval & Reranking Extras
-    "FlagEmbedding>=1.3.5,<2.0.0",          # BGE-M3 unified embeddings
     "sentence-transformers>=5.2.0,<6.0.0",  # CrossEncoder reranking
     # Prompt Optimization (DSPy remains runtime-gated; install separately once
     # its dependency chain is compatible with security floors).
@@ -85,20 +80,17 @@ dependencies = [
 # Optional runtime features published as extras (PEP 621).
 [project.optional-dependencies]
 gpu = [
-    "fastembed-gpu>=0.8.0,<0.9.0",        # GPU-accelerated embeddings
+    "torch==2.8.0",
+    "torchvision==0.23.0",
+    # Dense/image embedding and reranking use PyTorch CUDA. Sparse FastEmbed
+    # remains on the core CPU runtime because fastembed and fastembed-gpu are
+    # mutually exclusive distributions.
     # spaCy GPU acceleration via CuPy (CUDA 12.x)
     "cupy-cuda12x>=13.0.0; sys_platform != 'darwin'",
 ]
 apple = [
     # spaCy Apple Silicon acceleration (thinc-apple-ops)
     "spacy[apple]; sys_platform == 'darwin' and platform_machine == 'arm64'",
-]
-llama = [
-    "llama-index-core>=0.14.21,<0.15.0",
-]
-graph = [
-    "llama-index-graph-stores-kuzu>=0.9.1,<1.0.0",
-    "kuzu>=0.11.3,<1.0.0",
 ]
 observability = [
     "llama-index-observability-otel>=0.6.0,<0.7.0",
@@ -110,20 +102,34 @@ multimodal = [
 eval = [
     "beir>=2.0.0,<3.0.0",                # IR benchmark datasets + evaluation
 ]
-
+searchable-pdf = [
+    "ocrmypdf>=17.4,<18",
+]
 # Note: spaCy models are not PyPI packages and must be installed separately:
 # uv run python -m spacy download en_core_web_sm
 
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools==80.9.0", "wheel==0.47.0"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+include = ["src*"]
+
+[tool.setuptools.package-data]
+"src.prompting" = [
+    "templates/presets/*.yaml",
+    "templates/prompts/*.prompt.md",
+]
+
 [project.urls]
-Repository = "https://github.com/BjornMelin/docmind-ai"
+Repository = "https://github.com/BjornMelin/docmind-ai-llm"
 Documentation = "https://github.com/BjornMelin/docmind-ai-llm/tree/main/docs"
 "GPU Setup Guide" = "https://github.com/BjornMelin/docmind-ai-llm/blob/main/docs/developers/gpu-setup.md"
 
 [tool.uv]
+required-version = "==0.11.21"
+default-groups = ["dev", "cpu"]
+conflicts = [[{ group = "cpu" }, { extra = "gpu" }]]
 # Transitive dep constraints: keep resolver away from known vulnerable/yanked ranges,
 # while only permitting prereleases when they are explicitly requested or necessary.
 prerelease = "if-necessary-or-explicit"
@@ -143,46 +149,27 @@ constraint-dependencies = [
     "tornado>=6.5.5",
 ]
 
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu128", extra = "gpu" },
+    { index = "pytorch-cpu", group = "cpu" },
+]
+torchvision = [
+    { index = "pytorch-cu128", extra = "gpu" },
+    { index = "pytorch-cpu", group = "cpu" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
 
 
-[tool.docmind-ai]
-# CUDA Stack Requirements
-cuda_version = "12.8+"
-pytorch_version = "2.8.0"
-vllm_version = "external-only (OpenAI-compatible server)"
-driver_version = "550.54.14+"
-
-# Hardware Requirements for Qwen3-4B-Instruct-2507-FP8
-min_vram_gb = 16
-recommended_vram_gb = 16
-target_model = "Qwen3-4B-Instruct-2507-FP8"
-max_context_length = 131072
-
-# Performance Targets
-target_decode_tps = [100, 160]  # tokens per second
-target_prefill_tps = [800, 1300]  # tokens per second
-
-# Installation Commands (documented in README.md)
-installation_notes = """
-Automated GPU Installation:
-uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128
-
-Manual Installation Steps (if needed):
-1. Install PyTorch with CUDA 12.8:
-   uv pip install torch==2.8.0 --torch-backend cu128
-
-2. Use vLLM as an external server (OpenAI-compatible HTTP).
-   Configure `DOCMIND_OPENAI__BASE_URL` (for example `https://host:port/v1`)
-   or `DOCMIND_VLLM__VLLM_BASE_URL`, and set `DOCMIND_LLM_BACKEND=vllm`.
-
-3. Use llama.cpp out-of-process behind an OpenAI-compatible HTTP endpoint.
-   The in-process `llama-cpp-python` dependency is intentionally excluded from
-   the locked app environment while its dependency chain pulls vulnerable
-   `diskcache`.
-
-4. Install remaining GPU dependencies (mirror [project.optional-dependencies].gpu):
-   uv pip install "fastembed-gpu>=0.8.0,<0.9.0"
-"""
 
 [tool.ruff]
 line-length = 88
@@ -334,7 +321,7 @@ markers = [
     "deployment_gate: Production deployment gate tests (full validation)",
     
     # Performance and Quality
-    "performance: Performance benchmarks and regression tests (<0.2s unit test target)",
+    "performance: Performance benchmarks and regression tests",
     "quality_gate: Tests that enforce Phase 5A quality standards (95%+ success)",
     "high_confidence: Tests with >95% historical success rate",
     "regression_test: Tests for detecting performance/quality regressions",
@@ -348,7 +335,7 @@ markers = [
     "agents: Multi-agent coordination tests",
     "retrieval: Retrieval/search tests",
     "embeddings: Embedding model tests",
-    "multimodal: CLIP/multimodal tests",
+    "multimodal: SigLIP and visual retrieval tests",
     "timeout: Per-test timeout marker",
 ]
 asyncio_mode = "auto"
@@ -356,6 +343,10 @@ asyncio_default_fixture_loop_scope = "function"
 
 # Development-only dependency groups (PEP 735); not published as package metadata.
 [dependency-groups]
+cpu = [
+    "torch==2.8.0",
+    "torchvision==0.23.0",
+]
 dev = [
     "ruff>=0.14.14,<0.15.0",
     "pyright[nodejs]>=1.1.409,<1.2.0",
@@ -372,14 +363,12 @@ dev = [
     "testcontainers>=4.14.2",
     "coverage-badge>=1.1.2",
     "tomli>=2.4.1",
+    "pypdf>=6.10.2,<7.0.0",
 ]
 test = [
     "pytest>=9.0.3,<10.0.0",
     "pytest-asyncio>=1.3.0,<2.0.0",
     "pytest-cov>=7.1.0,<8.0.0",
-]
-performance = [
-    "numba>=0.65.1",  # Optional JIT compilation for performance
 ]
 quality = [
     "pre-commit>=4.6.0",

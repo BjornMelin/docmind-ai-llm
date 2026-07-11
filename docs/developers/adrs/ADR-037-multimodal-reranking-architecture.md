@@ -2,8 +2,8 @@
 ADR: 037
 Title: Multimodal Reranking with SigLIP Visual Re‑score (default) and ColPali (optional) + BGE v2‑m3 (text)
 Status: Implemented
-Version: 1.2
-Date: 2025-09-03
+Version: 1.4
+Date: 2026-07-11
 Supersedes: 006
 Superseded-by:
 Related: 003, 004, 024, 036
@@ -50,7 +50,7 @@ Use SigLIP normalized cosine re‑score for nodes with `metadata.modality in {"i
 
 ## High-Level Architecture
 
-Retriever → Mixed nodes (text + images) → Gate per-node modality → Rerank (ColPali or BGE) → Merge/fuse → Synthesis
+Retriever → Mixed nodes (text + images) → Gate per-node modality → Rerank (BGE text + SigLIP visual, optional ColPali) → Merge/fuse → Synthesis
 
 ## Related Requirements
 
@@ -212,10 +212,12 @@ async def test_auto_gating_text_and_image_nodes(sample_nodes):
 
 ### Dependencies
 
-- Python: `llama-index`, `llama-index-postprocessor-colpali-rerank`, `sentence-transformers`, `torch`
+- Python: `llama-index-core>=0.14.21,<0.15.0`, optional `llama-index-postprocessor-colpali-rerank`, `sentence-transformers`, `transformers`, and `torch`
 
 ## Changelog
 
+- **1.4 (2026-07-11):** Corrected the architecture flow to show SigLIP as the default visual reranker and ColPali as optional.
+- **1.3 (2026-07-10):** Replace the removed LlamaIndex meta-package with direct dependencies and retain ColPali only through the optional multimodal profile.
 - **1.2 (2025-09-07):** Clarified required telemetry keys and fail‑open behavior; no UI toggles, env‑only overrides.
   - Canonical env override: `DOCMIND_RETRIEVAL__USE_RERANKING` (maps to `settings.retrieval.use_reranking`).
 - **1.1 (2025-09-07):** Set SigLIP as default visual re‑score; ColPali optional via policy; added decision framework and guardrails; aligned with SPEC‑005

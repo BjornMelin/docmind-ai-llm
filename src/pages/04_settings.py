@@ -20,7 +20,7 @@ from src.config.env_persistence import persist_env
 from src.config.llm_runtime_probe import probe_openai_compatible_runtime
 from src.config.settings import DocMindSettings, settings
 from src.config.settings_utils import DEFAULT_OPENAI_BASE_URL, ensure_v1
-from src.retrieval import adapter_registry
+from src.retrieval.llama_index_adapter import get_graphrag_health
 from src.ui.components.provider_badge import provider_badge
 from src.utils.telemetry import log_jsonl
 
@@ -143,6 +143,9 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
                     ),
                 }
             ),
+            "parsing": validated.parsing,
+            "pdf_backend": validated.pdf_backend,
+            "ocr": validated.ocr,
         }
     )
     # Apply updated settings in-place so existing imports keep the same
@@ -153,7 +156,7 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
     # intentional here.
     settings.__init__(**updated.model_dump(mode="python"))
 
-    model_label = validated.model or validated.vllm.model
+    model_label = validated.effective_model
     try:
         from src.config.integrations import initialize_integrations
 
@@ -214,7 +217,7 @@ def main() -> None:
     st.title("Settings · LLM Runtime")
 
     # Show badge
-    graphrag_health = adapter_registry.get_default_adapter_health()
+    graphrag_health = get_graphrag_health()
     provider_badge(settings, graphrag_health=graphrag_health)
     provider = _render_provider_section()
     model, context_window, timeout_s, use_gpu = _render_model_section()
@@ -251,6 +254,7 @@ def main() -> None:
         ollama_top_logprobs,
     ) = _render_ollama_advanced_section(provider)
     allow_remote = _render_security_section()
+    parsing_values, parsing_ui_errors = _render_document_parsing_section()
     rrf_k, t_text, t_siglip, t_colpali, t_total = _render_retrieval_section()
     _render_graphrag_section(graphrag_health)
     if provider == "ollama":
@@ -262,6 +266,7 @@ def main() -> None:
 
     ui_errors = _validate_llamacpp_inputs(provider, llamacpp_url, openai_base_url)
     ui_errors.extend(openai_ui_errors)
+    ui_errors.extend(parsing_ui_errors)
     values: SettingsFormValues = {
         "provider": provider,
         "model": model,
@@ -283,6 +288,7 @@ def main() -> None:
         "timeout_s": timeout_s,
         "use_gpu": use_gpu,
         "allow_remote": allow_remote,
+        "parsing": parsing_values,
         "rrf_k": rrf_k,
         "t_text": t_text,
         "t_siglip": t_siglip,
@@ -296,6 +302,46 @@ def main() -> None:
     _render_endpoint_test(validated)
     _render_actions(validated, ui_errors)
     _render_cache_controls()
+
+
+def _render_document_parsing_section() -> tuple[dict[str, object], list[str]]:
+    """Render the supported CPU-safe document parser settings."""
+    st.subheader("Document Parsing & OCR")
+    st.caption("CPU-safe Docling + pypdfium2 + RapidOCR")
+    col1, col2 = st.columns(2)
+    with col1:
+        force_ocr = st.checkbox(
+            "Force RapidOCR",
+            value=bool(settings.ocr.force_ocr),
+        )
+    with col2:
+        searchable_pdf = st.checkbox(
+            "Searchable-PDF utility",
+            value=bool(settings.ocr.searchable_pdf_enabled),
+        )
+        model_cache_dir = st.text_input(
+            "Parser model cache",
+            value=str(settings.ocr.model_cache_dir),
+        )
+
+    _render_parsing_health()
+    return (
+        {
+            "searchable_pdf": searchable_pdf,
+            "force_ocr": force_ocr,
+            "model_cache_dir": model_cache_dir,
+        },
+        [],
+    )
+
+
+def _render_parsing_health() -> None:
+    """Render import/runtime health for parser dependencies."""
+    from src.processing.parsing.health import parser_health
+
+    health = parser_health(settings)
+    st.caption("Parser dependency health")
+    st.json(health, expanded=False)
 
 
 def _render_provider_section() -> str:
@@ -328,7 +374,7 @@ def _render_model_section() -> tuple[str, int, int, bool]:
     st.subheader("Model & Context")
     model = st.text_input(
         "Model ID",
-        value=(settings.model or settings.vllm.model),
+        value=settings.effective_model,
         help="Model identifier exposed by the selected provider.",
     )
     context_window = int(
@@ -801,7 +847,7 @@ def _render_graphrag_section(
     """
     st.subheader("GraphRAG")
     if graphrag_health is None:
-        graphrag_health = adapter_registry.get_default_adapter_health()
+        graphrag_health = get_graphrag_health()
     supports, adapter_name, hint = graphrag_health
     st.text_input("Adapter", value=adapter_name, disabled=True)
     st.text_input(
@@ -919,6 +965,7 @@ class SettingsFormValues(TypedDict):
     timeout_s: int
     use_gpu: bool
     allow_remote: bool
+    parsing: dict[str, object]
     rrf_k: int
     t_text: int
     t_siglip: int
@@ -930,6 +977,7 @@ def _build_candidate_settings(values: SettingsFormValues) -> dict[str, Any]:
     """Build a settings payload for validation."""
     provider = str(values["provider"])
     headers, _ = _parse_headers_json(values["openai_headers_json"])
+    parsing_values = values["parsing"]
     return {
         "llm_backend": provider,
         "model": str(values["model"]).strip() or None,
@@ -956,6 +1004,14 @@ def _build_candidate_settings(values: SettingsFormValues) -> dict[str, Any]:
             "allow_remote_endpoints": bool(values["allow_remote"]),
             "endpoint_allowlist": list(settings.security.endpoint_allowlist),
             "trust_remote_code": bool(settings.security.trust_remote_code),
+        },
+        "parsing": settings.parsing.model_dump(mode="python"),
+        "pdf_backend": settings.pdf_backend.model_dump(mode="python"),
+        "ocr": {
+            **settings.ocr.model_dump(mode="python"),
+            "force_ocr": bool(parsing_values["force_ocr"]),
+            "model_cache_dir": str(parsing_values["model_cache_dir"]).strip(),
+            "searchable_pdf_enabled": bool(parsing_values["searchable_pdf"]),
         },
         "retrieval": {
             "rrf_k": int(values["rrf_k"]),
@@ -1135,14 +1191,14 @@ def _render_actions(validated: DocMindSettings | None, ui_errors: list[str]) -> 
             use_container_width=True,
             disabled=actions_disabled,
         ):
-            if validated is None:  # pragma: no cover - defensive
+            if validated is None or ui_errors:
                 st.error("Cannot apply: invalid settings.")
             else:
                 _apply_validated_runtime(validated)
 
     with col_b:
         if st.button("Save", use_container_width=True, disabled=actions_disabled):
-            if validated is None:  # pragma: no cover - defensive
+            if validated is None or ui_errors:
                 st.error("Cannot save: invalid settings.")
             else:
                 _persist_env_from_validated(validated)
@@ -1212,6 +1268,30 @@ def _persist_env_from_validated(validated: DocMindSettings) -> None:
         ),
         "DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS": (
             "true" if validated.security.allow_remote_endpoints else "false"
+        ),
+        "DOCMIND_PARSING__FRAMEWORK": validated.parsing.framework,
+        "DOCMIND_PARSING__PROFILE": validated.parsing.profile,
+        "DOCMIND_PARSING__MAX_PAGES": str(validated.parsing.max_pages),
+        "DOCMIND_PARSING__MAX_RENDER_PIXELS": str(validated.parsing.max_render_pixels),
+        "DOCMIND_PARSING__MAX_TOTAL_TEXT_CHARS": str(
+            validated.parsing.max_total_text_chars
+        ),
+        "DOCMIND_PARSING__PARSE_TIMEOUT_SECONDS": str(
+            validated.parsing.parse_timeout_seconds
+        ),
+        "DOCMIND_PARSING__OCRMYPDF_TIMEOUT_SECONDS": str(
+            validated.parsing.ocrmypdf_timeout_seconds
+        ),
+        "DOCMIND_PDF_BACKEND__RENDER_DPI": str(int(validated.pdf_backend.render_dpi)),
+        "DOCMIND_PDF_BACKEND__MIN_TEXT_CHARS_PER_PAGE": str(
+            int(validated.pdf_backend.min_text_chars_per_page)
+        ),
+        "DOCMIND_OCR__ENGINE": validated.ocr.engine,
+        "DOCMIND_OCR__FORCE_OCR": "true" if validated.ocr.force_ocr else "false",
+        "DOCMIND_OCR__MODEL_CACHE_DIR": str(validated.ocr.model_cache_dir),
+        "DOCMIND_OCR__OCRMYPDF_JOBS": str(int(validated.ocr.ocrmypdf_jobs)),
+        "DOCMIND_OCR__SEARCHABLE_PDF_ENABLED": (
+            "true" if validated.ocr.searchable_pdf_enabled else "false"
         ),
         "DOCMIND_RETRIEVAL__RRF_K": str(int(validated.retrieval.rrf_k)),
         "DOCMIND_RETRIEVAL__TEXT_RERANK_TIMEOUT_MS": str(

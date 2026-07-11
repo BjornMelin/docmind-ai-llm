@@ -9,6 +9,11 @@ import pytest
 
 def test_hybrid_dedup_keeps_highest_score(monkeypatch):  # type: ignore[no-untyped-def]
     hmod = importlib.import_module("src.retrieval.hybrid")
+    monkeypatch.setattr(
+        hmod,
+        "ensure_hybrid_collection",
+        lambda *_args, **_kwargs: type("_Compatibility", (), {"compatible": True})(),
+    )
 
     class _Point:
         def __init__(self, pid: str, score: float):
@@ -18,11 +23,13 @@ def test_hybrid_dedup_keeps_highest_score(monkeypatch):  # type: ignore[no-untyp
 
     class _Res:
         def __init__(self):
-            # Duplicate page_id "p1" appears twice with different scores
-            self.points = [_Point("p1", 0.2), _Point("p1", 0.9), _Point("p2", 0.5)]
+            self.groups = [
+                type("_Group", (), {"hits": [_Point("p1", 0.9)]})(),
+                type("_Group", (), {"hits": [_Point("p2", 0.5)]})(),
+            ]
 
     class _Client:
-        def query_points(self, **_kwargs):  # type: ignore[no-untyped-def]
+        def query_points_groups(self, **_kwargs):  # type: ignore[no-untyped-def]
             return _Res()
 
         def close(self):  # type: ignore[no-untyped-def]
@@ -49,6 +56,15 @@ def test_hybrid_dedup_keeps_highest_score(monkeypatch):  # type: ignore[no-untyp
 )
 def test_fusion_selection(monkeypatch, mode: str, expected: str):  # type: ignore[no-untyped-def]
     hmod = importlib.import_module("src.retrieval.hybrid")
+    monkeypatch.setattr(
+        hmod,
+        "ensure_hybrid_collection",
+        lambda *_args, **_kwargs: type("_Compatibility", (), {"compatible": True})(),
+    )
     params = hmod.HybridParams(collection="c", fusion_mode=mode)
     retriever = hmod.ServerHybridRetriever(params, client=lambda: None)  # type: ignore[arg-type]
-    assert retriever._fusion().fusion.name == expected
+    query = retriever._fusion()
+    if mode == "rrf":
+        assert query.rrf.k == 60
+    else:
+        assert query.fusion.name == expected

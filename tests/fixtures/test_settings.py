@@ -83,6 +83,7 @@ class MockEmbeddingConfig(EmbeddingConfig):
     """Test-optimized embedding configuration for minimal resource usage."""
 
     # Small dimensions and batches for speed
+    model_name: str = Field(default="test/mock-embedding")
     dimension: int = Field(default=384, ge=256, le=4096)  # Smaller than production
     max_length: int = Field(default=512, ge=512, le=16384)  # Smaller context
     batch_size_gpu: int = Field(default=2, ge=1, le=128)  # Small batches
@@ -99,6 +100,7 @@ class MockRetrievalConfig(RetrievalConfig):
 class MockCacheConfig(CacheConfig):
     """Test-optimized cache configuration - caching disabled for test isolation."""
 
+    dir: Path = Field(default=Path("./test_cache"))
     enable_document_caching: bool = Field(default=False)  # Disabled for test isolation
     ttl_seconds: int = Field(
         default=300, ge=300, le=86400
@@ -138,7 +140,6 @@ class MockDocMindSettings(DocMindSettings):
 
     # Temporary directories for test isolation
     data_dir: Path = Field(default=Path("./test_data"))
-    cache_dir: Path = Field(default=Path("./test_cache"))
     sqlite_db_path: Path = Field(default=Path("./test_data/test.db"))
     log_file: Path = Field(default=Path("./test_logs/test.log"))
 
@@ -160,7 +161,7 @@ class MockDocMindSettings(DocMindSettings):
         """Post-initialization with test-specific optimizations."""
         # Create test directories (separate from production)
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.cache.dir.mkdir(parents=True, exist_ok=True)
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
         if self.sqlite_db_path.parent != self.data_dir:
             self.sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -202,6 +203,7 @@ class IntegrationProcessingConfig(ProcessingConfig):
 class IntegrationCacheConfig(CacheConfig):
     """Integration test cache config with caching enabled."""
 
+    dir: Path = Field(default=Path("./test_cache"))
     enable_document_caching: bool = Field(default=True)  # Enabled for integration tests
     ttl_seconds: int = Field(default=1800, ge=300, le=86400)  # 30 min TTL
 

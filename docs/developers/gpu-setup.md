@@ -9,12 +9,15 @@ date: 2026-01-16
 This guide covers optional GPU acceleration for:
 
 - **LLM serving** (external vLLM server)
-- **Embeddings** (fastembed-gpu)
+- **Dense/image embeddings and reranking** (PyTorch CUDA)
 - **NLP enrichment** (spaCy via Thinc)
+
+Sparse FastEmbed remains CPU-based because the `fastembed` and
+`fastembed-gpu` distributions are mutually exclusive.
 
 For baseline CPU install, see `docs/user/getting-started.md`.
 
-## NVIDIA CUDA (Linux / Windows / WSL2)
+## NVIDIA CUDA (Linux x86_64 validated; WSL2 best effort)
 
 ### Prerequisites
 
@@ -25,15 +28,14 @@ For baseline CPU install, see `docs/user/getting-started.md`.
 
 Use the project’s GPU extras. This installs:
 
-- `fastembed-gpu` (embedding acceleration)
+- official CUDA 12.8 PyTorch and Torchvision wheels
 - `cupy-cuda12x>=13` (spaCy/Thinc GPU acceleration for CUDA 12.x)
 
-The `unsafe-best-match` strategy is intentional for this CUDA-only install so
-uv can select CUDA 12.8 wheels from the PyTorch index instead of CPU wheels from
-the default index.
+The CPU group and GPU extra are mutually exclusive. Native uv source rules
+select the locked official CUDA 12.8 wheels.
 
 ```bash
-uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
+uv sync --frozen --no-group cpu --extra gpu
 uv run python -m spacy download en_core_web_sm
 ```
 
@@ -67,7 +69,10 @@ uv run python -c "import torch; print(torch.cuda.is_available())"
 uv run python -c "import spacy; print(spacy.__version__); print(spacy.prefer_gpu(0))"
 ```
 
-## Apple Silicon (macOS arm64)
+## Apple Silicon (macOS arm64, best effort)
+
+The Apple extra is prebuilt for CPython 3.12 in the current lock. It is not
+release-validated on CPython 3.13 or in dedicated macOS CI.
 
 ### Install (Apple Extras)
 

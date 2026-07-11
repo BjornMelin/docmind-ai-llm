@@ -2,8 +2,8 @@
 ADR: 011
 Title: Agent Orchestration with LangGraph StateGraph
 Status: Accepted (Amended)
-Version: 7.2
-Date: 2026-05-01
+Version: 7.3
+Date: 2026-07-11
 Supersedes:
 Superseded-by:
 Related: 001, 003, 004, 010, 015, 016, 024, 066
@@ -215,7 +215,7 @@ def test_supervisor_boots_with_agents(supervisor_app):
   authoritative versions. As of ADR-066, the lockfile contains
   `langgraph==1.1.10`, `langgraph-checkpoint==4.0.3`,
   `langgraph-checkpoint-sqlite==3.0.3`, `langchain==1.2.16`,
-  `langchain-core==1.3.2`, `llama-index==0.14.21`, and
+  `langchain-core==1.3.2`, `llama-index-core==0.14.21`, selected adapters, and
   `llama-index-workflows==2.20.0` as a transitive dependency.
 
 ### Ongoing Maintenance & Considerations
@@ -226,6 +226,7 @@ def test_supervisor_boots_with_agents(supervisor_app):
 
 ## Changelog
 
+- 7.3 (2026-07-11): Replaced the removed LlamaIndex meta-package reference with the direct core and selected-adapter contract.
 - 7.2 (2026-05-01): Linked ADR-066 issue #86 decision; reaffirmed LangGraph as
   the default runtime and refreshed dependency posture.
 - 7.1 (2026‑01‑18): Clarified handoff option deprecations and aligned dependency

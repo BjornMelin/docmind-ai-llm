@@ -59,17 +59,26 @@ def test_dedup_unique_by_doc_id(monkeypatch):
     ]
 
     class _Res:
-        points = pts
+        def __init__(self) -> None:
+            self.groups = [
+                SimpleNamespace(hits=[pts[0]]),
+                SimpleNamespace(hits=[pts[1]]),
+                SimpleNamespace(hits=[pts[3]]),
+            ]
 
     captured = {}
 
-    def fake_query_points(**kwargs):
+    def fake_query_points_groups(**kwargs):
         captured.update(kwargs)
-        assert isinstance(kwargs.get("query"), qmodels.FusionQuery)
+        assert isinstance(kwargs.get("query"), qmodels.RrfQuery)
+        assert kwargs["group_by"] == "doc_id"
         return _Res()
 
     monkeypatch.setattr(
-        retr._client, "query_points", lambda **kw: fake_query_points(**kw)
+        retr._client,
+        "query_points_groups",
+        lambda **kw: fake_query_points_groups(**kw),
+        raising=False,
     )
 
     nodes = retr.retrieve("q")

@@ -1,12 +1,4 @@
-"""GraphRAG helpers orchestrated through the adapter registry.
-
-This module keeps GraphRAG integration dependency-light:
-
-- Runtime graph capabilities are provided by an ``AdapterFactoryProtocol``
-  implementation (defaulting to LlamaIndex when installed).
-- Snapshot exports support both newer store APIs that accept ``node_ids=...``
-  and older store APIs that accept a list of nodes (via ``store.get``).
-"""
+"""LlamaIndex GraphRAG construction and export helpers."""
 
 from __future__ import annotations
 
@@ -17,14 +9,7 @@ from typing import Any
 
 from loguru import logger
 
-from src.retrieval.adapter_registry import (
-    resolve_adapter,
-)
-from src.retrieval.adapters.protocols import (
-    AdapterFactoryProtocol,
-    GraphQueryArtifacts,
-    GraphRetrieverProtocol,
-)
+from src.retrieval.llama_index_adapter import get_llama_index_adapter
 from src.telemetry.opentelemetry import (
     graph_export_span,
     record_graph_export_event,
@@ -40,6 +25,14 @@ __all__ = [
 ]
 
 
+@dataclass(frozen=True)
+class GraphQueryArtifacts:
+    """Graph retriever and query engine used by the router."""
+
+    retriever: Any
+    query_engine: Any
+
+
 def build_graph_query_engine(
     property_graph_index: Any,
     *,
@@ -49,19 +42,29 @@ def build_graph_query_engine(
     path_depth: int = 1,
     node_postprocessors: Sequence[Any] | None = None,
     response_mode: str = "compact",
-    adapter: AdapterFactoryProtocol | None = None,
 ) -> GraphQueryArtifacts:
-    """Construct graph retriever/query engine via the active adapter."""
-    factory = resolve_adapter(adapter)
-    return factory.build_graph_artifacts(
-        property_graph_index=property_graph_index,
-        llm=llm,
+    """Construct graph retrieval directly through LlamaIndex core."""
+    if property_graph_index is None or not hasattr(
+        property_graph_index, "as_retriever"
+    ):
+        raise ValueError("property_graph_index must expose as_retriever()")
+    retriever = property_graph_index.as_retriever(
         include_text=include_text,
         similarity_top_k=similarity_top_k,
         path_depth=path_depth,
-        node_postprocessors=node_postprocessors,
-        response_mode=response_mode,
     )
+    engine_kwargs: dict[str, Any] = {
+        "retriever": retriever,
+        "llm": llm,
+        "response_mode": response_mode,
+        "verbose": False,
+    }
+    if node_postprocessors:
+        engine_kwargs["node_postprocessors"] = list(node_postprocessors)
+    query_engine = get_llama_index_adapter().RetrieverQueryEngine.from_args(
+        **engine_kwargs
+    )
+    return GraphQueryArtifacts(retriever=retriever, query_engine=query_engine)
 
 
 def build_graph_retriever(
@@ -70,29 +73,15 @@ def build_graph_retriever(
     include_text: bool = True,
     similarity_top_k: int = 10,
     path_depth: int = 1,
-    adapter: AdapterFactoryProtocol | None = None,
-) -> GraphRetrieverProtocol:
-    """Return the graph retriever from the configured adapter."""
+) -> Any:
+    """Return the LlamaIndex graph retriever."""
     artifacts = build_graph_query_engine(
         property_graph_index,
         include_text=include_text,
         similarity_top_k=similarity_top_k,
         path_depth=path_depth,
-        adapter=adapter,
     )
     return artifacts.retriever
-
-
-@dataclass(frozen=True)
-class _ExportContext:
-    adapter_name: str
-    telemetry: Any
-
-
-def _export_context(adapter: AdapterFactoryProtocol | None) -> _ExportContext:
-    factory = resolve_adapter(adapter)
-    telemetry = factory.get_telemetry_hooks()
-    return _ExportContext(adapter_name=factory.name, telemetry=telemetry)
 
 
 def get_export_seed_ids(
@@ -100,12 +89,11 @@ def get_export_seed_ids(
     vector_index: Any | None,
     *,
     cap: int = 32,
-    adapter: AdapterFactoryProtocol | None = None,
 ) -> list[str]:
-    """Derive export seeds via adapter retrievers with vector fallback."""
+    """Derive export seeds via graph retrieval with vector fallback."""
     try:
         if property_graph_index is not None:
-            retriever = build_graph_retriever(property_graph_index, adapter=adapter)
+            retriever = build_graph_retriever(property_graph_index)
             nodes = retriever.retrieve("seed")
             out: list[str] = []
             seen: set[str] = set()
@@ -275,24 +263,20 @@ def export_graph_jsonl(
     output_path: Path | str,
     depth: int = 2,
     seed_node_ids: Sequence[str] | None = None,
-    adapter: AdapterFactoryProtocol | None = None,
 ) -> None:
-    """Serialize the graph to JSON Lines using adapter-friendly store APIs."""
+    """Serialize the graph to JSON Lines using LlamaIndex store APIs."""
     store = getattr(property_graph_index, "property_graph_store", None)
     if store is None:
         raise ValueError("property_graph_index must expose property_graph_store")
     node_ids = list(seed_node_ids or [])
     if not node_ids:
-        node_ids = get_export_seed_ids(
-            property_graph_index, None, cap=32, adapter=adapter
-        )
-    ctx = _export_context(adapter)
+        node_ids = get_export_seed_ids(property_graph_index, None, cap=32)
 
     lines = _render_rel_map_jsonl(store=store, seed_node_ids=node_ids, depth=int(depth))
     path_obj = Path(output_path)
     path_obj.parent.mkdir(parents=True, exist_ok=True)
     with graph_export_span(
-        adapter_name=ctx.adapter_name,
+        adapter_name="llama_index",
         fmt="jsonl",
         depth=int(depth),
         seed_count=len(node_ids),
@@ -302,13 +286,6 @@ def export_graph_jsonl(
         )
         bytes_written = path_obj.stat().st_size if path_obj.exists() else 0
         record_graph_export_event(span, path=path_obj, bytes_written=bytes_written)
-    ctx.telemetry.graph_exported(
-        adapter_name=ctx.adapter_name,
-        fmt="jsonl",
-        bytes_written=bytes_written,
-        depth=int(depth),
-        seed_count=len(node_ids),
-    )
 
 
 def export_graph_parquet(
@@ -317,7 +294,6 @@ def export_graph_parquet(
     output_path: Path | str,
     depth: int = 2,
     seed_node_ids: Sequence[str] | None = None,
-    adapter: AdapterFactoryProtocol | None = None,
 ) -> None:
     """Serialize the graph to Parquet when PyArrow is available."""
     store = getattr(property_graph_index, "property_graph_store", None)
@@ -325,10 +301,7 @@ def export_graph_parquet(
         raise ValueError("property_graph_index must expose property_graph_store")
     node_ids = list(seed_node_ids or [])
     if not node_ids:
-        node_ids = get_export_seed_ids(
-            property_graph_index, None, cap=32, adapter=adapter
-        )
-    ctx = _export_context(adapter)
+        node_ids = get_export_seed_ids(property_graph_index, None, cap=32)
 
     path_obj = Path(output_path)
     path_obj.parent.mkdir(parents=True, exist_ok=True)
@@ -344,7 +317,7 @@ def export_graph_parquet(
         return
 
     with graph_export_span(
-        adapter_name=ctx.adapter_name,
+        adapter_name="llama_index",
         fmt="parquet",
         depth=int(depth),
         seed_count=len(node_ids),
@@ -353,10 +326,3 @@ def export_graph_parquet(
         pq.write_table(table, str(path_obj))
         bytes_written = path_obj.stat().st_size if path_obj.exists() else 0
         record_graph_export_event(span, path=path_obj, bytes_written=bytes_written)
-    ctx.telemetry.graph_exported(
-        adapter_name=ctx.adapter_name,
-        fmt="parquet",
-        bytes_written=bytes_written,
-        depth=int(depth),
-        seed_count=len(node_ids),
-    )

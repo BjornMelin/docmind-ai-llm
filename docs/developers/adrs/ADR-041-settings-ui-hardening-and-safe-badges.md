@@ -81,6 +81,10 @@ flowchart TD
 - Settings must not allow remote endpoints unless `security.allow_remote_endpoints=true` and host is allowlisted.
 - UI must not introduce new HTML/JS sinks.
 - `.env` persistence must not log secrets.
+- The Settings page includes a canonical "Document Parsing & OCR" section.
+  Candidate parser/OCR settings are validated through `DocMindSettings` before
+  Apply/Save; unsupported parser, backend, or OCR engine values must not be
+  written to `.env`.
 
 ## Testing
 

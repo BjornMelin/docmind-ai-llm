@@ -22,7 +22,7 @@ This directory contains documentation for DocMind AI developers. The documentati
 | ---------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------- |
 | **[Architecture Overview](architecture-overview.md)**            | Executive technical summary with performance specs                 | Technical leads, architects                 |
 | **[Cache Implementation Guide](cache.md)**                       | Wiring, configuration, operations, troubleshooting                 | Developers integrating cache                |
-| **[GraphRAG Adapters Guide](guides/graphrag-adapters.md)**       | Adapter protocol, registry wiring, and optional dependency lanes   | Developers extending GraphRAG               |
+| **[GraphRAG Guide](guides/graphrag.md)**                         | Direct LlamaIndex runtime, health checks, and graph exports        | Developers extending GraphRAG               |
 | **[Multimodal Pipeline Guide](guides/multimodal-pipeline.md)**   | End-to-end PDF images → retrieval → UI → persistence               | Developers/operators shipping multimodal    |
 | **[Testing Guide](../testing/testing-guide.md)**                 | Canonical testing strategy and commands                            | QA engineers, developers writing tests      |
 | **[CI/CD Pipeline](ci-cd-pipeline.md)**                          | Continuous integration and deployment workflows                    | DevOps engineers, release managers          |

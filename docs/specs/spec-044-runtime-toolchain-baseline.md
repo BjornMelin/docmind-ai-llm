@@ -1,95 +1,181 @@
 ---
 spec: SPEC-044
-title: Runtime & Toolchain Baseline — Python 3.12.13 Compatible, uv-first
-version: 1.2.0
-date: 2026-04-28
+title: Runtime and toolchain baseline
+version: 1.6.0
+date: 2026-07-11
 owners: ["ai-arch"]
 status: Implemented
 related_requirements:
-  - NFR-MAINT-002: Ruff/pyright pass (ruff enforces pylint-equivalent rules).
-  - NFR-MAINT-003: No placeholders; docs/specs/RTM must match code.
-  - NFR-PORT-003: Docker/compose runnable + reproducible.
+  - NFR-MAINT-002: Ruff and Pyright pass.
+  - NFR-MAINT-003: Package, lock, tests, and active docs agree.
+  - NFR-PORT-003: Docker and wheel artifacts are reproducible.
 related_adrs: ["ADR-065", "ADR-014", "ADR-024", "ADR-042"]
 ---
 
 ## Objective
 
-Define a single, enforceable baseline for:
+This specification defines Python support, uv dependency resolution, CPU and GPU profiles, wheel validation, continuous integration (CI), and container baselines.
 
-- supported Python versions (primary vs. supported range)
-- toolchain targeting (Ruff/Pyright)
-- deterministic dependency resolution across extras/groups
-- container and CI Python baselines
-- uv-first developer workflows
+## Supported Python versions
 
-## Non-goals
+- Primary development, CI, and container runtime: CPython 3.12.13
+- Supported package range: Python `>=3.12,<3.14`
+- Ruff target: `py312`
+- Pyright target: Python 3.12
+- Free-threaded CPython builds: unsupported
 
-- Supporting Python <3.12.
-- Adopting the free-threaded CPython build (GIL-disabled). The project uses the default CPython build.
-- Installing or running GPU inference servers (vLLM/LM Studio) inside the app environment or container image.
-
-## Runtime policy
-
-### Supported versions
-
-- Primary development/runtime version: **CPython 3.12.13** (see `.python-version`).
-- Supported range for the application: **Python 3.12 through 3.13** (`requires-python = ">=3.12,<3.14"`).
+Verify the active interpreter:
 
 ```bash
 uv sync --frozen
 uv run python -c "import sys; print(sys.version)"
-uv run python scripts/run_tests.py
 ```
 
-## Tooling policy (lint + type)
+## Dependency authority
 
-DocMind targets Python 3.12-compatible syntax and typing:
+`pyproject.toml` declares direct dependencies, optional extras, dependency groups, and uv source rules. `uv.lock` records the resolved graph.
 
-- Ruff targets Python 3.12 (`target-version = "py312"`).
-- Pyright checks against Python 3.12 (`pythonVersion = "3.12"`).
-- CI runs the full test suite against Python 3.12.13.
+`tool.uv.required-version` pins uv `0.11.21` for local commands and
+`astral-sh/setup-uv`; the Dockerfile uses the same versioned image. CI cache
+suffixes separate the 3.12, 3.13, Qdrant, and documentation dependency payloads.
+The isolated wheel backend is exact-pinned to Setuptools `80.9.0` and Wheel
+`0.47.0`, so a manual rebuild of a release tag uses the same build toolchain.
 
-## Dependency resolution policy (uv)
+The package requires:
 
-- Source of truth: `pyproject.toml` + `uv.lock`.
-- Base install must remain CPU-first and resolve without CUDA-specific indices.
-- Optional extras must be deterministic and documented:
-  - `uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match`
-  - `uv sync --frozen --extra graph`
-  - `uv sync --frozen --extra multimodal`
-  - `uv sync --frozen --extra observability`
-  - `uv sync --frozen --extra eval`
-- The GPU command intentionally uses `--index-strategy=unsafe-best-match` only
-  with the CUDA wheel index so uv selects CUDA 12.8 PyTorch wheels rather than
-  CPU wheels from the default index.
+- `llama-index-core>=0.14.21,<0.15.0`
+- Selected LlamaIndex LLM, Hugging Face, Qdrant, and DuckDB adapters
+- Direct FastEmbed, Sentence Transformers, Transformers, and Torch dependencies
+
+The package does not include:
+
+- The `llama-index` meta-package
+- A `llama` optional extra
+- LlamaIndex embedding adapters for OpenAI, FastEmbed, or CLIP
+- Whisper
+
+## CPU and GPU profiles
+
+The default uv profile is CPU-first:
+
+```bash
+uv sync --frozen
+uv run python -c \
+  "import torch; assert torch.version.cuda is None; print(torch.__version__)"
+```
+
+The default `cpu` dependency group and uv source rules select official CPU-only PyTorch and Torchvision wheels.
+
+The NVIDIA profile replaces the CPU group:
+
+```bash
+uv sync --frozen --no-group cpu --extra gpu
+uv run python -c \
+  "import torch; print(torch.__version__, torch.cuda.is_available())"
+```
+
+The `cpu` group and `gpu` extra conflict by design. The GPU source rule selects
+the locked CUDA 12.8 PyTorch wheel index without command-line index overrides.
+It accelerates dense/image embeddings, reranking, and spaCy; sparse FastEmbed
+remains on its mutually exclusive CPU distribution. Linux x86_64 is the
+release-validated GPU host; WSL2 and macOS paths are best effort.
+
+Other supported extras are:
+
+- `multimodal`: ColPali reranking
+- `observability`: LlamaIndex OpenTelemetry integration
+- `eval`: BEIR evaluation
+- `searchable-pdf`: POSIX-only OCRmyPDF integration (Linux, macOS, or WSL2;
+  native Windows unsupported; OCRmyPDF and Tesseract executables required)
+
+## Wheel contract
+
+Build and inspect the wheel:
+
+```bash
+rm -rf build docmind_ai_llm.egg-info
+uv build --wheel --clear
+uv run python scripts/smoke_built_wheel.py
+```
+
+The smoke script verifies:
+
+- Required parser, version, and prompt-template files
+- Deleted files and any other paths absent from the source tree are absent
+- Required `Requires-Dist` metadata
+- Removed dependencies and the `graph` and `llama` extras are absent
+- An isolated import and packaged prompt read after `pip install --no-deps`
+
+This is a package content and metadata test. It does not validate a fresh pip dependency resolution.
+
+uv is the supported local installer, and the repository image is the supported container path. The uv lock and source rules preserve the CPU or GPU profile. The wheel smoke test above validates package contents only; it does not define a supported pip-managed runtime.
+
+## Continuous integration
+
+The canonical CPython 3.12.13 lane:
+
+- Set offline Hugging Face and Transformers flags
+- Require real `llama_index.core`
+- Assert `torch.version.cuda is None`
+- Run Ruff, configured Pyright, wheel smoke, coverage, and schema validation
+
+The lean CPython 3.13.12 lane installs the base profile, runs the full unit suite, and runs 21 focused GraphRAG tests. It asserts that `llama_index.core` is installed and Kuzu is absent. Independent jobs validate Docker and Compose policy, build the production image from its real context with reusable BuildKit layers in the GitHub Actions cache, require the canonical liveness command to succeed, and run RRF and DBSF queries against Qdrant `v1.18.2` with the qdrant-client version from `uv.lock`.
+
+Workflows use the current supported Action majors: `actions/checkout@v7`, `actions/setup-python@v6`, `astral-sh/setup-uv@v8`, `actions/setup-node@v6`, `docker/setup-buildx-action@v4`, and `docker/build-push-action@v7`.
+
+## Release workflow
+
+The release workflow:
+
+1. Creates the GitHub release through Release Please
+2. Checks out the created release tag, clears ignored Setuptools staging, and
+   builds its wheel with `uv build --wheel --clear`
+3. Runs `scripts/smoke_built_wheel.py`
+4. Uploads the smoke-tested `dist/*.whl` to the GitHub release
+
+The workflow validates the release artifact’s contents and metadata. It does not publish to PyPI or claim dependency-install portability.
 
 ## vLLM policy
 
-vLLM is supported as an **external OpenAI-compatible server** (out-of-process). The repo environment does not install `vllm`.
+vLLM runs as an external OpenAI-compatible server. The application environment and container image do not install it.
 
-DocMind connects via:
+Configure DocMind with:
 
 - `DOCMIND_LLM_BACKEND=vllm`
-- **Primary pattern**: `DOCMIND_OPENAI__BASE_URL=http://localhost:8000/v1` is the recommended OpenAI-compatible primary pattern when running vLLM.
-- **Alternatives**: `DOCMIND_VLLM__VLLM_BASE_URL` is available for explicit vLLM-targeted configuration; `DOCMIND_VLLM_BASE_URL` is a convenience top-level field.
+- `DOCMIND_OPENAI__BASE_URL=http://localhost:8000/v1`
+- `DOCMIND_OPENAI__API_KEY=local_api_key_not_used`
 
-Server tuning (FlashInfer, FP8 KV cache, chunked prefill) is configured on the vLLM server process. DocMind surfaces helper values via `settings.get_vllm_env_vars()` (e.g., for multi-GPU scheduling or memory overrides).
+Server-side FlashInfer, FP8 key-value cache, model, and memory settings belong to the vLLM process.
 
 ## Container baseline
 
-- Containers pin the primary runtime: `python:3.12.13-slim-bookworm`.
-- Dependency install in containers uses `uv sync --frozen` against `uv.lock`.
-- Runtime container runs as a non-root user and uses exec-form `CMD`.
+- Base image: `python:3.12.13-slim-bookworm`
+- Installer: `uv sync --frozen`
+- PyTorch profile: official CPU wheels
+- Runtime user: non-root
+- Command: exec-form `CMD`
+- Framework telemetry: tracked Streamlit config and container command set
+  `browser.gatherUsageStats=false`
+- Startup preflight: `python scripts/parser_health.py --check`
+- Immutable text model: pinned BGE-M3 PyTorch snapshot, offline-load checked at
+  build time with a 1024-dimensional embedding assertion
+- Recurring liveness: `python scripts/container_health.py`
+- Compose base: CPU Ollama `0.31.2` and Qdrant `v1.18.2`
+- Compose GPU mode: `docker-compose.gpu.yml` adds only NVIDIA device access
 
-See `SPEC-023` and `ADR-042`.
+See SPEC-023 and ADR-042 for container hardening.
 
 ## Verification
 
-Required checks for final validation:
+Run the current local gates:
 
 ```bash
-uv run ruff format . && uv run ruff check . --fix
+uv lock --check --offline
+uv run ruff format --check .
+uv run ruff check .
 uv run pyright --threads 4
-uv run python scripts/run_tests.py
-uv run python scripts/run_quality_gates.py --ci --report
+uv run python scripts/run_tests.py --fast
+rm -rf build docmind_ai_llm.egg-info
+uv build --wheel --clear
+uv run python scripts/smoke_built_wheel.py
 ```

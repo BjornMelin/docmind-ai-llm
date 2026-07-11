@@ -1,182 +1,140 @@
 ---
 ADR: 002
-Title: Unified Embedding Strategy with BGE‑M3
+Title: Unified embedding strategy with BGE-M3 and SigLIP
 Status: Implemented
-Version: 4.3
-Date: 2025-09-02
+Version: 4.6
+Date: 2026-07-11
 Supersedes:
 Superseded-by:
 Related: 003, 006, 009, 031, 034, 001
 Tags: embeddings, retrieval, hybrid, multimodal, local-first
 References:
-- [BAAI/bge-m3 — Hugging Face](https://huggingface.co/BAAI/bge-m3)
-- [SigLIP — Transformers Docs](https://huggingface.co/docs/transformers/en/model_doc/siglip)
-- [OpenAI CLIP ViT‑B/32 — Hugging Face](https://huggingface.co/openai/clip-vit-base-patch32)
-- [LlamaIndex — Embeddings](https://docs.llamaindex.ai/en/stable/module_guides/models/embeddings/)
-- [Qdrant — Documentation](https://qdrant.tech/documentation/)
+- [BAAI BGE-M3](https://huggingface.co/BAAI/bge-m3)
+- [Transformers SigLIP](https://huggingface.co/docs/transformers/en/model_doc/siglip)
+- [LlamaIndex embeddings](https://docs.llamaindex.ai/en/stable/module_guides/models/embeddings/)
+- [Qdrant documentation](https://qdrant.tech/documentation/)
 ---
 
 ## Description
 
-Replace the three‑model setup (BGE‑large + SPLADE + CLIP) with a two‑model approach: **BGE‑M3** for unified dense+sparse text and **SigLIP** for images. Reduces complexity and memory while improving retrieval quality.
+Use BGE-M3 for dense text, direct FastEmbed support for sparse text, and SigLIP for images. SigLIP is the only supported image embedding backend.
 
 ## Context
 
-Separate dense and sparse models increase coordination cost and memory. BGE‑M3 unifies dense/sparse (and supports multi‑granularity) with strong quality and 8K context, enabling simpler hybrid search with fewer moving parts.
+The original decision replaced separate BGE-large, SPLADE, and CLIP paths with fewer model families. The current runtime uses BGE-M3 dense vectors, FastEmbed sparse vectors, and SigLIP image vectors.
 
-## Decision Drivers
+## Decision drivers
 
-- Reduce model count and memory footprint
-- Maintain or improve retrieval quality
-- 100% local operation on consumer hardware
-- Fit adaptive retrieval (ADR‑003) and storage (ADR‑031)
-
-## Alternatives
-
-- A: Current three‑model (BGE‑large + SPLADE + CLIP) — High overhead
-- B: BGE‑M3 + CLIP (Selected) — Unified dense/sparse + multimodal
-- C: Nomic‑v2 + CLIP — MoE, good multilingual; alternative local setup
-
-### Decision Framework
-
-| Model / Option | Quality (40%) | Simplicity (30%) | Perf (30%) | Total Score | Decision |
-| --- | --- | --- | --- | --- | --- |
-| BGE‑M3+CLIP | 9 | 9 | 9 | **9.0** | Selected |
-| Nomic‑v2+CLIP | 8 | 8 | 8 | 8.0 | Rejected |
-| 3‑model(baseline) | 7 | 2 | 3 | 4.0 | Rejected |
+- Reduce duplicate model and adapter ownership
+- Keep dense, sparse, and image roles explicit
+- Support local execution after model installation
+- Preserve Qdrant named-vector and image-collection contracts
+- Use maintained library integrations
 
 ## Decision
 
-Adopt BGE‑M3 (1024‑dim) for unified dense+sparse text embeddings and SigLIP base (projection_dim ≈ 768) for images. Vectors are stored in Qdrant (ADR‑031) and consumed by the adaptive retrieval pipeline (ADR‑003). This replaces the previous three‑model setup to reduce complexity and memory while maintaining quality.
+Adopt:
 
-## High-Level Architecture
+- BGE-M3 for 1024-dimensional dense text vectors
+- Direct FastEmbed support for sparse text vectors
+- SigLIP for image and text-to-image vectors
+- BGE reranker v2-m3 for text reranking
+- Optional ColPali only as a later visual reranking stage
+
+Store dense and sparse text vectors under their canonical Qdrant names. Store SigLIP image vectors in the dedicated image collection.
+
+Do not expose an OpenCLIP or alternate image-backend selector.
 
 ```mermaid
-graph LR
-  C["Chunking (ADR-009)"] --> T["BGE-M3 Text Vectors"]
-  C --> I["SigLIP Image Vectors"]
-  T --> Q["Qdrant"]
-  I --> Q
-  Q --> H["Hybrid Retrieval (ADR-003)"]
+flowchart LR
+    CHUNK["Document chunks"] --> DENSE["BGE-M3 dense vectors"]
+    CHUNK --> SPARSE["FastEmbed sparse vectors"]
+    PAGE["Page images"] --> IMAGE["SigLIP image vectors"]
+    DENSE --> TEXTQ["Qdrant text collection"]
+    SPARSE --> TEXTQ
+    IMAGE --> IMAGEQ["Qdrant image collection"]
 ```
 
-## Related Requirements
+## Runtime ownership
 
-### Functional Requirements
+| Concern | Owner |
+| --- | --- |
+| Dense text model | `src/config/integrations.py` through the LlamaIndex Hugging Face adapter |
+| Sparse text model | Direct FastEmbed integration in retrieval and storage |
+| SigLIP model loading | `src/utils/vision_siglip.py` |
+| Image embedding API | `src/utils/siglip_adapter.py` |
+| Vector schema | `src/utils/storage.py` and image-index helpers |
+| Retrieval fusion | Qdrant prefetch and fusion queries |
 
-- FR‑1: Generate dense embeddings for semantic similarity
-- FR‑2: Generate sparse embeddings for keyword retrieval
-- FR‑3: Support multimodal search via image vectors
+## Local operation and privacy
 
-### Non-Functional Requirements
+Embedding models can load from local caches after operators prefetch them. Set `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` for an offline run.
 
-- NFR‑1: >30% embedding memory reduction vs baseline
-- NFR‑2: Maintain or improve retrieval accuracy
-- NFR‑3: Fully offline on consumer hardware
+Local embedding and loopback Qdrant paths do not require a hosted embedding API. This configuration does not itself measure network egress.
 
-### Integration Requirements
+## Image metadata
 
-- IR‑1: Use LlamaIndex embedding interfaces
-- IR‑2: Persist in Qdrant with hybrid search enabled
+- Tag page-image vectors with `image_backbone: "siglip"`
+- Persist `page_id`, `source_file`, and `page_number`
+- Render PDF images through pypdfium2
+- Store EXIF-free WebP with JPEG fallback
+- Use a perceptual hash for stability checks
 
-## Local‑First & Privacy
+## Current dependencies
 
-- All embedding models (BGE‑M3 for text; SigLIP for images) run locally and are loaded from local caches; set `HF_HUB_OFFLINE=1` and pre‑download model weights to avoid network access.
-- No external APIs or cloud endpoints are required for embedding; the vector store (Qdrant) runs locally on `127.0.0.1`.
+- `sentence-transformers>=5.2.0,<6.0.0`
+- `fastembed>=0.5.1`
+- `torch==2.8.0`
+- `transformers>=5.0.0,<6.0.0`
+- `llama-index-core>=0.14.21,<0.15.0`
+- `llama-index-embeddings-huggingface>=0.7.0,<0.8.0`
+- `BAAI/bge-m3`
+- `google/siglip-base-patch16-224`
 
-Note on model roles: Embeddings = BGE‑M3 (text) and SigLIP (images). Reranking uses BGE v2‑m3 (text cross‑encoder) with SigLIP visual re‑score via normalized cosine; ColPali is optional on capable GPUs.
-
-### Image Backbone Tagging and Imaging Defaults
-
-- Tag page/image vectors with `image_backbone: "siglip"` in metadata for downstream scoring and auditability.
-- Persist canonical de‑dup/trace fields on all nodes: `page_id`, `source_file`, `page_number`.
-- Default PDF imaging targets ~200 DPI via PyMuPDF; store EXIF‑free WebP (JPEG fallback) and maintain perceptual hash (pHash) for stability checks.
-
-### Performance Requirements
-
-- PR‑1: <50ms per‑chunk embedding on RTX 4090 Laptop
-- PR‑2: Efficient hybrid query latency via unified vectors
-
-## Design
-
-### Architecture Overview
-
-- Unified embedding path for text; separate path for images
-- Single ingestion→embedding→storage flow; hybrid retrieval consumes both
-
-### Implementation Details
-
-Text embedding (BGE-M3) binding (simplified):
-
-In `src/config/integrations.py`:
-
-```python
-from llama_index.core import Settings
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-
-def configure_embeddings(model_name: str, device: str) -> None:
-    Settings.embed_model = HuggingFaceEmbedding(
-        model_name=model_name,
-        device=device,
-        trust_remote_code=False,
-    )
-```
-
-Image embedding helpers (SigLIP/OpenCLIP) live under `src/models/embeddings.py` (see `ImageEmbedder` / `UnifiedEmbedder`).
-
-Qdrant collection dimensionality (ensure index schema aligns):
-
-- Text vectors (BGE‑M3): 1024 dimensions
-- Image vectors (SigLIP base): projection_dim (typically 768)
-- Use separate collections or a hybrid schema that matches each embedding’s dimension.
-
-### Configuration
-
-```env
-DOCMIND_EMBEDDING__MODEL_NAME=BAAI/bge-m3
-DOCMIND_EMBEDDING__BATCH_SIZE_GPU=64
-DOCMIND_EMBEDDING__BATCH_SIZE_CPU=8
-```
-
-## Testing
-
-```python
-def test_bgem3_shape(embed_model):
-    vecs = embed_model.get_text_embedding("hello")
-    assert len(vecs) == 1024
-```
+The package does not require the `llama-index` meta-package or LlamaIndex embedding adapters for OpenAI, FastEmbed, or CLIP.
 
 ## Consequences
 
-### Positive Outcomes
+Positive outcomes:
 
-- Fewer models; lower memory; simpler maintenance
-- Improved coordination between dense and sparse signals
+- One image backend and one SigLIP loader owner
+- Explicit dense and sparse responsibilities
+- Fewer published adapter dependencies
+- Stable vector dimensions and collection ownership
+- Reproducible BGE-M3 loading from a pinned Hub revision, cache folder, or
+  explicit local snapshot
 
-### Negative Consequences / Trade-offs
+Trade-offs:
 
-- Requires one‑time re‑indexing of existing documents
-- Increased reliance on BGE‑M3 implementation
+- Embedding changes require explicit reindexing
+- Custom SigLIP models need an explicit compatible revision and vector schema
+- Custom text models need an explicit compatible revision and vector dimension
+- GPU performance varies by hardware and is not a release guarantee
 
-### Dependencies
+## Historical decision context
 
-- Python: `FlagEmbedding>=1.2.0`, `torch>=2.0.0`, `llama-index>=0.10`
-- Models: `BAAI/bge-m3`, `google/siglip-base-patch16-224` (default); Optional: OpenCLIP ViT‑L/14 or ViT‑H/14
+Earlier revisions compared BGE-M3 plus CLIP, Nomic plus CLIP, and the original three-model stack. Those alternatives explain the transition but are not supported runtime backends.
 
-### Ongoing Maintenance & Considerations
+Earlier performance and memory figures were evaluation targets, not retained release evidence.
 
-- Track FlagEmbedding and LlamaIndex releases for embedding API changes
-- Re‑evaluate batch sizes when hardware or drivers change
-- Validate hybrid performance quarterly with a small benchmark set
+## Verification
+
+```bash
+uv run pytest tests/unit/models/embeddings -q
+uv run pytest tests/unit/retrieval/embeddings -q
+uv run pytest tests/unit/retrieval/reranking/siglip -q
+```
 
 ## Changelog
 
-- 4.3 (2025-09-07): Added image_backbone="siglip" tagging, canonical page metadata, and DPI≈200 imaging defaults aligned with SPEC‑003 and plan 004.
-- 4.2 (2025-09-07): Switch image backbone default from CLIP to SigLIP; update diagrams and implementation details
-- 4.1 (2025-09-02): Replaced ADR-007 with ADR-031; added ADR-034 reference; updated formatting
-- 4.1 (2025-08-26): IMPLEMENTATION COMPLETE — BGE-M3 deployed; integrated with ADR-009
-- 4.0 (2025-08-18): Updated perf targets for RTX 4090 Laptop
-- 3.1 (2025-08-18): DSPy and PropertyGraphIndex integration
-- 3.0 (2025-08-17): Removed API-only Voyage-3; set BGE-M3 as primary local
-- 2.0 (2025-08-17): INVALID — Voyage-3 selection
-- 1.0 (2025-01-16): Initial design
+- 4.6 (2026-07-11): Pinned BGE-M3, wired native LlamaIndex Hugging Face
+  sequence/normalization/batch options, and made missing local artifacts fail
+  without a mock embedding fallback.
+- 4.5 (2026-07-11): Removed the unused parallel `FlagEmbedding` implementation and made the LlamaIndex Hugging Face adapter, direct FastEmbed sparse path, and shared SigLIP loader the only owners.
+- 4.4 (2026-07-10): Aligned current implementation with BGE-M3 dense, direct FastEmbed sparse, and SigLIP-only image embeddings. Removed active OpenCLIP and meta-package claims.
+- 4.3 (2025-09-07): Added SigLIP metadata, canonical page metadata, and pypdfium2 imaging defaults.
+- 4.2 (2025-09-07): Changed the image backbone from CLIP to SigLIP.
+- 4.1 (2025-09-02): Replaced ADR-007 with ADR-031 and added ADR-034.
+- 4.0 (2025-08-18): Recorded the BGE-M3 evaluation.
+- 3.0 (2025-08-17): Removed API-only Voyage-3.
+- 1.0 (2025-01-16): Recorded the initial design.

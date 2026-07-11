@@ -8,7 +8,9 @@ The workflow is defined in [`.github/workflows/release.yml`](../../.github/workf
 
 ### Key Settings
 
-- **Trigger**: Runs on every push to the `main` branch.
+- **Triggers**: Release Please runs on pushes to `main`. A published GitHub
+  Release triggers the wheel build, smoke, and asset upload. A manual dispatch
+  can rebuild an existing tag's artifact after a transient failure.
 - **Release Type**: `python` (Handles `pyproject.toml` version bumping and `CHANGELOG.md` updates).
 - **Manifest Config**: Advanced Release Please settings live in
   [`release-please-config.json`](../../release-please-config.json) and
@@ -22,6 +24,8 @@ The workflow is defined in [`.github/workflows/release.yml`](../../.github/workf
   repository contents and pull request write access.
 - **SemVer Strategy**: `bump-minor-pre-major: true`.
   - This ensures that breaking changes ( `feat!:` ) increment the **minor** version (e.g., `0.1.0` -> `0.2.0`) rather than the **major** version, protecting the `1.0.0` milestone for the actual stable release.
+  - The stable milestone commit uses an explicit `Release-As: 1.0.0` footer.
+    This one-time override wins over pre-major bump behavior.
 
 ## How It Works
 
@@ -52,9 +56,14 @@ The workflow is defined in [`.github/workflows/release.yml`](../../.github/workf
     - When a maintainer **merges** the Release PR, `release-please`:
         - Creates a new GitHub Release.
         - Tags the commit with the new version (e.g., `v0.2.0`).
-    - The release workflow validates the published GitHub Release body so empty
-      or unparsable notes fail the run instead of silently shipping bad release
-      notes.
+    - Both the publisher and artifact jobs validate the GitHub Release body so
+      empty or unparsable notes fail before a wheel can be uploaded.
+    - The published-release event checks out the tag, builds and smoke-tests the
+      wheel from cleared ignored Setuptools staging with the tag commit
+      timestamp as `SOURCE_DATE_EPOCH`, then uploads it as a GitHub Release
+      asset. If that job fails, run the same workflow
+      manually with the existing tag; the reproducible artifact path does not
+      depend on `release_created` remaining true on a rerun.
 
 ## Release Note Guardrails
 
@@ -66,8 +75,8 @@ The workflow is defined in [`.github/workflows/release.yml`](../../.github/workf
   required title check works for forks while keeping the token read-only.
 - Allowed release-driving PR title types are `feat`, `fix`, `chore`, `docs`,
   `style`, `refactor`, `perf`, `test`, and `deps`.
-- The release workflow fails after publishing if the GitHub Release body is
-  blank, which catches Release Please parse failures before they go unnoticed.
+- Artifact publication refuses a blank GitHub Release body, including manual
+  recovery runs, so the wheel cannot race ahead of release-note validation.
 - Generated Release Please PRs skip the heavy CI, docs, and automatic CodeRabbit
   review lanes. They contain only version and release-note files assembled from
   already-merged commits, so the useful gate is the Release Please contract

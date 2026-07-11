@@ -81,12 +81,10 @@ def fixture_settings_app_test(tmp_path, monkeypatch) -> Iterator[AppTest]:
     original_llm = getattr(LISettings, "_llm", None)
     original_embed = getattr(LISettings, "_embed_model", None)
 
-    # Avoid slow/optional GraphRAG adapter discovery during Settings
-    # AppTest reruns. The Settings page only needs the badge health tuple;
-    # heavy adapter imports are out of scope for this integration test and
-    # can dominate runtime under coverage.
+    # The Settings page only needs the badge health tuple; dedicated unit tests
+    # cover the LlamaIndex PropertyGraph API check.
     monkeypatch.setattr(
-        "src.retrieval.adapter_registry.get_default_adapter_health",
+        "src.retrieval.llama_index_adapter.get_graphrag_health",
         lambda *, force_refresh=False: (
             False,
             "unavailable",
@@ -102,8 +100,10 @@ def fixture_settings_app_test(tmp_path, monkeypatch) -> Iterator[AppTest]:
             default_timeout=int(os.environ.get("TEST_TIMEOUT", "30")),
         )
     finally:
-        LISettings.llm = original_llm
-        LISettings.embed_model = original_embed
+        LISettings.llm = original_llm  # pyright: ignore[reportAttributeAccessIssue]
+        LISettings.embed_model = (  # pyright: ignore[reportAttributeAccessIssue]
+            original_embed
+        )
 
 
 def test_settings_apply_runtime_calls_initialize_integrations(
@@ -227,6 +227,11 @@ def test_settings_save_persists_env(
     assert values.get("DOCMIND_OLLAMA_EMBED_DIMENSIONS") == "384"
     assert values.get("DOCMIND_OLLAMA_ENABLE_LOGPROBS") == "true"
     assert values.get("DOCMIND_OLLAMA_TOP_LOGPROBS") == "2"
+    assert values.get("DOCMIND_PARSING__PROFILE") == "cpu_safe"
+    assert values.get("DOCMIND_PDF_BACKEND__RENDER_DPI") == "200"
+    assert values.get("DOCMIND_PDF_BACKEND__MIN_TEXT_CHARS_PER_PAGE") == "24"
+    assert values.get("DOCMIND_OCR__FORCE_OCR") == "false"
+    assert values.get("DOCMIND_OCR__MODEL_CACHE_DIR") is not None
 
 
 def test_settings_save_persists_openai_compatible_env(

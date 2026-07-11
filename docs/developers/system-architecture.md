@@ -1,532 +1,29 @@
-# DocMind AI System Architecture Guide
+# Trace the DocMind system architecture
 
-**Version:** 2.0.0  
-**Status:** Alpha (v2.0 Revision)
+This guide maps DocMind’s runtime components to their implementation owners. Use it when changing a boundary, following data through the system, or deciding which contract needs an update.
 
-## Overview
+## Map component ownership
 
-DocMind AI is a local-first AI document analysis system implementing a modern agentic RAG architecture with multi-agent coordination. This guide provides comprehensive architectural understanding of the unified configuration architecture (ADR-024) and the production-ready system that achieves 95% complexity reduction while maintaining full functionality.
+Each subsystem has one primary owner:
 
-## Table of Contents
+| Subsystem | Owner | Responsibility |
+| --- | --- | --- |
+| Application shell | Streamlit pages under `src/pages/` | Uploads, settings, chat, analytics, and diagnostics |
+| Configuration | `src/config/settings.py` | Typed defaults, environment mapping, and validation |
+| Integration wiring | `src/config/integrations.py` | Lazy initialization of external libraries and clients |
+| Parser boundary | `src/processing/parsing/` | Format routing, bounded conversion, OCR, and canonical output |
+| Ingestion | `src/processing/ingestion_pipeline.py` | Chunking, enrichment, indexing, exports, and publication |
+| Retrieval | `src/retrieval/` | Hybrid search, image search, fusion, deduplication, and reranking |
+| Agent graph | `src/agents/supervisor_graph.py` | Role routing, deadlines, fallbacks, and checkpoints |
+| Persistence | `src/persistence/` | Chat, snapshots, locks, and content-addressed artifacts |
+| Telemetry | `src/telemetry/` and `src/utils/telemetry.py` | Metadata-only local events and optional OpenTelemetry export |
 
-1. [High-Level System Architecture](#high-level-system-architecture)
-2. [Unified Configuration Architecture](#unified-configuration-architecture)
-3. [Multi-Agent Coordination System](#multi-agent-coordination-system)
-4. [Component Deep Dive](#component-deep-dive)
-5. [Data Flow Architecture](#data-flow-architecture)
-6. [Integration Points](#integration-points)
-7. [Architectural Principles](#architectural-principles)
-8. [Future Development Guidelines](#future-development-guidelines)
+The source files and active specifications are authoritative. `pyproject.toml` and `uv.lock` are the dependency authorities.
 
-## High-Level System Architecture
-
-DocMind AI employs a sophisticated multi-layer architecture optimized for local-first operation:
-
-```mermaid
-graph TB
-    subgraph "Interface Layer"
-        UI[Streamlit UI]
-        API[FastAPI Endpoints]
-        TELEMETRY[Telemetry Sink]
-    end
-
-    subgraph "Multi-Agent Orchestration (LangGraph)"
-        SUP[LangGraph Supervisor]
-        ROUTER[Router Agent]
-        PLANNER[Planner Agent]
-        RETRIEVER[Retrieval Agent]
-        SYNTH[Synthesis Agent]
-        VALIDATOR[Validator Agent]
-        
-        SUP <-> ROUTER
-        SUP <-> PLANNER
-        SUP <-> RETRIEVER
-        SUP <-> SYNTH
-        SUP <-> VALIDATOR
-    end
-
-    subgraph "Processing & Retrieval Layer"
-        INGEST[Ingestion Pipeline]
-        EMBED[BGE-M3 / SigLIP]
-        FUSION[Multimodal Fusion]
-        RERANK[BGE-Reranker]
-    end
-
-    subgraph "Storage & Persistence Layer"
-        QDRANT[(Qdrant Vector DB)]
-        SQLITE[(SQLite WAL / Chat DB)]
-        ARTIFACTS[(Artifact Store)]
-        
-        INGEST --> QDRANT
-        RETRIEVER --> QDRANT
-        RETRIEVER --> FUSION
-        SUP --> SQLITE
-        INGEST --> ARTIFACTS
-    end
-
-    UI --> SUP
-    API --> SUP
-
-    style SUP fill:#ff9999
-    style QDRANT fill:#ffcc99
-    style ARTIFACTS fill:#ccffcc
-```
-
-### Core Components
-
-| Component               | Purpose                                              | Technology                               | Performance Target   |
-| ----------------------- | ---------------------------------------------------- | ---------------------------------------- | -------------------- |
-| **Supervisor**          | LangGraph-based agent orchestration                  | LangGraph v1.0.6                         | < 200ms overhead     |
-| **VLLM Backend**        | High-performance local inference (OpenAI-compatible) | vLLM server (FP8 / FlashInfer, external) | 120-180 tok/s        |
-| **Vector Store**        | Multi-vector and hybrid retrieval                    | Qdrant                                   | < 50ms query latency |
-| **Persistence**         | Durable chat sessions and multimodal artifacts       | SQLite WAL + ArtifactRef                 | Zero-loss integrity  |
-
-## Local-first Guarantees
-
-DocMind AI is architected with a strict **local-first** mandate (ADR-058):
-
-1. **On-device Persistence**: All conversation state and document metadata are stored in local SQLite databases with WAL (Write-Ahead Logging) enabled.
-2. **No Cloud Leakage**: Remote LLM endpoints are disabled by default. Embeddings (BGE-M3/SigLIP) run locally on the user's GPU/CPU.
-3. **Fail-open Multimodal**: If GPU acceleration or specialized libraries (e.g., `sqlite-vec`) are unavailable, the system fallbacks to basic text-only RAG without crashing.
-4. **Content-Addressed Artifacts**: Large binary blobs (images, thumbnails) are never stored in databases. They are stored as `ArtifactRef` (SHA-256) in a local filesystem store.
-| Component               | Purpose                                                  | Technology                                                                     | Performance Target   |
-| ----------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ | -------------------- |
-| **Frontend**            | Document uploads, configuration, results, chat interface | Streamlit                                                                      | Real-time streaming  |
-| **Multi-Agent System**  | 5-agent coordination for complex queries                 | LangGraph Supervisor                                                           | <200ms coordination  |
-| **LLM Backend**         | Language model inference with 128K context               | vLLM server + Qwen3-4B-FP8                                                     | 120-180 tok/s decode |
-| **Vector Storage**      | Hybrid dense/sparse search with RRF fusion               | Qdrant                                                                         | <100ms retrieval     |
-| **Document Processing** | Hi-res parsing with NLP enrichment (optional)            | Unstructured + spaCy                                                           | <2s per document*    |
-| **Performance Layer**   | FP8 quantization, parallel execution, CUDA optimization  | torch==2.8.0 + nvidia-cuda-runtime-cu12==12.8.90 + nvidia-cudnn-cu12==9.10.2.21 | 12–14 GB VRAM usage  |
-
-*Processing time may vary based on whether optional spaCy NLP enrichment is enabled.
-*Version source of truth: `pyproject.toml` (direct pins) and `uv.lock`
-(resolved CUDA runtime packages).
-
-## Unified Configuration Architecture
-
-### Design Philosophy
-
-The unified configuration architecture (ADR-024) implements a **single source of truth** approach:
-
-```python
-# Always use this pattern - single import for all configuration
-from src.config import settings
-
-# Access any nested configuration
-model_name = settings.vllm.model              # "Qwen/Qwen3-4B-Instruct-2507-FP8"
-embedding_model = settings.embedding.model_name  # "BAAI/bge-m3"
-chunk_size = settings.processing.chunk_size   # Document chunking parameters
-timeout = settings.agents.decision_timeout    # Multi-agent coordination (200ms)
-```
-
-### Configuration Architecture
-
-```mermaid
-graph TD
-    ENV[.env File] --> PYDANTIC[Pydantic Settings V2]
-    PYDANTIC --> ROOT[DocMindSettings]
-
-    ROOT --> VLLM[VLLMConfig]
-    ROOT --> EMBEDDING[EmbeddingConfig]
-    ROOT --> AGENTS[AgentConfig]
-    ROOT --> PROCESSING[ProcessingConfig]
-    ROOT --> QDRANT[QdrantConfig]
-    ROOT --> LLM[LLMConfig]
-
-    VLLM --> V1[model: str]
-    VLLM --> V2[attention_backend: str]
-    VLLM --> V3[gpu_memory_utilization: float]
-    VLLM --> V4[kv_cache_dtype: str]
-
-    EMBEDDING --> E1[model_name: str = "BAAI/bge-m3"]
-    EMBEDDING --> E2[max_length: int = 8192]
-    EMBEDDING --> E3[batch_size: int = 32]
-
-    AGENTS --> A1[decision_timeout: int = 200]
-    AGENTS --> A2[enable_multi_agent: bool = true]
-    AGENTS --> A3[max_retries: int = 2]
-
-    style ROOT fill:#ff9999
-    style VLLM fill:#99ccff
-    style EMBEDDING fill:#ffcc99
-    style AGENTS fill:#ccffcc
-```
-
-### Key Configuration Models
-
-#### VLLMConfig - Model Backend Configuration
-
-```python
-class VLLMConfig(BaseModel):
-    """vLLM backend configuration for Qwen3-4B-FP8."""
-    model: str = "Qwen/Qwen3-4B-Instruct-2507-FP8"
-    attention_backend: str = "FLASHINFER"           # FlashInfer for 2x speedup
-    gpu_memory_utilization: float = 0.85            # 13.6GB of 16GB RTX 4090
-    kv_cache_dtype: str = "fp8_e5m2"               # FP8 KV cache quantization
-    max_model_len: int = 131072                     # 128K context window
-    enforce_eager: bool = False                     # Enable FlashInfer optimizations
-```
-
-#### EmbeddingConfig - BGE-M3 Unified Embeddings
-
-```python
-class EmbeddingConfig(BaseModel):
-    """BGE-M3 unified dense + sparse embedding configuration."""
-    model_name: str = "BAAI/bge-m3"                # Unified dense+sparse model
-    max_length: int = 8192                         # 16x improvement over legacy
-    batch_size: int = 32                           # GPU-optimized batching
-    normalize_embeddings: bool = True              # L2 normalization
-    use_fp16: bool = True                          # FP16 acceleration
-```
-
-#### AgentConfig - Multi-Agent Coordination
-
-```python
-class AgentConfig(BaseModel):
-    """Multi-agent coordination configuration (ADR-011)."""
-    decision_timeout: int = 200                    # <200ms coordination target
-    enable_multi_agent: bool = True                # 5-agent coordination
-    max_retries: int = 2                           # Retry attempts per agent
-    enable_fallback_rag: bool = True               # Fallback to single-agent RAG
-    concurrent_agents: int = 3                     # Parallel agent execution
-```
-
-## Multi-Agent Coordination System
-
-DocMind AI employs a sophisticated **5-agent coordination system** built on LangGraph's supervisor pattern to provide intelligent document analysis with enhanced quality, reliability, and performance.
-
-### Agent Architecture Overview
-
-```mermaid
-graph TD
-    A[User Query] --> B[LangGraph Supervisor]
-
-    B --> C[Router Agent]
-    B --> D[Planner Agent]
-    B --> E[Retrieval Agent]
-    B --> F[Synthesis Agent]
-    B --> G[Validator Agent]
-
-    C --> H{Query Complexity}
-    H -->|Simple| I[Direct Retrieval Path]
-    H -->|Complex| J[Multi-Agent Pipeline]
-
-    D --> K[Query Decomposition]
-    K --> L[Execution Strategy]
-
-    E --> M[Vector Search]
-    E --> N[Hybrid Retrieval]
-    E --> O[GraphRAG]
-
-    F --> P[Multi-Source Synthesis]
-    P --> Q[Deduplication]
-
-    G --> R[Response Validation]
-    R --> S[Quality Assessment]
-
-    I --> T[Final Response]
-    S --> T
-
-    U[Fallback System] -.-> T
-    B -.-> U
-
-    style B fill:#ff9999
-    style C fill:#99ccff
-    style E fill:#ffcc99
-    style F fill:#ccffcc
-    style G fill:#ffdddd
-```
-
-### Agent Specialization
-
-| Agent               | Role                                        | Performance Target | Key Features                                       |
-| ------------------- | ------------------------------------------- | ------------------ | -------------------------------------------------- |
-| **Router Agent**    | Query classification and strategy selection | <50ms              | Pattern-based routing, complexity analysis         |
-| **Planner Agent**   | Query decomposition into sub-tasks          | <100ms             | Multi-strategy planning, execution ordering        |
-| **Retrieval Agent** | Multi-strategy document retrieval           | <150ms             | Vector/Hybrid/GraphRAG, optional DSPy optimization |
-| **Synthesis Agent** | Multi-source result combination             | <100ms             | Deduplication, relevance ranking                   |
-| **Validator Agent** | Response quality assessment                 | <75ms              | Hallucination detection, source verification       |
-
-### LangGraph Supervisor Implementation
-
-DocMind uses a **repo-local**, graph-native supervisor implementation (no external
-supervisor wrapper dependency). The coordinator builds a parent `StateGraph`
-and uses **handoff tools** that return `langgraph.types.Command(graph=Command.PARENT, ...)`
-to route from the supervisor agent into subagent nodes.
-
-Key code paths:
-
-- `src/agents/coordinator.py` (wiring + compilation with checkpointer/store)
-- `src/agents/supervisor_graph.py` (handoff tools + `StateGraph` builder)
-
-```python
-from src.agents.supervisor_graph import (
-    SupervisorBuildParams,
-    build_multi_agent_supervisor_graph,
-    create_forward_message_tool,
-)
-
-graph = build_multi_agent_supervisor_graph(
-    [router_agent, planner_agent, retrieval_agent, synthesis_agent, validation_agent],
-    model=model,
-    prompt=system_prompt,
-    state_schema=MultiAgentGraphState,
-    extra_tools=[create_forward_message_tool(supervisor_name="supervisor")],
-    params=SupervisorBuildParams(output_mode="last_message"),
-)
-compiled = graph.compile(checkpointer=checkpointer, store=store)
-```
-
-### Shared Tool Functions
-
-All agents use standardized `@tool` decorated functions for consistency:
-
-```python
-from langchain_core.tools import tool
-from typing_extensions import Annotated
-from langgraph.prebuilt import InjectedState
-
-@tool
-def route_query(
-    query: str,
-    state: Annotated[dict, InjectedState]
-) -> RoutingDecision:
-    """Analyze query complexity and select processing strategy."""
-    complexity = analyze_query_complexity(query)
-    strategy = select_retrieval_strategy(complexity)
-
-    return RoutingDecision(
-        complexity=complexity,
-        strategy=strategy,
-        estimated_time=estimate_processing_time(complexity)
-    )
-
-@tool
-def retrieve_documents(
-    query: str,
-    strategy: str,
-    state: Annotated[dict, InjectedState]
-) -> List[Document]:
-    """Execute multi-strategy document retrieval."""
-    retriever = get_retriever(strategy)
-    results = retriever.retrieve(query, top_k=10)
-
-    # Apply reranking for quality
-    if len(results) > 5:
-        results = rerank_documents(query, results)
-
-    return results[:5]  # Return top 5 after reranking
-```
-
-## Component Deep Dive
-
-### Document Processing Pipeline
-
-```mermaid
-graph LR
-    A[Raw Document] --> B[Unstructured Parser]
-    B --> C[Content Extraction]
-    C --> D[Text Chunking]
-    D -.-> E[spaCy NLP Enrichment (optional)]
-    E -.-> F
-    D --> F[BGE-M3 Embeddings]
-    F --> G[Vector Storage]
-
-    H[Metadata Extraction] --> G
-    B --> H
-
-    I[IngestionCache] --> G
-    E --> I
-
-    style B fill:#ff9999
-    style E fill:#99ccff,stroke-dasharray: 5 5
-    style F fill:#ffcc99
-    style G fill:#ccffcc
-```
-
-**Key Features:**
-
-- **Hi-res Parsing**: Unstructured.io for PDF, DOCX, HTML, Markdown
-- **NLP enrichment (optional)**: spaCy sentence segmentation + entity extraction during ingestion (see SPEC-015)
-- **Intelligent Chunking**: Context-aware chunking with overlap optimization
-- **Unified Embeddings**: BGE-M3 dense + sparse embeddings (1024D + sparse)
-- **Caching Layer**: IngestionCache (DuckDBKVStore) for processed documents
-
-### Vector Storage & Retrieval
-
-DocMind AI implements advanced hybrid search with RRF fusion:
-
-```python
-class QdrantVectorStore:
-    """Qdrant vector storage with hybrid search capabilities."""
-
-    async def hybrid_search(self, query: str, top_k: int = 10) -> List[Document]:
-        """Execute hybrid dense + sparse search using server-side fusion (Qdrant)."""
-        # In production, hybrid fusion is executed server-side via Qdrant Query API
-        # (Prefetch + FusionQuery, RRF default; DBSF optional). No client-side alpha/rrf_k knobs.
-        return await self.server_side_hybrid(query, top_k)
-```
-
-### Performance Optimization Layer
-
-DocMind AI achieves exceptional performance through multiple optimization techniques:
-
-#### FP8 Quantization
-
-```bash
-# Environment configuration for FP8 optimization
-VLLM_ATTENTION_BACKEND=FLASHINFER        # FlashInfer attention backend
-VLLM_KV_CACHE_DTYPE=fp8_e5m2            # FP8 KV cache quantization
-VLLM_GPU_MEMORY_UTILIZATION=0.85        # 13.6GB of 16GB RTX 4090
-VLLM_DISABLE_CUSTOM_ALL_REDUCE=1        # Single GPU optimization
-```
-
-#### Performance Targets Achieved
-
-- **Decode Speed**: 120-180 tok/s (RTX 4090)
-- **Prefill Speed**: 900-1400 tok/s (RTX 4090)
-- **Context Window**: 128K tokens supported
-- **VRAM Usage**: 12-14GB for full 128K context
-- **Agent Coordination**: <200ms decision timeout
-
-## Data Flow Architecture
-
-### Query Processing Flow
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant UI as Streamlit UI
-    participant S as Supervisor
-    participant R as Router Agent
-    participant P as Planner Agent
-    participant RT as Retrieval Agent
-    participant SY as Synthesis Agent
-    participant V as Validator Agent
-    participant LLM as vLLM Backend
-
-    U->>UI: Submit Query
-    UI->>S: Query Processing Request
-
-    S->>R: Route Query
-    R->>S: Routing Decision
-
-    alt Complex Query
-        S->>P: Plan Execution
-        P->>S: Execution Strategy
-    end
-
-    S->>RT: Retrieve Documents
-    RT->>RT: Hybrid Search + Reranking
-    RT->>S: Retrieved Documents
-
-    S->>SY: Synthesize Response
-    SY->>LLM: Generate Response
-    LLM->>SY: Generated Content
-    SY->>S: Synthesized Response
-
-    S->>V: Validate Response
-    V->>S: Validation Result
-
-    S->>UI: Final Response
-    UI->>U: Display Results
-```
-
-### Document Processing Flow
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant UI as Streamlit UI
-    participant DP as Document Processor
-    participant NLP as spaCy Enrichment
-    participant EMB as BGE-M3 Embedder
-    participant VS as Qdrant Vector Store
-    participant CACHE as IngestionCache
-
-    U->>UI: Upload Document
-    UI->>DP: Process Document
-
-    DP->>DP: Parse with Unstructured
-    DP->>DP: Intelligent Chunking
-    opt NLP Enrichment Enabled
-        DP->>NLP: Extract Sentences + Entities
-        NLP->>DP: Sentences + Entities (metadata)
-    end
-    DP->>CACHE: Cache Processed Chunks
-
-    DP->>EMB: Generate Embeddings
-    EMB->>EMB: Dense + Sparse Embeddings
-    EMB->>VS: Store Vectors
-
-    VS->>UI: Processing Complete
-    UI->>U: Ready for Queries
-```
-
-## Integration Points
-
-### External Services
-
-- **Ollama**: Local LLM serving (fallback option)
-- **Qdrant**: Vector database for embeddings storage
-- **vLLM**: High-performance LLM inference server
-
-### Internal Modules
-
-```python
-# Core integration pattern
-from src.config import settings
-from src.agents.coordinator import MultiAgentCoordinator
-from pathlib import Path
-from src.models.processing import IngestionConfig, IngestionInput
-from src.processing.ingestion_pipeline import ingest_documents
-from src.processing.ingestion_api import generate_stable_id
-
-# Usage example
-cfg = IngestionConfig(
-    chunk_size=settings.processing.chunk_size,
-    chunk_overlap=settings.processing.chunk_overlap,
-)
-inputs = [
-    IngestionInput(
-        document_id=generate_stable_id(path),
-        source_path=Path(path),
-        metadata={"source_filename": Path(path).name},
-    )
-    for path in file_paths
-]
-result = await ingest_documents(cfg, inputs)
-coordinator = MultiAgentCoordinator(settings)
-response = coordinator.process_query(query)
-```
-
-### Directory Structure Integration
-
-```text
-src/
-├── app.py                    # Main Streamlit application
-├── config/                   # Unified configuration (BaseSettings)
-├── agents/                   # Agent implementation & Coordinator
-├── core/                     # Internal engine logic (Spacy, etc.)
-├── eval/                     # Evaluation harnesses (RAGas, custom)
-├── models/                   # Pydantic core schemas
-├── pages/                    # Streamlit multipage app views
-├── persistence/              # SQLite, Artifacts, Snapshots (ADR-058)
-├── processing/               # Ingestion pipeline & OCR
-├── prompting/                # Prompt templates & Registry
-├── retrieval/                # Vector, Hybrid, & Multimodal fusion
-├── telemetry/                # Observability & Data logging
-├── ui/                       # Reusable UI components
-└── utils/                    # cross-cutting helpers (Security, IO)
-```
-
-#### Structural Parity Manifest (CI Validated)
-
-The following JSON block is used by `scripts/verify_structural_parity.py` to ensure documentation and codebase alignment. **Do not modify format.**
+The documentation CI checks this source-package manifest against the top-level directories under `src/`:
 
 ```json
 {
-  "version": "2.0.0",
   "canonical_src": [
     "agents",
     "analysis",
@@ -547,137 +44,148 @@ The following JSON block is used by `scripts/verify_structural_parity.py` to ens
 }
 ```
 
-## Cognitive Persistence & Storage
+## Trace document ingestion
 
-DocMind AI implements a hierarchical persistence strategy optimized for reliability and low latency (ADR-058):
-
-### 1. Chat Persistence (LangGraph + SQLite)
-
-Thread state, including message history and agent intermediate steps, is persisted using the LangGraph `SqliteSaver`. This enables:
-
-- **Resilient Sessions**: Conversations survive application restarts.
-- **Time Travel**: Users can resume from any prior checkpoint/message id.
-
-### 2. Artifact Storage (ArtifactRef)
-
-Large binary files (PDF images, document thumbnails) are stored using a content-addressed filesystem store (`src/persistence/artifacts.py`).
-
-- **ArtifactRef**: Unique identifier comprising `sha256` and `extension`.
-- **Security**: A directory jail ensures artifacts are never served outside the designated data directory.
-- **Payload Integrity**: Vector DB entries and chat messages store only the `ArtifactRef`, never raw or relative paths.
-
-### 3. Vector Storage (Qdrant)
-
-Embeddings are stored in Qdrant with HNSW indexing. The system supports multi-collection routing (Text vs. Image collections) for hybrid RAG.
-
-## Architectural Principles
-
-### Core Design Philosophy
-
-**KISS > DRY > YAGNI** - Always prioritize simplicity, then eliminate duplication, and avoid premature abstractions.
-
-1. **Library-First Always**: Research existing solutions before building custom implementations
-2. **Single Source of Truth**: Maintain unified configuration patterns
-3. **Flat Over Nested**: Prefer flat structures over deep hierarchies
-4. **Testable Architecture**: Every architectural decision should be automatically validatable
-
-### Evolution Guidelines
+Ingestion accepts a normalized source path for binary documents or `payload_text` for explicit in-memory text.
 
 ```mermaid
-graph TD
-    A[New Requirement] --> B{Library Solution Exists?}
-    B -->|Yes| C[Adopt Library]
-    B -->|No| D{Can Extend Existing?}
-    D -->|Yes| E[Extend Pattern]
-    D -->|No| F[Design Simple Solution]
+sequenceDiagram
+    participant UI as Streamlit
+    participant API as Ingestion API
+    participant Parser as Parser worker
+    participant Pipeline as LlamaIndex pipeline
+    participant Store as Qdrant and local stores
 
-    C --> G[Validate Integration]
-    E --> G
-    F --> G
-
-    G --> H[Update Configuration]
-    H --> I[Add Tests]
-    I --> J[Update Documentation]
-    J --> K[ADR if Architectural]
+    UI->>API: source_path or payload_text
+    API->>Parser: bounded parse request
+    Parser-->>API: canonical documents and page metadata
+    API->>Pipeline: documents
+    Pipeline->>Pipeline: split and optionally enrich
+    Pipeline->>Store: text vectors and page-image vectors
+    Pipeline->>Store: snapshot and artifact metadata
+    Store-->>UI: published result
 ```
 
-### Quality Assurance
+The parser must finish before ingestion publishes documents, nodes, image artifacts, or snapshots. Binary failures raise `DocumentParseError`. Direct UTF-8 fallback applies only to `.txt`, `.md`, `.markdown`, and `.rst`.
 
-- **95% ADR Compliance**: All architectural decisions are implemented and validated
-- **Comprehensive Testing**: Three-tier testing strategy (unit, integration, system)
-- **Performance Monitoring**: Continuous validation of performance targets
-- **Code Quality**: 9.88/10 code quality score with zero linting errors
+PDF parsing follows one path:
 
-## Future Development Guidelines
+1. Validate Docling and RapidOCR model manifests
+2. Inspect the PDF with pypdfium2
+3. Convert content with Docling
+4. Run RapidOCR when page routing requires optical character recognition (OCR)
+5. Return canonical documents and page metadata
 
-### Architectural Decision Process
+The parser worker owns a private process group on Portable Operating System Interface (POSIX) systems. Timeout and cancellation terminate and reap the group. The optional OCRmyPDF exporter uses its own process group and remains outside the parser worker.
 
-Before making significant changes:
+## Trace text and image retrieval
 
-1. **Research Phase**: Investigate existing solutions (use context7, exa, firecrawl)
-2. **Design Phase**: Choose simplest viable approach
-3. **Validation Phase**: Ensure integration with existing patterns
-4. **Implementation Phase**: Follow established code quality standards
-5. **Documentation Phase**: Update all relevant documentation
+Text retrieval combines BGE-M3 dense vectors and direct FastEmbed sparse vectors in Qdrant.
 
-### Configuration Evolution
+```mermaid
+flowchart LR
+    QUERY["Query"] --> ROUTER["RouterQueryEngine"]
+    ROUTER --> DENSE["text-dense"]
+    ROUTER --> SPARSE["text-sparse"]
+    DENSE --> FUSION["Qdrant RRF or DBSF"]
+    SPARSE --> FUSION
+    QUERY --> IMAGE["SigLIP image search"]
+    FUSION --> MERGE["Deduplicate and rerank"]
+    IMAGE --> MERGE
+    MERGE --> RESULT["Source-attributed nodes"]
+```
 
-**CRITICAL**: All configuration changes MUST go through the unified settings architecture.
+Normal startup creates a missing collection and accepts a compatible one. It refuses an incompatible existing schema. Only `scripts/qdrant_schema.py rebuild-empty` can rebuild an empty collection, and the operator must stop every writer first.
+
+SigLIP owns image embedding and visual scoring. ColPali can add visual reranking through the `multimodal` extra. No alternate image embedding fallback remains.
+
+## Trace agent execution
+
+The repository-owned LangGraph `StateGraph` supervisor coordinates five roles:
+
+1. Route the request
+2. Plan retrieval work
+3. Execute retrieval tools
+4. Synthesize source-grounded output
+5. Validate the result
+
+LangChain’s `create_agent` builds role agents inside the graph. The supervisor propagates deadlines and caps per-call timeouts. Optional stages fail open only where their owning contract permits it.
+
+The router factory builds the canonical retrieval surface. It exposes semantic and hybrid tools when their indexes are ready. It adds the knowledge graph tool only when dependencies, configuration, and a graph index are available.
+
+## Trace persistence
+
+DocMind separates durable state by data type:
+
+- SQLite stores chat sessions and LangGraph checkpoints
+- DuckDB stores the ingestion cache and optional local analytics
+- Qdrant stores named text vectors and SigLIP image vectors
+- Snapshot directories store manifests and restorable files
+- The artifact store stores content-addressed page images and thumbnails
+
+Snapshot creation uses a temporary workspace and an atomic finalization step. Each manifest records corpus, configuration, version, vector-store, graph-store, and optional graph-export identity.
+
+Durable payloads exclude raw document text, prompt text, model output, secrets, absolute host paths, and base64 image blobs. Artifact payloads use `ArtifactRef` identifiers.
+
+## Resolve configuration once
+
+Pydantic Settings owns application configuration. Environment variables use the `DOCMIND_` prefix and `__` for nested fields.
 
 ```python
-# Adding new configuration - follow this pattern
-class NewFeatureConfig(BaseModel):
-    """New feature configuration."""
-    enabled: bool = Field(default=False)
-    parameter: int = Field(default=100, ge=1, le=1000)
+from src.config import settings
 
-# Add to DocMindSettings
-class DocMindSettings(BaseSettings):
-    # Existing configurations...
-    new_feature: NewFeatureConfig = Field(default_factory=NewFeatureConfig)
+qdrant_url = settings.database.qdrant_url
+top_k = settings.retrieval.top_k
 ```
 
-### Performance Guidelines
+The Streamlit entrypoint loads `.env` during startup. Importing `src.config.settings` does not perform dotenv file input or output.
 
-When adding new features:
+The parser framework, parser profile, and OCR engine are fixed validation literals. Do not expose them as backend selectors. Operators can configure resource limits, rendering, OCR forcing, model cache location, and searchable-PDF export.
 
-1. **Maintain Performance Targets**: All changes must maintain <200ms agent coordination
-2. **Memory Efficiency**: Monitor VRAM usage (target <14GB total)
-3. **Parallel Execution**: Leverage existing concurrency patterns
-4. **Caching Strategy**: Use IngestionCache (DuckDBKVStore) for expensive operations
+## Enforce the local trust boundary
 
-### Integration Patterns
+The default configuration blocks unapproved remote endpoints. Loopback endpoints remain available for local language model servers and Qdrant.
 
-Follow these patterns for new integrations:
+An allowlisted non-loopback hostname must resolve to public addresses when remote endpoints remain disabled. Enable remote endpoints explicitly for approved private services or hosted providers. That choice sends language model requests beyond the local machine.
 
-```python
-# 1. Configuration first
-class NewIntegrationConfig(BaseModel):
-    """Configuration for new integration."""
-    endpoint: str = "http://localhost:8080"
-    timeout: int = 30
+Model prefetch commands access their configured upstream sources. After all artifacts are present, offline environment flags prevent Hugging Face and Transformers downloads. These controls do not measure total process egress.
 
-# 2. Async-first implementation
-class NewIntegration:
-    def __init__(self, config: NewIntegrationConfig):
-        self.config = config
+## Run supported deployment profiles
 
-    async def process(self, data):
-        """Async processing method."""
-        pass
+The default uv and Docker profiles use official CPU-only PyTorch wheels. The uv `gpu` extra replaces the CPU group with locked CUDA 12.8 Torch and torchvision wheels.
 
-# 3. Error handling and fallbacks
-try:
-    result = await integration.process(data)
-except Exception as e:
-    logger.warning(f"Integration failed: {e}")
-    result = fallback_process(data)
+The application does not install vLLM or llama.cpp. Run either as an external OpenAI-compatible server. The Compose `gpu` profile can run Ollama on the internal network.
+
+The canonical container health command is:
+
+```bash
+python scripts/container_health.py
 ```
 
----
+The command validates parser model manifests, then opens a TCP connection to `127.0.0.1:8501`.
 
-This architecture guide provides the foundation for understanding and contributing to DocMind AI. The system's unified approach ensures consistency, maintainability, and excellent performance while remaining approachable for new developers.
+## Validate architecture changes
 
-For implementation details, see the [Developer Handbook](developer-handbook.md).
-For configuration specifics, see the [Configuration Guide](configuration.md).
-For operational procedures, see the [Operations Guide](operations-guide.md).
+Run the narrowest relevant checks while developing, then use the full release gates before shipping:
+
+```bash
+uv run ruff format --check .
+uv run ruff check .
+uv run pyright --threads 4
+uv run python scripts/run_tests.py
+```
+
+Run the local Qdrant system test and live Docker build when a change crosses those boundaries. Regenerate the schema 3 repeat-three parser benchmark only after the working tree is frozen.
+
+Performance results depend on the model, context length, hardware, corpus, and enabled extras. Retain the command, fixture set, hardware profile, and generated artifact for any performance claim.
+
+## Update the owning contract
+
+Update the matching specification or architecture decision when behavior changes:
+
+- Parser and ingestion: `docs/specs/spec-002-ingestion-pipeline.md`
+- Embeddings and retrieval: `docs/specs/spec-003-embeddings.md`
+- Security and privacy: `docs/specs/spec-011-security-privacy.md`
+- Containers: `docs/specs/spec-023-containerization-hardening.md`
+- Runtime baseline: `docs/specs/spec-044-runtime-toolchain-baseline.md`
+- Architecture decisions: `docs/developers/adrs/`

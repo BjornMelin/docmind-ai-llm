@@ -1,36 +1,45 @@
 ---
 spec: SPEC-009
-title: Persistence and Caching: DuckDBKV Ingestion Cache + SQLite WAL Ops + Versioned Qdrant
-version: 1.0.0
-date: 2025-09-05
+title: Persistence and Caching: DuckDBKV Ingestion Cache and Qdrant
+version: 1.1.0
+date: 2026-07-11
 owners: ["ai-arch"]
-status: Final
+status: Revised
 related_requirements:
   - FR-PERS-001: Ingestion cache SHALL use DuckDBKV via LlamaIndex IngestionCache.
-  - FR-PERS-002: Metadata SHALL use SQLite in WAL mode.
-  - FR-PERS-003: Qdrant collections SHALL be versioned and idempotent.
+  - FR-PERS-003: Qdrant collections SHALL use the canonical named-vector schema and explicit compatibility checks.
 related_adrs: ["ADR-010","ADR-031","ADR-030"]
 ---
 
-
 ## Objective
 
-Adopt a simple offline-first persistence split: Qdrant for vectors, DuckDBKV for ingestion cache, SQLite WAL for ops metadata.
+Define the implemented ingestion persistence split:
+
+- Qdrant stores dense and sparse vectors.
+- LlamaIndex `IngestionCache` backed by `DuckDBKVStore` caches ingestion work.
+
+The proposed SQLite WAL operational-metadata store is future design, not part
+of this release contract. See SPEC-039 and ADR-055. Existing chat and memory
+features own their separate SQLite stores.
 
 ## Libraries and Imports
 
 ```python
 from llama_index.core.ingestion import IngestionCache
 from llama_index.storage.kvstore.duckdb import DuckDBKVStore
-import sqlite3
 ```
 
-## File Operations
+## Implementation ownership
 
-### UPDATE
+- `src/processing/ingestion_pipeline.py` owns `_ensure_cache_path()` and
+  `build_ingestion_pipeline()`.
+- `build_ingestion_pipeline()` constructs `DuckDBKVStore`, wraps it in
+  `IngestionCache`, and passes the cache to LlamaIndex.
+- `src/utils/storage.py` owns Qdrant collection creation and compatibility
+  checks. Normal startup does not mutate an incompatible collection.
 
-- `src/core/processing.py`: `build_cache(settings)` returning IngestionCache(DuckDBKVStore).
-- `src/models/storage.py`: SQLite helpers enabling WAL.
+Cache location is controlled by `DOCMIND_CACHE__DIR` and
+`DOCMIND_CACHE__FILENAME`.
 
 ## Acceptance Criteria
 
@@ -41,6 +50,11 @@ Feature: Cache reuse
     Then the second run SHALL hit the ingestion cache
 ```
 
+Verification lives in `tests/unit/processing/test_ingestion_pipeline.py` and
+the Qdrant schema tests under `tests/unit/utils/storage/`.
+
 ## References
 
-- LlamaIndex IngestionCache docs; SQLite WAL docs.
+- LlamaIndex `IngestionCache` and `DuckDBKVStore` documentation
+- `docs/specs/spec-039-operational-metadata-sqlite-wal.md`
+- `docs/developers/adrs/ADR-055-operational-metadata-sqlite-wal.md`

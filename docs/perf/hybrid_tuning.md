@@ -10,7 +10,7 @@ The recommended starting points for hybrid retrieval.
 - sparse prefetch: 400
 - fused_top_k: 60
   
-Note: Fusion is performed server‑side via Qdrant Query API (Prefetch + FusionQuery). There are no client‑side fusion knobs (no alpha/rrf_k). DBSF may be enabled via environment when supported.
+Note: Fusion and deduplication are performed server-side via Qdrant Query API (`Prefetch` plus `RrfQuery`/`FusionQuery` and `query_points_groups`). RRF uses `DOCMIND_RETRIEVAL__RRF_K`; DBSF may be enabled via environment when supported.
 
 ## Tune by Observing
 
@@ -22,7 +22,7 @@ Note: Fusion is performed server‑side via Qdrant Query API (Prefetch + FusionQ
 
 - Use `DOCMIND_RETRIEVAL__FUSION_MODE=rrf|dbsf` to evaluate DBSF; prefer RRF as default
 - BM42 requires sparse `modifier=IDF`; verify collection schema
-- Consider enabling server group_by (future) for page/doc dominance; current build dedups by `retrieval.dedup_key`
+- `retrieval.dedup_key` controls Qdrant `group_by` (`page_id` or `doc_id`); each group returns its best hit.
 
 ## When to prefer DBSF (experimental)
 

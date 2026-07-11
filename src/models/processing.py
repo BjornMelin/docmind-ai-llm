@@ -1,26 +1,37 @@
 """Canonical ingestion models for the DocMind pipeline.
 
-These Pydantic models describe the configuration, input payloads, and
-normalized outputs for the upcoming LlamaIndex-first ingestion system. They
-replace the legacy Unstructured-specific models that previously existed in
-this module.
+These Pydantic models are the canonical configuration, input, and normalized
+output contracts for the LlamaIndex-first ingestion system.
 """
 
 from __future__ import annotations
 
-from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    StrictStr,
+    field_validator,
+    model_validator,
+)
 
+CANONICAL_DOCUMENT_ID_KEY = "docmind_document_id"
 
-class ProcessingStrategy(StrEnum):
-    """Enumerate OCR processing strategies for the ingestion pipeline."""
-
-    FAST = "fast"
-    OCR_ONLY = "ocr_only"
-    HI_RES = "hi_res"
+_RESERVED_METADATA_KEYS = frozenset(
+    {
+        CANONICAL_DOCUMENT_ID_KEY,
+        "document_id",
+        "page_id",
+        "page_number",
+        "parsing",
+        "source_filename",
+        "source_hash",
+    }
+)
 
 
 class IngestionConfig(BaseModel):
@@ -55,9 +66,6 @@ class IngestionConfig(BaseModel):
     cache_collection: str = Field(
         default="docmind_ingestion", description="Namespace for cache storage"
     )
-    docstore_path: Path | None = Field(
-        default=None, description="Optional filesystem docstore location"
-    )
     enable_observability: bool = Field(
         default=False, description="Enable OpenTelemetry tracing/metrics"
     )
@@ -84,33 +92,67 @@ class IngestionConfig(BaseModel):
         return self
 
 
+class ParsingOverrides(BaseModel):
+    """Supported per-ingestion CPU parser overrides."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    force_ocr: bool | None = None
+    export_searchable_pdf: bool | None = None
+
+
 class IngestionInput(BaseModel):
     """Normalized ingestion payload.
 
-    Exactly one of ``source_path`` or ``payload_bytes`` must be provided.
+    Exactly one of ``source_path`` or ``payload_text`` must be provided.
     """
 
     document_id: str = Field(..., min_length=1, description="Stable document ID")
     source_path: Path | None = Field(
         default=None, description="Path to the document on disk"
     )
-    payload_bytes: bytes | None = Field(
-        default=None, description="In-memory document payload"
+    payload_text: StrictStr | None = Field(
+        default=None,
+        min_length=1,
+        description="In-memory canonical text payload",
     )
-    metadata: dict[str, Any] = Field(
-        default_factory=dict, description="Arbitrary metadata for the document"
+    metadata: dict[str, JsonValue] = Field(
+        default_factory=dict,
+        description="JSON-safe user metadata excluding parser-owned keys",
     )
     encrypt_images: bool = Field(
         default=False, description="Override to force page-image encryption"
     )
+    parsing_overrides: ParsingOverrides = Field(
+        default_factory=ParsingOverrides,
+        description="Supported CPU parser overrides",
+    )
+
+    @field_validator("payload_text")
+    @classmethod
+    def _reject_blank_payload_text(cls, value: str | None) -> str | None:
+        """Reject text payloads that cannot produce a meaningful node."""
+        if value is not None and not value.strip():
+            raise ValueError("payload_text must contain non-whitespace text")
+        return value
+
+    @field_validator("metadata")
+    @classmethod
+    def _reserve_parser_metadata(
+        cls, value: dict[str, JsonValue]
+    ) -> dict[str, JsonValue]:
+        reserved = sorted(_RESERVED_METADATA_KEYS.intersection(value))
+        if reserved:
+            raise ValueError(f"Metadata keys are parser-owned: {', '.join(reserved)}")
+        return value
 
     @model_validator(mode="after")
     def _validate_payload(self) -> IngestionInput:
         """Validate mutual exclusivity of payload fields and normalise paths."""
         has_path = self.source_path is not None
-        has_bytes = self.payload_bytes is not None
-        if has_path == has_bytes:
-            msg = "Provide exactly one of source_path or payload_bytes"
+        has_text = self.payload_text is not None
+        if has_path == has_text:
+            msg = "Provide exactly one of source_path or payload_text"
             raise ValueError(msg)
         if self.source_path is not None:
             self.source_path = self.source_path.expanduser()
@@ -190,10 +232,11 @@ class IngestionResult(BaseModel):
 
 
 __all__ = [
+    "CANONICAL_DOCUMENT_ID_KEY",
     "ExportArtifact",
     "IngestionConfig",
     "IngestionInput",
     "IngestionResult",
     "ManifestSummary",
-    "ProcessingStrategy",
+    "ParsingOverrides",
 ]

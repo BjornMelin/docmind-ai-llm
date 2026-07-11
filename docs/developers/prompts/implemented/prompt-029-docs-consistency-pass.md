@@ -8,7 +8,13 @@ related_adrs: ["ADR-048"]
 related_specs: ["SPEC-029"]
 ---
 
-Implements `ADR-048` + `SPEC-029`.
+> [!IMPORTANT]
+> This file is a historical execution record of the original proposal. The generic
+> inline source-path scanner, JSON drift report, suppression comments, and
+> `scripts/doc_drift_allowlist.txt` described below were **not adopted**. The
+> completed implementation is the focused link, schema, top-level structural-parity,
+> and Markdownlint gate defined by ADR-048 v1.1 and SPEC-029 v1.1; inline source-path
+> accuracy remains review-owned. Do not execute the scanner or allowlist steps below.
 
 **Read first (repo truth):**
 

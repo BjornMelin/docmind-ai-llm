@@ -45,8 +45,6 @@ def setup_comprehensive_dependencies(monkeypatch):
     heavy_dependencies = [
         "transformers",
         "sentence_transformers",
-        "FlagEmbedding",
-        "unstructured",
         "nltk",
         "chromadb",
         "qdrant_client",
@@ -119,7 +117,7 @@ def _configure_core_mocks(
     mock_ollama_pull.return_value = {"status": "success"}
 
 
-def _exercise_workflow(mock_detect, mock_load_docs):
+async def _exercise_workflow(mock_detect, mock_load_docs):
     """Run the lightweight workflow assertions and return artifacts."""
     from types import SimpleNamespace
 
@@ -141,7 +139,7 @@ def _exercise_workflow(mock_detect, mock_load_docs):
     )
     validate_startup_configuration(settings)
     hardware_info = detect_hardware()
-    documents = mock_load_docs(["test.pdf"])
+    documents = await mock_load_docs(["test.pdf"])
 
     mock_index = MagicMock()
     from src.agents.tool_factory import ToolFactory
@@ -203,7 +201,7 @@ async def test_complete_application_workflow():
             result,
             analysis_output,
             predefined_prompts,
-        ) = _exercise_workflow(mock_detect, mock_load_docs)
+        ) = await _exercise_workflow(mock_detect, mock_load_docs)
 
         assert settings is not None
         assert isinstance(hardware_info, dict)
@@ -319,7 +317,7 @@ async def test_document_processing_pipeline():
 
         mock_documents = [
             Document(
-                text="Advanced document processing with unstructured data handling.",
+                text="Advanced document processing with canonical parser handling.",
                 metadata={"source": "doc1.pdf", "page": 1, "chunk_id": "chunk_1"},
             ),
             Document(
@@ -408,7 +406,7 @@ async def test_async_workflow_components():
             mock_load.return_value = []
 
             # Test async document processing (mocked)
-            documents = mock_load(["test.pdf"])
+            documents = await mock_load(["test.pdf"])
             assert documents is not None
 
             # Test async coordinator

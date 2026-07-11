@@ -570,7 +570,7 @@ def _populate_backup_workspace(
     qdrant_files: list[QdrantSnapshotFile] = []
 
     # Cache DB (DuckDB KV store)
-    cache_db = cfg.cache_dir / cfg.cache.filename
+    cache_db = cfg.cache.ingestion_db_path
     bytes_written += _include_file(
         source=cache_db,
         dest=tmp_dir / "cache" / cache_db.name,

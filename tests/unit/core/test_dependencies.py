@@ -1,31 +1,24 @@
-"""Tests for dependency validation after PR #2 cleanup.
+"""Tests for the canonical application dependency contract.
 
-This module validates that the dependency cleanup was successful by:
+This module validates that dependency cleanup remains effective by:
 1. Verifying all llama-index imports use modular packages
-2. Testing core import resolution
-3. Ensuring the app can start without missing critical dependencies
+2. Verifying required and forbidden project distributions
+3. Testing core import resolution
+4. Ensuring the app can start without missing critical dependencies
 """
 
 import ast
 import importlib
+import tomllib
 from pathlib import Path
 
 import pytest
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
 
-# LlamaIndex packages that should use modular imports
-REQUIRED_MODULAR_IMPORTS = {
-    "llama_index.core",
-    "llama_index.llms.openai",
-    "llama_index.llms.ollama",
-    "llama_index.embeddings.openai",
-    "llama_index.embeddings.huggingface",
-    "llama_index.embeddings.fastembed",
-    "llama_index.vector_stores.qdrant",
-    "llama_index.postprocessor.colpali_rerank",
-}
+from scripts import smoke_built_wheel as wheel_contract
 
-# Get project root directory
-PROJECT_ROOT = Path(__file__).parents[2]
+PROJECT_ROOT = Path(__file__).parents[3]
 
 
 class ImportVisitor(ast.NodeVisitor):
@@ -88,7 +81,23 @@ def get_main_python_files() -> list[Path]:
 
 
 class TestDependencyCleanup:
-    """Test suite for validating dependency cleanup from PR #2."""
+    """Test suite for the canonical project dependency contract."""
+
+    def test_project_dependency_contract(self) -> None:
+        """Keep one required LlamaIndex core and only used integrations."""
+        project = tomllib.loads(
+            (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        )["project"]
+        dependencies = {
+            canonicalize_name(Requirement(value).name)
+            for value in project["dependencies"]
+        }
+
+        assert not wheel_contract._REQUIRED_WHEEL_DEPENDENCIES.difference(dependencies)
+        assert not wheel_contract._FORBIDDEN_WHEEL_DEPENDENCIES.intersection(
+            dependencies
+        )
+        assert "llama" not in project["optional-dependencies"]
 
     def test_llama_index_uses_modular_imports(self):
         """Test that all LlamaIndex imports use modular packages."""

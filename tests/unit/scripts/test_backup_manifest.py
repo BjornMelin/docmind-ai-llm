@@ -15,7 +15,7 @@ from tests.fixtures.test_settings import create_test_settings
 
 
 @pytest.mark.unit
-def test_create_backup_writes_manifest(
+def test_create_backup_uses_live_ingestion_cache_not_stale_parent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Creates a backup and writes a manifest.
@@ -31,7 +31,7 @@ def test_create_backup_writes_manifest(
 
     cfg = create_test_settings(
         data_dir=tmp_path / "data",
-        cache_dir=tmp_path / "cache",
+        cache={"dir": tmp_path / "cache"},
         backup_enabled=True,
         backup_keep_last=3,
     )
@@ -42,9 +42,12 @@ def test_create_backup_writes_manifest(
         '{"ok": true}\n',
         encoding="utf-8",
     )
-    cfg.cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_db = cfg.cache_dir / cfg.cache.filename
-    cache_db.write_text("duckdb", encoding="utf-8")
+    cache_db = cfg.cache.ingestion_db_path
+    assert cache_db == cfg.cache.dir / "ingestion" / cfg.cache.filename
+    cache_db.parent.mkdir(parents=True, exist_ok=True)
+    cache_db.write_text("live ingestion cache", encoding="utf-8")
+    stale_parent_cache = cfg.cache.dir / cfg.cache.filename
+    stale_parent_cache.write_text("stale parent cache", encoding="utf-8")
 
     result = create_backup(
         dest_root=tmp_path / "backups",
@@ -66,6 +69,9 @@ def test_create_backup_writes_manifest(
 
     assert "cache_db" in result.included
     assert "snapshots" in result.included
+    backed_up_cache = result.backup_dir / "cache" / cfg.cache.filename
+    assert backed_up_cache.read_text(encoding="utf-8") == "live ingestion cache"
+    assert stale_parent_cache.read_text(encoding="utf-8") == "stale parent cache"
 
 
 @pytest.mark.unit
@@ -88,7 +94,7 @@ def test_create_backup_requires_enabled(
 
     cfg = create_test_settings(
         data_dir=tmp_path / "data",
-        cache_dir=tmp_path / "cache",
+        cache={"dir": tmp_path / "cache"},
         backup_enabled=False,
     )
 

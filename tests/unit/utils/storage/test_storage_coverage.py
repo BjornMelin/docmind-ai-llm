@@ -16,16 +16,35 @@ def test_create_vector_store_returns_store(monkeypatch):
     monkeypatch.setattr(storage_mod, "QdrantClient", MagicMock())
 
     class _DummyStore:
-        def __init__(self, client, collection_name, enable_hybrid, batch_size):
+        def __init__(
+            self,
+            client,
+            collection_name,
+            enable_hybrid,
+            batch_size,
+            dense_vector_name,
+            sparse_vector_name,
+        ):
             self.client = client
             self.collection_name = collection_name
             self.enable_hybrid = enable_hybrid
             self.batch_size = batch_size
+            self.dense_vector_name = dense_vector_name
+            self.sparse_vector_name = sparse_vector_name
 
     monkeypatch.setattr(storage_mod, "QdrantVectorStore", _DummyStore)
+    monkeypatch.setattr(
+        storage_mod,
+        "ensure_hybrid_collection",
+        lambda *_args, **_kwargs: storage_mod.CollectionCompatibilityResult(
+            True, "unchanged", "compatible", 1
+        ),
+    )
 
     store = storage_mod.create_vector_store("test_collection", enable_hybrid=True)
     assert store.collection_name == "test_collection"
+    assert store.dense_vector_name == storage_mod.DENSE_VECTOR_NAME
+    assert store.sparse_vector_name == storage_mod.SPARSE_VECTOR_NAME
 
 
 def test_get_collection_info_exists(monkeypatch):

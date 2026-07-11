@@ -208,6 +208,7 @@ class MultimodalFusionRetriever:
                 prefetch_sparse=settings.retrieval.prefetch_sparse_limit,
                 prefetch_dense=settings.retrieval.prefetch_dense_limit,
                 fusion_mode=settings.retrieval.fusion_mode,
+                rrf_k=settings.retrieval.rrf_k,
                 dedup_key=settings.retrieval.dedup_key,
             )
         )

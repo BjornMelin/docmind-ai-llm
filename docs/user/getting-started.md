@@ -1,118 +1,131 @@
-# Getting Started (User Guide)
+# Run DocMind locally
 
-DocMind AI is a local-first document analysis app. It runs offline after initial install and model downloads.
+This guide installs the locked CPU profile, starts loopback-only services, prefetches parser models, configures a language model backend, and launches DocMind.
 
 ## Prerequisites
 
-- **Python**: 3.12-3.13 (`>=3.12,<3.14` in `pyproject.toml`)
-- **uv**: dependency manager used by this repo
-- **Docker** (optional but recommended): for running Qdrant locally
-- **One local LLM backend**:
-  - Ollama (default), or
-  - an OpenAI-compatible server (vLLM / LM Studio / llama.cpp server)
+- Python 3.12 or 3.13
+- uv
+- Docker for the local Qdrant launcher
+- Ollama or another OpenAI-compatible language model server
 
-## Step 1: Install dependencies
+A GPU is optional. The default installation uses official CPU-only PyTorch
+wheels. Linux x86_64 is the release-validated host platform; WSL2 and macOS are
+best-effort paths until dedicated CI exists.
 
-```bash
-uv sync
-```
-
-### Optional: GPU extras (NVIDIA CUDA)
-
-DocMind’s GPU extra accelerates embeddings/reranking and installs CUDA wheels
-for PyTorch via the PyTorch index. The `unsafe-best-match` index strategy is
-intentional here: it lets uv select the CUDA 12.8 wheels from the PyTorch index
-instead of preferring CPU wheels from the default index.
+## Install the locked CPU profile
 
 ```bash
-uv sync --frozen --extra gpu --index https://download.pytorch.org/whl/cu128 --index-strategy=unsafe-best-match
-uv run python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
+uv sync --frozen
+uv run python -c \
+  "import torch; assert torch.version.cuda is None; print(torch.__version__)"
 ```
 
-Notes:
+## Install the optional NVIDIA profile
 
-- On Windows, use WSL2 for CUDA installs.
-- vLLM is not installed into this repo’s environment; see “vLLM (external server)” below.
-
-## Step 2: Start local services (recommended)
-
-Qdrant is the default vector database.
+The GPU extra replaces the default CPU dependency group with locked CUDA 12.8
+PyTorch wheels for dense/image embeddings, reranking, and spaCy. Sparse
+FastEmbed remains CPU-based:
 
 ```bash
-docker compose up -d qdrant
-curl -f http://localhost:6333/health
+uv sync --frozen --no-group cpu --extra gpu
+uv run python -c \
+  "import torch; print(torch.__version__, torch.cuda.is_available())"
 ```
 
-## Step 3: Configure the app
+WSL2 is the best-effort Windows CUDA path; native Windows is not
+release-validated. vLLM remains an external server and is not installed into
+DocMind's environment.
 
-Start from the canonical template and override only what you need:
+## Choose a supported installation path
+
+Use the locked uv environment for local development or the repository Docker image for containers. The wheel smoke test installs with `--no-deps` to validate package contents and metadata. It does not validate pip dependency resolution.
+
+## Start Qdrant
+
+The launcher binds Qdrant REST and gRPC ports to loopback and refuses to reuse a container with missing or unsafe port bindings:
+
+```bash
+./scripts/start_qdrant_local.sh
+curl --fail http://127.0.0.1:6333/health
+uv run python scripts/qdrant_schema.py check
+```
+
+Docker Compose keeps Qdrant internal to the Compose network. Use the launcher when the host application or system tests need `127.0.0.1:6333`.
+
+## Prefetch required local models
+
+DocMind requires BGE-M3 for dense indexing and verified Docling and RapidOCR
+model bundles for PDF parsing:
+
+```bash
+uv run python tools/models/pull.py \
+  --bge-m3 \
+  --cache_dir ./models_cache \
+  --parser-defaults \
+  --rapidocr-cache-dir ./cache/models
+uv run python scripts/parser_health.py --check
+```
+
+After dependencies and model bundles are present, the parser does not use a hosted fallback.
+
+## Create local configuration
 
 ```bash
 cp .env.example .env
 ```
 
-### Choose your LLM backend
+Keep `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` for loopback-only backends.
 
-DocMind uses a single `DOCMIND_*` configuration surface. Backends that expose an OpenAI-compatible API share the same client path.
+### Configure Ollama
 
-- **Ollama (default)**:
+```bash
+echo 'DOCMIND_LLM_BACKEND=ollama' >> .env
+echo 'DOCMIND_OLLAMA_BASE_URL=http://localhost:11434' >> .env
+echo 'DOCMIND_MODEL=qwen3:4b-instruct' >> .env
+ollama pull qwen3:4b-instruct
+```
 
-  ```bash
-  echo 'DOCMIND_LLM_BACKEND=ollama' >> .env
-  echo 'DOCMIND_OLLAMA_BASE_URL=http://localhost:11434' >> .env
-  ```
+### Configure an external vLLM server
 
-- **vLLM (external OpenAI-compatible server)**:
+```bash
+echo 'DOCMIND_LLM_BACKEND=vllm' >> .env
+echo 'DOCMIND_OPENAI__BASE_URL=http://localhost:8000/v1' >> .env
+echo 'DOCMIND_OPENAI__API_KEY=local_api_key_not_used' >> .env
+```
 
-  ```bash
-  echo 'DOCMIND_LLM_BACKEND=vllm' >> .env
-  echo 'DOCMIND_OPENAI__BASE_URL=http://localhost:8000/v1' >> .env
-  echo 'DOCMIND_OPENAI__API_KEY=not-needed' >> .env
-  ```
+vLLM runs outside DocMind. Configure its model, FlashInfer, FP8 cache, and memory limits on the server process.
 
-Recommended defaults:
+### Configure an approved remote endpoint
 
-- Prefer local backends (Ollama, LM Studio, vLLM, llama.cpp server) with loopback URLs.
-- Keep `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` unless you explicitly need non-loopback endpoints.
+Remote endpoints change the privacy boundary and require an explicit policy change:
 
-- **OpenAI-compatible cloud / gateway** (OpenAI/OpenRouter/xAI/Vercel AI Gateway/LiteLLM Proxy):
+```bash
+echo 'DOCMIND_LLM_BACKEND=openai_compatible' >> .env
+echo 'DOCMIND_OPENAI__BASE_URL=https://api.openai.com/v1' >> .env
+echo 'DOCMIND_OPENAI__API_KEY=your_api_key_here' >> .env
+echo 'DOCMIND_OPENAI__API_MODE=responses' >> .env
+echo 'DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true' >> .env
+```
 
-  ```bash
-  echo 'DOCMIND_LLM_BACKEND=openai_compatible' >> .env
-  echo 'DOCMIND_OPENAI__BASE_URL=https://api.openai.com/v1' >> .env
-  echo 'DOCMIND_OPENAI__API_KEY=sk-...' >> .env
-  echo 'DOCMIND_OPENAI__API_MODE=responses' >> .env
-  echo 'DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true' >> .env
-  ```
-
-For a full list of configuration knobs, see:
-
-- `docs/user/configuration.md`
-- `docs/developers/configuration.md`
-
-## Step 4: Run DocMind
+## Launch DocMind
 
 ```bash
 uv run streamlit run app.py
 ```
 
-## Quick diagnostics
+## Check the active runtime
 
 ```bash
-uv run python -c "from src.config import settings; print(settings.llm_backend, settings.backend_base_url_normalized)"
-uv run python -c "import torch; print('cuda', torch.cuda.is_available())"
+uv run python -c \
+  "from src.config import settings; print(settings.llm_backend)"
+uv run python scripts/parser_health.py --check
+uv run python scripts/qdrant_schema.py check
 ```
 
-## vLLM (external server)
-
-DocMind connects to vLLM via OpenAI-compatible HTTP (`/v1`). Run vLLM separately (Linux + NVIDIA GPU recommended).
-
-If you need a server-side FlashInfer/FP8 profile, see:
-
-- `README.md` (vLLM server connectivity + tuning)
-- `docs/developers/operations-guide.md`
-
-## Next steps
+## Continue setup
 
 - Configuration reference: `docs/user/configuration.md`
+- Developer configuration: `docs/developers/configuration.md`
 - Troubleshooting: `docs/user/troubleshooting-faq.md`
+- Operations: `docs/developers/operations-guide.md`

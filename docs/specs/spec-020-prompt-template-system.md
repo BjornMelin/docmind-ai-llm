@@ -48,15 +48,15 @@ src/
     registry.py        # In-memory registry + query APIs
     renderer.py        # Thin adapter around LlamaIndex RichPromptTemplate
     validators.py      # Static/semantic checks, lint helpers
-templates/
-  prompts/
-    comprehensive-analysis.prompt.md
-    key-insights.prompt.md
-    summary-open-questions.prompt.md
-  presets/
-    tones.yaml         # Named style hints (replaces TONES)
-    roles.yaml         # Role instructions (replaces INSTRUCTIONS)
-    lengths.yaml       # Output length preferences (replaces LENGTHS)
+    templates/
+      prompts/
+        comprehensive-analysis.prompt.md
+        key-insights.prompt.md
+        summary-open-questions.prompt.md
+      presets/
+        tones.yaml     # Named style hints (replaces TONES)
+        roles.yaml     # Role instructions (replaces INSTRUCTIONS)
+        lengths.yaml   # Output length preferences (replaces LENGTHS)
 ```
 
 ### Template Format (Markdown + YAML front matter)
@@ -96,7 +96,7 @@ Answer clearly and concisely.
 
 ### Presets (YAML)
 
-Example `templates/presets/tones.yaml`:
+Example `src/prompting/templates/presets/tones.yaml`:
 
 ```yaml
 professional:
@@ -129,7 +129,7 @@ from llama_index.core.prompts import RichPromptTemplate
 
 ### Rendering Pipeline (Leverage LlamaIndex)
 
-1. Loader scans `templates/prompts/*.prompt.md` on first use
+1. Loader scans packaged `src/prompting/templates/prompts/*.prompt.md` resources
 2. Parse YAML front matter + Jinja body; build `TemplateSpec`
 3. Validate (keep simple, no custom engine):
    - required variables present in context (fast check)
@@ -268,8 +268,8 @@ from llama_index.core.prompts import RichPromptTemplate
 ### CREATE
 
 - `src/prompting/` package: `models.py`, `loader.py`, `registry.py`, `renderer.py`, `validators.py`, `__init__.py`
-- `templates/prompts/`: `comprehensive-analysis.prompt.md`, `key-insights.prompt.md`, `summary-open-questions.prompt.md`
-- `templates/presets/`: `tones.yaml`, `roles.yaml`, `lengths.yaml`
+- `src/prompting/templates/prompts/`: `comprehensive-analysis.prompt.md`, `key-insights.prompt.md`, `summary-open-questions.prompt.md`
+- `src/prompting/templates/presets/`: `tones.yaml`, `roles.yaml`, `lengths.yaml`
 - Tests: `tests/unit/prompting/*`, `tests/integration/test_prompt_registry.py`, `tests/e2e/test_prompt_system.py`
 - Docs: `docs/developers/guides/adding-prompt-template.md`
 

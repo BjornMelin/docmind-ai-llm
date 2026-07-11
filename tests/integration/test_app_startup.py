@@ -260,7 +260,7 @@ class TestAppConfigurationIntegration:
         # Setup temporary environment
         temp_env = {
             "DOCMIND_DATA_DIR": str(tmp_path / "data"),
-            "DOCMIND_CACHE_DIR": str(tmp_path / "cache"),
+            "DOCMIND_CACHE__DIR": str(tmp_path / "cache"),
             "DOCMIND_DEBUG": "true",
         }
 
@@ -277,10 +277,10 @@ class TestAppConfigurationIntegration:
 
                 # Test directories can be created
                 settings.data_dir.mkdir(parents=True, exist_ok=True)
-                settings.cache_dir.mkdir(parents=True, exist_ok=True)
+                settings.cache.dir.mkdir(parents=True, exist_ok=True)
 
                 assert settings.data_dir.exists()
-                assert settings.cache_dir.exists()
+                assert settings.cache.dir.exists()
 
             except (RuntimeError, OSError, AssertionError, ImportError) as e:
                 pytest.skip(f"Configuration integration failed: {e}")

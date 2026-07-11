@@ -76,12 +76,12 @@ def snapshot_storage_root(tmp_path: Path) -> Path:
 @pytest.fixture
 def ingestion_pipeline_builder(
     tmp_path: Path,
-) -> Callable[[IngestionConfig | None], tuple[Any, Path, Path | None]]:
+) -> Callable[[IngestionConfig | None], tuple[Any, Path]]:
     """Factory fixture that yields configured ingestion pipelines."""
 
     def _builder(
         cfg: IngestionConfig | None = None, *, embedding: Any | None = None
-    ) -> tuple[Any, Path, Path | None]:
+    ) -> tuple[Any, Path]:
         configuration = cfg or IngestionConfig(cache_dir=tmp_path / "cache")
         return build_ingestion_pipeline(configuration, embedding=embedding)
 
@@ -752,7 +752,7 @@ def ensure_settings_dirs(s) -> None:  # pragma: no cover
         from pathlib import Path
 
         data_dir = Path(s.data_dir)
-        cache_dir = Path(s.cache_dir)
+        cache_dir = Path(s.cache.dir)
         log_parent = Path(s.log_file).parent
         db_parent = Path(s.sqlite_db_path).parent
 

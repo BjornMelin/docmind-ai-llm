@@ -4,8 +4,8 @@ This guide explains how to add a new prompt template to DocMind AI’s file‑ba
 
 ## Where templates live
 
-- Templates: `templates/prompts/*.prompt.md`
-- Presets (optional): `templates/presets/{tones,roles,lengths}.yaml`
+- Templates: `src/prompting/templates/prompts/*.prompt.md`
+- Presets (optional): `src/prompting/templates/presets/{tones,roles,lengths}.yaml`
 
 ## Template format
 
@@ -46,10 +46,11 @@ Summarize the content and list any open questions.
 
 ## Presets (optional)
 
-Presets provide named options for tone, role, and length. They’re simple YAML dictionaries under `templates/presets/`:
+Presets provide named options for tone, role, and length. They are YAML
+dictionaries under `src/prompting/templates/presets/`:
 
 ```yaml
-# templates/presets/tones.yaml
+# src/prompting/templates/presets/tones.yaml
 professional:
   description: Use a professional, objective tone.
 ```

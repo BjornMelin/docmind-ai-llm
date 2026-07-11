@@ -1,30 +1,21 @@
 import base64
 import os
 import tempfile
+from pathlib import Path
 
-import pytest
 from pydantic import SecretStr
 
 
-def _skip_if_no_pymupdf():
-    try:
-        import fitz  # noqa: F401
-    except Exception:
-        pytest.skip("PyMuPDF not available")
+def _make_pdf(path: Path) -> None:
+    from pypdf import PdfWriter
 
-
-def _make_pdf(path: str):
-    import fitz  # type: ignore
-
-    doc = fitz.open()
-    page = doc.new_page(width=200, height=100)
-    page.insert_text((20, 50), "Hello")
-    doc.save(path)
-    doc.close()
+    writer = PdfWriter()
+    writer.add_blank_page(width=200, height=100)
+    with path.open("wb") as handle:
+        writer.write(handle)
 
 
 def test_pdf_page_images_encrypted(monkeypatch):
-    _skip_if_no_pymupdf()
     from src.config import settings
     from src.processing.pdf_pages import save_pdf_page_images
 
@@ -38,8 +29,8 @@ def test_pdf_page_images_encrypted(monkeypatch):
     settings.processing.encrypt_page_images = True
 
     with tempfile.TemporaryDirectory() as td:
-        pdf = os.path.join(td, "t.pdf")
-        out = os.path.join(td, "imgs")
+        pdf = Path(td) / "t.pdf"
+        out = Path(td) / "imgs"
         _make_pdf(pdf)
         items = save_pdf_page_images(pdf, out_dir=out, dpi=200)
         assert items

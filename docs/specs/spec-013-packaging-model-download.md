@@ -1,8 +1,8 @@
 ---
 spec: SPEC-013
 title: Packaging: Model Pre-download with huggingface_hub and Integrity Checks
-version: 1.0.0
-date: 2025-09-05
+version: 1.1.0
+date: 2026-07-11
 owners: ["ai-arch"]
 status: Final
 related_requirements:
@@ -14,7 +14,9 @@ related_adrs: ["ADR-040"]
 
 ## Objective
 
-Provide a CLI tool to pre-download text and image embedding models and verify file hashes using `huggingface_hub`.
+Provide a CLI tool to pre-download complete text and image embedding snapshots
+at repository-owned revisions through `huggingface_hub`. Parser artifacts use
+separate app-owned manifests with exact size and SHA-256 verification.
 
 ## Libraries and Imports
 
@@ -31,9 +33,12 @@ from huggingface_hub import hf_hub_download
 ### Model IDs (default set)
 
 - Text embeddings: `BAAI/bge-m3`
-- Text reranker: `BAAI/bge-reranker-v2-m3`
 - Image/text (multimodal): `google/siglip-base-patch16-224`
-- Sparse (BM42): `Qdrant/bm42-all-minilm-l6-v2-attentions`
+
+`--all` downloads complete pinned snapshots for those two models. Parser
+artifacts use `--parser-defaults` and their app-owned manifests. Text reranking
+and sparse encoding are optional, fail-open stages; the CLI does not pretend
+that one detached weight file is a runnable local model.
 
 Offline flags to set before runtime: `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1`.
 

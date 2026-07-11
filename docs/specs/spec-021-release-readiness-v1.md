@@ -1,10 +1,10 @@
 ---
 spec: SPEC-021
-title: Release Readiness v1 — Ship Plan, Work Packages, and Quality Gates
-version: 1.0.0
-date: 2026-01-09
+title: Release readiness v1: ship plan, work packages, and quality gates
+version: 1.1.0
+date: 2026-07-11
 owners: ["ai-arch"]
-status: Draft
+status: Implemented
 related_requirements:
   - NFR-SEC-001: Default egress disabled; only local endpoints allowed unless explicitly configured.
   - NFR-MAINT-002: Ruff/pyright pass (ruff enforces pylint-equivalent rules).
@@ -26,7 +26,6 @@ related_adrs:
   - "ADR-051"
   - "ADR-052"
   - "ADR-053"
-  - "ADR-055"
   - "ADR-056"
   - "ADR-058"
 ---
@@ -41,7 +40,7 @@ Define the **complete set of work packages** required to ship the first finished
 - documentation + RTM consistency restored
 - no placeholder markers or NotImplemented placeholders left in production modules
 - advanced, opt-in capabilities shipped (semantic cache, analysis modes, backups) without violating local-first posture
-- correctness hardening shipped (ops metadata store, cooperative deadline propagation) without adding new remote surfaces
+- cooperative deadline propagation without adding new remote surfaces
 
 This SPEC is the umbrella “release plan” and links to the individual ADR/SPEC/prompts for each package.
 
@@ -77,10 +76,14 @@ Each work package MUST ship with:
 | 14 | Document analysis modes (auto/separate/combined) | ADR-023 | SPEC-036 | `docs/developers/prompts/implemented/prompt-036-document-analysis-modes.md` |
 | 15 | Local backup & retention (snapshots + cache + Qdrant) | ADR-033 | SPEC-037 | `docs/developers/prompts/implemented/prompt-037-local-backup-and-retention.md` |
 | 16 | Semantic response cache (Qdrant-backed, guardrailed) | ADR-035 | SPEC-038 | `docs/developers/prompts/implemented/prompt-038-semantic-cache-qdrant.md` |
-| 17 | Operational metadata store (SQLite WAL) | ADR-055 | SPEC-039 | `docs/developers/prompts/implemented/prompt-039-operational-metadata-sqlite-wal.md` |
 | 18 | Agent deadline propagation + router injection | ADR-056 | SPEC-040 | `docs/developers/prompts/implemented/prompt-040-agent-deadline-propagation-and-router-injection.md` |
 
 All ADR/SPEC/prompt files referenced above are stored under `docs/` in this repo and are part of this release plan.
+
+The proposed SQLite operational-metadata store in ADR-055 and the draft
+SPEC-039 are future design material, not a v1 release requirement. Current
+background jobs remain process-local, while durable chat state, snapshots, and
+the ingestion cache use their existing canonical stores.
 
 ## Execution order and dependencies
 
@@ -91,28 +94,29 @@ Recommended dependency order (minimizes churn):
 3. WP05/WP04 → stabilizes ingestion + retrieval tool surfaces used by agents/docs.
 4. WP18 → restores retrieval tool contract and aligns per-call timeouts to the supervisor decision budget.
 5. WP11 → moves snapshot rebuild/export into a testable service boundary (enables WP12).
-6. WP17 → adds transactional ops metadata needed for background job reliability and restart recovery.
-7. WP12 → adds background ingestion UX on top of the stable service boundary (writes to ops DB).
-8. WP03 → ships chat persistence + time travel + hybrid memory UX (depends on stable settings/data_dir and stable supervisor wiring).
-9. WP14 → adds analysis modes on top of stable retrieval + chat UX.
-10. WP16 → adds semantic cache (optional; default-off; strict invalidation).
-11. WP15 → adds local backup/retention once data layout is stable (uses snapshots/cache dirs).
-12. WP06/WP07/WP13 → eliminates legacy entrypoints, strengthens logging safety, and hardens Analytics.
-13. WP09/WP08 → removes remaining work markers and aligns docs/RTM.
-14. WP02 (Docker/Compose) → can be done anytime, but should be validated before release.
+6. WP12 → adds process-local background ingestion UX on top of the stable service boundary.
+7. WP03 → ships chat persistence + time travel + hybrid memory UX (depends on stable settings/data_dir and stable supervisor wiring).
+8. WP14 → adds analysis modes on top of stable retrieval + chat UX.
+9. WP16 → adds semantic cache (optional; default-off; strict invalidation).
+10. WP15 → adds local backup/retention once data layout is stable (uses snapshots/cache dirs).
+11. WP06/WP07/WP13 → eliminates legacy entrypoints, strengthens logging safety, and hardens Analytics.
+12. WP09/WP08 → removes remaining work markers and aligns docs/RTM.
+13. WP02 (Docker/Compose) → can be done anytime, but should be validated before release.
 
 ## Release quality gates (commands)
 
 All packages MUST pass these commands before being marked complete:
 
 ```bash
-uv sync
-uv run ruff format .
-uv run ruff check . --fix
-uv run pyright
+uv sync --frozen
+uv run ruff format --check .
+uv run ruff check .
+uv run pyright --threads 4
 uv run python scripts/run_tests.py --fast
-uv run python scripts/run_tests.py
-uv run python scripts/run_quality_gates.py --ci --report
+uv run python scripts/run_tests.py --coverage
+rm -rf build docmind_ai_llm.egg-info
+uv build --wheel --clear
+uv run python scripts/smoke_built_wheel.py
 ```
 
 Containerization packages MUST also pass:
@@ -120,7 +124,10 @@ Containerization packages MUST also pass:
 ```bash
 docker build -t docmind:dev .
 docker compose config
+docker compose -f docker-compose.yml -f docker-compose.prod.yml config
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml config
 docker compose up --build -d
+docker compose exec ollama ollama pull qwen3:4b-instruct
 ```
 
 ## RTM updates

@@ -3,16 +3,15 @@
 A privacy-focused document analysis system with hybrid search, knowledge graphs,
 and multi-agent coordination for intelligent document processing.
 
-Note: Module name intentionally kept as-is to match project name in pyproject.toml.
-Ruff's N999 rule is temporarily disabled for this module.
+The package keeps import-time work minimal so release and health checks can
+import it without initializing application settings or external integrations.
 """
 
-__version__ = "0.1.0"
+from src.version import get_version
+
+__version__ = get_version()
 __author__ = "Bjorn Melin"
 
-# Make key components available at package level
-from .config import settings
-
 __all__ = [
-    "settings",
+    "__version__",
 ]

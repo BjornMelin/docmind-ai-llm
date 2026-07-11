@@ -22,7 +22,7 @@ graph TD
     C --> D[DuckDBKVStore (docmind.duckdb)]
 ```
 
-- Cache file: `settings.cache_dir/docmind.duckdb`
+- Cache file: `settings.cache.ingestion_db_path`
 - Collection/namespace: `docmind_processing`
 - Policy: do not add a custom cache wrapper or interface; use library types directly.
 
@@ -31,11 +31,10 @@ graph TD
 ### Wiring in code
 
 ```python
-from pathlib import Path
 from llama_index.core.ingestion import IngestionCache
 from llama_index.storage.kvstore.duckdb import DuckDBKVStore
 
-cache_db = Path(settings.cache_dir) / "docmind.duckdb"
+cache_db = settings.cache.ingestion_db_path
 cache_db.parent.mkdir(parents=True, exist_ok=True)
 
 kv = DuckDBKVStore(db_path=str(cache_db))
@@ -45,9 +44,7 @@ ingestion_cache = IngestionCache(cache=kv, collection="docmind_processing")
 ### Clearing the cache
 
 ```python
-from pathlib import Path
-
-cache_db = Path(settings.cache_dir) / "docmind.duckdb"
+cache_db = settings.cache.ingestion_db_path
 if cache_db.exists():
     cache_db.unlink()
 ```
@@ -73,9 +70,9 @@ def get_cache_stats() -> dict[str, object]:
 
 ## Operations
 
-- Inspect location: confirm file exists at `settings.cache_dir/docmind.duckdb`.
+- Inspect location: confirm `settings.cache.ingestion_db_path` exists.
 - Backup/restore: copy or move the single file while the app is stopped.
-- Relocate: change `DOCMIND_CACHE_DIR`; the file will be created on demand.
+- Relocate: change `DOCMIND_CACHE__DIR`; the file will be created on demand.
 - Clear: delete `docmind.duckdb`; it will be recreated on next use.
 
 ## Failure Modes and Fixes
@@ -83,7 +80,7 @@ def get_cache_stats() -> dict[str, object]:
 - ImportError: `llama_index.storage.kvstore.duckdb` not found
   - Ensure LlamaIndex version exposes `DuckDBKVStore` and required integration is installed.
 - PermissionError on cache path
-  - Use a writable `DOCMIND_CACHE_DIR`; create parent directories up front.
+  - Use a writable `DOCMIND_CACHE__DIR`; create parent directories up front.
 - File lock or DB busy
   - Stop concurrent writers; DuckDB is single-writer. Retry after closing processes.
 - Corrupted DB file
@@ -91,12 +88,12 @@ def get_cache_stats() -> dict[str, object]:
 
 ## Configuration
 
-- `DOCMIND_CACHE_DIR` → `settings.cache_dir`
-- Cache file name: `docmind.duckdb`
+- `DOCMIND_CACHE__DIR` → `settings.cache.dir`
+- `DOCMIND_CACHE__FILENAME` → `settings.cache.filename`
 
 ## Testing Guidance
 
-- Use a temporary directory for `settings.cache_dir` in tests to avoid collisions.
+- Use a temporary directory for `settings.cache.dir` in tests to avoid collisions.
 - For unit tests that do not need DuckDB behavior, use a small stub/mocked cache local to `tests/` instead of adding production wrappers.
 - Clean up the temp cache file between tests.
 
@@ -109,7 +106,7 @@ def get_cache_stats() -> dict[str, object]:
 
 - Custom `SimpleCache` and SimpleKVStore usage are removed.
 - No backward compatibility for prior cache state.
-- To clear existing state, delete `docmind.duckdb`.
+- To clear existing state, delete `cache/ingestion/docmind.duckdb`.
 
 ## References
 

@@ -1,123 +1,112 @@
 ---
 spec: SPEC-003
-title: Unified Embeddings: BGE‑M3 Text (dense+sparse) + Multimodal Images (SigLIP default)
-version: 1.2.0
-date: 2025-09-07
+title: Unified embeddings with BGE-M3 text and SigLIP images
+version: 1.4.0
+date: 2026-07-11
 owners: ["ai-arch"]
 status: Completed
 related_requirements:
   - FR-EMB-001: Text embeddings SHALL use BAAI/bge-m3 with dense+sparse.
-  - FR-EMB-002: Image embeddings SHOULD default to SigLIP; OpenCLIP MAY be used when explicitly selected.
+  - FR-EMB-002: Image embeddings SHALL use SigLIP.
   - FR-EMB-003: Batch size and precision SHALL adapt to hardware.
-  - NFR-PERF-002: Embed throughput ≥ 200 doc/sec on CPU for short chunks (64 tokens).
+  - NFR-PERF-002: Embedding benchmarks SHALL identify their hardware and inputs.
 related_adrs: ["ADR-002","ADR-004","ADR-007","ADR-024"]
 ---
 
 
 ## Objective
 
-Deliver a minimal, library‑first embedding stack for text and images, removing duplicate/legacy code while preserving SPEC‑003 capabilities:
+Define the one supported embedding stack for text and images:
 
-- Text: BGE‑M3 dense + sparse using FlagEmbedding and LlamaIndex `Settings` for query‑time dense alignment; FastEmbed BM42/BM25 for sparse alignment with Qdrant hybrid.
-- Images: OpenCLIP (ViT‑L/14, ViT‑H/14) and SigLIP via official libraries; prefer LlamaIndex ClipEmbedding where applicable.
-- No custom sparse scoring, no bespoke CLIP wrappers, and no backward‑compat layers.
+- Text: BGE-M3 dense embeddings through LlamaIndex and direct FastEmbed BM42/BM25 sparse vectors for Qdrant hybrid retrieval.
+- Images: Transformers SigLIP through the shared `src/utils/vision_siglip.py` loader.
+- No image-backend selector, OpenCLIP path, BGE image path, custom sparse scoring, or compatibility layer.
 
-## Architecture and Libraries
+## Architecture and libraries
 
-- Text (primary):
-  - BGE‑M3 dense (LlamaIndex embed model) + FastEmbed sparse (BM42/BM25) for hybrid alignment with Qdrant Query API.
+- Text:
+  - BGE-M3 produces normalized 1024-dimensional dense vectors.
+  - The default model revision is pinned in
+    `src/config/embedding_defaults.py`.
+  - LlamaIndex receives native `max_length`, `normalize`, and
+    `embed_batch_size` options plus an offline cache or explicit local snapshot.
+  - Direct FastEmbed produces BM42 sparse vectors and falls back to BM25 when BM42 is unavailable.
+  - Qdrant performs server-side fusion through the Query API.
 
 - Images:
-  - Transformers SigLIP (default) via `SiglipModel` + `SiglipProcessor`, using `get_image_features()` / `get_text_features()` with a curated revision pin for the default model only.
-  - OpenCLIP optionally via `open_clip.create_model_and_transforms('ViT-L-14'|'ViT-H-14', pretrained=...)` when explicitly required.
-  - In LlamaIndex contexts, use a SigLIP adapter or `TextImageReranker` equivalents; avoid legacy CLIP-first wrappers.
-  - Metadata: set `image_backbone="siglip"` for image/page nodes; default DPI≈200 for page image renders.
+  - `SiglipModel` and `SiglipProcessor` provide image and text features.
+  - The default model uses the source-controlled revision in `src/utils/vision_siglip.py`.
+  - `tools/models/pull.py --all` downloads the pinned Transformers snapshot.
+  - Configuration exposes the SigLIP model ID, optional custom revision, normalization, and batch size. It exposes no backend selector.
 
 - Hosting note: Hugging Face Text Embeddings Inference (TEI) is dense‑only for BGE‑M3. Do not use TEI when sparse is required.
 
-## Migration and Cleanup Plan (no back‑compat)
+## Current implementation
 
-1) Text pipeline standardization
+1. Text retrieval:
 
-   - Adopt LI Settings for query‑time dense; FastEmbed for sparse queries; Qdrant Query API for server‑side fusion.
-   - Remove custom sparse glue or tri‑mode layerings; keep library‑first wiring only.
+   - Use LlamaIndex `Settings` for query-time dense embeddings.
+   - Use direct FastEmbed for sparse queries.
+   - Use Qdrant for server-side fusion.
 
-2) Image pipeline consolidation
+2. Image embeddings:
 
-   - Prefer SigLIP as the primary image encoder; use OpenCLIP only when explicitly selected.
-   - Remove ad‑hoc CLIP heuristics and redundant wrappers; centralize device/batch settings.
-   - Derive embedding dimensions from model outputs at runtime (no hard‑coded dims).
+   - Use only SigLIP.
+   - Load the model and processor through `src/utils/vision_siglip.py`.
+   - Derive nonempty output dimensions from the model.
 
-3) Code deletions and refactors
+3. Configuration:
 
-   - Remove BGEM3 tri‑mode specific wrappers; avoid duplicative adapters.
-   - Remove CLIP VRAM heuristic helpers and any nonessential image preprocess shims.
-   - Keep a single, minimal SigLIP adapter for visual similarities only where
-     needed; route Hugging Face SigLIP model/processor loading through
-     `src/utils/vision_siglip.py`.
+   - Keep text model ID, revision, optional local path, cache folder,
+     dimensions, sparse enablement, normalization, and batch sizes under
+     `settings.embedding`.
+   - Keep SigLIP model ID, optional custom revision, normalization, and image batch size under the same group.
 
-4) Tests
+4. Tests:
 
-   - Update tests to target LlamaIndex dense query alignment and FastEmbed sparse alignment; verify Qdrant Query API Prefetch typing.
+   - Cover BGE-M3 dimensions, direct FastEmbed sparse output, SigLIP loading, image encoding, and Qdrant prefetch typing.
 
-5) Configuration
-
-   - Keep SPEC‑003 knobs in `settings.embedding` but narrow to: model id, enable_sparse, device, batch sizes, image backbone.
-   - Document that `enable_sparse=True` implies FlagEmbedding + LI retriever path; TEI is unsupported for sparse.
-
-6) Quality gates
-
-   - All modules must pass `ruff` (format+lint). Ruff enforces pylint-equivalent rules via `PL*` selectors in `pyproject.toml`.
-   - No legacy/duplicate code remains; no deprecation notes or back‑compat toggles.
-
-## Acceptance Criteria (updated)
+## Acceptance criteria
 
 ```gherkin
 Feature: Embedding stack
   Scenario: Text dense+sparse
-    Given FastEmbed (BM42/BM25) and LlamaIndex Settings are configured
+    Given direct FastEmbed and LlamaIndex Settings are configured
     When I retrieve over a list of texts
     Then I obtain hybrid retrieval using dense 1024‑d vectors and sparse lexical weights
 
   Scenario: Image encode
     When I encode a PNG
-    Then I obtain a normalized vector with the expected dimension for the selected backbone
+    Then I obtain a normalized SigLIP vector with the model's output dimension
 
   Scenario: Offline operation
     Given HF offline flags are set and models are predownloaded
     When I request embeddings
-    Then no network egress SHALL occur and the local cache SHALL be used
+    Then model loading uses the local cache or fails without downloading
 
   Scenario: Eliminate duplicate/legacy wrappers
     Given the codebase
-    Then no BGEM3Embedding or ad‑hoc CLIP wrapper remains and tests use LI classes
+    Then no duplicate BGE-M3 or image-backend compatibility wrapper remains
 ```
 
-## Implementation Phases (high level)
+## Implementation status
 
-1. Use LI Settings for query-time dense and FastEmbed for sparse queries; use Qdrant Query API server-side fusion.
-2. Prefer SigLIP for images; use OpenCLIP only when explicitly required.
-3. Remove duplicate wrappers (BGEM3 tri-mode helpers, ad‑hoc CLIP helpers), adjust imports/usages.
-4. Rewrite/realign tests to new interfaces; maintain fast offline stubs.
-5. Run quality gates; address lint and style; finalize docs.
-
-### Status Tracking (2025‑09‑07)
-
-- Phase 1: Completed
-- Phase 2: Completed — callers migrated; imports updated; tests no longer import legacy symbols; SigLIP default enforced.
-- Phase 3: Completed — ad‑hoc CLIP helpers removed; LI ClipEmbedding used; image dims derived at runtime.
-- Phase 4: Completed — removed `src/retrieval/embeddings.py` and all references.
-- Phase 5: Completed — docs updated; ruff gates green.
+- BGE-M3 dense and direct FastEmbed sparse paths are implemented.
+- BGE-M3 is pinned to an exact revision and its configured dimension is fixed
+  at 1024. A failed load leaves LlamaIndex's backing slot empty.
+- SigLIP is the only image backend.
+- The default SigLIP revision is pinned in source and prefetched by `tools/models/pull.py --all`.
+- Qdrant validates named-vector dimensions before indexing.
 
 ## References
 
-- FastEmbed (BM42/BM25) sparse embeddings — indices/values and tokenizer sources
+- FastEmbed BM42/BM25 sparse embedding documentation
 - LlamaIndex Settings for dense query alignment; Qdrant Query API hybrid
-- Transformers SigLIP docs; OpenCLIP model zoo and transforms
+- Transformers SigLIP documentation
 - TEI (HF) limitations for BGE‑M3 sparse (dense-only)
 
-## Routing & Dimensions
+## Routing and dimensions
 
 - Text embeddings SHOULD use BGE‑M3 (dimension 1024). Implement checks to assert dimension alignment across indexing/retrieval.
-- Image/text similarity SHOULD use SigLIP for image embeddings; route accordingly based on modality.
-- Embedding routers MUST produce clear errors when a model ID/dimension mismatch is detected.
+- Image and text-to-image similarity MUST use SigLIP.
+- Embedding routers MUST report model ID or dimension mismatches before indexing.

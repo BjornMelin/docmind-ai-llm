@@ -2,8 +2,8 @@
 ADR: 049
 Title: Multimodal Helper Cleanup — Remove Dead Test-only Utility From Production Package
 Status: Implemented
-Version: 1.1
-Date: 2026-01-12
+Version: 1.2
+Date: 2026-07-11
 Supersedes:
 Superseded-by:
 Related: 037, 002
@@ -46,7 +46,7 @@ We will:
 
 1. Delete `src/utils/multimodal.py` and its dedicated test suite (`tests/unit/utils/multimodal/*`) if no production code imports it.
 
-2. Update docs/architecture maps to remove references to the module and point to the canonical multimodal implementation (`src/models/embeddings.py`, `src/retrieval/reranking.py`, `src/utils/vision_siglip.py`).
+2. Update docs/architecture maps to remove references to the module and point to the canonical multimodal implementation (`src/utils/siglip_adapter.py`, `src/retrieval/reranking.py`, `src/utils/vision_siglip.py`).
 
 ## Consequences
 
@@ -58,3 +58,7 @@ We will:
 ### Trade-offs
 
 - Removes a “toy” validation pipeline; if needed later, reintroduce under `src/eval/` with a proper spec.
+
+## Changelog
+
+- 1.2 (2026-07-11): Removed the later-deleted parallel embedding module from the canonical implementation map.

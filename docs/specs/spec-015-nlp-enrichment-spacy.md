@@ -17,8 +17,8 @@ related_adrs: ["ADR-024","ADR-013","ADR-030","ADR-058","ADR-061"]
 Add a **first-class NLP enrichment stage** to ingestion using **spaCy 3.8.11** with:
 
 - CPU default (offline-first)
-- NVIDIA CUDA acceleration on Linux/Windows when available
-- Apple Silicon acceleration on macOS (arm64)
+- NVIDIA CUDA acceleration on release-validated Linux x86_64, with WSL2 best effort
+- Apple Silicon acceleration on macOS arm64 as a CPython 3.12 best-effort path
 - Centralized runtime selection, caching, and typed outputs
 
 ## Architecture (repo truth)
@@ -101,12 +101,12 @@ uv sync
 uv run python -m spacy download en_core_web_sm
 ```
 
-### NVIDIA CUDA (Linux/Windows)
+### NVIDIA CUDA (Linux x86_64 validated; WSL2 best effort)
 
 Recommended (repo-supported):
 
 ```bash
-uv sync --frozen --extra gpu
+uv sync --frozen --no-group cpu --extra gpu
 uv run python -m spacy download en_core_web_sm
 ```
 
@@ -117,7 +117,7 @@ export DOCMIND_SPACY__DEVICE=cuda
 export DOCMIND_SPACY__GPU_ID=0
 ```
 
-### Apple Silicon (macOS arm64)
+### Apple Silicon (macOS arm64, CPython 3.12 best effort)
 
 ```bash
 uv sync --frozen --extra apple

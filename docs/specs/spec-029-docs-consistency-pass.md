@@ -1,8 +1,8 @@
 ---
 spec: SPEC-029
 title: Documentation Consistency Pass (Specs, Handbook, RTM)
-version: 1.0.0
-date: 2026-01-09
+version: 1.1.0
+date: 2026-07-11
 owners: ["ai-arch"]
 status: Implemented
 related_requirements:
@@ -55,25 +55,26 @@ Restore documentation correctness for v1 by aligning:
    - Update `docs/specs/spec-012-observability.md` to match current `ObservabilityConfig` schema and `src/telemetry/opentelemetry.py` behavior.
    - Ensure the SRS includes `NFR-OBS-*` requirements referenced by SPEC-012 (add if missing).
 
-## Automated drift check (lightweight)
+## Implemented documentation gates
 
-Add a small script (or extend an existing health script) to detect doc drift:
+The repository uses focused checks rather than a general inline source-path
+scanner:
 
-- scan **non-historical** docs:
-  - include: `docs/specs/`, `docs/developers/`
-  - exclude:
-    - `docs/**/archived/`, `docs/specs/.archived/`
-    - `docs/specs/prompts/completed/` (historical “completed prompts” may reference removed files)
-    - `docs/specs/prompts/` (prompt templates are not sources of truth for current module paths)
-- detect referenced paths matching `src/<path>.py`
-- assert each referenced file exists
+- `scripts/check_links.py` validates internal Markdown links.
+- `scripts/verify_structural_parity.py` compares the documented top-level
+  package manifest with `src/`.
+- `scripts/validate_schemas.py` validates repository schemas.
+- Markdownlint validates active Markdown files.
 
-Wire it into `scripts/run_quality_gates.py` (or `scripts/test_health.py --check-patterns`) so CI catches regressions.
+Inline `src/...` references remain review-owned because design records may
+intentionally describe deleted files or conceptual examples. No inline-path
+allowlist is part of the implemented contract.
 
 ## Testing strategy
 
-- Unit test for the drift checker with a small fixture corpus (optional).
-- Verification: quality gates run the drift checker and fail on missing references.
+- Unit tests cover schema validation.
+- Documentation CI runs link, structural-parity, and Markdown checks.
+- Reviewers verify changed inline code references against the live tree.
 
 ## Rollout / migration
 
@@ -81,10 +82,5 @@ Wire it into `scripts/run_quality_gates.py` (or `scripts/test_health.py --check-
 
 ## RTM updates (docs/specs/traceability.md)
 
-Add a planned row:
-
-- NFR-MAINT-003: “Docs drift fixed + drift checker added”
-  - Code: `docs/specs/*`, `docs/developers/*`, `scripts/*`
-  - Tests: optional unit test for checker
-  - Verification: quality gates
-  - Status: Planned → Implemented
+NFR-MAINT-003 records the implemented link, schema, structural-parity, and
+Markdown quality gates. It does not claim general inline source-path scanning.

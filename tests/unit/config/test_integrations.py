@@ -15,6 +15,7 @@ from src.config.integrations import (
     _configure_structured_outputs,
     _should_configure_embeddings,
     _should_configure_llm,
+    is_embedding_ready,
     setup_llamaindex,
 )
 
@@ -22,13 +23,32 @@ from src.config.integrations import (
 @pytest.fixture(autouse=True)
 def fake_settings(monkeypatch):
     """Provide a lightweight stand-in for llama_index.core.Settings."""
-    fake = SimpleNamespace(
-        llm=None,
-        embed_model=None,
-        context_window=None,
-        num_output=None,
-        guided_json_enabled=False,
-    )
+
+    class _FakeSettings:
+        def __init__(self) -> None:
+            self._llm = None
+            self._embed_model = None
+            self.context_window = None
+            self.num_output = None
+            self.guided_json_enabled = False
+
+        @property
+        def llm(self):  # type: ignore[no-untyped-def]
+            return self._llm
+
+        @llm.setter
+        def llm(self, value):  # type: ignore[no-untyped-def]
+            self._llm = value
+
+        @property
+        def embed_model(self):  # type: ignore[no-untyped-def]
+            return self._embed_model
+
+        @embed_model.setter
+        def embed_model(self, value):  # type: ignore[no-untyped-def]
+            self._embed_model = value
+
+    fake = _FakeSettings()
     monkeypatch.setattr("src.config.integrations.Settings", fake)
     return fake
 
@@ -40,6 +60,29 @@ def test_should_configure_llm_checks_existing(fake_settings):
     assert _should_configure_llm(force_llm=True)
     fake_settings.llm = None
     assert _should_configure_llm(force_llm=False)
+
+
+@pytest.mark.unit
+def test_should_configure_llm_reads_real_backing_slot_without_lazy_resolution(
+    monkeypatch,
+):
+    """Inspect real LlamaIndex state without invoking its default resolver."""
+    from llama_index.core import Settings as LlamaIndexSettings
+
+    from src.config import integrations as integ
+
+    resolver = MagicMock(side_effect=AssertionError("lazy resolver called"))
+    monkeypatch.setattr(integ, "Settings", LlamaIndexSettings)
+    monkeypatch.setattr("llama_index.core.settings.resolve_llm", resolver)
+    monkeypatch.setattr(LlamaIndexSettings, "_llm", None)
+
+    assert integ._should_configure_llm(force_llm=False)
+    resolver.assert_not_called()
+
+    configured = MagicMock()
+    monkeypatch.setattr(LlamaIndexSettings, "_llm", configured)
+    assert not integ._should_configure_llm(force_llm=False)
+    resolver.assert_not_called()
 
 
 @pytest.mark.unit
@@ -118,6 +161,103 @@ def test_configure_embeddings_handles_failure(monkeypatch, fake_settings):
         assert any("Could not configure embeddings" in m for m in messages)
         assert any("[redacted:" in m for m in messages)
         assert not any("embed error" in m for m in messages)
+
+
+@pytest.mark.unit
+def test_configure_embeddings_passes_native_huggingface_options(
+    monkeypatch, fake_settings
+):
+    """Forward the canonical text settings through native adapter keywords."""
+    from llama_index.core.base.embeddings.base import BaseEmbedding
+
+    from src.config.embedding_defaults import (
+        BGE_M3_EMBEDDING_DIMENSION,
+        DEFAULT_BGE_M3_MODEL_ID,
+        DEFAULT_BGE_M3_MODEL_REVISION,
+    )
+
+    embed_model = MagicMock(spec=BaseEmbedding)
+    constructor = MagicMock(return_value=embed_model)
+    config = {
+        "batch_size_text": 7,
+        "cache_folder": "/models/cache",
+        "device": "cpu",
+        "dimension": BGE_M3_EMBEDDING_DIMENSION,
+        "local_files_only": True,
+        "local_model_path": None,
+        "max_length": 8192,
+        "model_id": DEFAULT_BGE_M3_MODEL_ID,
+        "model_name": DEFAULT_BGE_M3_MODEL_ID,
+        "model_revision": DEFAULT_BGE_M3_MODEL_REVISION,
+        "normalize_text": True,
+        "trust_remote_code": False,
+    }
+    config_owner = SimpleNamespace(get_embedding_config=lambda: config)
+    monkeypatch.setattr("src.config.integrations.settings", config_owner)
+    monkeypatch.setattr("src.config.integrations.HuggingFaceEmbedding", constructor)
+
+    _configure_embeddings()
+
+    constructor.assert_called_once_with(
+        model_name=DEFAULT_BGE_M3_MODEL_ID,
+        device="cpu",
+        max_length=8192,
+        normalize=True,
+        embed_batch_size=7,
+        trust_remote_code=False,
+        local_files_only=True,
+        cache_folder="/models/cache",
+        revision=DEFAULT_BGE_M3_MODEL_REVISION,
+    )
+    assert fake_settings._embed_model is embed_model
+
+
+@pytest.mark.unit
+def test_embedding_failure_clears_real_slot_without_mock_fallback(monkeypatch):
+    """A load failure leaves the real backing slot empty and not ready."""
+    from llama_index.core import Settings as LlamaIndexSettings
+    from llama_index.core.embeddings import MockEmbedding
+
+    from src.config import integrations as integ
+    from src.config.embedding_defaults import DEFAULT_BGE_M3_MODEL_ID
+
+    config_owner = SimpleNamespace(
+        get_embedding_config=lambda: {
+            "dimension": 1024,
+            "model_id": DEFAULT_BGE_M3_MODEL_ID,
+            "model_name": DEFAULT_BGE_M3_MODEL_ID,
+        }
+    )
+    monkeypatch.setattr(integ, "Settings", LlamaIndexSettings)
+    monkeypatch.setattr(integ, "settings", config_owner)
+    monkeypatch.setattr(
+        integ,
+        "HuggingFaceEmbedding",
+        MagicMock(side_effect=OSError("model missing")),
+    )
+    monkeypatch.setattr(
+        LlamaIndexSettings,
+        "_embed_model",
+        MockEmbedding(embed_dim=1),
+    )
+
+    integ._configure_embeddings()
+
+    assert LlamaIndexSettings._embed_model is None
+    assert not integ.is_embedding_ready()
+
+
+@pytest.mark.unit
+def test_embedding_readiness_rejects_llamaindex_mock(monkeypatch, fake_settings):
+    """Only a real BaseEmbedding implementation is production-ready."""
+    from llama_index.core.base.embeddings.base import BaseEmbedding
+    from llama_index.core.embeddings import MockEmbedding
+
+    fake_settings._embed_model = MockEmbedding(embed_dim=1024)
+    assert not is_embedding_ready()
+
+    fake_settings._embed_model = MagicMock(spec=BaseEmbedding)
+    assert is_embedding_ready()
 
 
 @pytest.mark.unit
@@ -208,7 +348,7 @@ def test_startup_init_creates_directories(monkeypatch, tmp_path):
 
     cfg = SimpleNamespace(
         data_dir=tmp_path / "data",
-        cache_dir=tmp_path / "cache",
+        cache=SimpleNamespace(dir=tmp_path / "cache"),
         log_file=tmp_path / "logs" / "app.log",
         database=SimpleNamespace(sqlite_db_path=tmp_path / "db" / "doc.db"),
         observability=SimpleNamespace(enabled=False, endpoint=None, sampling_ratio=1.0),
@@ -240,4 +380,20 @@ def test_get_settings_embed_model_handles_attribute_error(monkeypatch):
             raise AttributeError(name)
 
     monkeypatch.setattr("src.config.integrations.Settings", _WeirdSettings())
+    assert integ.get_settings_embed_model() is None
+
+
+@pytest.mark.unit
+def test_get_settings_embed_model_handles_lazy_default_import_error(monkeypatch):
+    from src.config import integrations as integ
+
+    class _MissingDefaultAdapter:
+        _embed_model = None
+
+        @property
+        def embed_model(self):  # type: ignore[no-untyped-def]
+            raise AssertionError("lazy default must not be inspected")
+
+    monkeypatch.setattr("src.config.integrations.Settings", _MissingDefaultAdapter())
+
     assert integ.get_settings_embed_model() is None

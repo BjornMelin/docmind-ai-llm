@@ -40,7 +40,7 @@ def documents_ingest_app_test(
     orig_chat_sqlite = app_settings.chat.sqlite_path
     orig_db_sqlite = app_settings.database.sqlite_db_path
     monkeypatch.setenv("DOCMIND_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("DOCMIND_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("DOCMIND_CACHE__DIR", str(tmp_path / "cache"))
     app_settings.data_dir = tmp_path
     app_settings.chat.sqlite_path = tmp_path / "chat.db"
     app_settings.database.sqlite_db_path = tmp_path / "docmind.db"

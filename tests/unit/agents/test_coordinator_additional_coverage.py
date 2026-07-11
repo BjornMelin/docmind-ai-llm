@@ -73,7 +73,7 @@ def test_ensure_setup_configures_native_retry_when_supported(
             self.max_retries = None
 
     llamaindex_llm = _LLM()
-    mock_settings.llm = llamaindex_llm
+    mock_settings._llm = llamaindex_llm
 
     with (
         patch("src.agents.coordinator.is_dspy_available", return_value=False),
@@ -111,7 +111,7 @@ def test_ensure_setup_wraps_llm_when_native_retry_assignment_fails(
             raise ValueError("nope")
 
     llamaindex_llm = _LLM()
-    mock_settings.llm = llamaindex_llm
+    mock_settings._llm = llamaindex_llm
 
     with (
         patch("src.agents.coordinator.is_dspy_available", return_value=False),

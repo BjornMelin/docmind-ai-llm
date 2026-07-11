@@ -33,13 +33,16 @@ Each prompt is self-contained and embeds DocMind’s “Implementation Executor 
 - `docs/developers/prompts/implemented/prompt-036-document-analysis-modes.md`
 - `docs/developers/prompts/implemented/prompt-037-local-backup-and-retention.md`
 - `docs/developers/prompts/implemented/prompt-038-semantic-cache-qdrant.md`
-- `docs/developers/prompts/implemented/prompt-039-operational-metadata-sqlite-wal.md`
 - `docs/developers/prompts/implemented/prompt-040-agent-deadline-propagation-and-router-injection.md`
 - `docs/developers/prompts/implemented/prompt-041-chat-persistence-langgraph-sqlite-hybrid-memory.md`
 - `docs/developers/prompts/implemented/prompt-042-multimodal-ingestion.md`
 - `docs/developers/prompts/implemented/prompt-043-hybrid-retrieval-logic.md`
 - `docs/developers/prompts/implemented/prompt-044-ui-and-persistence.md`
 - `docs/developers/prompts/implemented/prompt-045-nlp-enrichment-spacy.md`
+
+## Future design prompts
+
+- `docs/developers/prompts/prompt-039-operational-metadata-sqlite-wal.md`
 
 ## Superseded prompts (do not implement)
 

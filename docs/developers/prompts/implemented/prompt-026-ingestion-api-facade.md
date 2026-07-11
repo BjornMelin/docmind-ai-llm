@@ -132,7 +132,7 @@ You must keep changes minimal, library-first, and maintainable.
 #### 3) Security & Offline-first
 
 - **Symlinks**: `path.resolve(strict=True)` must not resolve to an external path or be a symlink itself if `follow_symlinks=False`. Block traversal.
-- **Cache**: `clear_ingestion_cache` must only delete from `settings.cache_dir / "ingestion"`.
+- **Cache**: `clear_ingestion_cache` must only delete from `settings.cache.dir / "ingestion"`.
 
 ---
 

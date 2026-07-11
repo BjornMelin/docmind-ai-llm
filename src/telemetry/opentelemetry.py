@@ -12,7 +12,6 @@ import importlib
 import os
 from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager, suppress
-from importlib import metadata
 from typing import Any, cast
 
 try:  # pragma: no cover - optional dependency
@@ -34,6 +33,7 @@ from opentelemetry.trace import Span, StatusCode
 from opentelemetry.trace.status import Status
 
 from src.config.settings import DocMindSettings, ObservabilityConfig
+from src.version import get_version
 
 _OTEL_STATE: dict[str, Any] = {
     "trace_provider": None,
@@ -354,9 +354,8 @@ def _build_resource(app_settings: DocMindSettings) -> Resource:
     obs = app_settings.observability
     attributes: dict[str, Any] = {
         "service.name": obs.service_name,
+        "service.version": get_version(),
     }
-    with suppress(metadata.PackageNotFoundError):
-        attributes["service.version"] = metadata.version("docmind_ai_llm")
     if app_settings.environment:
         attributes["deployment.environment"] = app_settings.environment
     return Resource.create(attributes)

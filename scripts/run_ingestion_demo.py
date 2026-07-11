@@ -21,7 +21,7 @@ def main() -> None:
     config = IngestionConfig(cache_dir=cache_dir)
     payload = IngestionInput(
         document_id="demo-doc",
-        payload_bytes=b"DocMind ingestion demo",
+        payload_text="DocMind ingestion demo",
         metadata={"source": "demo"},
     )
     result = ingest_documents_sync(config, [payload])

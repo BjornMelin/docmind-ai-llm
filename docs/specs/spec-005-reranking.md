@@ -1,8 +1,8 @@
 ---
 spec: SPEC-005
 title: Reranking: BGE Cross-Encoder for Text + SigLIP Visual Re‑score (ColPali Optional)
-version: 1.1.0
-date: 2025-09-05
+version: 1.2.0
+date: 2026-07-11
 owners: ["ai-arch"]
 status: Completed
 related_requirements:
@@ -37,7 +37,7 @@ Improve retrieval quality by applying **BGE Cross-Encoder** for text nodes and *
 
 - Keep UI free of reranker toggles; provide ops env overrides only.
 - Early-exit: if there are no image/page nodes, skip visual rerank stage entirely.
-- Cancellation semantics: batch-wise early-exit only (deterministic subsets), no mid-batch truncation; single reranker integration path with auto-detect (prefer direct FlagEmbedding; else LI wrapper).
+- Cancellation semantics: batch-wise early-exit only (deterministic subsets), no mid-batch truncation. Text reranking has one owner: LlamaIndex `SentenceTransformerRerank` backed by Sentence Transformers.
 
 ## Libraries and Imports
 

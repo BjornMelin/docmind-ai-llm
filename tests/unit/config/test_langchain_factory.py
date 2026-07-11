@@ -12,6 +12,17 @@ from src.config.settings import DocMindSettings
 pytestmark = pytest.mark.unit
 
 
+def test_build_chat_model_default_ollama_uses_effective_model() -> None:
+    """Default Ollama wiring uses the public Ollama tag, not the vLLM ID."""
+    cfg = DocMindSettings(llm_backend="ollama", model=None)
+
+    with patch("src.config.langchain_factory.ChatOpenAI", autospec=True) as client:
+        build_chat_model(cfg)
+
+    _, kwargs = client.call_args
+    assert kwargs["model"] == "qwen3:4b-instruct"
+
+
 def test_build_chat_model_openai_compatible_responses_sets_flags() -> None:
     """Responses mode enables use_responses_api and responses/v1 output version."""
     cfg = DocMindSettings()

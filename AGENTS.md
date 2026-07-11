@@ -1,4 +1,4 @@
-# DocMind AI - Agent Instructions
+# DocMind AI: Agent instructions
 
 ## Purpose
 
@@ -16,35 +16,38 @@ and docs under `docs/specs/` + `docs/developers/adrs/`.
 - `src/agents/`: LangGraph coordinator (graph-native supervisor via `StateGraph`)
 - `src/persistence/`: snapshots, hashing, locking, chat DB
 - `src/telemetry/` + `src/utils/telemetry.py`: OTEL + JSONL events
-- `templates/`: prompt templates/presets
+- `src/prompting/templates/`: packaged prompt templates and presets
 - `docs/specs/` + `docs/developers/adrs/`: specs/ADRs (source-of-truth docs)
 - `scripts/` + `tools/`: dev utilities (tests, perf, model pull)
 
-## Quick Commands (uv)
+## Quick commands with uv
 
 - Setup: `uv sync && cp .env.example .env`
 - Run: `uv run streamlit run app.py` (or `./scripts/run_app.sh`)
 - Env: prefer `uv run ...` (uses the project env, typically `.venv`).
 - Verify (batch): after a batch of edits, run lint/type on touched paths + focused tests.
-  - Lint (all): `uv run ruff format . && uv run ruff check . --fix`
+  - Format (all): `uv run ruff format .`
+  - Lint (all): `uv run ruff check .`
   - Type (paths): `uv run pyright --threads 4 <paths>`
   - Tools-only (when `tools/` changed): `uv run pyright --threads 4 tools`
   - Tests (focused): `uv run pytest <tests/...> -vv` (or `-k <expr>` for a narrow slice)
-- Verify (final): before finishing the task/prompt, run full lint/type then full tests: `uv run ruff format . && uv run ruff check . --fix && uv run pyright --threads 4 && uv run python scripts/run_tests.py`
+- Verify (final): before finishing the task/prompt, run non-mutating full lint/type
+  checks, then full tests: `uv run ruff format --check . && uv run ruff check . &&
+  uv run pyright --threads 4 && uv run python scripts/run_tests.py`
 - Tests (fast): `uv run python scripts/run_tests.py --fast`
 - Coverage: `uv run python scripts/run_tests.py --coverage`
 - Coverage report: `uv run python scripts/check_coverage.py --collect --report --html`
 - Quality gates (CI): `uv run python scripts/run_quality_gates.py --ci --report`
 - Perf check: `uv run python scripts/performance_monitor.py --run-tests --check-regressions --report`
 - GPU check: `uv run python scripts/test_gpu.py --quick`
-- Prefetch models: `uv run python tools/models/pull.py --all --cache_dir ./models_cache`
+- Prefetch required BGE-M3 and parser models: `uv run python tools/models/pull.py --bge-m3 --cache_dir ./models_cache --parser-defaults --rapidocr-cache-dir ./cache/models`
 - spaCy model (opt): `uv run python -m spacy download en_core_web_sm`
 - Review triage: `uv run python scripts/analyze_github_reviews.py --json-file <path>` (or set `DOCMIND_REVIEW_JSON`)
 
-## Non-negotiables (CI + Security)
+## Non-negotiables for CI and security
 
 - No `TODO|FIXME|XXX` under `src tests docs scripts tools`.
-- CI expects `ruff format --check` and clean `ruff check` (CI runs `ruff check --fix --exit-non-zero-on-fix`).
+- CI expects `ruff format --check` and a clean, non-mutating `ruff check`.
 - Offline-first default: no implicit egress. Base URL validation is strict by default and includes DNS resolution of allowlisted non-loopback hosts as SSRF/DNS-rebinding hardening.
 - Streamlit: no `unsafe_allow_html=True` for untrusted content.
 - Logging/telemetry: metadata-only; never log secrets or raw prompt/doc/model output (use `src/utils/log_safety.py`).
@@ -76,8 +79,8 @@ When resuming after compaction:
 
 ## Optional extras
 
-- `uv sync --frozen --extra gpu` (fastembed-gpu, CuPy CUDA wheels)
-- `uv sync --frozen --extra graph` (GraphRAG adapters)
+- `uv sync --frozen --no-group cpu --extra gpu` (PyTorch CUDA and CuPy;
+  sparse FastEmbed remains CPU-based)
 - `uv sync --frozen --extra multimodal` (ColPali reranker)
 - `uv sync --frozen --extra observability` (OTLP exporters + portalocker)
 - `uv sync --frozen --extra eval` (beir)
@@ -90,7 +93,9 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 - Keep these coupled:
   - Torch 2.8.x ↔ Transformers `>=5.0,<6.0` (vLLM is external-only via OpenAI-compatible HTTP)
   - DuckDB `<1.4.0` (LlamaIndex integrations cap it)
-  - LlamaIndex packages stay `<0.15.0`
+  - `llama-index-core>=0.14.21,<0.15.0` plus selected integration packages
+  - Direct `fastembed>=0.5.1`; do not restore the removed LlamaIndex FastEmbed adapter
+  - Ollama Python client `0.6.2`
   - Streamlit `<2.0.0`
   - `[tool.uv]` enforces `rapidfuzz>=3.14.1,<4.0.0`
 
@@ -123,6 +128,7 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 ## Containerization (CI-enforced)
 
 - `Dockerfile`: Python 3.12.13 base; final `USER` non-root; `CMD`/`ENTRYPOINT` exec-form (no `sh -c`); no `:latest`.
+- `scripts/container_health.py` owns container health; Dockerfile and Compose call it directly.
 - `.dockerignore`: ignore `.env` (`.env`, `.env.*`, or `.env*`); don’t bake `.env` into images.
 - Compose: use canonical `DOCMIND_*` env vars (no legacy `OLLAMA_BASE_URL`/`VLLM_BASE_URL`/`LMSTUDIO_BASE_URL`); prod override sets `read_only: true` and `tmpfs: /tmp`.
 
@@ -133,17 +139,34 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
 ## Ingestion / processing
 
-- Use LlamaIndex `IngestionPipeline` with `TokenTextSplitter` (and optional `TitleExtractor`).
-- Prefer `UnstructuredReader` when installed; fall back to plain-text read.
+- Use LlamaIndex `IngestionPipeline` with `TokenTextSplitter` and optional
+  spaCy enrichment. Do not add a second title-extraction path.
+- Use `src/processing/parsing/` as the parser boundary. The parser always uses
+  local Docling, pypdfium2, and RapidOCR artifacts. Plain text and Markdown use
+  the direct text loader.
+- Prefetch parser artifacts before PDF parsing. Health checks hash every file in
+  the canonical manifests and report integrity issues with relative paths.
+- Searchable-PDF export is an optional, fail-open OCRmyPDF utility. It requires
+  POSIX process groups; use WSL2 on Windows. Cancellation and timeout paths must
+  kill and reap the whole subprocess group.
+- Fail closed with `DocumentParseError` for every parser error. The parser service
+  alone owns direct UTF-8 loading; do not add an ingestion-facade text fallback.
+- Accept in-memory ingestion as `payload_text: str`; route every binary input
+  through a source path and the parser boundary.
+- Reject duplicate document IDs before ingestion I/O. Derive file document IDs
+  as `doc-<full lowercase SHA-256>` through `src/utils/hashing.py`.
 - Cache: DuckDB KV store (`DOCMIND_CACHE__DIR`, `DOCMIND_CACHE__FILENAME`).
-- PDF page images: PyMuPDF rendering; optional AES-GCM (`DOCMIND_IMG_AES_KEY_BASE64`, `DOCMIND_IMG_DELETE_PLAINTEXT`).
+- PDF page images: pypdfium2 rendering; optional AES-GCM (`DOCMIND_IMG_AES_KEY_BASE64`, `DOCMIND_IMG_DELETE_PLAINTEXT`).
 - Multimodal artifacts: store page images/thumbnails as content-addressed `ArtifactRef` in the local ArtifactStore (`DOCMIND_ARTIFACTS__*`).
 
 ## Retrieval
 
 - Text embeddings: BGE-M3 (1024D). Sparse: FastEmbed BM42 preferred, BM25 fallback.
-- Hybrid retrieval: Qdrant server-side via `Prefetch` + `FusionQuery` (RRF default; DBSF env-gated).
+- Hybrid retrieval: Qdrant server-side via `Prefetch` plus `RrfQuery` (configured k) or DBSF `FusionQuery`.
 - Named vectors: `text-dense`, `text-sparse` (+ IDF modifier). Dedup by `page_id` (default) or `doc_id`.
+- Runtime creates a missing collection but never mutates an incompatible one.
+  Use `scripts/qdrant_schema.py rebuild-empty` only after stopping writers; it
+  requires an exact zero count and refuses nonempty or error states.
 - Enable server-side hybrid: `DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=true`.
 - Multimodal search: SigLIP text→image fused by RRF; image collection uses `settings.database.qdrant_image_collection`.
 
@@ -169,7 +192,7 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 ## GraphRAG
 
 - Enable only when both are true: `DOCMIND_ENABLE_GRAPHRAG=true` and `DOCMIND_GRAPHRAG_CFG__ENABLED=true`.
-- Requires `--extra graph` adapters (kuzu + LlamaIndex).
+- Uses LlamaIndex core's `PropertyGraphIndex` and `SimplePropertyGraphStore`; there is no graph extra.
 - Exports: JSONL baseline; Parquet optional (PyArrow). Preserve `get_rel_map` labels (fallback `related`).
 - Seed policy: graph retriever → vector retriever → deterministic fallback.
 
@@ -181,7 +204,7 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 - Don’t persist base64 blobs or raw filesystem paths; persist `ArtifactRef` and sanitize path-like metadata to basenames.
 - Locking: `portalocker` when available (fallback `O_EXCL`). Persist via `SnapshotManager` APIs.
 
-## SQLite / WAL
+## SQLite and WAL
 
 - Don’t share a sqlite connection across threads; prefer one connection per operation.
 - Persist metadata only (no raw prompt/doc text).
@@ -195,13 +218,14 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
   - URLs: log origin only; sanitize exception strings before logging.
 - Controls: `DOCMIND_TELEMETRY_DISABLED`, `DOCMIND_TELEMETRY_SAMPLE`, `DOCMIND_TELEMETRY_ROTATE_BYTES`.
 
-## Agents (budgets)
+## Agent budgets
 
 - When deadline propagation is enabled, cap per-call timeouts to the supervisor budget (avoid a single call exceeding `settings.agents.decision_timeout`).
 
 ## Offline-first
 
-- Predownload models: `tools/models/pull.py` (avoid runtime downloads).
+- Predownload required BGE-M3 and parser defaults: `uv run python tools/models/pull.py --bge-m3 --cache_dir ./models_cache --parser-defaults --rapidocr-cache-dir ./cache/models`.
+- Check parser readiness: `uv run python scripts/parser_health.py --check`.
 - Use `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` for offline runs; tests must remain deterministic/offline unless explicitly marked.
 
 ## Coding standards
@@ -234,7 +258,7 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 - When behavior changes, update README and the owning spec/ADR.
 - Keep active docs pointing at real `src/...` paths (avoid doc drift).
 
-## Browser Automation
+## Browser automation
 
 Use `agent-browser` for web automation. Run `agent-browser --help` for all commands.
 
@@ -245,7 +269,7 @@ Core workflow:
 3. `agent-browser click @e1` / `fill @e2 "text"` - Interact using refs
 4. Re-snapshot after page changes
 
-## Source Code Reference
+## Source code reference
 
 Source code for deps is available in `opensrc/` for deeper understanding of implementation details.
 
@@ -253,14 +277,13 @@ See `opensrc/sources.json` for the list of available packages and their versions
 
 Use this source code when you need to understand how a package works internally, not just its types/interface.
 
-### Fetching Additional Source Code
+### Fetching additional source code
 
 To fetch source code for a package or repository you need to understand, run:
 
 ```bash
-# NOTE: append the --modify=false to all commands
-npx opensrc <package>           # npm package (e.g., npx opensrc zod)
-npx opensrc pypi:<package>      # Python package (e.g., npx opensrc pypi:requests)
-npx opensrc crates:<package>    # Rust crate (e.g., npx opensrc crates:serde)
-npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
+opensrc fetch --cwd . <package>       # npm package (for example, zod)
+opensrc fetch --cwd . pypi:<package>  # Python package (for example, requests)
+opensrc fetch crates:<package>        # Rust crate (for example, serde)
+opensrc fetch <owner>/<repo>          # GitHub repository (for example, vercel/ai)
 ```

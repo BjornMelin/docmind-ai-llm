@@ -20,6 +20,11 @@ def test_qdrant_prefetch_fusionquery_telemetry(
 ) -> None:
     """Verify hybrid retrieval emits correct telemetry with Qdrant prefetch."""
     hmod = importlib.import_module("src.retrieval.hybrid")
+    monkeypatch.setattr(
+        hmod,
+        "ensure_hybrid_collection",
+        lambda *_args, **_kwargs: type("_Compatibility", (), {"compatible": True})(),
+    )
 
     # Minimal fake Qdrant response
     class _Point:
@@ -34,15 +39,18 @@ def test_qdrant_prefetch_fusionquery_telemetry(
         """Container for the stubbed Qdrant response."""
 
         def __init__(self) -> None:
-            self.points = [_Point(i) for i in range(6)]
+            self.groups = [
+                type("_Group", (), {"hits": [_Point(i)]})() for i in range(6)
+            ]
 
     class _Client:
         """Stubbed Qdrant client capturing query parameters."""
 
-        def query_points(self, **_kwargs: Any) -> _Res:
+        def query_points_groups(self, **_kwargs: Any) -> _Res:
             """Execute a query and verify prefetch and limit parameters."""
             assert "prefetch" in _kwargs
             assert "limit" in _kwargs
+            assert _kwargs["group_size"] == 1
             return _Res()
 
         def close(self) -> None:

@@ -23,7 +23,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing-only imports
     from llama_index.core.base.llms.types import ChatMessage as _ChatMessage
 
     type ChatMessage = _ChatMessage
-else:  # pragma: no cover - runtime fallback for optional llama-index installs
+else:  # pragma: no cover - avoid importing a typing-only class at runtime
     type ChatMessage = Any
 
 

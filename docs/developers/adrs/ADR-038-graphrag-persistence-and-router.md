@@ -53,8 +53,16 @@ GraphRAG was accepted (ADR‑019) as an optional enhancement, but lacked standar
 
 - Router: When a graph exists and is healthy, compose tools `[vector_query_engine, graph_query_engine(include_text=true, path_depth=1)]` with `PydanticSingleSelector` (OpenAI) else `LLMSingleSelector`. If graph absent/unhealthy, use vector tool only.
 - Graph helpers: Use documented APIs (`property_graph_store.get`, `get_rel_map`) and `PropertyGraphIndex.as_retriever/as_query_engine`. No index mutation.
-- Persistence: Implement SnapshotManager to write to `storage/_tmp-<uuid>` and atomically rename to `storage/<timestamp>`. Write `manifest.json` with `corpus_hash`, `config_hash`, `created_at`, `versions`. Use a lockfile to ensure a single writer. Load the latest snapshot in Chat and show a staleness badge on mismatch.
-- Exports: JSONL baseline (one relation per line from `get_rel_map`); Parquet optional if `pyarrow` is available. Metadata is recorded in `manifest.graph_exports` with telemetry fields (`seed_count`, `duration_ms`, `size_bytes`, `sha256`).
+- Persistence: Implement SnapshotManager to write to `storage/_tmp-<uuid>`
+  and atomically rename to `storage/<timestamp>`. Each snapshot contains
+  `manifest.jsonl`, `manifest.meta.json`, and `manifest.checksum`.
+  `manifest.meta.json` owns `corpus_hash`, `config_hash`, `created_at`, and
+  `versions`. Use a lockfile to ensure a single writer. Load the latest
+  snapshot in Chat and show a staleness badge on mismatch.
+- Exports: JSONL baseline (one relation per line from `get_rel_map`); Parquet
+  optional if `pyarrow` is available. Metadata is recorded under
+  `manifest.meta.json`'s `graph_exports` field with `seed_count`, `duration_ms`,
+  `size_bytes`, and `sha256`.
 - UI: Documents page “Build GraphRAG (beta)” toggle (default off, configurable). Chat defaults to router when graph present and shows staleness badge when hashes mismatch.
 
 ## High-Level Architecture
@@ -70,7 +78,7 @@ flowchart LR
   R --> A[Answer + Sources]
   PG --> E[Exports JSONL/Parquet]
   V & PG --> S[SnapshotManager]
-  S --> M[manifest.json]
+  S --> M[manifest.jsonl + manifest.meta.json + manifest.checksum]
 ```
 
 ## Related Requirements

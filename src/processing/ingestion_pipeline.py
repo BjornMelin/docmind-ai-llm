@@ -2,15 +2,16 @@
 
 This module assembles an :class:`~llama_index.core.ingestion.IngestionPipeline`
 using canonical DocMind configuration objects and returns normalized
-:class:`~src.models.processing.IngestionResult` payloads. It replaces the legacy
-custom DocumentProcessor while leaning entirely on maintained LlamaIndex and
-Unstructured integrations.
+:class:`~src.models.processing.IngestionResult` payloads. Parser routing lives in
+``src.processing.parsing``; this module only assembles chunking, metadata,
+artifact, cache, and snapshot orchestration.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import os
 import re
 import time
@@ -19,11 +20,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 from llama_index.core import Document
-from llama_index.core.extractors import TitleExtractor
 from llama_index.core.ingestion import IngestionCache, IngestionPipeline
 from llama_index.core.node_parser import TokenTextSplitter
 from llama_index.core.schema import TransformComponent
-from llama_index.core.storage.docstore import SimpleDocumentStore
 from llama_index.storage.kvstore.duckdb import DuckDBKVStore
 from loguru import logger
 from opentelemetry import trace
@@ -32,6 +31,10 @@ from src.config import settings as app_settings
 from src.config import setup_llamaindex
 from src.config.integrations import get_settings_embed_model
 from src.config.settings import ProcessingConfig
+from src.config.settings_utils import (
+    endpoint_url_allowed,
+    parse_endpoint_allowlist_hosts,
+)
 from src.models.processing import (
     ExportArtifact,
     IngestionConfig,
@@ -41,8 +44,12 @@ from src.models.processing import (
 )
 from src.persistence.artifacts import ArtifactRef, ArtifactStore
 from src.persistence.hashing import compute_config_hash, compute_corpus_hash
-from src.processing.ingestion_api import load_documents_from_inputs
+from src.processing.ingestion_api import (
+    load_documents_from_inputs,
+    require_unique_document_ids,
+)
 from src.processing.pdf_pages import save_pdf_page_images
+from src.utils.log_safety import safe_url_for_log
 
 if TYPE_CHECKING:  # pragma: no cover
     from llama_index.core.base.embeddings.base import BaseEmbedding
@@ -53,6 +60,54 @@ else:
     BaseEmbedding = object
 
 _TRACER = trace.get_tracer("docmind.ingestion")
+
+
+def _manifest_parsing_config(inputs: Sequence[IngestionInput]) -> dict[str, Any]:
+    """Return the canonical parser configuration represented by a manifest."""
+    per_input = [
+        {
+            "document_id": item.document_id,
+            "overrides": item.parsing_overrides.model_dump(
+                mode="json", exclude_none=True
+            ),
+        }
+        for item in inputs
+    ]
+    per_input.sort(key=lambda item: str(item["document_id"]))
+    return {
+        **app_settings.parsing.model_dump(mode="json"),
+        "ocr": app_settings.ocr.model_dump(mode="json"),
+        "pdf_backend": app_settings.pdf_backend.model_dump(mode="json"),
+        "input_overrides": per_input,
+    }
+
+
+def _ingestion_corpus_hash(inputs: Sequence[IngestionInput]) -> str:
+    """Hash file corpus state plus ordered in-memory payload identities."""
+    corpus_paths = [Path(item.source_path) for item in inputs if item.source_path]
+    base_dir: Path | None = None
+    if corpus_paths:
+        try:
+            base_dir = Path(os.path.commonpath([str(p.parent) for p in corpus_paths]))
+        except ValueError:
+            base_dir = None
+    file_corpus_hash = compute_corpus_hash(corpus_paths, base_dir=base_dir)
+    payload_hashes = sorted(
+        (
+            item.document_id,
+            hashlib.sha256(item.payload_text.encode("utf-8")).hexdigest(),
+        )
+        for item in inputs
+        if item.payload_text is not None
+    )
+    if not payload_hashes:
+        return file_corpus_hash
+    return compute_config_hash(
+        {
+            "file_corpus_hash": file_corpus_hash,
+            "payload_text": payload_hashes,
+        }
+    )
 
 
 class SettingsWithProcessing(Protocol):
@@ -119,33 +174,13 @@ def _ensure_cache_path(cfg: IngestionConfig) -> Path:
     Returns:
         Path: Fully qualified DuckDB cache path guaranteed to exist.
     """
-    base_dir = cfg.cache_dir or app_settings.cache_dir
-    base_dir.mkdir(parents=True, exist_ok=True)
-    cache_filename = getattr(cfg, "cache_filename", None)
-    if cache_filename is None:
-        cache_settings = getattr(app_settings, "cache", None)
-        cache_filename = getattr(cache_settings, "filename", "docmind.duckdb")
-    return base_dir / Path(cache_filename)
-
-
-def _ensure_docstore(cfg: IngestionConfig) -> tuple[SimpleDocumentStore, Path | None]:
-    """Return a document store instance, restoring persisted state when present.
-
-    Args:
-        cfg: Runtime ingestion configuration.
-
-    Returns:
-        tuple[SimpleDocumentStore, Path | None]: Instantiated docstore and the
-        persistence path when configured. The path is ``None`` when persistence
-        is disabled.
-    """
-    path = cfg.docstore_path
-    if path is None:
-        return SimpleDocumentStore(), None
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
-        return SimpleDocumentStore.from_persist_path(str(path)), path
-    return SimpleDocumentStore(), path
+    cache_path = (
+        Path(cfg.cache_dir) / app_settings.cache.filename
+        if cfg.cache_dir is not None
+        else app_settings.cache.ingestion_db_path
+    )
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    return cache_path
 
 
 def build_ingestion_pipeline(
@@ -153,7 +188,7 @@ def build_ingestion_pipeline(
     *,
     embedding: BaseEmbedding | None,
     nlp_service: SpacyNlpService | None = None,
-) -> tuple[IngestionPipeline, Path, Path | None]:
+) -> tuple[IngestionPipeline, Path]:
     """Construct an :class:`IngestionPipeline` configured with local persistence.
 
     Args:
@@ -162,14 +197,14 @@ def build_ingestion_pipeline(
         nlp_service: Optional spaCy service used for NLP enrichment.
 
     Returns:
-        tuple[IngestionPipeline, Path, Path | None]: Pipeline instance, cache
-        database path, and optional docstore persist path.
+        tuple[IngestionPipeline, Path]: Pipeline instance and cache database path.
     """
     cache_path = _ensure_cache_path(cfg)
-    kv_store = DuckDBKVStore(database_name=str(cache_path))
+    kv_store = DuckDBKVStore(
+        database_name=cache_path.name,
+        persist_dir=str(cache_path.parent),
+    )
     ingest_cache = IngestionCache(cache=kv_store, collection=cfg.cache_collection)
-    docstore, docstore_path = _ensure_docstore(cfg)
-
     transformations: list[TransformComponent] = [
         TokenTextSplitter(
             chunk_size=cfg.chunk_size,
@@ -192,29 +227,14 @@ def build_ingestion_pipeline(
     except Exception as exc:  # pragma: no cover - fail open
         logger.debug("spaCy enrichment unavailable: {}", type(exc).__name__)
 
-    # Title extraction remains optional; failures simply skip the transform.
-    try:
-        extractor = TitleExtractor(show_progress=False)
-        transformations.append(extractor)
-    except (ImportError, ValueError, RuntimeError) as exc:  # pragma: no cover
-        from src.utils.log_safety import build_pii_log_entry
-
-        redaction = build_pii_log_entry(str(exc), key_id="ingestion.title_extractor")
-        logger.debug(
-            "TitleExtractor unavailable (error_type={} error={})",
-            type(exc).__name__,
-            redaction.redacted,
-        )
-
     if embedding is not None:
         transformations.append(embedding)
 
     pipeline = IngestionPipeline(
         transformations=transformations,
         cache=ingest_cache,
-        docstore=docstore,
     )
-    return pipeline, cache_path, docstore_path
+    return pipeline, cache_path
 
 
 def _resolve_embedding(embedding: BaseEmbedding | None) -> BaseEmbedding | None:
@@ -229,10 +249,10 @@ def _resolve_embedding(embedding: BaseEmbedding | None) -> BaseEmbedding | None:
         transformation.
     """
     if embedding is not None:
-        return embedding
+        return embedding if embedding_allowed_for_ingestion(embedding) else None
 
     resolved = get_settings_embed_model()
-    if resolved is not None:
+    if resolved is not None and embedding_allowed_for_ingestion(resolved):
         return resolved
 
     try:
@@ -253,15 +273,56 @@ def _resolve_embedding(embedding: BaseEmbedding | None) -> BaseEmbedding | None:
             type(exc).__name__,
             redaction.redacted,
         )
-        return get_settings_embed_model()
+        resolved = get_settings_embed_model()
+        return resolved if embedding_allowed_for_ingestion(resolved) else None
 
     resolved = get_settings_embed_model()
+    if resolved is not None and not embedding_allowed_for_ingestion(resolved):
+        resolved = None
     if resolved is None:
         logger.warning(
             "Embedding unavailable after auto-setup; "
             "pipeline will run without embeddings"
         )
     return resolved
+
+
+def embedding_allowed_for_ingestion(embedding: BaseEmbedding | None) -> bool:
+    """Return True when an embedding model is allowed by endpoint policy.
+
+    Local embedding implementations usually do not expose an endpoint URL and
+    are accepted. OpenAI-compatible embedding objects expose ``api_base`` or
+    ``base_url`` and must pass the same local-first endpoint policy used by the
+    rest of the application.
+
+    Args:
+        embedding: Candidate embedding instance.
+
+    Returns:
+        True when ingestion may use the embedding model.
+    """
+    if embedding is None:
+        return False
+
+    endpoint = getattr(embedding, "api_base", None)
+    if endpoint is None:
+        endpoint = getattr(embedding, "base_url", None)
+    if endpoint is None:
+        return True
+
+    if bool(app_settings.security.allow_remote_endpoints):
+        return True
+
+    allowed_hosts = parse_endpoint_allowlist_hosts(
+        app_settings.security.endpoint_allowlist
+    )
+    allowed = endpoint_url_allowed(endpoint, allowed_hosts=allowed_hosts)
+    if not allowed:
+        logger.warning(
+            "Embedding endpoint blocked by local-first endpoint policy: {}",
+            safe_url_for_log(str(endpoint)),
+        )
+    return bool(allowed)
 
 
 def _page_image_exports(
@@ -285,7 +346,7 @@ def _page_image_exports(
     if path.suffix.lower() != ".pdf":
         return []
 
-    base_dir = cfg.cache_dir or app_settings.cache_dir
+    base_dir = cfg.cache_dir or app_settings.cache.dir
     output_dir = base_dir / "page_images" / path.stem
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -615,6 +676,42 @@ def _index_page_images(
         }
 
 
+def _collect_parsing_provenance(documents: Sequence[Document]) -> dict[str, Any]:
+    """Collect sanitized parser provenance from loaded documents."""
+    by_doc: dict[str, dict[str, Any]] = {}
+    for doc in documents:
+        meta = getattr(doc, "metadata", {}) or {}
+        parsing = meta.get("parsing")
+        document_id = str(meta.get("document_id") or getattr(doc, "doc_id", ""))
+        if not document_id or not isinstance(parsing, dict):
+            continue
+        by_doc.setdefault(document_id, dict(parsing))
+    if not by_doc:
+        return {}
+
+    profiles = {
+        str(item.get("profile"))
+        for item in by_doc.values()
+        if item.get("profile") is not None
+    }
+    if len(profiles) > 1:
+        raise ValueError("ingestion produced multiple parser profiles")
+    profile = next(iter(profiles), None)
+    frameworks = sorted(
+        {
+            str(item.get("framework"))
+            for item in by_doc.values()
+            if item.get("framework") is not None
+        }
+    )
+    return {
+        "parsing.document_count": len(by_doc),
+        "parsing.frameworks": frameworks,
+        "parsing.profile": profile,
+        "parsing.provenance": by_doc,
+    }
+
+
 def _prune_artifacts_best_effort() -> int:
     """Prune artifact store to enforce size budget (best-effort)."""
     try:
@@ -658,13 +755,14 @@ async def ingest_documents(
         summary, exports (enriched in-place with artifact reference fields),
         metadata, and execution timing.
     """
+    require_unique_document_ids(inputs)
     resolved_embedding = _resolve_embedding(embedding)
     if resolved_embedding is None:
         logger.warning(
             "No embedding model configured; proceeding without embedding transform"
         )
 
-    pipeline, cache_path, docstore_path = build_ingestion_pipeline(
+    pipeline, cache_path = build_ingestion_pipeline(
         cfg, embedding=resolved_embedding, nlp_service=nlp_service
     )
     documents, exports = await _load_documents(cfg, inputs)
@@ -672,25 +770,23 @@ async def ingest_documents(
     start = time.perf_counter()
     with _TRACER.start_as_current_span("ingest_documents") as span:
         span.set_attribute("docmind.document_count", len(documents))
-        nodes = await pipeline.arun(documents=documents)
+        nodes = list(await pipeline.arun(documents=documents))
     duration_ms = (time.perf_counter() - start) * 1000.0
 
-    if docstore_path is not None and pipeline.docstore is not None:
-        pipeline.docstore.persist(str(docstore_path))
+    if inputs and not nodes:
+        raise RuntimeError("Ingestion produced no nodes for a non-empty input batch")
 
     img_index_meta = _index_page_images(exports, cfg)
     artifact_gc_deleted = _prune_artifacts_best_effort()
 
-    corpus_paths = [Path(item.source_path) for item in inputs if item.source_path]
-    base_dir: Path | None = None
-    if corpus_paths:
-        try:
-            base_dir = Path(os.path.commonpath([str(p.parent) for p in corpus_paths]))
-        except ValueError:
-            base_dir = None
     manifest = ManifestSummary(
-        corpus_hash=compute_corpus_hash(corpus_paths, base_dir=base_dir),
-        config_hash=compute_config_hash(cfg.model_dump()),
+        corpus_hash=_ingestion_corpus_hash(inputs),
+        config_hash=compute_config_hash(
+            {
+                "ingestion": cfg.model_dump(mode="json"),
+                "parsing": _manifest_parsing_config(inputs),
+            }
+        ),
         payload_count=len(nodes),
         complete=False,
     )
@@ -700,9 +796,8 @@ async def ingest_documents(
         # Avoid emitting absolute local filesystem paths in
         # structured results that could be logged or persisted.
         "cache_db": cache_path.name,
-        "docstore_enabled": bool(docstore_path),
-        "docstore_filename": docstore_path.name if docstore_path else None,
         **img_index_meta,
+        **_collect_parsing_provenance(documents),
         "artifact_gc_deleted": int(artifact_gc_deleted),
     }
 
@@ -729,7 +824,7 @@ async def ingest_documents(
         metadata["nlp.enabled"] = False
 
     return IngestionResult(
-        nodes=list(nodes),
+        nodes=nodes,
         documents=documents,
         manifest=manifest,
         exports=exports,

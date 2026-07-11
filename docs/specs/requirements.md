@@ -1,4 +1,4 @@
-# DocMind AI — Software Requirements Specification (SRS)
+# DocMind AI software requirements specification
 
 Version: 2.0.0 • Date: 2026-01-14 • Owner: Eng/Arch
 Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking, GraphRAG, and multi-provider LLM runtimes.
@@ -13,10 +13,12 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 - VLM: Vision-Language Model
 - RRF: Reciprocal Rank Fusion
 
-### Context & Stakeholders
+### Context and stakeholders
 
 - Users: Analysts, researchers, engineers running local RAG.
-- Operators: Individual users on mixed hardware (CPU-only, Nvidia CUDA, AMD ROCm, Apple Silicon).
+- Operators: Individual users on CPU-first systems. Linux x86_64 is
+  release-validated; WSL2 and macOS are best-effort paths. The optional app GPU
+  extra supports NVIDIA CUDA 12.8 on Linux x86_64.
 - Maintainers: DocMind AI dev team.
 
 ## 1. Business goals and constraints
@@ -29,15 +31,15 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 - C3: Primary runtime is CPython **3.12.13** (`requires-python = ">=3.12,<3.14"`).
 - C4: High-performance LLM serving (vLLM) is supported **out-of-process** via OpenAI-compatible HTTP; the app must not require `vllm` as an in-env dependency.
 
-## 2. Functional Requirements (FR-###)
+## 2. Functional requirements (FR-###)
 
 | ID | Requirement | Source | Acceptance |
 | --- | --- | --- | --- |
-| **FR-001** | The system **shall** ingest documents using Unstructured with `strategy=auto` and apply OCR fallback when needed. | ADR‑002 | AC‑FR‑001 |
+| **FR-001** | The system **shall** ingest supported documents through the CPU-safe parser boundary: Docling conversion, pypdfium2 inspection/rasterization, and RapidOCR for low-text PDF pages. Binary parse failures fail closed. | ADR‑045; SPEC‑002 | AC‑FR‑001 |
 | **FR-002** | The system **shall** build a LlamaIndex `IngestionPipeline` with per-node+transform caching (DuckDBKV). | ADR‑010 | AC‑FR‑002 |
-| **FR-003** | The system **shall** create canonical nodes with deterministic IDs and include `pdf_page_image` nodes for pages. | ADR‑002 | AC‑FR‑003 |
+| **FR-003** | The system **shall** create canonical nodes with deterministic IDs and include `pdf_page_image` nodes for pages. | SPEC‑002; ADR‑002; ADR‑034 | AC‑FR‑003 |
 | **FR-036** | The system **shall** optionally enrich ingested text nodes with sentence spans and entity spans using the centralized spaCy NLP subsystem, controlled by settings and supporting cross-platform device selection (`cpu\|cuda\|apple\|auto`). | SPEC‑015/ADR‑061 | AC‑FR‑036 |
-| **FR-004** | The system **shall** embed text with BGE‑M3 and images with SigLIP by default (OpenCLIP MAY be selected explicitly). | ADR‑002 | AC‑FR‑004 |
+| **FR-004** | The system **shall** embed text with BGE-M3 and images with SigLIP. No alternate image backend selector is supported. | ADR‑002 | AC‑FR‑004 |
 | **FR-005** | The system **shall** persist vectors in Qdrant with named vectors `text-dense` and `text-sparse` and perform server‑side hybrid queries via the Query API. Default fusion **SHALL** be RRF; DBSF MAY be enabled experimentally via environment when supported by Qdrant. The sparse index **SHALL** prefer FastEmbed BM42 with IDF modifier; fallback to BM25 when BM42 is unavailable. During hybrid queries, the system **shall** emit telemetry fields: `retrieval.fusion_mode`, `retrieval.prefetch_*_limit`, `retrieval.fused_limit`, `retrieval.return_count`, `retrieval.latency_ms`, `retrieval.sparse_fallback`, and `dedup.*`. | SPEC‑004/ADR‑005/006 | AC‑FR‑005 |
 | **FR-006** | The system **shall not** implement client-side fusion as default; all hybrid fusion **SHALL** occur server‑side in Qdrant. | SPEC‑004 | AC‑FR‑006 |
 | **FR-007** | The system **shall** rerank text with BGE‑reranker‑v2‑m3 and visual/page-image nodes with SigLIP text–image similarity by default; ColPali MAY be enabled when thresholds are met (visual‑heavy corpora, small K, sufficient GPU). | SPEC‑005/ADR‑037 | AC‑FR‑007 |
@@ -54,7 +56,7 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 | **FR-012** | The system **shall** allow users to select an LLM provider among llama.cpp, vLLM, Ollama, LM Studio, and choose the model at runtime in UI and settings. | ADR‑009 | AC‑FR‑012 |
 | **FR-013** | The system **shall** provide OpenAI‑compatible client wiring for vLLM, Ollama, LM Studio, and llama.cpp server modes. | ADR‑009 | AC‑FR‑013 |
 | **FR-014** | The system **shall** run a LangGraph‑supervised multi‑agent flow with deterministic JSON‑schema outputs when available. | ADR‑001 | AC‑FR‑014 |
-| **FR-015** | The system **shall** persist ingestion cache via DuckDBKV and operational metadata via SQLite WAL. | ADR‑010 | AC‑FR‑015 |
+| **FR-015** | The system **shall** persist the LlamaIndex ingestion transformation cache via DuckDBKV. | ADR‑010 | AC‑FR‑015 |
 | **FR-016** | The system **shall** provide an evaluation harness for IR (BEIR/M‑BEIR) and E2E (RAGAS) runnable offline. | ADR‑011 | AC‑FR‑016 |
 | **FR-017** | The system **shall** collect minimal observability (latency, memory, top‑k, fusion mode, reranker hits) locally. | Status: Implemented | - |
 | **FR-020** | The system **shall** provide a file‑based prompt template system built on LlamaIndex `RichPromptTemplate` with YAML front matter metadata and presets. | ADR‑020/SPEC‑020 | AC‑FR‑020 |
@@ -73,17 +75,17 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 | **FR‑SEC‑IMG‑ENC** | The system **shall** support optional encryption‑at‑rest for page images using AES‑GCM; metadata SHALL record `encrypted=true`, `alg`, and `kid`. | SPEC‑011 | AC‑FR‑SEC‑IMG‑ENC |
 | **FR‑SEC‑NET‑001** | The system **shall** default to offline‑first behavior; remote endpoints are disabled unless explicitly allowlisted. | SPEC‑011/ADR‑024 | AC‑FR‑SEC‑NET‑001 |
 
-## 3. Non‑Functional Requirements (NFR‑###) — ISO/IEC 25010
+## 3. Non-functional requirements (NFR-###)
 
 | Category | ID | Requirement | Verification |
 | --- | --- | --- | --- |
-| **Functional suitability** | **NFR‑FS‑001** | The app **shall** achieve ≥0.7 nDCG@10 on a small bundled eval set (text RAG). | test+analysis |
-| **Functional suitability** | **NFR‑FS‑002** | With visual reranker on mixed corpora, Recall@20 **shall** improve ≥5% over no‑rerank baseline. | test |
+| **Functional suitability** | **NFR‑FS‑001** | The evaluation harness **shall** report nDCG@10 for its named text retrieval dataset. | test+analysis |
+| **Functional suitability** | **NFR‑FS‑002** | Visual reranker evaluation **shall** report Recall@20 against a no-rerank baseline. | test |
 | **Reliability** | **NFR‑REL‑001** | The app **shall** recover from vector store restarts without re‑ingestion (idempotent upsert). | demo |
 | **Reliability** | **NFR‑REL‑002** | Cache hits **shall** be deterministic across runs given same inputs and config. | test |
-| **Performance efficiency** | **NFR‑PERF‑001** | Chat p50 end‑to‑end latency ≤2.0 s on mid‑GPU profile; ≤6.0 s on CPU‑only profile. | test |
-| **Performance efficiency** | **NFR‑PERF‑002** | Rerank P95 for text top‑40 ≤150 ms on 4070‑class GPU; visual SigLIP top‑10 ≤150 ms; ColPali top‑10 ≤400 ms when enabled. | test |
-| **Performance efficiency** | **NFR‑PERF‑003** | Qdrant hybrid query p50 ≤120–200 ms for fused_top_k=60 on local machine. | test |
+| **Performance efficiency** | **NFR‑PERF‑001** | Chat benchmarks **shall** report p50 end-to-end latency with the hardware, model, and corpus identified. | test |
+| **Performance efficiency** | **NFR‑PERF‑002** | Rerank benchmarks **shall** report text, SigLIP, and optional ColPali stage latency with the hardware identified. | test |
+| **Performance efficiency** | **NFR‑PERF‑003** | Qdrant benchmarks **shall** report local hybrid-query p50 with collection size and `fused_top_k` identified. | test |
 | **Usability** | **NFR‑USE‑001** | Streamlit UI navigable with keyboard; forms avoid unnecessary reruns. | inspection |
 | **Observability** | **NFR‑OBS‑001** | The app **shall** emit structured, local-first telemetry events (JSONL) for key actions (router selection, staleness detection, exports, job lifecycle) with sampling/rotation controls. | test |
 | **Observability** | **NFR‑OBS‑002** | The app **shall** support optional OpenTelemetry tracing and metrics export when explicitly enabled; disabled by default and safe for offline operation. | test |
@@ -91,17 +93,22 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 | **Security** | **NFR‑SEC‑002** | Local data **shall** remain on device; logging excludes sensitive content. | inspection |
 | **Security** | **NFR‑SEC‑003** | Optional AES‑GCM encryption‑at‑rest available; off by default. | test |
 | **Security** | **NFR-SEC-004** | Streamlit UI **shall not** execute unsafe HTML/JS; `unsafe_allow_html=True` is prohibited in production UI. | inspection+test |
-| **Compatibility** | **NFR‑COMP‑001** | Windows/macOS/Linux supported; Apple Metal via llama.cpp; AMD ROCm via vLLM. | demo |
+| **Compatibility** | **NFR‑COMP‑001** | Linux x86_64 is the release-validated CPU-first host. WSL2 and macOS are best effort until dedicated CI exists. Use WSL2 rather than native Windows for POSIX-only searchable-PDF export. External LLM servers own their hardware acceleration. | Linux CI + best-effort manual checks |
 | **Maintainability** | **NFR‑MAINT‑001** | Library‑first: app code **shall not** re‑implement features available in LlamaIndex/Qdrant/Streamlit. | inspection |
-| **Maintainability** | **NFR‑MAINT‑002** | Pylint score ≥9.5; Ruff passes. | inspection |
+| **Maintainability** | **NFR‑MAINT‑002** | Ruff, strict core Ruff, and Pyright pass. | inspection |
 | **Maintainability** | **NFR-MAINT-003** | No placeholder APIs (work-marker comments / NotImplementedError) in shipped production modules; docs/specs/RTM must match code. | inspection+quality gates |
 | **Portability** | **NFR‑PORT‑001** | Single definitive architecture; no prod/local forks; configuration via settings/UI only. | inspection |
 | **Portability** | **NFR-PORT-002** | Cross-platform paths and cache env overrides supported for local packaging and model predownload workflows. | inspection |
 | **Portability** | **NFR-PORT-003** | Docker/compose artifacts **shall** run out-of-the-box for local deployments and be reproducible from `uv.lock`. | manual run+inspection |
 
-## 4. Data and Interface Requirements
+## 4. Data and interface requirements
 
-- Vector store: Qdrant collection with named vectors `text-dense` (float32) and `text-sparse` (CSR), deterministic point IDs = SHA‑256(content). Hybrid queries enabled with server‑side fusion.
+- Vector store: Qdrant collection with named vectors `text-dense` and
+  `text-sparse` (IDF-enabled sparse index). Text points retain the canonical
+  base-document ID under `docmind_document_id` and use deterministic UUIDv5
+  point IDs derived from document ID, page ID, and chunk position. Re-ingestion
+  upserts the current nodes, then deletes only stale points captured for the
+  affected documents. Hybrid queries use server-side fusion.
 
 - Ingestion cache: DuckDBKV; pipeline caches node+transform hashes.
 
@@ -115,13 +122,13 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 
   - `security.*` enforces local-first defaults. `allow_remote_endpoints` is false by default, remote hosts **must** appear in the `endpoint_allowlist`, and effective policy state is surfaced read-only in the UI.
 
-  - `retrieval.hybrid.*` unifies server-side hybrid gating: `retrieval.enable_server_hybrid` (bool) plus `retrieval.fusion_mode` ∈ {`rrf`, `dbsf`}. No legacy client-side fusion flags remain.
+  - `retrieval.*` owns server-side hybrid gating: `retrieval.enable_server_hybrid` (bool) plus `retrieval.fusion_mode` ∈ {`rrf`, `dbsf`}. No legacy hybrid namespace or client-side fusion flags remain.
 
 ## 5. Compliance, privacy, and security controls
 
 - Local‑first default, opt‑in remote endpoints; CORS disabled in Streamlit.
 
-- License inventory: Apache‑2.0 (LlamaIndex, Qdrant client), MIT (BGE‑M3), OpenCLIP (MIT), SigLIP (Apache‑2.0).
+- License inventory: Apache-2.0 (LlamaIndex, Qdrant client, SigLIP) and MIT (BGE-M3).
 
 ## 6. Assumptions, dependencies, out-of-scope
 
@@ -140,7 +147,7 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 
 - Code refs: e.g., src/config/llm_factory.py (provider wiring) and Streamlit UI (pages).
 
-## Acceptance Criteria (Gherkin excerpts)
+## Acceptance criteria
 
 ### AC‑FR‑001
 

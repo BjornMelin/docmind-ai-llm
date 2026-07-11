@@ -1,46 +1,55 @@
-# Testing Layout (Unit Tier)
+# Find and run DocMind tests
 
-This repository organizes unit tests by domain to mirror the `src/` folder. Subdirectories under `tests/unit/` map directly to source boundaries with a focus on simple, flat groupings where it helps discovery.
+This reference maps test directories to their source owners and lists the supported local commands.
 
-- `app/`: App entrypoints and basic wiring (main, app components)
-- `agents/`: Coordinator, tools, error recovery, ToolFactory
-- `cache/`: Ingestion cache unit tests
-- `config/`: Settings and integration‑mapping validation
-- `containers/`: Container wiring tests split out from `core/`
-- `core/`: Core invariants, exception handling, dependencies, spaCy manager
-- `integrations/`: Cross‑cutting adapters (e.g., DSPy retriever)
-- `models/`: Pydantic models (schemas, processing, storage)
-  - `models/embeddings/`: Text/image/unified embedder suites
-- `processing/`: Document processing; Unstructured + LlamaIndex pipeline
-- `prompts/`: Prompt templates
-- `retrieval/`: Retrieval domain
-  - `query_engine/`: Query engine behaviors and fallbacks
-  - `qdrant/`: Qdrant prefetch/dedup behavior
-  - `dedup/`: Dedup helpers prior to final cut
-  - `embeddings/`: Retrieval‑side embedding contracts
-  - `pipeline/`: Server hybrid pipeline assembly
-  - `sparse/`: FastEmbed/BM25 sparse flow
-  - `telemetry/`: Retrieval telemetry assertions
-  - `rbac/`: Owner filters and RBAC
-  - `reranking/`: Text/visual reranking
-    - `text/`, `visual/`, `siglip/`, `rrf/`, `infra/`
-- `telemetry/`: Global telemetry toggles and schema contracts
-- `ui/`: UI utility/component tests
-- `utils/`: Utilities split by feature
-  - `core/`, `document/`, `monitoring/`, `multimodal/`, `security/`, `siglip_adapter/`, `storage/`
+## Test tiers
 
-## Fixture strategy
+- `unit`: isolated domain behavior
+- `integration`: cross-component behavior and Streamlit AppTest
+- `e2e`: application workflows
+- `system`: opt-in local-service validation
+- `performance`: benchmarks
+- `validation`: production-readiness contracts
 
-- `tests/unit/conftest.py`: minimal unit-wide defaults only.
-- Domain `conftest.py` files live beside their tests (e.g., `processing/conftest.py`, `utils/conftest.py`) and are not imported across domains.
-- Avoid global fixture sprawl; keep scopes tight and deterministic (no real network/sleeps/GPU).
+## Unit domains
 
-## Running tests
+- `agents`: supervisor, agents, tools, and registry
+- `analysis`: analysis services
+- `app`: application entrypoints
+- `config`: settings and runtime binding
+- `core`: shared invariants and dependency contracts
+- `eval`: evaluation helpers
+- `integrations`: cross-cutting adapters
+- `models`: Pydantic and embedding models
+- `nlp`: spaCy services and transforms
+- `pages` and `ui`: Streamlit helpers and components
+- `persistence`: chat, snapshots, artifacts, and checkpoints
+- `processing`: parser and LlamaIndex ingestion
+- `prompting`: prompt templates and rendering
+- `retrieval`: hybrid search, GraphRAG, reranking, and SigLIP
+- `scripts`: benchmark, container, model, package, and Qdrant commands
+- `security`: security boundaries
+- `telemetry`: event and trace contracts
+- `utils`: storage, images, monitoring, and shared helpers
 
-- Unit with coverage: `uv run pytest -q tests/unit --cov=src` (note: `-q` for clean CI; use `-v` for verbose debugging)
-- Integration (offline) lives in `tests/integration` (separate job in CI).
+Keep domain fixtures beside their tests. Reserve `tests/conftest.py` and `tests/unit/conftest.py` for cross-domain defaults.
 
-## Pytest settings
+## Run tests
 
-- Import mode: `--import-mode=importlib` to avoid path quirks.
-- Test discovery roots: `[tool.pytest.ini_options].testpaths = ["tests"]`.
+```bash
+uv run pytest tests/unit/processing/test_parser_contract.py -vv
+uv run python scripts/run_tests.py --unit
+uv run python scripts/run_tests.py --integration
+uv run python scripts/run_tests.py --fast
+uv run python scripts/run_tests.py --coverage
+```
+
+Run system tests explicitly:
+
+```bash
+DOCMIND_RUN_SYSTEM=1 uv run pytest tests/system -vv
+```
+
+`requires_llama` selects tests that need the real required `llama_index.core` package. There is no `llama` extra or `--extras` test lane.
+
+See `docs/testing/testing-guide.md` for markers, dependency profiles, wheel validation, and contribution rules.

@@ -1,454 +1,298 @@
-# DocMind AI Configuration Guide (2026)
+# Configure DocMind
 
-DocMind AI uses a centralized, type-safe configuration system powered by **Pydantic Settings v2**. This architecture ensures that every runtime knob is validated at startup, providing a single source of truth for developers and operators.
+This reference explains DocMind’s Pydantic Settings model, environment mapping, source precedence, security policy, and high-impact runtime groups. `src/config/settings.py` is the exhaustive field authority.
 
----
+## Load settings
 
-## Navigation Hub
-
-Choose your path based on your current intent:
-
-- **[Quick Start](#quick-start)**: Set up your local environment in 60 seconds.
-- **[Usage Guide](#usage-guide)**: How to use settings in your code and environment.
-- **[Architecture & Side-Effects](#architecture--side-effects)**: Technical details on mapping and relocation.
-- **[Complete Variable Reference](#complete-variable-reference)**: Exhaustive list of all environment variables.
-- **[Hardware Profiles](#hardware-configuration-scenarios)**: Validated profiles for common hardware.
-- **[Validation & Troubleshooting](#validating-your-configuration)**: Fixing common errors.
-
----
-
-## Configuration Architecture
-
-```mermaid
-graph TD
-    ENV[Environment Variables] -- "DOCMIND_*" --> SETTINGS[src.config.settings]
-    SETTINGS -- "Pydantic V2 Validation" --> OBJ[DocMindSettings Instance]
-
-    subgraph "Core Groups"
-        OBJ --> VLLM[VLLMConfig]
-        OBJ --> RETRIEVAL[RetrievalConfig]
-        OBJ --> EMBEDDING[EmbeddingConfig]
-        OBJ --> SECURITY[SecurityConfig]
-    end
-
-    subgraph "Startup Side-Effects"
-        OBJ -- "startup_init()" --> DIR[Directory Creation]
-        OBJ -- "Bridge" --> OSENV[os.environ Propagation]
-        OBJ -- "Normalize" --> DBPATH[SQLite Path Relocation]
-    end
-```
-
-### Key Principles
-
-- **Zero `os.getenv` Sprawl**: Core logic consumes `src.config.settings`, never raw environment variables (ADR-050).
-- **Nested Schema**: Configuration is organized into logical groups (e.g., `vllm`, `retrieval`, `security`).
-- **Convention-Over-Configuration**:
-  - **Prefix**: `DOCMIND_`
-  - **Separator**: `__` (double underscore) for nested fields (e.g., `DOCMIND_RETRIEVAL__TOP_K`).
-- **Ergonomic Aliases**: High-traffic settings have top-level aliases (e.g., `DOCMIND_MODEL` -> `settings.vllm.model`).
-- **Validation**: All inputs are validated for range, type, and security constraints.
-
----
-
-## Quick Start
-
-1. **Copy the example environment file**:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-2. **Edit `.env` values** as needed for your backend (Ollama, vLLM, etc).
-3. **Run the app**. The settings will auto-load:
-
-   ```bash
-   uv run streamlit run app.py
-   ```
-
----
-
-## Usage Guide
-
-### Programmatic Access Patterns
-
-Import the global `settings` instance to access configuration values in your code:
+Application code imports the shared instance:
 
 ```python
 from src.config import settings
 
-# Access nested fields
-model_name = settings.vllm.model
-sqlite_path = settings.database.sqlite_db_path
-use_kg = settings.graphrag_cfg.enabled
-
-# Helper methods for common consumers
-model_cfg = settings.get_model_config()      # {model_name, context_window, max_tokens, etc}
-embed_cfg = settings.get_embedding_config()  # {model_name, device, batch_size, etc}
-vllm_vars = settings.get_vllm_env_vars()     # env vars for vLLM launchers
+model_name = settings.effective_model
+qdrant_url = settings.database.qdrant_url
+graphrag_enabled = settings.is_graphrag_enabled()
 ```
 
-### Environment Variable Mapping
+The shared instance does not read `.env` during import. The Streamlit entrypoint calls `bootstrap_settings()` once to load it.
 
-The system automatically maps environment variables to the Pydantic model using the `DOCMIND_` prefix and `__` delimiter.
+## Understand source precedence
 
-**Examples:**
+Pydantic Settings resolves values in this order:
 
-- `DOCMIND_EMBEDDING__MODEL_NAME=BAAI/bge-m3` → `settings.embedding.model_name`
-- `DOCMIND_VLLM__CONTEXT_WINDOW=131072` → `settings.vllm.context_window`
-- `DOCMIND_GRAPHRAG_CFG__ENABLED=true` → `settings.graphrag_cfg.enabled`
+1. Explicit constructor arguments
+2. Exported `DOCMIND_*` environment variables
+3. The selected dotenv file
+4. Model defaults
 
-### Settings Source Precedence
+Exported environment variables therefore override `.env` by default.
 
-DocMind relies on Pydantic Settings defaults for settings-source priority:
+`DOCMIND_CONFIG__DOTENV_PRIORITY=dotenv_first` changes precedence only for DocMind settings during local development. Security settings remain environment-first.
 
-1. **Init kwargs** (explicit constructor arguments)
-2. **Environment variables** (`DOCMIND_*`)
-3. **Dotenv** (`.env`, when explicitly loaded via `bootstrap_settings()` or `_env_file=...`)
-4. **Defaults** (model field defaults)
+Use these controls when a third-party library might read a process-global credential:
 
-This means `.env` does **not** override already-exported environment variables.
+- `DOCMIND_CONFIG__ENV_MASK_KEYS` removes selected process environment keys
+- `DOCMIND_CONFIG__ENV_OVERLAY` copies a validated DocMind setting into a process environment key
 
-Dotenv policy:
+Do not use dotenv-first or environment overlays to weaken production security policy.
 
-- The process-global `src.config.settings.settings` singleton does **not** read `.env` at import time.
-- The Streamlit entrypoint (`app.py` → `src/app.py`) calls `bootstrap_settings()` once at startup to opt into loading `.env`.
+## Map environment variables
 
-### Advanced: Dotenv Override Modes and Env Masking
+All application settings use the `DOCMIND_` prefix. Use a double underscore for nested fields:
 
-By default, DocMind follows the 12-factor convention: exported environment
-variables win over `.env`.
+- `DOCMIND_EMBEDDING__MODEL_NAME` maps to `settings.embedding.model_name`
+- `DOCMIND_AGENTS__DECISION_TIMEOUT` maps to `settings.agents.decision_timeout`
+- `DOCMIND_DATABASE__QDRANT_URL` maps to `settings.database.qdrant_url`
 
-For local development, you can opt into "dotenv-first" behavior **for DocMind
-settings only** (does not change third-party libraries that read `os.environ`
-directly):
+Supported top-level aliases include:
 
-- `DOCMIND_CONFIG__DOTENV_PRIORITY=env_first|dotenv_first` (default: `env_first`)
+| Alias | Canonical target |
+| --- | --- |
+| `DOCMIND_MODEL` | `settings.model` (backend-wide override) |
+| `DOCMIND_CONTEXT_WINDOW` | `settings.context_window` (global cap override) |
+| `DOCMIND_CONTEXT_WINDOW_SIZE` | `settings.context_window` (global cap override) |
+| `DOCMIND_CHUNK_SIZE` | `processing.chunk_size` |
+| `DOCMIND_CHUNK_OVERLAP` | `processing.chunk_overlap` |
+| `DOCMIND_ENABLE_MULTI_AGENT` | `agents.enable_multi_agent` |
 
-Safety guardrail:
+Prefer nested names for subsystem-specific settings. Use `DOCMIND_MODEL` and
+`DOCMIND_CONTEXT_WINDOW` only when intentionally overriding the selected
+backend's defaults.
 
-- Even when `dotenv_first` is enabled, `settings.security.*` remains **env-first**
-  so a local `.env` cannot accidentally weaken the offline-first / allowlist posture.
+## Configure core paths
 
-If you need to prevent accidental use of global machine env vars (e.g.
-`OPENAI_API_KEY`) by dependencies, use an explicit allowlist:
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DOCMIND_APP_NAME` | `DocMind AI` | Application label |
+| `DOCMIND_DEBUG` | `false` | Debug logging and diagnostics |
+| `DOCMIND_LOG_LEVEL` | `INFO` | Log threshold |
+| `DOCMIND_DATA_DIR` | `./data` | Data root |
+| `DOCMIND_CACHE__DIR` | `./cache` | Cache root (`settings.cache.dir`) |
+| `DOCMIND_LOG_FILE` | `./logs/docmind.log` | Application log |
 
-- `DOCMIND_CONFIG__ENV_MASK_KEYS=OPENAI_API_KEY,ANTHROPIC_API_KEY`
-  - Removes the listed keys from `os.environ` at startup (before most imports).
-- `DOCMIND_CONFIG__ENV_OVERLAY=OPENAI_API_KEY:openai.api_key`
-  - After settings are validated, sets `os.environ[OPENAI_API_KEY]` from
-    `settings.openai.api_key`.
+Bare SQLite filenames move under `DOCMIND_DATA_DIR`. Absolute paths and paths with an explicit parent remain unchanged.
 
-Do not use these override modes in production environments.
+## Configure language model backends
 
-### Top-Level Aliases
+`DOCMIND_LLM_BACKEND` accepts:
 
-For convenience, the following top-level overrides are supported:
+- `ollama`
+- `vllm`
+- `lmstudio`
+- `llamacpp`
+- `openai_compatible`
 
-| Alias Variable                | Nested Target               | Constraint          |
-| :---------------------------- | :-------------------------- | :------------------ |
-| `DOCMIND_MODEL`               | `vllm.model`                | string              |
-| `DOCMIND_CONTEXT_WINDOW`      | `vllm.context_window`       | int (ge=8192)       |
-| `DOCMIND_CONTEXT_WINDOW_SIZE` | `vllm.context_window`       | int                 |
-| `DOCMIND_CHUNK_SIZE`          | `processing.chunk_size`     | int (ge=100)        |
-| `DOCMIND_CHUNK_OVERLAP`       | `processing.chunk_overlap`  | int (le=chunk_size) |
-| `DOCMIND_ENABLE_MULTI_AGENT`  | `agents.enable_multi_agent` | boolean             |
+The last four use an OpenAI-compatible HTTP boundary. vLLM and llama.cpp run outside the application process.
 
----
+`settings.effective_model` owns backend-aware model selection. A non-empty
+`DOCMIND_MODEL` override wins. Without an override, Ollama uses
+`qwen3:4b-instruct`; every other backend uses `DOCMIND_VLLM__MODEL`.
 
-## Architecture & Side-Effects
+### Configure an OpenAI-compatible endpoint
 
-### SQLite Path Relocation
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DOCMIND_OPENAI__BASE_URL` | `http://localhost:1234/v1` | Provider base URL |
+| `DOCMIND_OPENAI__API_KEY` | unset | Bearer credential |
+| `DOCMIND_OPENAI__REQUIRE_V1` | `true` | Normalize one trailing `/v1` |
+| `DOCMIND_OPENAI__API_MODE` | `chat_completions` | `chat_completions` or `responses` |
+| `DOCMIND_OPENAI__DEFAULT_HEADERS` | `{}` | Provider-specific headers |
 
-To simplify container volume mounting, DocMind AI automatically relocates bare SQLite filenames to live under the `DOCMIND_DATA_DIR`.
+Local servers may use a non-secret placeholder key. Remote endpoints require an explicit security-policy change.
 
-**Logic**:
+### Configure vLLM client metadata
 
-1. If a path is **absolute**, it is preserved.
-2. If a path includes a **parent directory** (e.g., `./custom/db.sqlite`), it is preserved.
-3. If a path is a **bare filename** (e.g., `docmind.db`), it is rewritten to `<DOCMIND_DATA_DIR>/docmind.db`.
+| Variable | Default |
+| --- | --- |
+| `DOCMIND_VLLM__MODEL` | `Qwen/Qwen3-4B-Instruct-2507-FP8` |
+| `DOCMIND_VLLM__CONTEXT_WINDOW` | `131072` |
+| `DOCMIND_VLLM__MAX_TOKENS` | `2048` |
+| `DOCMIND_VLLM__TEMPERATURE` | `0.1` |
+| `DOCMIND_VLLM__VLLM_BASE_URL` | `http://localhost:8000` |
 
-Affected settings:
+FlashInfer, FP8 key-value cache, and GPU memory settings configure the external vLLM process. They do not install or start vLLM inside DocMind.
 
-- `DOCMIND_DATABASE__SQLITE_DB_PATH`
-- `DOCMIND_CHAT__SQLITE_PATH`
+## Configure endpoint security
 
-### Environment Bridge Mode
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS` | `false` | Permit non-loopback endpoints |
+| `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST` | Loopback URLs | Allow selected hostnames or URLs |
+| `DOCMIND_SECURITY__TRUST_REMOTE_CODE` | `false` | Permit dependency model code |
 
-During `startup_init()`, specific settings are propagated back to `os.environ`. This maintains compatibility with decoupled libraries (like OpenTelemetry or HuggingFace) that rely on traditional environment variables.
+When remote endpoints are disabled:
 
----
+- Loopback endpoints are allowed
+- A non-loopback hostname must be allowlisted
+- DNS resolution must succeed
+- Resolved private, link-local, reserved, or otherwise blocked addresses fail validation
 
-## Complete Variable Reference
+Use `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true` only when the selected endpoint changes the intended privacy boundary.
 
-### 1. Global & Core Settings
+## Configure agent deadlines
 
-| Variable            | Type    | Default              | Description                                                     |
-| :------------------ | :------ | :------------------- | :-------------------------------------------------------------- |
-| `DOCMIND_APP_NAME`  | string  | `DocMind AI`         | Application identifier.                                         |
-| `DOCMIND_DEBUG`     | boolean | `false`              | Enables verbose debug logging.                                  |
-| `DOCMIND_LOG_LEVEL` | string  | `INFO`               | Standard Python log level (DEBUG, INFO, etc).                   |
-| `DOCMIND_DATA_DIR`  | path    | `./data`             | **Master Data Root**. All bare SQLite paths are relocated here. |
-| `DOCMIND_CACHE_DIR` | path    | `./cache`            | Storage for temporary processing artifacts.                     |
-| `DOCMIND_LOG_FILE`  | path    | `./logs/docmind.log` | Target file for structured logs.                                |
+| Variable | Default | Constraint |
+| --- | --- | --- |
+| `DOCMIND_AGENTS__ENABLE_MULTI_AGENT` | `true` | Boolean |
+| `DOCMIND_AGENTS__DECISION_TIMEOUT` | `200` seconds | 10 to 1,000 seconds |
+| `DOCMIND_AGENTS__MAX_RETRIES` | `2` | 0 to 10 |
+| `DOCMIND_AGENTS__MAX_CONCURRENT_AGENTS` | `3` | 1 to 10 |
+| `DOCMIND_AGENTS__ENABLE_FALLBACK_RAG` | `true` | Boolean |
 
-### 2. LLM Backend Selection
+`decision_timeout` is a supervisor budget in seconds. Provider calls clamp their timeout to the remaining budget.
 
-| Variable                           | Type    | Default                  | Description                                                                                       |
-| :--------------------------------- | :------ | :----------------------- | :------------------------------------------------------------------------------------------------ |
-| `DOCMIND_LLM_BACKEND`              | enum    | `ollama`                 | Options: `openai_compatible`, `vllm`, `ollama`, `lmstudio`, `llamacpp`.                           |
-| `DOCMIND_MODEL`                    | string  | `None`                   | **Alias Override** for `vllm.model`.                                                              |
-| `DOCMIND_CONTEXT_WINDOW`           | int     | `None`                   | **Alias Override** for `vllm.context_window`.                                                     |
-| `DOCMIND_OLLAMA_BASE_URL`          | string  | `http://localhost:11434` | Endpoint for Ollama backend.                                                                      |
-| `DOCMIND_OLLAMA_API_KEY`           | string  | `None`                   | Optional Ollama Cloud API key (Bearer token) for <https://ollama.com>.                            |
-| `DOCMIND_OLLAMA_ENABLE_WEB_SEARCH` | boolean | `false`                  | Enable Ollama Cloud `web_search`/`web_fetch` tools (requires API key + remote endpoints allowed). |
-| `DOCMIND_OLLAMA_EMBED_DIMENSIONS`  | int     | `None`                   | Optional `/api/embed` dimensions truncation for supported models.                                 |
-| `DOCMIND_OLLAMA_ENABLE_LOGPROBS`   | boolean | `false`                  | Enable token logprobs for Ollama chat/generate (default off).                                     |
-| `DOCMIND_OLLAMA_TOP_LOGPROBS`      | int     | `0`                      | Include top-k alternative tokens per position (0-20) when logprobs enabled.                       |
-| `DOCMIND_VLLM_BASE_URL`            | string  | `None`                   | Direct endpoint for vLLM (native or OpenAI-compatible).                                           |
-| `DOCMIND_ENABLE_GPU_ACCELERATION`  | boolean | `true`                   | Controls hardware offloading for LlamaCPP/Embeddings.                                             |
+## Configure document processing
 
-#### OpenAI-compatible provider configuration (cloud/gateways/local servers)
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DOCMIND_PROCESSING__CHUNK_SIZE` | `1500` | TokenTextSplitter chunk size |
+| `DOCMIND_PROCESSING__CHUNK_OVERLAP` | `50` | Token overlap |
+| `DOCMIND_PROCESSING__NEW_AFTER_N_CHARS` | `1200` | Enrichment boundary |
+| `DOCMIND_PROCESSING__COMBINE_TEXT_UNDER_N_CHARS` | `500` | Small-text merge boundary |
+| `DOCMIND_PROCESSING__MAX_DOCUMENT_SIZE_MB` | `100` | Source-size limit |
+| `DOCMIND_PROCESSING__ENCRYPT_PAGE_IMAGES` | `false` | Encrypt exported page images |
 
-When `DOCMIND_LLM_BACKEND=openai_compatible`, DocMind uses `DOCMIND_OPENAI__*` as the single configuration surface for the OpenAI-compatible endpoint:
+`chunk_overlap` cannot exceed `chunk_size`.
 
-| Variable | Type | Default | Description |
-| --- | --- | --- | --- |
-| `DOCMIND_OPENAI__BASE_URL` | string | `http://localhost:1234/v1` | OpenAI-compatible base URL (local server, proxy, or cloud gateway). |
-| `DOCMIND_OPENAI__API_KEY` | string | `None` | Optional API key (Bearer token). Local servers can use a placeholder. |
-| `DOCMIND_OPENAI__REQUIRE_V1` | boolean | `true` | If `true`, normalize base URL to include a single `/v1`. Disable for endpoints rooted at `/` (e.g., LiteLLM Proxy default). |
-| `DOCMIND_OPENAI__API_MODE` | enum | `chat_completions` | `chat_completions` (default) or `responses` (use only when supported). |
-| `DOCMIND_OPENAI__DEFAULT_HEADERS` | json | `{}` | Optional default headers (JSON object string) for provider-required headers (e.g., OpenRouter attribution). |
+## Configure parsing and OCR
 
-> [!IMPORTANT]
-> **Backend URL Normalization**: for OpenAI-compatible endpoints, DocMind normalizes to include a single `/v1` suffix by default. For `openai_compatible`, this is controlled by `DOCMIND_OPENAI__REQUIRE_V1`.
+DocMind has one parser contract: Docling, pypdfium2, RapidOCR, and ONNX Runtime.
 
-**App config vs provider env vars:** DocMind uses a single `DOCMIND_*` config surface for the application (routing, security policy, and backend selection). Provider/daemon variables (e.g., `OLLAMA_*`, `OPENAI_*`, `VLLM_*`) configure those services directly and are intentionally not reused here to avoid collisions and ambiguity. Use `DOCMIND_OLLAMA_API_KEY` for Ollama Cloud access; reserve `OLLAMA_*` for the Ollama server/CLI.
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DOCMIND_PARSING__MAX_PAGES` | `500` | Maximum pages |
+| `DOCMIND_PARSING__MAX_RENDER_PIXELS` | `40000000` | Per-render pixel limit |
+| `DOCMIND_PARSING__MAX_TOTAL_TEXT_CHARS` | `10000000` | Extracted-text limit |
+| `DOCMIND_PARSING__PARSE_TIMEOUT_SECONDS` | `300` | Parser worker deadline |
+| `DOCMIND_PARSING__OCRMYPDF_TIMEOUT_SECONDS` | `300` | Searchable-PDF deadline |
+| `DOCMIND_PARSING__DIRECT_TEXT_PROBE_BYTES` | `8192` | Binary-content probe |
+| `DOCMIND_PDF_BACKEND__RENDER_DPI` | `200` | PDF rasterization resolution |
+| `DOCMIND_PDF_BACKEND__MIN_TEXT_CHARS_PER_PAGE` | `24` | Selective OCR threshold |
+| `DOCMIND_OCR__FORCE_OCR` | `false` | OCR every PDF page |
+| `DOCMIND_OCR__MODEL_CACHE_DIR` | `./cache/models` | Verified model cache |
+| `DOCMIND_OCR__SEARCHABLE_PDF_ENABLED` | `false` | Optional OCRmyPDF artifact |
+| `DOCMIND_OCR__OCRMYPDF_JOBS` | `1` | OCRmyPDF worker count |
 
-### 3. vLLM Optimization (RTX 4090 / 2026 Profile)
+There is no online parser mode or configurable PDF backend. Parser model preflight and integrity checks always apply.
 
-| Variable                               | Type    | Default                           | Description                                    |
-| :------------------------------------- | :------ | :-------------------------------- | :--------------------------------------------- |
-| `DOCMIND_VLLM__MODEL`                  | string  | `Qwen/Qwen3-4B-Instruct-2507-FP8` | Default production model.                      |
-| `DOCMIND_VLLM__CONTEXT_WINDOW`         | int     | `131072`                          | Target KV cache capacity (tokens).             |
-| `DOCMIND_VLLM__GPU_MEMORY_UTILIZATION` | float   | `0.85`                            | Fraction of VRAM reserved for KV cache.        |
-| `DOCMIND_VLLM__KV_CACHE_DTYPE`         | string  | `fp8_e5m2`                        | Enables FP8 quantization for massive contexts. |
-| `DOCMIND_VLLM__ATTENTION_BACKEND`      | string  | `FLASHINFER`                      | Performance-critical attention provider.       |
-| `DOCMIND_VLLM__ENABLE_CHUNKED_PREFILL` | boolean | `true`                            | Optimizes throughput for long documents.       |
+## Configure embeddings and images
 
-### 4. Retrieval & Reranking
+Text uses BGE-M3. Sparse retrieval uses direct FastEmbed support. Images use SigLIP.
 
-| Variable                                    | Type    | Default   | Description                                                    |
-| :------------------------------------------ | :------ | :-------- | :------------------------------------------------------------- |
-| `DOCMIND_RETRIEVAL__STRATEGY`               | string  | `hybrid`  | Retrieval mode.                                                |
-| `DOCMIND_RETRIEVAL__TOP_K`                  | int     | `10`      | Final candidates delivered to the LLM.                         |
-| `DOCMIND_RETRIEVAL__FUSION_MODE`            | enum    | `rrf`     | `rrf` (Reciprocal Rank Fusion) or `dbsf`.                      |
-| `DOCMIND_RETRIEVAL__RRF_K`                  | int     | `60`      | RRF constant ($k$).                                            |
-| `DOCMIND_RETRIEVAL__FUSED_TOP_K`            | int     | `60`      | Candidates kept after fusion.                                  |
-| `DOCMIND_RETRIEVAL__PREFETCH_DENSE_LIMIT`   | int     | `200`     | Dense branch prefetch limit.                                   |
-| `DOCMIND_RETRIEVAL__PREFETCH_SPARSE_LIMIT`  | int     | `400`     | Sparse branch prefetch limit.                                  |
-| `DOCMIND_RETRIEVAL__DEDUP_KEY`              | enum    | `page_id` | Field used for results de-duplication (`page_id` or `doc_id`). |
-| `DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID`   | boolean | `false`   | Offloads fusion to Qdrant (requires Qdrant 1.11+).             |
-| `DOCMIND_RETRIEVAL__ENABLE_COLPALI`         | boolean | `false`   | Enable heavy visual-semantic reranker (requires ~8-12GB VRAM). |
-| `DOCMIND_RETRIEVAL__USE_RERANKING`          | boolean | `true`    | Enables Cross-Encoder post-processing.                         |
-| `DOCMIND_RETRIEVAL__TEXT_RERANK_TIMEOUT_MS` | int     | `250`     | Hard deadline for text reranking stage.                        |
-| `DOCMIND_RETRIEVAL__TOTAL_RERANK_BUDGET_MS` | int     | `800`     | Global budget across all reranker stages.                      |
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DOCMIND_EMBEDDING__MODEL_NAME` | `BAAI/bge-m3` | Dense text model |
+| `DOCMIND_EMBEDDING__MODEL_REVISION` | `5617a9f…efb181` | Pinned BGE-M3 revision |
+| `DOCMIND_EMBEDDING__LOCAL_MODEL_PATH` | unset | Full local SentenceTransformers snapshot |
+| `DOCMIND_EMBEDDING__CACHE_FOLDER` | `./models_cache` | Hugging Face model cache |
+| `DOCMIND_EMBEDDING__DIMENSION` | `1024` | Text vector dimension |
+| `DOCMIND_EMBEDDING__MAX_LENGTH` | `8192` | Native text sequence limit |
+| `DOCMIND_EMBEDDING__NORMALIZE_TEXT` | `true` | Normalize dense vectors |
+| `DOCMIND_EMBEDDING__ENABLE_SPARSE` | `true` | Sparse retrieval |
+| `DOCMIND_EMBEDDING__SIGLIP_MODEL_ID` | `google/siglip-base-patch16-224` | Image model |
+| `DOCMIND_EMBEDDING__SIGLIP_MODEL_REVISION` | unset | Explicit custom revision |
+| `DOCMIND_EMBEDDING__BATCH_SIZE_TEXT_CPU` | `4` | CPU text batch |
+| `DOCMIND_EMBEDDING__BATCH_SIZE_TEXT_GPU` | `12` | GPU text batch |
+| `DOCMIND_EMBEDDING__BATCH_SIZE_IMAGE` | `8` | Image batch |
 
-### NLP Enrichment (spaCy)
+The curated BGE-M3 and SigLIP models use repository-owned revision pins. A
+custom model ID remains unpinned unless you also set its revision. Set
+`DOCMIND_EMBEDDING__LOCAL_MODEL_PATH` to load a complete local BGE-M3 snapshot
+directly; this disables Hub model-ID and revision resolution. Missing local or
+cached models leave the embedding runtime unconfigured instead of installing a
+mock fallback.
 
-DocMind supports optional NLP enrichment during ingestion using spaCy (sentences + entities).
-This is centralized under `src/nlp/` and wired into ingestion as a transform (see SPEC-015 and ADR-061).
+There is no OpenCLIP or alternate image-backend selector.
 
-Canonical settings (preferred):
+## Configure retrieval
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DOCMIND_RETRIEVAL__TOP_K` | `10` | Final candidates |
+| `DOCMIND_RETRIEVAL__FUSION_MODE` | `rrf` | `rrf` or `dbsf` |
+| `DOCMIND_RETRIEVAL__RRF_K` | `60` | RRF constant |
+| `DOCMIND_RETRIEVAL__DEDUP_KEY` | `page_id` | `page_id` or `doc_id` |
+| `DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID` | `false` | Qdrant server fusion |
+| `DOCMIND_RETRIEVAL__USE_RERANKING` | `true` | Text reranking |
+| `DOCMIND_RETRIEVAL__ENABLE_IMAGE_RETRIEVAL` | `true` | SigLIP image channel |
+| `DOCMIND_RETRIEVAL__ENABLE_COLPALI` | `false` | Optional ColPali reranker |
+| `DOCMIND_RETRIEVAL__TEXT_RERANK_TIMEOUT_MS` | `250` | Text-stage deadline |
+| `DOCMIND_RETRIEVAL__SIGLIP_TIMEOUT_MS` | `150` | SigLIP-stage deadline |
+| `DOCMIND_RETRIEVAL__TOTAL_RERANK_BUDGET_MS` | `800` | Total rerank budget |
+
+Reranking timeouts use milliseconds. Agent `decision_timeout` uses seconds.
+
+## Configure GraphRAG
+
+Both gates default to true:
+
+- `DOCMIND_ENABLE_GRAPHRAG`
+- `DOCMIND_GRAPHRAG_CFG__ENABLED`
+
+Graph retrieval requires LlamaIndex core's Property Graph API and a property graph index. Without them, the router uses vector and hybrid tools.
+
+Install the base profile:
 
 ```bash
-DOCMIND_SPACY__ENABLED=true
-DOCMIND_SPACY__MODEL=en_core_web_sm
-DOCMIND_SPACY__DEVICE=auto          # cpu|cuda|apple|auto
-DOCMIND_SPACY__GPU_ID=0
-DOCMIND_SPACY__DISABLE_PIPES='["parser"]'  # JSON array (CSV also supported)
-DOCMIND_SPACY__BATCH_SIZE=32
-DOCMIND_SPACY__N_PROCESS=1
+uv sync --frozen
 ```
 
-Operator-friendly aliases (supported; bridged at startup):
+See `docs/developers/guides/graphrag.md` for GraphRAG behavior.
+
+## Configure databases and persistence
+
+| Variable | Default |
+| --- | --- |
+| `DOCMIND_DATABASE__QDRANT_URL` | `http://localhost:6333` |
+| `DOCMIND_DATABASE__QDRANT_COLLECTION` | `docmind_docs` |
+| `DOCMIND_DATABASE__QDRANT_IMAGE_COLLECTION` | `docmind_images` |
+| `DOCMIND_DATABASE__QDRANT_TIMEOUT` | `60` seconds |
+| `DOCMIND_DATABASE__SQLITE_DB_PATH` | `docmind.db` |
+| `DOCMIND_DATABASE__ENABLE_WAL_MODE` | `true` |
+
+Start the host-local Qdrant service through `scripts/start_qdrant_local.sh`. Docker Compose keeps Qdrant internal to its network.
+
+## Configure an offline run
+
+Install dependencies and model bundles before disconnecting:
 
 ```bash
-SPACY_ENABLED=true
-SPACY_MODEL=en_core_web_sm
-SPACY_DEVICE=auto
-SPACY_GPU_ID=0
-SPACY_DISABLE_PIPES=parser,lemmatizer
-SPACY_BATCH_SIZE=32
-SPACY_N_PROCESS=1
+uv sync --frozen
+uv run python tools/models/pull.py \
+  --bge-m3 \
+  --cache_dir ./models_cache \
+  --parser-defaults \
+  --rapidocr-cache-dir ./cache/models
 ```
 
-Device selection MUST occur before any `spacy.load()` call to avoid device allocation hazards. See spaCy top-level API docs for `prefer_gpu()` / `require_gpu()` / `require_cpu()`.
-
-### 5. Security & Guardrails
-
-|Variable|Type|Default|Description|
-|---|---|---|---|
-|`DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS`|boolean|`false`|If `false`, enforce strict endpoint checks (loopback allowed; non-loopback must be allowlisted and resolve to public IPs). If `true`, private/internal endpoints are permitted (use when Docker service hostnames or RFC1918 addresses are required).|
-|`DOCMIND_SECURITY__ENDPOINT_ALLOWLIST`|list|`[localhost, 127.0.0.1]`|Allowed hosts (or URLs) when strict checks are active (`ALLOW_REMOTE_ENDPOINTS=false`).|
-|`DOCMIND_SECURITY__TRUST_REMOTE_CODE`|boolean|`false`|Controls `trust_remote_code` for library imports.|
-|`DOCMIND_HASHING__HMAC_SECRET`|secret|`[hidden]`|**Critical**: Secret key for PII redacting and log fingerprints.|
-
-### 6. Observability & Telemetry
-
-| Variable                                | Type    | Default                  | Description                                                  |
-| :-------------------------------------- | :------ | :----------------------- | :----------------------------------------------------------- |
-| `DOCMIND_OBSERVABILITY__ENABLED`        | boolean | `false`                  | Enables OpenTelemetry exporters.                             |
-| `DOCMIND_OBSERVABILITY__PROTOCOL`       | enum    | `http/protobuf`          | `grpc` or `http/protobuf`.                                   |
-| `DOCMIND_OBSERVABILITY__SAMPLING_RATIO` | float   | `1.0`                    | Trace sampling (0.0 to 1.0).                                 |
-| `DOCMIND_TELEMETRY_DISABLED`            | boolean | `false`                  | Disables local JSONL telemetry sink.                         |
-| `DOCMIND_TELEMETRY_SAMPLE`              | float   | `1.0`                    | Sampling rate for local JSONL events (0.0 to 1.0).           |
-| `DOCMIND_TELEMETRY_ROTATE_BYTES`        | int     | `0`                      | Rotate telemetry log when file reaches N bytes (0 disables). |
-| `DOCMIND_TELEMETRY__JSONL_PATH`         | path    | `./logs/telemetry.jsonl` | Advanced: override JSONL destination path.                   |
-
-### 7. Embedding & Vision
-
-- `DOCMIND_EMBEDDING__MODEL_NAME`: `BAAI/bge-m3` text embedding model.
-- `DOCMIND_EMBEDDING__DIMENSION`: `1024` resulting vector dimension.
-- `DOCMIND_EMBEDDING__ENABLE_SPARSE`: `true` computes Lexical/BM25-style weights.
-- `DOCMIND_EMBEDDING__IMAGE_BACKBONE`: `auto` preferred SigLIP backbone.
-- `DOCMIND_EMBEDDING__SIGLIP_MODEL_REVISION`: `unset`; see note below.
-- `DOCMIND_EMBEDDING__BATCH_SIZE_TEXT_GPU`: `12` for CUDA optimization.
-- `DOCMIND_EMBEDDING__BATCH_SIZE_TEXT_CPU`: `4` for RAM-constrained systems.
-
-Custom SigLIP model IDs stay unpinned unless `DOCMIND_EMBEDDING__SIGLIP_MODEL_REVISION` is set explicitly. The curated pin applies only when using the built-in SigLIP model ID.
-
-### 8. Document Processing
-
-| Variable                                  | Type    | Default | Description                                 |
-| :---------------------------------------- | :------ | :------ | :------------------------------------------ |
-| `DOCMIND_PROCESSING__CHUNK_SIZE`          | int     | `1500`  | Tokens per document segment.                |
-| `DOCMIND_PROCESSING__CHUNK_OVERLAP`       | int     | `150`   | Buffer between segments.                    |
-| `DOCMIND_PROCESSING__NEW_AFTER_N_CHARS`   | int     | `1200`  | Soft character limit for segment splitting. |
-| `DOCMIND_PROCESSING__ENCRYPT_PAGE_IMAGES` | boolean | `false` | When true, renders PII-safe `*.enc` images. |
-
-### 9. Image Encryption (Advanced)
-
-| Variable                              | Type    | Default | Description                                                 |
-| :------------------------------------ | :------ | :------ | :---------------------------------------------------------- |
-| `DOCMIND_IMG_AES_KEY_BASE64`          | secret  | `None`  | AES-256 key (32 bytes) in base64 for page image encryption. |
-| `DOCMIND_IMG_KID`                     | string  | `None`  | Key identifier for rotating encryption keys.                |
-| `DOCMIND_IMG_DELETE_PLAINTEXT`        | boolean | `false` | Delete original images after successful encryption.         |
-
-### 10. Database & Persistence
-
-| Variable                              | Type    | Default                 | Description                                       |
-| :------------------------------------ | :------ | :---------------------- | :------------------------------------------------ |
-| `DOCMIND_DATABASE__VECTOR_STORE_TYPE` | string  | `qdrant`                | Default vector backend.                           |
-| `DOCMIND_DATABASE__QDRANT_URL`        | string  | `http://localhost:6333` | Service endpoint.                                 |
-| `DOCMIND_DATABASE__QDRANT_COLLECTION` | string  | `docmind_docs`          | Target collection for text vectors.               |
-| `DOCMIND_DATABASE__SQLITE_DB_PATH`    | path    | `docmind.db`            | Primary relational store (relocated to data_dir). |
-| `DOCMIND_DATABASE__ENABLE_WAL_MODE`   | boolean | `true`                  | Recommended for concurrent SQLite access.         |
-
-### 11. UI & Monitoring
-
-| Variable                            | Type    | Default | Description                               |
-| :---------------------------------- | :------ | :------ | :---------------------------------------- |
-| `DOCMIND_UI__STREAMLIT_PORT`        | int     | `8501`  | Service port for the web dashboard.       |
-| `DOCMIND_UI__RESPONSE_STREAMING`    | boolean | `true`  | Interactive tty-style response rendering. |
-| `DOCMIND_MONITORING__MAX_MEMORY_GB` | float   | `4.0`   | System RAM safety threshold for alerts.   |
-| `DOCMIND_MONITORING__MAX_VRAM_GB`   | float   | `14.0`  | GPU VRAM safety threshold for alerts.     |
-
-### 12. Feature Flags
-
-| Variable                                | Type    | Default | Description                                   |
-| :-------------------------------------- | :------ | :------ | :-------------------------------------------- |
-| `DOCMIND_ENABLE_GRAPHRAG`               | boolean | `true`  | Globally enable/disable GraphRAG features.    |
-| `DOCMIND_ENABLE_DSPY_OPTIMIZATION`      | boolean | `false` | Enable query rewriting/optimization via DSPy. |
-| `DOCMIND_ENABLE_MULTIMODAL`             | boolean | `false` | Enable multimodal (ColPali/Vision) support.   |
-| `DOCMIND_ARTIFACTS__MAX_TOTAL_MB`       | int     | `4096`  | GC threshold for image artifact store.        |
-| `DOCMIND_ARTIFACTS__GC_MIN_AGE_SECONDS` | int     | `3600`  | Minimum age before artifact collection.       |
-
----
-
-## Hardware Configuration Scenarios
-
-Below are validated environment profiles for common hardware targets.
-
-### Gaming Laptop (8-12GB VRAM)
-
-**Target**: Responsive RAG with moderate document sizes.
-
-```env
-DOCMIND_LLM_BACKEND=ollama
-DOCMIND_ENABLE_GPU_ACCELERATION=true
-DOCMIND_VLLM__GPU_MEMORY_UTILIZATION=0.7
-DOCMIND_CONTEXT_WINDOW=16384
-DOCMIND_EMBEDDING__BATCH_SIZE_TEXT_CPU=4
-```
-
-### Workstation (RTX 3090/4090)
-
-**Target**: Production-grade throughput with 128K context.
-
-```env
-DOCMIND_LLM_BACKEND=vllm
-DOCMIND_VLLM__GPU_MEMORY_UTILIZATION=0.85
-DOCMIND_VLLM__KV_CACHE_DTYPE=fp8_e5m2
-DOCMIND_VLLM__ATTENTION_BACKEND=FLASHINFER
-DOCMIND_RETRIEVAL__USE_RERANKING=true
-```
-
-### Air-Gapped / CPU-Only
-
-**Target**: Maximum privacy, zero network required.
-
-```env
-DOCMIND_LLM_BACKEND=llamacpp
-DOCMIND_LLAMACPP_BASE_URL=http://localhost:8080/v1
-DOCMIND_MODEL=local-gguf
-DOCMIND_ENABLE_GPU_ACCELERATION=false
-DOCMIND_EMBEDDING__EMBED_DEVICE=cpu
-DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false
-DOCMIND_HF_HUB_OFFLINE=1
-```
-
-Run llama.cpp out of process:
+Then set library offline flags:
 
 ```bash
-llama-server -m ./models/model.gguf --alias local-gguf \
-  --ctx-size 8192 --host 127.0.0.1 --port 8080
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+uv run python scripts/parser_health.py --check
 ```
 
-Use `--alias` as `DOCMIND_MODEL`. Keep `DOCMIND_LLAMACPP_BASE_URL`
-normalized to `/v1`; DocMind probes `/health` and `/v1/models` from Settings.
+These controls do not measure network egress. Use a separate network-capture procedure when that evidence is required.
 
----
+## Validate configuration
 
-## Validating Your Configuration
-
-### Verification Snippet
-
-You can verify the final resolved state of the system using a short Python snippet:
+Inspect resolved settings without printing secrets:
 
 ```python
-# Verify model resolution
 from src.config import settings
-print(f"Active Model: {settings.model or settings.vllm.model}")
 
-# Verify path relocation
-from src.config.integrations import startup_init
-startup_init(settings)
-print(f"Resolved DB Path: {settings.database.sqlite_db_path}")
+print(settings.llm_backend)
+print(settings.backend_base_url_normalized)
+print(settings.database.qdrant_url)
+print(settings.is_graphrag_enabled())
 ```
 
-### Common Errors
+Common validation failures:
 
-|Error Message|Cause|Resolution|
-|---|---|---|
-|`ValueError: … must be at least 32 bytes`|Weak secret key.|Provide a longer random string.|
-|`ValueError: Remote endpoints are disabled.`|Non-loopback base URL is not allowlisted, cannot be DNS-resolved, or resolves to private/link-local/reserved ranges.|Use `localhost`, allowlist a public host, or set `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true` for private/internal endpoints (e.g., Docker service hostnames).|
-|`ValueError: chunk_overlap cannot exceed chunk_size`|Invalid overlap ratio.|Adjust overlap/size ratio in processing config.|
-
----
-
-## Best Practices
-
-- **Prefer Nested Variables**: Use clearest mapping (`DOCMIND_SECTION__FIELD`).
-- **Keep `.env` Minimal**: Default values in `settings.py` cover typical local runs.
-- **Use Provided Helpers**: Use `settings.get_*_config()` to wire client libraries instead of manual parsing.
-- **Do Not Add Test Flags**: Keep tests isolated in code; do not pollute production config with test-only toggles.
+| Error | Corrective action |
+| --- | --- |
+| HMAC secret is shorter than 32 bytes | Supply at least 32 bytes |
+| Remote endpoint is rejected | Use loopback or configure the explicit remote policy |
+| `chunk_overlap` exceeds `chunk_size` | Lower overlap or raise chunk size |
+| Parser models are not ready | Run the parser prefetch command and health check |

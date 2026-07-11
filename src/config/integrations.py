@@ -14,24 +14,25 @@ Key behaviors:
 import os
 import threading
 from contextlib import suppress
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from llama_index.core import Settings
 from loguru import logger
 
+from src.config.embedding_defaults import (
+    BGE_M3_EMBEDDING_DIMENSION,
+    DEFAULT_BGE_M3_MODEL_ID,
+)
 from src.config.llm_factory import build_llm
-from src.models.embedding_constants import ImageBackboneName
 from src.telemetry.opentelemetry import setup_metrics, setup_tracing
 
 from .settings import DocMindSettings, settings
 
 if TYPE_CHECKING:  # pragma: no cover
     from llama_index.core.base.embeddings.base import BaseEmbedding
-
-    from src.models.embeddings import ImageEmbedder
 else:
     BaseEmbedding = Any
-    ImageEmbedder = Any
 
 
 # Text embeddings default wrapper
@@ -49,6 +50,12 @@ _HF_EMBED_LOCK = threading.Lock()
 
 def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> None:
     """Configure global LlamaIndex settings based on DocMind configuration."""
+    # Local-first defaults must be visible before any Hugging Face backed
+    # constructor runs, otherwise cache hits can still perform network HEAD
+    # probes before offline mode is enabled.
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
     if _should_configure_llm(force_llm):
         _configure_llm()
     else:
@@ -61,10 +68,6 @@ def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> N
 
     _configure_context_settings()
     _configure_structured_outputs()
-
-    # Local-first defaults (offline and localhost enforcement)
-    os.environ.setdefault("HF_HUB_OFFLINE", "1")
-    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
 
 def setup_vllm_env() -> None:
@@ -123,7 +126,7 @@ def startup_init(cfg: "DocMindSettings" = settings) -> None:
     try:
         # IO: ensure directories
         cfg.data_dir.mkdir(parents=True, exist_ok=True)
-        cfg.cache_dir.mkdir(parents=True, exist_ok=True)
+        cfg.cache.dir.mkdir(parents=True, exist_ok=True)
         cfg.log_file.parent.mkdir(parents=True, exist_ok=True)
         if cfg.database.sqlite_db_path.parent != cfg.data_dir:
             cfg.database.sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -216,64 +219,14 @@ __all__ = [
     "get_settings_embed_model",
     "get_vllm_server_command",
     "initialize_integrations",
+    "is_embedding_ready",
     "setup_llamaindex",
     "setup_vllm_env",
 ]
 
 
-# === Unified Embedder Factory (optional app wiring) ===
-def get_unified_embedder():  # pragma: no cover - simple factory
-    """Return a UnifiedEmbedder configured from settings.
-
-    Uses the unified device selection and enables strict image type checks.
-    This is a lightweight entry point for app code to opt into the
-    library-first TextEmbedder (BGE-M3) and ImageEmbedder (OpenCLIP/SigLIP).
-    """
-    from src.models.embeddings import ImageEmbedder, TextEmbedder, UnifiedEmbedder
-
-    device = "cuda" if settings.enable_gpu_acceleration else "cpu"
-    text = TextEmbedder(model_name=settings.embedding.model_name, device=device)
-    image = ImageEmbedder(backbone=settings.embedding.image_backbone, device=device)
-    return UnifiedEmbedder(text=text, image=image, strict_image_types=True)
-
-
-def get_image_embedder(
-    backbone: ImageBackboneName = "siglip_base",
-) -> ImageEmbedder:  # pragma: no cover - simple factory
-    """Return an ImageEmbedder with the requested backbone.
-
-    Default backbone is SigLIP (preferred). Accepts "auto", "openclip_vitl14",
-    "openclip_vith14", "siglip_base", or "bge_visualized".
-    """
-    from src.models.embeddings import ImageEmbedder
-
-    device = "cuda" if settings.enable_gpu_acceleration else "cpu"
-    return ImageEmbedder(backbone=backbone, device=device)
-
-
-def get_clip_like_image_embedder():  # pragma: no cover - convenience adapter
-    """Adapter that exposes `get_image_embedding(img)` using UnifiedEmbedder.
-
-    This makes it drop-in compatible with existing multimodal helpers that
-    expect a `clip`-like object while avoiding heavy third-party imports.
-    """
-    import numpy as _np
-
-    u = get_unified_embedder()
-
-    class _ClipLike:
-        def get_image_embedding(self, image: object) -> _np.ndarray:
-            """Return a single image embedding as a 1-D numpy array."""
-            arr = u.image.encode_image([image])
-            if arr.shape[0] == 0:
-                raise ValueError("No embedding produced")
-            return arr[0]
-
-    return _ClipLike()
-
-
 def _should_configure_llm(force_llm: bool) -> bool:
-    return force_llm or getattr(Settings, "llm", None) is None
+    return force_llm or getattr(Settings, "_llm", None) is None
 
 
 def _configure_llm() -> None:
@@ -288,15 +241,14 @@ def _configure_llm() -> None:
             type(err).__name__,
             redaction.redacted,
         )
-        # LlamaIndex Settings.llm is not typed as nullable, but failure paths
-        # must clear the global runtime slot so later configuration can retry.
-        cast(Any, Settings).llm = None
+        # Bypass the property setter: assigning None resolves a MockLLM.
+        cast(Any, Settings)._llm = None
         return
 
     try:
         Settings.llm = build_llm(settings)
         provider = settings.llm_backend
-        model_name = settings.model or settings.vllm.model
+        model_name = settings.effective_model
         from src.utils.log_safety import safe_url_for_log
 
         base_url = getattr(settings, "backend_base_url_normalized", None)
@@ -318,22 +270,35 @@ def _configure_llm() -> None:
             type(exc).__name__,
             redaction.redacted,
         )
-        # LlamaIndex Settings.llm is not typed as nullable, but failure paths
-        # must clear the global runtime slot so later configuration can retry.
-        cast(Any, Settings).llm = None
+        # Bypass the property setter: assigning None resolves a MockLLM.
+        cast(Any, Settings)._llm = None
 
 
 def get_settings_embed_model() -> BaseEmbedding | None:
     """Return the currently configured LlamaIndex embedding instance.
 
-    The helper guards against ``AttributeError`` when custom ``Settings``
-    objects override ``__getattr__`` or omit the ``embed_model`` attribute.
+    Read LlamaIndex's backing slot so this check cannot lazily resolve OpenAI or
+    a test-only ``MockEmbedding``.
     """
     try:
-        return getattr(Settings, "embed_model", None)
-    except AttributeError:  # pragma: no cover - defensive
-        logger.debug("Settings.embed_model attribute not present")
+        return getattr(Settings, "_embed_model", None)
+    except AttributeError as exc:  # pragma: no cover - defensive test doubles
+        logger.debug(
+            "Settings._embed_model unavailable (error_type={})",
+            type(exc).__name__,
+        )
         return None
+
+
+def is_embedding_ready() -> bool:
+    """Return whether a real LlamaIndex embedding model is configured."""
+    from llama_index.core.base.embeddings.base import BaseEmbedding as LIBaseEmbedding
+    from llama_index.core.embeddings import MockEmbedding
+
+    embed_model = get_settings_embed_model()
+    return isinstance(embed_model, LIBaseEmbedding) and not isinstance(
+        embed_model, MockEmbedding
+    )
 
 
 def _should_configure_embeddings(force_embed: bool) -> bool:
@@ -346,8 +311,26 @@ def _configure_embeddings() -> None:
             emb_cfg = settings.get_embedding_config()
         else:  # pragma: no cover - exercised in unit stubs
             emb_cfg = {"model_name": "BAAI/bge-m3", "device": "cpu"}
-        model_name = emb_cfg.get("model_name", "BAAI/bge-m3")
+        model_id = emb_cfg.get("model_id", emb_cfg.get("model_name"))
+        model_name = emb_cfg.get("model_name", DEFAULT_BGE_M3_MODEL_ID)
         device = emb_cfg.get("device", "cpu")
+        dimension = int(emb_cfg.get("dimension", BGE_M3_EMBEDDING_DIMENSION))
+        if (
+            model_id == DEFAULT_BGE_M3_MODEL_ID
+            and dimension != BGE_M3_EMBEDDING_DIMENSION
+        ):
+            raise ValueError(
+                f"BAAI/bge-m3 requires embedding dimension {BGE_M3_EMBEDDING_DIMENSION}"
+            )
+
+        local_model_path = emb_cfg.get("local_model_path")
+        if local_model_path is not None:
+            local_path = Path(str(local_model_path)).expanduser()
+            if not local_path.is_dir():
+                raise FileNotFoundError(
+                    f"Local embedding model directory not found: {local_path}"
+                )
+            model_name = str(local_path)
 
         global HuggingFaceEmbedding
         embedding_cls = HuggingFaceEmbedding
@@ -364,14 +347,27 @@ def _configure_embeddings() -> None:
         if embedding_cls is None:  # pragma: no cover - defensive
             raise RuntimeError("HuggingFaceEmbedding class unavailable")
 
-        Settings.embed_model = cast(Any, embedding_cls)(
-            model_name=model_name,
-            device=device,
-            trust_remote_code=emb_cfg.get("trust_remote_code", False),
-        )
+        embedding_kwargs: dict[str, Any] = {
+            "model_name": model_name,
+            "device": device,
+            "max_length": int(emb_cfg.get("max_length", 8192)),
+            "normalize": bool(emb_cfg.get("normalize_text", True)),
+            "embed_batch_size": int(emb_cfg.get("batch_size_text", 4)),
+            "trust_remote_code": emb_cfg.get("trust_remote_code", False),
+            "local_files_only": bool(emb_cfg.get("local_files_only", True)),
+        }
+        cache_folder = emb_cfg.get("cache_folder")
+        if cache_folder is not None:
+            embedding_kwargs["cache_folder"] = str(cache_folder)
+        model_revision = emb_cfg.get("model_revision")
+        if local_model_path is None and model_revision is not None:
+            embedding_kwargs["revision"] = str(model_revision)
+
+        embed_model = cast(Any, embedding_cls)(**embedding_kwargs)
+        Settings.embed_model = embed_model
         logger.info(
             "Embedding model configured: {} {} (device={})",
-            type(Settings.embed_model).__name__,
+            type(embed_model).__name__,
             model_name,
             device,
         )
@@ -384,7 +380,8 @@ def _configure_embeddings() -> None:
             type(exc).__name__,
             redaction.redacted,
         )
-        cast(Any, Settings).embed_model = None
+        # Bypass the property setter: assigning None resolves a MockEmbedding.
+        cast(Any, Settings)._embed_model = None
 
 
 def _configure_context_settings() -> None:

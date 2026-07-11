@@ -10,9 +10,6 @@ from typing import Any
 import pytest
 
 pytest.importorskip("llama_index.core", reason="requires llama_index.core")
-pytest.importorskip(
-    "llama_index.program.openai", reason="requires llama_index.program.openai"
-)
 
 from src.retrieval.router_factory import build_router_engine
 
@@ -48,6 +45,7 @@ def test_router_registers_kg_tool_even_on_empty_probe(
     from types import SimpleNamespace
 
     cfg = SimpleNamespace(
+        enable_graphrag=True,
         retrieval=SimpleNamespace(
             top_k=3,
             use_reranking=False,

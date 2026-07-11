@@ -1,8 +1,8 @@
 ---
 spec: SPEC-001
 title: Multi-provider LLM Runtime with UI Selection and Hardware-Aware Paths
-version: 1.2.0
-date: 2026-04-28
+version: 1.3.0
+date: 2026-07-11
 owners: ["ai-arch"]
 status: Implemented
 related_requirements:
@@ -41,6 +41,10 @@ Persist selection to settings. Expose model id, context, streaming, and safe end
   - Embed `dimensions` for truncation
   - Optional cloud web tools (web_search/web_fetch)
 - Central factory: `src/config/llm_factory.py`.
+- `DocMindSettings.effective_model` is the canonical runtime model owner. A
+  non-empty top-level `model` override wins; otherwise Ollama uses the public
+  `qwen3:4b-instruct` tag and other backends use `vllm.model`. Backend-agnostic
+  consumers MUST use this property; vLLM launch helpers remain vLLM-specific.
 - UI wiring: `src/pages/04_settings.py` controls provider, model, base URLs, and advanced knobs.
 - Respect environment via `src/config/settings.py` and surfacing in UI.
 
@@ -97,6 +101,11 @@ from src.config.llm_factory import build_llm
 
 ```gherkin
 Feature: LLM provider selection
+  Scenario: Start with default Ollama settings
+    Given no top-level model override is configured
+    And the selected provider is 'ollama'
+    Then the effective model SHALL be 'qwen3:4b-instruct'
+
   Scenario: Switch provider in settings
     Given the app is running
     And I open Settings

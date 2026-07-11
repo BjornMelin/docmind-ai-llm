@@ -15,10 +15,16 @@ import streamlit as st
 from loguru import logger
 
 from src.config import settings
-from src.models.processing import IngestionInput
+from src.models.processing import (
+    CANONICAL_DOCUMENT_ID_KEY,
+    IngestionInput,
+    ParsingOverrides,
+)
 from src.persistence.artifacts import ArtifactRef, ArtifactStore
 from src.persistence.snapshot import SnapshotLockTimeout, load_manifest
 from src.persistence.snapshot_utils import timestamped_export_path
+from src.processing.ingestion_api import require_unique_document_ids
+from src.processing.parsing.health import parser_health
 from src.retrieval.graph_config import (
     export_graph_jsonl,
     export_graph_parquet,
@@ -37,6 +43,7 @@ from src.ui.background_jobs import (
     get_or_create_owner_id,
 )
 from src.ui.ingest_adapter import ingest_inputs, save_uploaded_file
+from src.utils.hashing import document_id_from_sha256
 from src.utils.storage import create_vector_store
 
 ProgressReporter = Callable[[ProgressEvent], None]
@@ -75,10 +82,16 @@ def main() -> None:  # pragma: no cover - Streamlit page
     owner_id = get_or_create_owner_id()
     _render_latest_snapshot_summary()
 
-    files, use_graphrag, encrypt_images, submitted = _render_ingest_form()
+    files, use_graphrag, encrypt_images, parsing_overrides, submitted = (
+        _render_ingest_form()
+    )
     if submitted:
         _handle_ingest_submission(
-            files, use_graphrag, encrypt_images, owner_id=owner_id
+            files,
+            use_graphrag,
+            encrypt_images,
+            parsing_overrides,
+            owner_id=owner_id,
         )
     _render_ingest_job_panel(owner_id=owner_id)
 
@@ -88,7 +101,9 @@ def main() -> None:  # pragma: no cover - Streamlit page
     _render_export_controls()
 
 
-def _render_ingest_form() -> tuple[list[Any] | None, bool, bool, bool]:
+def _render_ingest_form() -> tuple[
+    list[Any] | None, bool, bool, ParsingOverrides, bool
+]:
     """Render the ingestion form and return submitted values."""
     with st.form("ingest_form", clear_on_submit=False):
         files = st.file_uploader("Add files", type=None, accept_multiple_files=True)
@@ -107,6 +122,7 @@ def _render_ingest_form() -> tuple[list[Any] | None, bool, bool, bool]:
                 "Encrypt page images (AES-GCM)",
                 value=bool(settings.processing.encrypt_page_images),
             )
+        parsing_overrides = _render_parsing_overrides()
         with st.expander("About snapshots", expanded=False):
             st.markdown(
                 "- Snapshots are created atomically in data/storage/<timestamp>.\n"
@@ -114,14 +130,40 @@ def _render_ingest_form() -> tuple[list[Any] | None, bool, bool, bool]:
                 "staleness detection.\n"
                 "- Rebuild a snapshot anytime; for new content, re-ingest first."
             )
+        with st.expander("Snapshot parsing metadata", expanded=False):
+            st.json(
+                {
+                    "profile": settings.parsing.profile,
+                    "ocr_engine": settings.ocr.engine,
+                },
+                expanded=False,
+            )
         submitted = st.form_submit_button("Ingest")
-    return files, use_graphrag, encrypt_images, submitted
+    return files, use_graphrag, encrypt_images, parsing_overrides, submitted
+
+
+def _render_parsing_overrides() -> ParsingOverrides:
+    """Render per-ingestion parser overrides."""
+    with st.expander("Parsing overrides", expanded=False):
+        use_global = st.checkbox("Use global parsing defaults", value=True)
+        force_ocr = st.checkbox("Force RapidOCR", value=False)
+        export_searchable_pdf = st.checkbox(
+            "Export searchable PDF",
+            value=False,
+        )
+        if use_global:
+            return ParsingOverrides()
+    return ParsingOverrides(
+        force_ocr=force_ocr,
+        export_searchable_pdf=export_searchable_pdf,
+    )
 
 
 def _handle_ingest_submission(
     files: list[Any] | None,
     use_graphrag: bool,
     encrypt_images: bool,
+    parsing_overrides: ParsingOverrides,
     *,
     owner_id: str,
 ) -> None:
@@ -131,93 +173,31 @@ def _handle_ingest_submission(
         files: List of uploaded file objects from Streamlit.
         use_graphrag: Whether to trigger GraphRAG snapshot rebuild.
         encrypt_images: Whether to encrypt extracted images.
+        parsing_overrides: Per-ingestion parser override values.
         owner_id: Unique identifier for the job owner.
     """
     if not files:
         st.warning("No files selected.")
         return
+    if not _pdf_uploads_are_ready(files):
+        return
     try:
-        nlp_service = None
-        try:
-            cfg_dump = settings.spacy.model_dump()  # type: ignore[attr-defined]
-            nlp_service = _get_spacy_service(settings.cache_version, cfg_dump)
-        except Exception as exc:
-            from src.utils.log_safety import build_pii_log_entry
-
-            redaction = build_pii_log_entry(str(exc), key_id="documents.spacy_init")
-            logger.warning(
-                "Failed to initialize SpacyNlpService (error_type={} error={})",
-                type(exc).__name__,
-                redaction.redacted,
-            )
-            nlp_service = None
-
-        saved_inputs: list[IngestionInput] = []
-        for file_obj in files:
-            if file_obj is None:
-                logger.warning("Skipping file (missing upload object).")
-                continue
-            file_name = getattr(file_obj, "name", None)
-            file_size = getattr(file_obj, "size", None)
-            if file_name is None:
-                logger.warning("Skipping file (missing name attribute).")
-                continue
-            if isinstance(file_size, int) and file_size <= 0:
-                logger.warning("Skipping file (empty upload).")
-                continue
-            try:
-                stored_path, digest = save_uploaded_file(file_obj)
-            except Exception as exc:
-                from src.utils.log_safety import build_pii_log_entry
-
-                error_redaction = build_pii_log_entry(
-                    str(exc), key_id="documents.save_file"
-                )
-                name_redaction = build_pii_log_entry(
-                    str(file_name), key_id="documents.upload_name"
-                )
-                logger.warning(
-                    "Skipping file (name={} error_type={} error={})",
-                    name_redaction.redacted,
-                    type(exc).__name__,
-                    error_redaction.redacted,
-                )
-                continue
-            saved_inputs.append(
-                IngestionInput(
-                    document_id=f"doc-{digest[:16]}",
-                    source_path=stored_path,
-                    metadata={
-                        "source_filename": file_name,
-                        "uploaded_at": datetime.now(UTC).isoformat(),
-                        "sha256": digest,
-                    },
-                    encrypt_images=bool(encrypt_images),
-                )
-            )
+        nlp_service = _load_optional_spacy_service()
+        saved_inputs = _save_ingestion_inputs(
+            files,
+            encrypt_images=encrypt_images,
+            parsing_overrides=parsing_overrides,
+        )
         if not saved_inputs:
             st.warning("No valid files to ingest.")
             return
-
-        job_manager = get_job_manager(settings.cache_version)
-
-        def _work(
-            cancel_event: threading.Event, report: ProgressReporter
-        ) -> dict[str, Any]:
-            return _run_ingest_job(
-                saved_inputs,
-                use_graphrag=use_graphrag,
-                encrypt_images=encrypt_images,
-                nlp_service=nlp_service,
-                cancel_event=cancel_event,
-                report_progress=report,
-            )
-
-        job_id = job_manager.start_job(owner_id=owner_id, fn=_work)
-        st.session_state["ingest_job_id"] = job_id
-        st.session_state["ingest_job_use_graphrag"] = bool(use_graphrag)
-        st.session_state["ingest_job_encrypt_images"] = bool(encrypt_images)
-        st.toast("Ingestion started", icon="⏳")
+        _start_ingestion_job(
+            saved_inputs,
+            use_graphrag=use_graphrag,
+            encrypt_images=encrypt_images,
+            nlp_service=nlp_service,
+            owner_id=owner_id,
+        )
     except Exception as exc:  # pragma: no cover - UX best effort
         from src.utils.log_safety import build_pii_log_entry
 
@@ -229,6 +209,135 @@ def _handle_ingest_submission(
         )
         st.error(f"Failed to start ingestion job ({type(exc).__name__}).")
         st.caption(f"Error reference: {redaction.redacted}")
+
+
+def _pdf_uploads_are_ready(files: list[Any]) -> bool:
+    """Return whether selected PDF uploads can be parsed offline."""
+    has_pdf = any(
+        str(getattr(file_obj, "name", "")).lower().endswith(".pdf")
+        for file_obj in files
+    )
+    if not has_pdf:
+        return True
+    readiness = parser_health(settings)
+    if readiness["pdf_ready"]:
+        return True
+    st.error("PDF parser models are not ready for offline ingestion.")
+    st.code(str(readiness["prefetch_command"]))
+    return False
+
+
+def _load_optional_spacy_service() -> SpacyNlpService | None:
+    """Load optional spaCy enrichment without blocking document ingestion."""
+    try:
+        cfg_dump = settings.spacy.model_dump()  # type: ignore[attr-defined]
+        return _get_spacy_service(settings.cache_version, cfg_dump)
+    except Exception as exc:
+        from src.utils.log_safety import build_pii_log_entry
+
+        redaction = build_pii_log_entry(str(exc), key_id="documents.spacy_init")
+        logger.warning(
+            "Failed to initialize SpacyNlpService (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
+        return None
+
+
+def _save_ingestion_inputs(
+    files: list[Any],
+    *,
+    encrypt_images: bool,
+    parsing_overrides: ParsingOverrides,
+) -> list[IngestionInput]:
+    """Persist valid uploads and return canonical ingestion inputs."""
+    saved_inputs: list[IngestionInput] = []
+    for file_obj in files:
+        if file_obj is None:
+            logger.warning("Skipping file (missing upload object).")
+            continue
+        file_name = getattr(file_obj, "name", None)
+        file_size = getattr(file_obj, "size", None)
+        if file_name is None:
+            logger.warning("Skipping file (missing name attribute).")
+            continue
+        if isinstance(file_size, int) and file_size <= 0:
+            logger.warning("Skipping file (empty upload).")
+            continue
+        saved_input = _save_ingestion_input(
+            file_obj,
+            file_name=str(file_name),
+            encrypt_images=encrypt_images,
+            parsing_overrides=parsing_overrides,
+        )
+        if saved_input is not None:
+            saved_inputs.append(saved_input)
+    return saved_inputs
+
+
+def _save_ingestion_input(
+    file_obj: Any,
+    *,
+    file_name: str,
+    encrypt_images: bool,
+    parsing_overrides: ParsingOverrides,
+) -> IngestionInput | None:
+    """Persist one upload and return its ingestion contract when successful."""
+    try:
+        stored_path, digest = save_uploaded_file(file_obj)
+    except Exception as exc:
+        from src.utils.log_safety import build_pii_log_entry
+
+        error_redaction = build_pii_log_entry(str(exc), key_id="documents.save_file")
+        name_redaction = build_pii_log_entry(file_name, key_id="documents.upload_name")
+        logger.warning(
+            "Skipping file (name={} error_type={} error={})",
+            name_redaction.redacted,
+            type(exc).__name__,
+            error_redaction.redacted,
+        )
+        return None
+    return IngestionInput(
+        document_id=document_id_from_sha256(digest),
+        source_path=stored_path,
+        metadata={
+            "uploaded_at": datetime.now(UTC).isoformat(),
+            "sha256": digest,
+        },
+        encrypt_images=bool(encrypt_images),
+        parsing_overrides=parsing_overrides,
+    )
+
+
+def _start_ingestion_job(
+    saved_inputs: list[IngestionInput],
+    *,
+    use_graphrag: bool,
+    encrypt_images: bool,
+    nlp_service: SpacyNlpService | None,
+    owner_id: str,
+) -> None:
+    """Start one background ingestion job and persist its UI state."""
+    require_unique_document_ids(saved_inputs)
+    job_manager = get_job_manager(settings.cache_version)
+
+    def _work(
+        cancel_event: threading.Event, report: ProgressReporter
+    ) -> dict[str, Any]:
+        return _run_ingest_job(
+            saved_inputs,
+            use_graphrag=use_graphrag,
+            encrypt_images=encrypt_images,
+            nlp_service=nlp_service,
+            cancel_event=cancel_event,
+            report_progress=report,
+        )
+
+    job_id = job_manager.start_job(owner_id=owner_id, fn=_work)
+    st.session_state["ingest_job_id"] = job_id
+    st.session_state["ingest_job_use_graphrag"] = bool(use_graphrag)
+    st.session_state["ingest_job_encrypt_images"] = bool(encrypt_images)
+    st.toast("Ingestion started", icon="⏳")
 
 
 def _run_ingest_job(
@@ -748,17 +857,18 @@ def _render_maintenance_controls() -> None:
 
 
 @st.cache_data(show_spinner=False)
-def _sha256_for_file(path_str: str, _mtime_ns: int, _size: int) -> str:
+def _sha256_for_file(path_str: str, mtime_ns: int, size: int) -> str:
     """Compute file sha256 with cache invalidated by stat tuple.
 
     Args:
         path_str: Path to the target file.
-        _mtime_ns: Modification time in nanoseconds (for cache busting).
-        _size: File size in bytes (for cache busting).
+        mtime_ns: Modification time in nanoseconds (for cache busting).
+        size: File size in bytes (for cache busting).
 
     Returns:
         str: Hexadecimal SHA-256 hash of the file content.
     """
+    _ = (mtime_ns, size)
     p = Path(path_str)
     h = hashlib.sha256()
     with p.open("rb") as f:
@@ -771,7 +881,7 @@ def _doc_id_for_upload(path: Path) -> str:
     """Return canonical document id for an uploaded file."""
     stt = path.stat()
     digest = _sha256_for_file(str(path), int(stt.st_mtime_ns), int(stt.st_size))
-    return f"doc-{digest[:16]}"
+    return document_id_from_sha256(digest)
 
 
 def _handle_reindex_page_images(
@@ -785,7 +895,7 @@ def _handle_reindex_page_images(
         st.info("No PDFs found under uploads.")
         return
 
-    cache_dir = settings.cache_dir / "ingestion"
+    cache_dir = settings.cache.ingestion_db_path.parent
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     cfg = IngestionConfig(
@@ -795,7 +905,6 @@ def _handle_reindex_page_images(
         enable_image_indexing=True,
         cache_dir=cache_dir,
         cache_collection=f"{settings.database.qdrant_image_collection}_image_reindex",
-        docstore_path=None,
     )
 
     inputs: list[IngestionInput] = []
@@ -817,7 +926,6 @@ def _handle_reindex_page_images(
             IngestionInput(
                 document_id=doc_id,
                 source_path=p,
-                metadata={"source_filename": p.name},
                 encrypt_images=bool(encrypt),
             )
         )
@@ -898,18 +1006,13 @@ def _handle_delete_upload(*, target: Path, purge_artifacts: bool) -> None:  # no
                 doc_id=doc_id,
             )
 
-            # Best-effort: delete text points for this doc id (key varies by indexer).
+            # Text points retain the canonical base-document ID under a DocMind-owned
+            # key because LlamaIndex reserves its generic document ID fields.
             text_filter = qmodels.Filter(
-                should=[
+                must=[
                     qmodels.FieldCondition(
-                        key="doc_id", match=qmodels.MatchValue(value=str(doc_id))
-                    ),
-                    qmodels.FieldCondition(
-                        key="document_id",
+                        key=CANONICAL_DOCUMENT_ID_KEY,
                         match=qmodels.MatchValue(value=str(doc_id)),
-                    ),
-                    qmodels.FieldCondition(
-                        key="ref_doc_id", match=qmodels.MatchValue(value=str(doc_id))
                     ),
                 ]
             )

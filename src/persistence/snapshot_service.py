@@ -11,6 +11,7 @@ import errno
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
+from importlib import metadata
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -21,6 +22,7 @@ from src.persistence.snapshot import SnapshotManager
 from src.persistence.snapshot_utils import current_config_dict, timestamped_export_path
 from src.utils.hashing import sha256_file
 from src.utils.log_safety import build_pii_log_entry
+from src.version import get_version
 
 MAX_CORPUS_FILES = 10_000
 
@@ -428,11 +430,9 @@ def _build_versions(
     Returns:
         Dictionary of component versions for manifest metadata.
     """
-    versions: dict[str, str] = {"app": settings_obj.app_version}
-    with contextlib.suppress(Exception):  # pragma: no cover
-        import llama_index  # type: ignore[import]
-
-        versions["llama_index"] = getattr(llama_index, "__version__", "unknown")
+    versions: dict[str, str] = {"app": get_version()}
+    with contextlib.suppress(metadata.PackageNotFoundError):  # pragma: no cover
+        versions["llama_index"] = metadata.version("llama-index-core")
 
     # Resolve embed_model following documented fallback order.
     if embed_model is None:

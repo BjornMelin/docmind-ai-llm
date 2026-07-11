@@ -59,13 +59,6 @@ def _mock_heavy_ml(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _mock_flag_embedding(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Mock FlagEmbedding to prevent heavy imports."""
-    mock_flag = MagicMock()
-    mock_flag.BGEM3FlagModel = MagicMock()
-    monkeypatch.setitem(sys.modules, "FlagEmbedding", mock_flag)
-
-
 def _mock_streamlit_extras(monkeypatch: pytest.MonkeyPatch) -> None:
     """Mock Streamlit extras packages used in the UI."""
     monkeypatch.setitem(sys.modules, "streamlit_extras", MagicMock())
@@ -132,36 +125,6 @@ def _mock_qdrant_client(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _mock_unstructured(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Mock Unstructured partition and chunking modules."""
-    from types import ModuleType
-
-    unstructured_pkg = ModuleType("unstructured")
-    partition_pkg = ModuleType("unstructured.partition")
-    auto_pkg = ModuleType("unstructured.partition.auto")
-
-    def _fake_partition(**kwargs):
-        return []
-
-    auto_pkg.partition = _fake_partition
-    title_pkg = ModuleType("unstructured.chunking.title")
-    basic_pkg = ModuleType("unstructured.chunking.basic")
-
-    def _fake_chunk_by_title(elements=None, **_):
-        return elements or []
-
-    def _fake_chunk_elements(elements=None, **_):
-        return elements or []
-
-    title_pkg.chunk_by_title = _fake_chunk_by_title
-    basic_pkg.chunk_elements = _fake_chunk_elements
-    monkeypatch.setitem(sys.modules, "unstructured", unstructured_pkg)
-    monkeypatch.setitem(sys.modules, "unstructured.partition", partition_pkg)
-    monkeypatch.setitem(sys.modules, "unstructured.partition.auto", auto_pkg)
-    monkeypatch.setitem(sys.modules, "unstructured.chunking.title", title_pkg)
-    monkeypatch.setitem(sys.modules, "unstructured.chunking.basic", basic_pkg)
-
-
 def _mock_internal_containers(monkeypatch: pytest.MonkeyPatch) -> None:
     """Mock internal DI container module."""
     mock_containers = MagicMock()
@@ -178,7 +141,6 @@ def setup_external_dependencies(monkeypatch):
     """
     install_mock_torch(monkeypatch, include_cuda_props=True)
     _mock_heavy_ml(monkeypatch)
-    _mock_flag_embedding(monkeypatch)
     install_mock_ollama(monkeypatch)
     install_dependency_injector(monkeypatch)
     install_llama_index_core(monkeypatch)
@@ -186,7 +148,6 @@ def setup_external_dependencies(monkeypatch):
     monkeypatch.setitem(sys.modules, "llama_index.llms.openai", MagicMock())
     _mock_streamlit_extras(monkeypatch)
     _mock_qdrant_client(monkeypatch)
-    _mock_unstructured(monkeypatch)
     _mock_internal_containers(monkeypatch)
 
 
@@ -201,18 +162,14 @@ def fixture_app_test(tmp_path, monkeypatch):
         AppTest: Streamlit app test instance with proper settings.
     """
     # Use real DocMindSettings (no side-effect integrations) with temp paths
-    from src.config.settings import (
-        DatabaseConfig,
-        MonitoringConfig,
-    )
-    from src.config.settings import (
-        DocMindSettings as TestDocMindSettings,
-    )
+    from src.config.settings import DatabaseConfig, MonitoringConfig
+    from src.config.settings import settings as app_settings
 
-    _ = TestDocMindSettings(
+    app_settings.__init__(
+        _env_file=None,
         # Override paths to use temp directory
         data_dir=tmp_path / "data",
-        cache_dir=tmp_path / "cache",
+        cache=app_settings.cache.model_copy(update={"dir": tmp_path / "cache"}),
         log_file=tmp_path / "logs" / "test.log",
         database=DatabaseConfig(sqlite_db_path=tmp_path / "db" / "test.db"),
         # Test-specific configurations
@@ -226,6 +183,7 @@ def fixture_app_test(tmp_path, monkeypatch):
 
     # Stub out agents modules to avoid heavy imports & pydantic issues
     install_agent_stubs(monkeypatch)
+    monkeypatch.setattr("src.app.bootstrap_settings", MagicMock(return_value=None))
 
     # Ensure submodule attribute is present for patch traversal
     from contextlib import suppress
@@ -241,7 +199,6 @@ def fixture_app_test(tmp_path, monkeypatch):
             "ollama.list",
             return_value={"models": [{"name": "qwen3-4b-instruct-2507:latest"}]},
         ),
-        patch("src.utils.core.validate_startup_configuration", return_value=True),
         # Mock hardware detection for consistent tests
         patch(
             "src.utils.core.detect_hardware",
@@ -252,9 +209,7 @@ def fixture_app_test(tmp_path, monkeypatch):
             },
         ),
     ):
-        return AppTest.from_file(
-            str(Path(__file__).parent.parent.parent / "src" / "app.py")
-        )
+        return AppTest.from_file(str(project_root / "app.py"))
 
 
 def test_app_hardware_detection(app_test) -> None:
@@ -347,9 +302,9 @@ def test_app_multi_agent_chat_functionality(app_test):
 
 
 @patch("ollama.pull", return_value={"status": "success"})
-@patch("src.utils.core.validate_startup_configuration", return_value=True)
+@patch("src.app.bootstrap_settings", return_value=None)
 def test_app_session_persistence_and_memory_management(
-    mock_validate,
+    mock_bootstrap,
     mock_pull,
     app_test,
 ):
@@ -359,14 +314,15 @@ def test_app_session_persistence_and_memory_management(
     memory persistence, and provides save/load functionality.
 
     Args:
-        mock_validate: Mock startup configuration validation.
+        mock_bootstrap: Mock settings bootstrap.
         mock_pull: Mock ollama.pull function.
         app_test: Streamlit app test fixture.
     """
     # Mark patched objects as used to satisfy lint rules
-    assert mock_validate is not None
+    assert mock_bootstrap is not None
     assert mock_pull is not None
     app = app_test.run()
+    assert mock_bootstrap.called
 
     # Verify app loaded successfully
     assert not app.exception, f"App failed with exception: {app.exception}"
@@ -404,18 +360,15 @@ def test_complete_end_to_end_multi_agent_workflow(app_test, tmp_path):
 
     This comprehensive test validates the entire user workflow:
     1. Application startup and configuration
-    2. Hardware detection and model suggestions
-    3. Document upload and processing
-    4. Multi-agent analysis coordination
-    5. Chat functionality with agent system
-    6. Session persistence and memory management
+    2. Document upload and processing
+    3. Multi-agent analysis coordination
+    4. Chat functionality with agent system
+    5. Session persistence and memory management
 
     Args:
-        mock_validate: Mock startup configuration validation.
         mock_load_docs: Mock document loading function.
         mock_coordinator_class: Mock MultiAgentCoordinator class.
         mock_ollama_list: Mock Ollama models list.
-        mock_detect: Mock hardware detection.
         mock_pull: Mock ollama.pull function.
         app_test: Streamlit app test fixture.
         tmp_path: Temporary directory for test files.
@@ -423,24 +376,11 @@ def test_complete_end_to_end_multi_agent_workflow(app_test, tmp_path):
     with (
         patch("ollama.pull", return_value={"status": "success"}),
         patch(
-            "src.utils.core.detect_hardware",
-            return_value={
-                "gpu_name": "RTX 4090",
-                "vram_total_gb": 24,
-                "cuda_available": True,
-            },
-            create=True,
-        ) as mock_detect,
-        patch(
             "ollama.list",
             return_value={"models": [{"name": "qwen3-4b-instruct-2507:latest"}]},
         ) as mock_ollama_list,
         patch_async_workflow_dependencies() as (mock_load_docs, mock_coordinator_class),
-        patch(
-            "src.utils.core.validate_startup_configuration",
-            return_value=True,
-            create=True,
-        ) as mock_validate,
+        patch("src.app.bootstrap_settings", return_value=None) as mock_bootstrap,
     ):
         # Setup comprehensive mocks for end-to-end testing
         from llama_index.core import Document
@@ -471,11 +411,7 @@ def test_complete_end_to_end_multi_agent_workflow(app_test, tmp_path):
     # 1. Verify application startup
     assert not app.exception, f"Application failed to start: {app.exception}"
 
-    # Verify startup configuration was used (non-strict)
-    assert mock_validate.called
-
-    # 2. Verify hardware detection and UI components (non-strict)
-    assert mock_detect.called
+    assert mock_bootstrap.called
 
     # Check main application components are present (robust title check)
     app_str = str(app)
@@ -484,13 +420,8 @@ def test_complete_end_to_end_multi_agent_workflow(app_test, tmp_path):
     # 3. Verify model selection and backend configuration (non-strict)
     # Listing models is optional in current app flow; tolerate absence
     _ = mock_ollama_list.called
-    sidebar_str = str(app.sidebar)
-    # Hardware info or controls present
-    assert (
-        ("Detected" in sidebar_str)
-        or ("Use GPU" in sidebar_str)
-        or ("Model" in sidebar_str)
-    )
+    sidebar_selectboxes = {element.label for element in app.sidebar.selectbox}
+    assert {"Session", "Scope", "Mode"} <= sidebar_selectboxes
 
     # 4. Verify document processing interface (non-brittle)
     has_file_uploader = (
@@ -501,11 +432,13 @@ def test_complete_end_to_end_multi_agent_workflow(app_test, tmp_path):
     # Do not fail hard on renderer differences; primary check is no exception
 
     # 5. Verify analysis options
-    has_analysis_options = "Analysis Options" in app_str or "Analyze" in app_str
+    has_analysis_options = any(
+        button.label == "Run analysis" for button in app.sidebar.button
+    )
     assert has_analysis_options, "Analysis interface not found"
 
     # 6. Verify chat functionality
-    has_chat_interface = "Chat with Documents" in app_str or "chat" in app_str.lower()
+    has_chat_interface = bool(app.chat_input)
     assert has_chat_interface, "Chat interface not found"
 
     # 7. Verify session management
@@ -522,9 +455,8 @@ def test_complete_end_to_end_multi_agent_workflow(app_test, tmp_path):
         # Final validation: Complete workflow loaded successfully
         assert not app.exception
         print("✅ End-to-end workflow test completed successfully")
-        print(f"   - Hardware detection: {mock_detect.called}")
         print(f"   - Model list retrieval: {mock_ollama_list.called}")
-        print(f"   - Configuration validation: {mock_validate.called}")
+        print(f"   - Settings bootstrap: {mock_bootstrap.called}")
         ui_components_loaded = bool(has_file_uploader and has_analysis_options)
         print(f"   - UI components loaded: {ui_components_loaded}")
         print(f"   - Chat interface: {has_chat_interface}")
@@ -538,11 +470,7 @@ async def test_async_workflow_validation(app_test):
         patch(
             "src.agents.coordinator.MultiAgentCoordinator", create=True
         ) as mock_coordinator_class,
-        patch(
-            "src.utils.core.validate_startup_configuration",
-            return_value=True,
-            create=True,
-        ),
+        patch("src.app.bootstrap_settings", return_value=None) as mock_bootstrap,
     ):
         # Setup async coordinator mock
         mock_coordinator = AsyncMock()
@@ -555,6 +483,7 @@ async def test_async_workflow_validation(app_test):
         app = app_test.run()
 
     assert not app.exception, f"Async workflow test failed: {app.exception}"
+    assert mock_bootstrap.called
 
     # Verify that async-capable components are present
     app_str = str(app)
@@ -571,29 +500,16 @@ def test_unified_configuration_architecture_integration(app_test):
     """Check app uses centralized settings with expected UI markers."""
     with (
         patch("ollama.pull", return_value={"status": "success"}),
-        patch(
-            "src.utils.core.validate_startup_configuration",
-            return_value=True,
-            create=True,
-        ) as mock_validate,
+        patch("src.app.bootstrap_settings", return_value=None) as mock_bootstrap,
     ):
         app = app_test.run()
 
-        # Verify startup configuration was used (non-strict)
-        assert mock_validate.called
+        assert mock_bootstrap.called
 
         # Verify app loaded successfully with unified configuration
         assert not app.exception, f"Unified configuration test failed: {app.exception}"
 
-        # Check that configuration-dependent components are present (robust)
-        app_str = str(app)
-        has_config_components = (
-            ("Use GPU" in app_str)
-            or ("Upload files" in app_str)
-            or ("Chat with Documents" in app_str)
-        )
-
-        assert has_config_components, "Configuration-dependent components not found"
+        assert "Chat" in str(app)
 
         print("✅ Unified configuration architecture integration validated")
 
@@ -614,12 +530,8 @@ def test_streamlit_app_markers_and_structure(app_test):
     assert ui_has_sidebar or ui_has_controls, "Missing core UI components"
 
     # Check sidebar components
-    sidebar_str = str(app.sidebar)
-    sidebar_components = ["Backend", "Model", "Use GPU"]
-    present_components = [comp for comp in sidebar_components if comp in sidebar_str]
-
-    # Should have at least some sidebar components
-    assert present_components, "No sidebar components found"
+    sidebar_selectboxes = {element.label for element in app.sidebar.selectbox}
+    assert {"Session", "Scope", "Mode"} <= sidebar_selectboxes
 
     print("✅ App structure validation completed")
     print(f"   - Sidebar present: {ui_has_sidebar}")

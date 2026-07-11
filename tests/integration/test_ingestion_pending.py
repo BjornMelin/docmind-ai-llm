@@ -17,7 +17,7 @@ def test_ingestion_pipeline_smoke(tmp_path):
     inputs = [
         IngestionInput(
             document_id="doc-1",
-            payload_bytes=b"Hello DocMind",
+            payload_text="Hello DocMind",
             metadata={"source": "test"},
         )
     ]

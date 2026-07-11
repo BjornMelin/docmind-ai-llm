@@ -14,22 +14,27 @@ def test_dedup_before_final_truncation(monkeypatch):
 
     class _Res:
         def __init__(self, points):
-            self.points = points
+            self.groups = [type("_Group", (), {"hits": [point]})() for point in points]
 
     class _FakeClient:
         def __init__(self, **_kwargs):
             pass
 
-        def query_points(self, **_kwargs):
+        def query_points_groups(self, **kwargs):
+            assert kwargs["group_by"] == "page_id"
+            assert kwargs["group_size"] == 1
+            assert kwargs["limit"] == 2
             pts = [
-                _P("a1", 0.9, {"page_id": "p1", "text": "x"}),
+                _P("a3", 0.95, {"page_id": "p1", "text": "x2"}),
                 _P("a2", 0.8, {"page_id": "p2", "text": "y"}),
-                _P("a3", 0.95, {"page_id": "p1", "text": "x2"}),  # duplicate page_id p1
-                _P("a4", 0.7, {"page_id": "p3", "text": "z"}),
             ]
             return _Res(pts)
 
     monkeypatch.setattr("src.retrieval.hybrid.QdrantClient", _FakeClient)
+    monkeypatch.setattr(
+        "src.retrieval.hybrid.ensure_hybrid_collection",
+        lambda *_args, **_kwargs: type("_Compatibility", (), {"compatible": True})(),
+    )
 
     retr = ServerHybridRetriever(
         HybridParams(
@@ -45,9 +50,7 @@ def test_dedup_before_final_truncation(monkeypatch):
     monkeypatch.setattr(retr, "_encode_sparse", lambda _t: None)  # dense only
 
     nodes = retr.retrieve("q")
-    # Should dedup p1 keeping higher score (a3) and include next best unique
     assert len(nodes) == 2
     ids = [n.node.id_ for n in nodes]
-    # a3 should be present, a1 dropped
     assert "a3" in ids
     assert "a1" not in ids

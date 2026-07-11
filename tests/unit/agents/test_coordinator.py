@@ -7,6 +7,7 @@ Covers configuration, state management, workflow setup, and error handling.
 # (e.g., _create_post_model_hook) because no equivalent public seam exists.
 # Keep private access minimal and well-documented.
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -169,20 +170,40 @@ class TestMultiAgentCoordinator:
             patch("src.config.setup_llamaindex"),
             patch("llama_index.core.Settings") as mock_settings,
         ):
-            mock_settings.llm = mock_llm
+            mock_settings._llm = mock_llm
 
             coordinator = MultiAgentCoordinator()
 
             from src.config import settings as app_settings
 
-            assert coordinator.model_path == "Qwen/Qwen3-4B-Instruct-2507-FP8"
-            # Defaults derive from application settings, not test fixture
-            assert coordinator.max_context_length == app_settings.vllm.context_window
+            assert coordinator.model_path == app_settings.effective_model
+            assert (
+                coordinator.max_context_length == app_settings.effective_context_window
+            )
             assert coordinator.backend == "vllm"
             assert coordinator.enable_fallback is True
             # Defaults derive from application settings
             assert coordinator.max_agent_timeout == app_settings.agents.decision_timeout
             assert coordinator._setup_complete is False
+
+    def test_coordinator_defaults_resolve_settings_at_call_time(self):
+        """Read effective model and context after module import, not in defaults."""
+        runtime_settings = MockDocMindSettings(
+            model="runtime/model",
+            context_window=4096,
+        )
+        settings_globals = MultiAgentCoordinator.__init__.__globals__
+
+        with patch.dict(
+            settings_globals,
+            {"settings": runtime_settings},
+            clear=False,
+        ):
+            coordinator = MultiAgentCoordinator()
+
+        assert coordinator.model_path == "runtime/model"
+        assert coordinator.max_context_length == 4096
+        assert coordinator.context_window == 4096
 
     @pytest.mark.usefixtures("test_settings")
     def test_coordinator_initialization_custom_params(self):
@@ -244,7 +265,7 @@ class TestMultiAgentCoordinator:
         """Test successful setup of coordinator components."""
         # Mock LLM in Settings
         mock_llm = _make_llm_mock()
-        mock_settings.llm = mock_llm
+        mock_settings._llm = mock_llm
 
         mock_dspy = Mock()
         mock_agent_factory = Mock(return_value=Mock())
@@ -296,7 +317,7 @@ class TestMultiAgentCoordinator:
     @patch("llama_index.core.Settings")
     def test_ensure_setup_no_llm_failure(self, mock_settings, mock_setup):
         """Test setup failure when LLM not configured."""
-        mock_settings.llm = None
+        mock_settings._llm = None
 
         coordinator = MultiAgentCoordinator()
         result = coordinator._ensure_setup()
@@ -621,7 +642,9 @@ class TestMultiAgentCoordinator:
 
     def test_validate_adr_compliance(self):
         """Test ADR compliance validation."""
-        coordinator = MultiAgentCoordinator()
+        coordinator = MultiAgentCoordinator(
+            model_path="Qwen/Qwen3-30B-A3B-Instruct-FP8"
+        )
         coordinator._setup_complete = True
         coordinator.compiled_graph = Mock()
         coordinator.avg_coordination_overhead = 0.1  # Under 200ms
@@ -762,15 +785,24 @@ class TestFactoryFunction:
         mock_instance = Mock()
         mock_coordinator = Mock(return_value=mock_instance)
         globals_map = create_multi_agent_coordinator.__globals__
+        runtime_settings = SimpleNamespace(
+            effective_model="runtime/default-model",
+            effective_context_window=32768,
+        )
 
         with patch.dict(
-            globals_map, {"MultiAgentCoordinator": mock_coordinator}, clear=False
+            globals_map,
+            {
+                "MultiAgentCoordinator": mock_coordinator,
+                "settings": runtime_settings,
+            },
+            clear=False,
         ):
             result = create_multi_agent_coordinator()
 
             mock_coordinator.assert_called_once_with(
-                model_path="Qwen/Qwen3-4B-Instruct-2507-FP8",
-                max_context_length=131072,  # From MockDocMindSettings
+                model_path="runtime/default-model",
+                max_context_length=32768,
                 enable_fallback=True,
                 tool_registry=None,
                 use_shared_llm_client=None,

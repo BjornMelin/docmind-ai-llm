@@ -4,23 +4,17 @@ FROM python:3.12.13-slim-bookworm AS builder
 
 WORKDIR /app
 
-ARG TORCH_VERSION=2.8.0
-ARG TORCH_WHEEL_URL=""
-ARG TORCH_WHEEL_SHA256=""
-
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_NO_CACHE_DIR=1
+    PYTHONUNBUFFERED=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         ca-certificates \
+        libgomp1 \
         libmagic1 \
-        libmupdf-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install uv==0.9.24
+COPY --from=ghcr.io/astral-sh/uv:0.11.21 /uv /uvx /bin/
 
 ENV UV_HTTP_TIMEOUT=3600 \
     UV_HTTP_RETRIES=20 \
@@ -29,45 +23,43 @@ ENV UV_HTTP_TIMEOUT=3600 \
     UV_PYTHON_DOWNLOADS=never \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
+    DOCMIND_EMBEDDING__CACHE_FOLDER=/app/hf-models \
+    LLAMA_INDEX_CACHE_DIR=/app/hf-models \
     VIRTUAL_ENV=/app/.venv \
-    PATH="/app/.venv/bin:$PATH" \
-    TORCH_VERSION=${TORCH_VERSION} \
-    TORCH_WHEEL_URL=${TORCH_WHEEL_URL} \
-    TORCH_WHEEL_SHA256=${TORCH_WHEEL_SHA256}
+    PATH="/app/.venv/bin:$PATH"
 
-COPY pyproject.toml uv.lock README.md ./
-COPY app.py ./app.py
-COPY scripts/docker_fetch_torch_wheel.py /usr/local/bin/docker_fetch_torch_wheel.py
-
-RUN --mount=type=cache,target=/root/.cache/torch \
-    python3 /usr/local/bin/docker_fetch_torch_wheel.py
+COPY pyproject.toml uv.lock ./
 
 RUN --mount=type=cache,target=/root/.cache/uv-docker \
-    --mount=type=cache,target=/root/.cache/torch \
-    uv venv && \
-    uv pip install --no-deps "$(cat /root/.cache/torch/torch-wheel.txt)" && \
-    uv sync --frozen --no-dev --no-install-project \
-      --no-install-package torch \
-      --no-install-package nvidia-cublas-cu12 \
-      --no-install-package nvidia-cuda-cupti-cu12 \
-      --no-install-package nvidia-cuda-nvrtc-cu12 \
-      --no-install-package nvidia-cuda-runtime-cu12 \
-      --no-install-package nvidia-cudnn-cu12 \
-      --no-install-package nvidia-cudnn-frontend \
-      --no-install-package nvidia-cufft-cu12 \
-      --no-install-package nvidia-cufile-cu12 \
-      --no-install-package nvidia-curand-cu12 \
-      --no-install-package nvidia-cusolver-cu12 \
-      --no-install-package nvidia-cusparse-cu12 \
-      --no-install-package nvidia-cusparselt-cu12 \
-      --no-install-package nvidia-cutlass-dsl \
-      --no-install-package nvidia-ml-py \
-      --no-install-package nvidia-nccl-cu12 \
-      --no-install-package nvidia-nvjitlink-cu12 \
-      --no-install-package nvidia-nvtx-cu12
+    uv sync --frozen --no-dev --no-install-project
 
+COPY README.md app.py ./
+COPY .streamlit/config.toml ./.streamlit/config.toml
 COPY src ./src
-COPY templates ./templates
+COPY scripts/container_entrypoint.sh scripts/container_health.py scripts/parser_health.py ./scripts/
+COPY tools/models/pull.py ./tools/models/pull.py
+
+# The production image advertises strict-offline PDF support, so its required
+# public parser artifacts are part of the immutable image rather than fetched
+# on first use.
+RUN python tools/models/pull.py \
+      --bge-m3 \
+      --cache_dir /app/hf-models \
+      --parser-defaults \
+      --rapidocr-cache-dir /app/parser-models
+
+RUN HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 python - <<'PY'
+from llama_index.core import Settings
+
+from src.config.integrations import setup_llamaindex
+
+setup_llamaindex(force_llm=True, force_embed=True)
+embedding = getattr(Settings, "_embed_model", None)
+if embedding is None or type(embedding).__name__ == "MockEmbedding":
+    raise SystemExit("canonical BGE-M3 embedding did not load from the image")
+if len(embedding.get_text_embedding("docmind readiness")) != 1024:
+    raise SystemExit("canonical BGE-M3 embedding dimension is not 1024")
+PY
 
 
 FROM python:3.12.13-slim-bookworm AS runtime
@@ -77,12 +69,17 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
+    DOCMIND_EMBEDDING__CACHE_FOLDER=/app/hf-models \
+    DOCMIND_OCR__MODEL_CACHE_DIR=/app/parser-models \
+    LLAMA_INDEX_CACHE_DIR=/app/hf-models \
     VIRTUAL_ENV=/app/.venv \
     PATH="/app/.venv/bin:$PATH"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgl1 \
+        libglib2.0-0 \
+        libgomp1 \
         libmagic1 \
-        libmupdf-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin docmind
@@ -95,7 +92,8 @@ USER docmind
 
 EXPOSE 8501
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD ["python", "-c", "import socket; s = socket.create_connection(('127.0.0.1', 8501), timeout=3); s.close()"]
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD ["python", "scripts/container_health.py"]
 
-CMD ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+ENTRYPOINT ["./scripts/container_entrypoint.sh"]
+CMD ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501", "--server.fileWatcherType=none", "--browser.gatherUsageStats=false"]

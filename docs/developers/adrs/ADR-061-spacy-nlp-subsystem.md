@@ -26,7 +26,9 @@ CPU/CUDA/Apple runtime selection, ingestion-time enrichment, and Streamlit-safe 
 DocMind AI needs optional NLP enrichment (sentence segmentation + entities) that:
 
 - is **offline-first** (no runtime downloads),
-- runs on **CPU by default**, with optional acceleration on **NVIDIA CUDA** and **Apple Silicon**,
+- runs on **CPU by default**, with optional acceleration on release-validated
+  **NVIDIA CUDA** for Linux x86_64 and best-effort **Apple Silicon** for macOS
+  arm64 with CPython 3.12,
 - avoids **fragile import-time side effects** (device selection must happen before model loads),
 - is safe to integrate into Streamlit (reruns + caching),
 - remains maintainable (one ownership boundary; schema-first outputs).
@@ -104,8 +106,9 @@ To avoid environment churn where uninstalling `typer` can remove files needed by
 
 For acceleration:
 
-- **Apple Silicon**: `uv sync --frozen --extra apple` installs `spacy[apple]` on macOS arm64.
-- **NVIDIA CUDA (12.x)**: `uv sync --frozen --extra gpu` installs `cupy-cuda12x>=13` on non-darwin.
+- **Apple Silicon**: `uv sync --frozen --extra apple` installs `spacy[apple]` on
+  macOS arm64 with CPython 3.12 as a best-effort path.
+- **NVIDIA CUDA (12.x)**: `uv sync --frozen --no-group cpu --extra gpu` installs `cupy-cuda12x>=13` on non-darwin.
 
 Why not use `spacy[cuda12x]==3.8.11`?
 

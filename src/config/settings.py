@@ -17,7 +17,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from loguru import logger
 from pydantic import (
     AnyHttpUrl,
     BaseModel,
@@ -35,6 +34,11 @@ from pydantic_settings import (
 )
 
 from src.config.dotenv import resolve_dotenv_path
+from src.config.embedding_defaults import (
+    BGE_M3_EMBEDDING_DIMENSION,
+    DEFAULT_BGE_M3_MODEL_ID,
+    DEFAULT_BGE_M3_MODEL_REVISION,
+)
 from src.config.settings_utils import (
     DEFAULT_LMSTUDIO_BASE_URL,
     DEFAULT_OLLAMA_BASE_URL,
@@ -45,8 +49,8 @@ from src.config.settings_utils import (
     ensure_v1,
     parse_endpoint_allowlist_hosts,
 )
-from src.models.embedding_constants import ImageBackboneName
 from src.nlp.settings import SpacyNlpSettings
+from src.version import get_version
 
 SETTINGS_MODEL_CONFIG = SettingsConfigDict(
     # Keep dotenv loading opt-in (callers can pass `_env_file=...` or use
@@ -447,20 +451,9 @@ class SecurityConfig(BaseModel):
     )
 
 
-class HybridConfig(BaseModel):
-    """Declarative hybrid retrieval policy."""
-
-    enabled: bool = Field(default=False)
-    server_side: bool = Field(default=False)
-    method: Literal["rrf", "dbsf"] = Field(default="rrf")
-    rrf_k: int = Field(default=60, ge=1, le=256)
-    dbsf_alpha: float = Field(default=0.5, ge=0.0, le=1.0)
-
-
 class ProcessingConfig(BaseModel):
     """Document processing configuration (ADR-009)."""
 
-    # Unstructured.io Settings
     chunk_size: int = Field(default=1500, ge=100, le=10000)
     new_after_n_chars: int = Field(default=1200, ge=100, le=8000)
     combine_text_under_n_chars: int = Field(default=500, ge=50, le=2000)
@@ -479,6 +472,40 @@ class ProcessingConfig(BaseModel):
         if int(self.chunk_overlap) > int(self.chunk_size):
             raise ValueError("chunk_overlap cannot exceed chunk_size")
         return self
+
+
+class DocumentParsingConfig(BaseModel):
+    """CPU-safe document parser routing and resource limits."""
+
+    framework: Literal["docling"] = Field(default="docling")
+    profile: Literal["cpu_safe"] = Field(default="cpu_safe")
+    max_pages: int = Field(default=500, ge=1, le=5000)
+    max_render_pixels: int = Field(default=40_000_000, ge=1_000_000, le=100_000_000)
+    max_total_text_chars: int = Field(
+        default=10_000_000,
+        ge=10_000,
+        le=100_000_000,
+    )
+    parse_timeout_seconds: float = Field(default=300.0, ge=1.0, le=1800.0)
+    ocrmypdf_timeout_seconds: float = Field(default=300.0, ge=1.0, le=1800.0)
+    direct_text_probe_bytes: int = Field(default=8192, ge=512, le=65_536)
+
+
+class PdfBackendConfig(BaseModel):
+    """PDF inspection and rasterization backend configuration."""
+
+    render_dpi: int = Field(default=200, ge=72, le=600)
+    min_text_chars_per_page: int = Field(default=24, ge=0, le=10000)
+
+
+class OcrConfig(BaseModel):
+    """RapidOCR and optional searchable-PDF configuration."""
+
+    engine: Literal["rapidocr"] = Field(default="rapidocr")
+    force_ocr: bool = Field(default=False)
+    model_cache_dir: Path = Field(default=Path("./cache/models"))
+    searchable_pdf_enabled: bool = Field(default=False)
+    ocrmypdf_jobs: int = Field(default=1, ge=1, le=8)
 
 
 class ChatConfig(BaseModel):
@@ -613,21 +640,64 @@ class ObservabilityConfig(BaseModel):
 class EmbeddingConfig(BaseModel):
     """Embedding configuration (SPEC-003; ADR-002/004).
 
-    Text uses BGE-M3. Images use tiered backbones (OpenCLIP/SigLIP) with
-    hardware-aware defaults. All knobs remain optional and conservative.
+    Text uses BGE-M3. Images use SigLIP.
     """
 
     # Text (BGE-M3)
-    model_name: str = Field(default="BAAI/bge-m3")
-    dimension: int = Field(default=1024, ge=256, le=4096)
+    model_name: str = Field(default=DEFAULT_BGE_M3_MODEL_ID)
+    model_revision: str | None = Field(
+        default=DEFAULT_BGE_M3_MODEL_REVISION,
+        description=(
+            "Pinned Hugging Face revision. Custom model IDs remain unpinned "
+            "unless this field is set explicitly."
+        ),
+    )
+    local_model_path: Path | None = Field(
+        default=None,
+        description="Optional local SentenceTransformers snapshot directory.",
+    )
+    cache_folder: Path = Field(default=Path("./models_cache"))
+    dimension: int = Field(default=BGE_M3_EMBEDDING_DIMENSION, ge=256, le=4096)
     max_length: int = Field(default=8192, ge=512, le=16384)
     enable_sparse: bool = Field(default=True)
     normalize_text: bool = Field(default=True)
     batch_size_text_gpu: int = Field(default=12, ge=1, le=128)
     batch_size_text_cpu: int = Field(default=4, ge=1, le=64)
 
+    @field_validator("model_revision", mode="before")
+    @classmethod
+    def _normalize_model_revision(cls, value: Any) -> str | None:
+        """Normalize blank text-model revisions to `None`."""
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator("local_model_path", mode="before")
+    @classmethod
+    def _normalize_local_model_path(cls, value: Any) -> Any:
+        """Treat a blank local model path as unset."""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @model_validator(mode="after")
+    def _validate_text_model_contract(self) -> "EmbeddingConfig":
+        """Keep the canonical BGE-M3 model and Qdrant dimension aligned."""
+        if self.model_name == DEFAULT_BGE_M3_MODEL_ID:
+            if self.dimension != BGE_M3_EMBEDDING_DIMENSION:
+                raise ValueError(
+                    "BAAI/bge-m3 requires embedding dimension "
+                    f"{BGE_M3_EMBEDDING_DIMENSION}"
+                )
+            if self.model_revision is None:
+                self.model_revision = DEFAULT_BGE_M3_MODEL_REVISION
+        elif "model_revision" not in self.model_fields_set:
+            self.model_revision = None
+        return self
+
     # Images
-    image_backbone: ImageBackboneName = Field(default="auto")
     siglip_model_id: str = Field(default="google/siglip-base-patch16-224")
     siglip_model_revision: str | None = Field(
         default=None,
@@ -654,14 +724,10 @@ class EmbeddingConfig(BaseModel):
     normalize_image: bool = Field(default=True)
     batch_size_image: int = Field(default=8, ge=1, le=64)
 
-    # Device selection (auto|cpu|cuda)
-    embed_device: Literal["auto", "cpu", "cuda"] = Field(default="auto")
-
 
 class RetrievalConfig(BaseModel):
     """Retrieval and reranking configuration (ADR-006)."""
 
-    strategy: str = Field(default="hybrid")
     top_k: int = Field(default=10, ge=1, le=50)
     use_reranking: bool = Field(default=True)
     reranking_top_k: int = Field(default=5, ge=1, le=20)
@@ -692,9 +758,8 @@ class RetrievalConfig(BaseModel):
     dedup_key: Literal["page_id", "doc_id"] = Field(default="page_id")
     # Feature flag for future named-vectors multi-head support (no-op now)
     named_vectors_multi_head_enabled: bool = Field(default=False)
-    # Router and feature toggles (ADR-003)
+    # Router selection (ADR-003)
     router: Literal["auto", "simple", "hierarchical", "graph"] = Field(default="auto")
-    graph_enabled: bool = Field(default=False)
     # Server-side hybrid via Qdrant Query API fusion (prefetch + RRF/DBSF).
     # This specifically controls registration of a server-side hybrid tool in
     # router_factory (distinct from any internal client-side hybrid behavior).
@@ -774,6 +839,11 @@ class CacheConfig(BaseModel):
     # Path configuration for DuckDB KV store
     dir: Path = Field(default=Path("./cache"))
     filename: str = Field(default="docmind.duckdb")
+
+    @property
+    def ingestion_db_path(self) -> Path:
+        """Return the canonical live ingestion DuckDB path."""
+        return self.dir / "ingestion" / self.filename
 
 
 class ArtifactsConfig(BaseModel):
@@ -953,7 +1023,6 @@ class DocMindSettings(BaseSettings):
 
     # Core Application
     app_name: str = Field(default="DocMind AI")
-    app_version: str = Field(default="2.0.0")
     debug: bool = Field(default=False)
     log_level: str = Field(default="INFO")
     # Global cache salt for Streamlit caches; bump to invalidate
@@ -967,7 +1036,6 @@ class DocMindSettings(BaseSettings):
     # File System Paths
     data_dir: Path = Field(default=Path("./data"))
     artifacts: ArtifactsConfig = Field(default_factory=ArtifactsConfig)
-    cache_dir: Path = Field(default=Path("./cache"))
     log_file: Path = Field(default=Path("./logs/docmind.log"))
 
     # Canonical hashing (ADR-050, ADR-047)
@@ -1016,7 +1084,7 @@ class DocMindSettings(BaseSettings):
     model: str | None = Field(
         default=None,
         description=(
-            "Preferred model identifier. If set, overrides nested vllm.model "
+            "Preferred model identifier. If set, overrides the backend default "
             "at runtime."
         ),
     )
@@ -1139,11 +1207,12 @@ class DocMindSettings(BaseSettings):
     graphrag_cfg: GraphRAGConfig = Field(default_factory=GraphRAGConfig)
     snapshots: SnapshotConfig = Field(default_factory=SnapshotConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
+    parsing: DocumentParsingConfig = Field(default_factory=DocumentParsingConfig)
+    pdf_backend: PdfBackendConfig = Field(default_factory=PdfBackendConfig)
+    ocr: OcrConfig = Field(default_factory=OcrConfig)
     image_encryption: ImageEncryptionConfig = Field(
         default_factory=ImageEncryptionConfig
     )
-    hybrid: HybridConfig = Field(default_factory=HybridConfig)
-
     # Alias fields mapped to nested configs for ergonomic top-level
     # environment overrides.
     context_window_size: int | None = Field(default=None)
@@ -1165,7 +1234,6 @@ class DocMindSettings(BaseSettings):
     @model_validator(mode="after")
     def _apply_aliases_and_validate(self) -> "DocMindSettings":
         self._apply_alias_overrides()
-        self._map_hybrid_to_retrieval()
         self._normalize_persistence_paths()
         self._validate_endpoints_security()
         self._validate_lmstudio_url()
@@ -1246,24 +1314,6 @@ class DocMindSettings(BaseSettings):
                 value = value.get_secret_value()
             setattr(target, attr, caster(value))
 
-    def _map_hybrid_to_retrieval(self) -> None:
-        try:
-            fields_set = getattr(self.retrieval, "model_fields_set", set())
-            if "enable_server_hybrid" not in fields_set:
-                self.retrieval.enable_server_hybrid = bool(self.hybrid.server_side)
-            if "rrf_k" not in fields_set:
-                self.retrieval.rrf_k = int(self.hybrid.rrf_k)
-            if "fusion_mode" not in fields_set:
-                self.retrieval.fusion_mode = self.hybrid.method
-        except (
-            AttributeError,
-            TypeError,
-            ValueError,
-        ) as exc:  # pragma: no cover - defensive
-            logger.warning(
-                "Failed to sync hybrid config into retrieval settings: %s", exc
-            )
-
     def _normalize_persistence_paths(self) -> None:
         """Normalize configured DB paths to live under data_dir by default."""
         for section, attr in (("chat", "sqlite_path"), ("database", "sqlite_db_path")):
@@ -1310,6 +1360,16 @@ class DocMindSettings(BaseSettings):
     def _norm_ollama(cls, v: object) -> str:
         candidate = ensure_http_scheme(v) or ""
         return candidate
+
+    @computed_field
+    @property
+    def effective_model(self) -> str:
+        """Return the backend-aware model identifier."""
+        if self.model:
+            return self.model
+        if self.llm_backend == "ollama":
+            return "qwen3:4b-instruct"
+        return self.vllm.model
 
     @computed_field
     @property
@@ -1405,7 +1465,7 @@ class DocMindSettings(BaseSettings):
         """
         base_url = self.backend_base_url_normalized
         return {
-            "model_name": self.model or self.vllm.model,
+            "model_name": self.effective_model,
             "context_window": self.effective_context_window,
             "max_tokens": self.vllm.max_tokens,
             "temperature": self.vllm.temperature,
@@ -1421,14 +1481,29 @@ class DocMindSettings(BaseSettings):
             as the single source of truth. Several integration points expect a
             plain dict to hydrate third-party clients.
         """
-        device = (
-            ("cuda" if self.enable_gpu_acceleration else "cpu")
-            if self.embedding.embed_device == "auto"
-            else self.embedding.embed_device
+        from src.utils.core import select_device
+
+        device = select_device("auto") if self.enable_gpu_acceleration else "cpu"
+        local_model_path = self.embedding.local_model_path
+        model_name = (
+            str(local_model_path.expanduser())
+            if local_model_path is not None
+            else self.embedding.model_name
         )
         return {
             # Text
-            "model_name": self.embedding.model_name,
+            "model_id": self.embedding.model_name,
+            "model_name": model_name,
+            "model_revision": (
+                None if local_model_path is not None else self.embedding.model_revision
+            ),
+            "local_model_path": (
+                str(local_model_path.expanduser())
+                if local_model_path is not None
+                else None
+            ),
+            "cache_folder": str(self.embedding.cache_folder.expanduser()),
+            "local_files_only": True,
             "device": device,
             "dimension": self.embedding.dimension,
             "max_length": self.embedding.max_length,
@@ -1443,12 +1518,10 @@ class DocMindSettings(BaseSettings):
             "normalize_text": self.embedding.normalize_text,
             "enable_sparse": self.embedding.enable_sparse,
             # Images
-            "image_backbone": self.embedding.image_backbone,
+            "siglip_model_id": self.embedding.siglip_model_id,
             "siglip_model_revision": self.embedding.siglip_model_revision,
             "batch_size_image": self.embedding.batch_size_image,
             "normalize_image": self.embedding.normalize_image,
-            # Misc
-            "embed_device": self.embedding.embed_device,
             "trust_remote_code": bool(self.security.trust_remote_code),
         }
 
@@ -1557,6 +1630,12 @@ class DocMindSettings(BaseSettings):
                 "to be True. Set DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true."
             )
 
+    @computed_field
+    @property
+    def app_version(self) -> str:
+        """Return the release-owned package version."""
+        return get_version()
+
 
 _SPACY_ENV_BRIDGE: dict[str, str] = {
     "SPACY_ENABLED": "DOCMIND_SPACY__ENABLED",
@@ -1652,10 +1731,13 @@ __all__ = [
     "ChatConfig",
     "DatabaseConfig",
     "DocMindSettings",
+    "DocumentParsingConfig",
     "EmbeddingConfig",
     "GraphRAGConfig",
     "ImageEncryptionConfig",
     "MonitoringConfig",
+    "OcrConfig",
+    "PdfBackendConfig",
     "ProcessingConfig",
     "RetrievalConfig",
     "SemanticCacheConfig",

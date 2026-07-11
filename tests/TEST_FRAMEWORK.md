@@ -298,7 +298,7 @@ This framework ensures fast, reliable, maintainable tests that provide confidenc
 
 ### Problem
 
-Mock objects in test fixtures can be converted to strings and used as actual file paths, creating directories with names like `<Mock name='mock.cache_dir' id='123456789'>` in the project root.
+Mock objects in test fixtures can be converted to strings and used as actual file paths, creating directories with names like `<Mock name='mock.cache.dir' id='123456789'>` in the project root.
 
 ### Root Cause
 
@@ -316,7 +316,7 @@ def mock_settings(tmp_path):
     settings.model_name = "test-model"
     settings.embedding_dimension = 1024
     # CRITICAL: Provide real paths for filesystem operations
-    settings.cache_dir = str(tmp_path / "cache")
+    settings.cache.dir = tmp_path / "cache"
     settings.data_dir = str(tmp_path / "data") 
     settings.log_file = str(tmp_path / "logs" / "test.log")
     return settings
@@ -329,7 +329,7 @@ def mock_settings(tmp_path):
 def bad_mock_settings():
     """BROKEN: Creates mock directories in project root!"""
     settings = Mock()
-    settings.cache_dir = Mock()  # This becomes "<Mock ...>" string!
+    settings.cache.dir = Mock()  # This becomes "<Mock ...>" string!
     return settings
 ```
 
@@ -338,7 +338,7 @@ def bad_mock_settings():
 Before creating any new test fixtures:
 
 1. **✅ Use `tmp_path` parameter** for any fixture that might create directories
-2. **✅ Provide real path strings** for `cache_dir`, `data_dir`, `log_file`, etc.
+2. **✅ Provide real paths** for `cache.dir`, `data_dir`, `log_file`, etc.
 3. **✅ Never leave path fields as Mock objects** if they'll be used in filesystem operations
 4. **✅ Follow existing patterns** in `conftest.py` (e.g., `centralized_settings_with_temp_dirs`)
 
@@ -346,8 +346,8 @@ Before creating any new test fixtures:
 
 If you see directories like these in project root, you have a mock path bug:
 
-- `<Mock name='mock.cache_dir' id='133725091402384'>`
-- `<MagicMock name='app_settings.cache_dir' id='133725128381264'>`
+- `<Mock name='mock.cache.dir' id='133725091402384'>`
+- `<MagicMock name='app_settings.cache.dir' id='133725128381264'>`
 
 ### Implementation Examples
 

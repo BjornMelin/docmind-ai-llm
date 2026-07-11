@@ -14,6 +14,11 @@ from typing import Any
 def test_hybrid_retrieval_telemetry_emits_backend_and_timeout(monkeypatch):  # type: ignore[no-untyped-def]
     """Validate backend, timeout, fusion params, and counts are logged."""
     hmod = importlib.import_module("src.retrieval.hybrid")
+    monkeypatch.setattr(
+        hmod,
+        "ensure_hybrid_collection",
+        lambda *_args, **_kwargs: type("_Compatibility", (), {"compatible": True})(),
+    )
 
     # Patch settings for deterministic rrf_k and timeout
     from src.config import settings as cfg  # lazy import for test
@@ -38,10 +43,12 @@ def test_hybrid_retrieval_telemetry_emits_backend_and_timeout(monkeypatch):  # t
 
     class _Res:
         def __init__(self):
-            self.points = [_Point(i) for i in range(8)]
+            self.groups = [
+                type("_Group", (), {"hits": [_Point(i)]})() for i in range(8)
+            ]
 
     class _Client:
-        def query_points(self, **_kwargs: Any):  # type: ignore[no-untyped-def]
+        def query_points_groups(self, **_kwargs: Any):  # type: ignore[no-untyped-def]
             return _Res()
 
         def close(self):  # type: ignore[no-untyped-def]
@@ -84,3 +91,4 @@ def test_hybrid_retrieval_telemetry_emits_backend_and_timeout(monkeypatch):  # t
     assert e.get("retrieval.fusion_mode") == "rrf"
     assert isinstance(e.get("retrieval.return_count"), int)
     assert isinstance(e.get("retrieval.latency_ms"), int)
+    assert e.get("dedup.server_side") is True

@@ -2,11 +2,11 @@
 ADR: 063
 Title: LLM Provider Architecture (OpenAI-Compatible Core + Open Responses Alignment)
 Status: Accepted
-Version: 1.0
-Date: 2026-01-17
+Version: 1.1
+Date: 2026-07-11
 Supersedes:
 Superseded-by:
-Related: ADR-004, ADR-024, ADR-059, ADR-062
+Related: ADR-004, ADR-024, ADR-059, ADR-062, ADR-065
 Tags: architecture, configuration, llm, providers, streaming
 References:
   - [Open Responses specification](https://www.openresponses.org/specification)
@@ -44,7 +44,7 @@ Open Responses defines a shared schema and streaming event taxonomy around the *
 - **User-first interoperability**: “paste base URL + key” should work for most providers.
 - **Maintenance**: minimize duplicated provider logic and reduce version churn risk.
 - **Streaming/tool calling correctness**: preserve semantics across providers.
-- **Runtime/tooling coherence**: keep provider behavior consistent under the single Python 3.13 baseline (ADR-064).
+- **Runtime/tooling coherence**: keep provider behavior consistent under the Python 3.12 primary baseline, with Python 3.13 supported (ADR-065).
 
 ## Alternatives
 
@@ -76,8 +76,11 @@ We will standardize the provider layer on an **OpenAI-compatible core interface*
 - Default to **Chat Completions** for broad compatibility, with an explicit opt-in to **Responses API** mode (`DOCMIND_OPENAI__API_MODE=responses`) when a provider supports it.
 - Keep **offline-first endpoint validation** as the hard boundary: loopback-only by default, allowlisted remote endpoints when explicitly enabled.
 - Prefer **gateways/proxies** (OpenRouter, LiteLLM Proxy, Vercel AI Gateway) for providers that are not natively OpenAI-compatible.
+- Document parsing is independent of the LLM provider layer. The canonical
+  parser uses local Docling, pypdfium2, and RapidOCR only; it does not route
+  document content through OpenAI-compatible, vLLM, or llama.cpp endpoints.
 
-We do **not** adopt the upstream `openresponses` Python package at this time. DocMind aligns with Open Responses semantics by using the OpenAI SDK v2 Responses event model (via LlamaIndex/LangChain) against OpenAI-compatible endpoints. If adopting `openresponses` provides concrete integration value (e.g., compliance tooling or interop adapters we can’t get otherwise), we can revisit under the Python 3.13-only baseline (ADR-064).
+We do **not** adopt the upstream `openresponses` Python package at this time. DocMind aligns with Open Responses semantics by using the OpenAI SDK v2 Responses event model (via LlamaIndex/LangChain) against OpenAI-compatible endpoints. If adopting `openresponses` provides concrete integration value, such as compliance tooling or otherwise unavailable interoperability adapters, revisit it under the active Python support contract in ADR-065.
 
 ## High-Level Architecture
 

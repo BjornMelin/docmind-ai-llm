@@ -1,186 +1,171 @@
-# Operations Guide
+# Operations guide
 
-**Version**: 2.0 (Rock Solid)
-**Scope**: Production, Offline, and Hardened Environments
+**Version**: 3.0
+**Scope**: Local development, restricted networks, and container operations
 
-## 1. Quick Start (Installation)
+## Install and run
 
-DocMind AI is a pure Python project managed by `uv`.
-
-### Prerequisites
-
-- **Python**: 3.12.13 (managed by `uv`)
-- **GPU**: NVIDIA RTX 4090 (16GB VRAM) recommended for vLLM/ColPali.
-- **System**: Linux / macOS / WSL2.
-
-### Standard Install
+DocMind uses Python 3.12 or 3.13 and `uv`. The default lockfile path is CPU-first and uses PyTorch's official CPU wheel index.
 
 ```bash
-# 1. Install dependencies & tools
 uv sync --frozen
-
-# 2. Run the application
+cp .env.example .env
 uv run streamlit run app.py
 ```
 
----
-
-## 2. Infrastructure & Hardening
-
-### Offline-First Setup
-
-To operate in air-gapped or restricted environments, you must pre-download artifacts.
-
-1. **Download Models**: Use the CLI to fetch LLM and embedding weights.
-
-   ```bash
-   uv run tools/models/pull.py --all
-   ```
-
-2. **Runtime Flags**: Set these environment variables to strictly prevent network egress.
-
-   ```env
-   HF_HUB_OFFLINE=1
-   TRANSFORMERS_OFFLINE=1
-   ```
-
-3. **spaCy (optional)**: Install a language model for NLP enrichment (entities/sentences).
-   The app will not auto-download models; install explicitly for offline use.
-
-   ```bash
-   uv run python -m spacy download en_core_web_sm
-   ```
-
-   Optional acceleration:
-
-   - NVIDIA CUDA (Linux/Windows): `uv sync --frozen --extra gpu` and set `DOCMIND_SPACY__DEVICE=auto|cuda|cpu`
-   - Apple Silicon (macOS arm64): `uv sync --frozen --extra apple` and set `DOCMIND_SPACY__DEVICE=auto|apple|cpu`
-
-   See `docs/specs/spec-015-nlp-enrichment-spacy.md` and `docs/developers/gpu-setup.md`.
-
-### Container Hardening (ADR-042)
-
-The provided `Dockerfile` supports hardened production security.
-
-- **Non-Root User**: Application runs as a standard user (`uid=1000`).
-- **Read-Only Filesystem**:
-  - Set `read_only: true` in `docker-compose.prod.yml`.
-  - Mount `tmpfs` at `/tmp` and `/run`.
-  - Mount persistent volumes for `/app/data` and `/app/logs`.
-- **Health Check**:
-  - Endpoint: `/_stcore/health`
-  - Port: `8501`
-
----
-
-## 3. Backend Selection & Performance
-
-Choose the backend that fits your hardware and throughput needs.
-
-| Backend       | Hardware           | Use Case               | Key Strength                              |
-| :------------ | :----------------- | :--------------------- | :---------------------------------------- |
-| **vLLM**      | NVIDIA GPU (16GB+) | Production / High Load | Highest throughput; FlashInfer optimized. |
-| **Ollama**    | Mac / Linux / Win  | General / Easy Setup   | Zero-config; manages model lifecycle.     |
-| **LlamaCPP**  | Local HTTP server  | Low Resource / Edge    | OpenAI-compatible llama.cpp server mode.  |
-| **LM Studio** | Desktop UI         | Research / Dev         | Visual parameter tuning.                  |
-
-### Performance Tuning (vLLM)
-
-To achieve the **128K context window** on 16GB VRAM, exact arguments are required:
-
-- **Max Model Length**: `--max-model-len 131072`
-- **KV Cache**: `--kv-cache-dtype fp8_e5m2` (Critical reduction in memory usage).
-- **Memory Utilization**: `DOCMIND_VLLM__GPU_MEMORY_UTILIZATION=0.90`
+Use the optional NVIDIA CUDA 12.8 dependency set only on a compatible host:
 
 ```bash
-# Production Launch Implementation
-vllm serve Qwen/Qwen3-4B-Instruct-2507-FP8 \
-  --max-model-len 131072 \
-  --kv-cache-dtype fp8_e5m2 \
-  --gpu-memory-utilization 0.90 \
-  --enable-chunked-prefill
+uv sync --frozen --no-group cpu --extra gpu
 ```
 
----
+The GPU extra is optional. External LLM servers such as vLLM have their own hardware and deployment requirements.
 
-## 4. Advanced Operations
+## Prepare models for restricted networks
 
-### Multimodal Reranking
+Fetch the required dense embedding and parser models into their canonical
+caches:
 
-DocMind supports dual-path visual reranking for complex PDF/Image retrieval.
+```bash
+uv run python tools/models/pull.py \
+  --bge-m3 \
+  --cache_dir ./models_cache \
+  --parser-defaults \
+  --rapidocr-cache-dir ./cache/models
+uv run python scripts/parser_health.py --check
+```
 
-- **Default (SigLIP)**: Fast, zero-service cosine rescale. No extra VRAM cost (uses embedding model).
-- **Pro (ColPali)**: Full visual-semantic reranking. Requires ~8-12GB additional VRAM.
-  - **Enable**: `DOCMIND_RETRIEVAL__ENABLE_COLPALI=true`
-  - **Warning**: Enabling this on 16GB cards alongside vLLM may cause OOM. Monitor VRAM.
+`--all` additionally prefetches the pinned SigLIP snapshot used by optional
+image retrieval. Text reranking and sparse encoding fail open when their
+optional local artifacts are absent.
 
-### Agent Operations
+The parser health command hashes every Docling and RapidOCR file against the canonical source manifest. Mismatches are reported by relative path in `docling.model_issues` and `rapidocr.model_issues`.
 
-- **Decision Timeout**: `DOCMIND_AGENTS__DECISION_TIMEOUT=200` (ms). Increase this if the router aggressively fallbacks during heavy load (e.g., to 400ms).
+After the artifacts are present, set the upstream library offline flags when the deployment requires them:
 
----
+```env
+HF_HUB_OFFLINE=1
+TRANSFORMERS_OFFLINE=1
+```
 
-## 5. Maintenance & Data Protection
+These flags control supported Hugging Face clients. They do not prove that the host has no other network path. DocMind separately rejects non-loopback service endpoints unless `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true` and the endpoint is allowed by policy.
 
-### Data Persistence
+## Operate the parser
 
-State is stored in three local locations (under `./data/`):
+DocMind has one parser path: Docling conversion, pypdfium2 PDF inspection and rasterization, and RapidOCR CPU OCR. There is no parser backend selector or remote parser fallback.
 
-1. `docmind.db` (SQLite WAL): **Operational Metadata** (Jobs, Snapshots, UI State). ACID compliant.
-2. `docmind.duckdb` (DuckDB): **Ingestion Cache**. Loss of this file slows down re-ingestion but loses no data.
-3. `qdrant/` (Directory): **Vector Storage**. Contains the encoded index.
+Searchable-PDF export is an optional artifact step:
 
-### Manual Backup Strategy
+```bash
+uv sync --frozen --extra searchable-pdf
+```
 
-_Automation script is planned (ADR-033/051)._
+OCRmyPDF export is fail-open and runs only on POSIX systems. Windows users can run it through WSL2. Timeout, cancellation, and failure handling terminate and reap the complete subprocess group. A searchable-PDF export failure does not change the parser result.
 
-**To Backup**:
+See [Parser runtime validation](parser-runtime-validation.md) for the model preflight and reproducible benchmark command.
 
-1. **Stop the Application**.
-2. **Copy Artifacts**:
+## Operate Qdrant safely
 
-   ```bash
-   cp -r data/docmind.db backups/
-   cp -r data/qdrant/ backups/
-   # Optional: Cache can be rebuilt
-   cp data/docmind.duckdb backups/
-   ```
+### Start a local instance
 
-3. **Restart Application**.
+Use the repository launcher for local Qdrant:
 
-### Log Safety & Observability
+```bash
+./scripts/start_qdrant_local.sh
+```
 
-- **PII Policy**: Logs are automatically redacted (ADR-047). Sensitive fields are replaced with robust HMAC fingerprints using `DOCMIND_HASHING__HMAC_SECRET`.
-- **Encrypted Artifacts**: If `DOCMIND_PROCESSING__ENCRYPT_PAGE_IMAGES=true`, page images on disk are AES-256 encrypted using `DOCMIND_IMG_AES_KEY_BASE64`.
+The launcher publishes REST and gRPC exactly on `127.0.0.1:6333` and `127.0.0.1:6334`. If a container with the selected name already exists, the launcher reuses it only when both bindings match exactly. It refuses missing, wildcard, IPv6, remapped, or otherwise different bindings so an operator can inspect and resolve the container without automatic deletion.
 
----
+The launcher accepts these optional controls:
 
-## 6. Configuration Guide
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DOCMIND_QDRANT_CONTAINER` | `docmind-qdrant-local` | Container name |
+| `DOCMIND_QDRANT_IMAGE` | `qdrant/qdrant:v1.10.0` | Container image |
+| `DOCMIND_QDRANT_PORT` | `6333` | Loopback REST port |
+| `DOCMIND_QDRANT_GRPC_PORT` | `6334` | Loopback gRPC port |
+| `DOCMIND_QDRANT_STORAGE` | `./data/qdrant-local` | Host storage path |
 
-DocMind AI uses a centralized, type-safe configuration system. For an exhaustive list of all 100+ environment variables, hardware profiles, and optimization settings, please refer to the:
+### Check collection compatibility
 
-**[Canonical Configuration Reference](configuration.md)**
+Inspect the configured named-vector collection without mutation:
 
-### Critical Production Variables
+```bash
+uv run python scripts/qdrant_schema.py check
+```
 
-| Variable                            | Default  | Purpose                                                          |
-| :---------------------------------- | :------- | :--------------------------------------------------------------- |
-| `DOCMIND_LLM_BACKEND`               | `ollama` | Backend selector (`vllm`, `ollama`, or `llamacpp`).              |
-| `DOCMIND_RETRIEVAL__ENABLE_COLPALI` | `false`  | Enable visual-semantic reranking (High VRAM).                    |
-| `DOCMIND_HASHING__HMAC_SECRET`      | `None`   | **CRITICAL**: Used for PII redaction and fingerprinting.         |
-| `DOCMIND_IMG_AES_KEY_BASE64`        | `None`   | Required if `DOCMIND_PROCESSING__ENCRYPT_PAGE_IMAGES` is `true`. |
+Application startup creates a missing collection. It accepts a compatible collection and refuses an incompatible one. Runtime code does not mutate or replace an incompatible schema.
 
----
+### Rebuild a proven-empty collection
 
-## 7. Developer Cheatsheet
+Stop every process that can write to the collection before running:
 
-Standard commands for repo maintenance.
+```bash
+uv run python scripts/qdrant_schema.py rebuild-empty
+```
 
-| Task             | Command                                        |
-| :--------------- | :--------------------------------------------- |
-| **Sync Deps**    | `uv sync --frozen`                             |
-| **Update Lock**  | `uv lock`                                      |
-| **Lint/Format**  | `uv run ruff check .` / `uv run ruff format .` |
-| **Type Check**   | `uv run pyright`                               |
-| **Run Tests**    | `uv run python scripts/run_tests.py`           |
-| **Quality Gate** | `uv run python scripts/run_quality_gates.py`   |
+`rebuild-empty` reads the exact point count, rebuilds only when that count is zero, and refuses non-empty collections or count failures with exit status 2. Qdrant does not atomically lock the count-and-delete sequence, so writer quiescence is an operator requirement. The command never treats a count error as an empty collection.
+
+Do not delete a collection to resolve a vector mismatch. Preserve or migrate non-empty data, or configure a new collection name.
+
+## Run containers
+
+The production compose overlay runs the application with a read-only root filesystem and writable mounts for required data. The Docker build uses the CPU dependency group unless the build is intentionally configured otherwise.
+
+Container health has one implementation owner:
+
+```bash
+python scripts/container_health.py
+```
+
+Both the Dockerfile and `docker-compose.prod.yml` invoke this script. It verifies parser model integrity, then opens a TCP connection to the local Streamlit port. It does not make an HTTP request.
+
+## Choose an LLM service
+
+DocMind supports local or policy-approved OpenAI-compatible services. The application does not bundle an inference server.
+
+| Backend | Connection model | Operational note |
+| --- | --- | --- |
+| Ollama | Native client | Default local backend; DocMind pins the Python client to 0.6.2 |
+| vLLM | OpenAI-compatible HTTP | Run and size the server separately |
+| llama.cpp | OpenAI-compatible HTTP | Run the server separately |
+| LM Studio | OpenAI-compatible HTTP | Run the desktop service separately |
+
+Keep `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` for loopback-only deployments. Enabling a remote service is a deliberate policy change and may also require an endpoint allowlist entry.
+
+## Tune retrieval and agents
+
+SigLIP is the only image embedding backend. ColPali remains an optional visual reranker installed through the `multimodal` extra:
+
+```bash
+uv sync --frozen --extra multimodal
+```
+
+The agent decision timeout is measured in seconds:
+
+```env
+DOCMIND_AGENTS__DECISION_TIMEOUT=200
+```
+
+The accepted range is `10s` to `1000s`. Retrieval reranker settings ending in `_MS` remain milliseconds and have separate budgets.
+
+## Protect state
+
+Stop application writers before making a filesystem-level backup. Preserve at least the configured SQLite database, application data, and Qdrant storage. DuckDB-backed ingestion cache data can be included when retaining warm cache state matters.
+
+Production deployments must replace `DOCMIND_HASHING__HMAC_SECRET` with a unique secret of at least 32 bytes. When `DOCMIND_PROCESSING__ENCRYPT_PAGE_IMAGES=true`, set `DOCMIND_IMG_AES_KEY_BASE64` to a base64-encoded 32-byte key and manage it outside source control.
+
+## Verify a release candidate
+
+Run the repository's standard quality gates before deployment:
+
+```bash
+uv run ruff check .
+uv run pyright
+uv run python scripts/run_tests.py
+uv run python scripts/run_quality_gates.py
+```
+
+The wheel smoke script validates wheel contents, metadata, and a `--no-deps` package import. It does not prove that pip can resolve every runtime dependency. Use the locked uv environment or the repository Docker image for supported installations.
+
+See the [configuration reference](configuration.md) for the complete environment schema.
