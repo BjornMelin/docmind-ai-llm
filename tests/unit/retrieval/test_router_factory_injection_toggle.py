@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.retrieval import router_factory as rf
+from src.retrieval.image_index import ImageCollectionIncompatibleError
 
 from .conftest import get_router_tool_names
 
@@ -32,6 +33,28 @@ class _FakeVector:
 class _FakePG:
     def __init__(self) -> None:
         self.property_graph_store = object()
+
+
+@pytest.mark.unit
+def test_router_factory_skips_incompatible_optional_image_collection(
+    monkeypatch: pytest.MonkeyPatch,
+    router_settings,
+) -> None:  # type: ignore[no-untyped-def]
+    """Keep semantic retrieval available when the image index is absent."""
+
+    def _incompatible_retriever(**_kwargs: object) -> object:
+        raise ImageCollectionIncompatibleError("image_collection_missing")
+
+    monkeypatch.setattr(
+        "src.retrieval.multimodal_fusion.MultimodalFusionRetriever",
+        _incompatible_retriever,
+        raising=True,
+    )
+    router_settings.retrieval.enable_image_retrieval = True
+
+    router = rf.build_router_engine(_FakeVector(), settings=router_settings)
+
+    assert set(get_router_tool_names(router)) == {"semantic_search"}
 
 
 @pytest.mark.unit

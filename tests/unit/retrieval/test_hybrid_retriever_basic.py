@@ -8,6 +8,7 @@ import pytest
 from llama_index.core.base.base_retriever import BaseRetriever
 
 from src.retrieval.hybrid import HybridParams, ServerHybridRetriever
+from src.retrieval.sparse_query import SparseEncodingError
 
 
 class _Point:
@@ -120,6 +121,32 @@ def test_hybrid_sparse_unavailable_fallback(monkeypatch: pytest.MonkeyPatch) -> 
     assert [prefetch.using for prefetch in calls["prefetch"]] == ["text-dense"]  # type: ignore[index,union-attr]
 
 
+def test_hybrid_sparse_encoder_failure_falls_back_to_dense(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Use dense retrieval when the optional BM42 query model cannot load."""
+    calls: dict[str, object] = {}
+
+    def _fail_sparse(_text: str) -> None:
+        raise SparseEncodingError("query encoding failed")
+
+    def _query(*_args: object, **kwargs: object) -> _Resp:
+        calls.update(kwargs)
+        return _Resp([_Point("a", 0.5, {"page_id": "A", "text": "dense"})])
+
+    monkeypatch.setattr("src.retrieval.hybrid._encode_sparse_query", _fail_sparse)
+    retriever = ServerHybridRetriever(HybridParams(collection="c"))
+    monkeypatch.setattr(
+        retriever._client,
+        "query_points_groups",
+        _query,
+        raising=False,
+    )
+
+    assert [node.node.get_content() for node in retriever.retrieve("q")] == ["dense"]
+    assert [prefetch.using for prefetch in calls["prefetch"]] == ["text-dense"]  # type: ignore[index,union-attr]
+
+
 def test_hybrid_retriever_checks_schema_without_mutating(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -189,13 +216,16 @@ async def test_hybrid_retriever_owns_sync_embedding_and_uses_async_qdrant(
     )
     monkeypatch.setattr("src.retrieval.hybrid.get_settings_embed_model", _Embed)
 
+    def _fail_sparse(_text: str) -> None:
+        raise SparseEncodingError("query encoding failed")
+
+    monkeypatch.setattr("src.retrieval.hybrid._encode_sparse_query", _fail_sparse)
+
     retriever = ServerHybridRetriever(
         HybridParams(collection="col"),
         client=_SyncClient(),  # type: ignore[arg-type]
         async_client=async_client,  # type: ignore[arg-type]
     )
-    monkeypatch.setattr(retriever, "_encode_sparse", lambda _text: None)
-
     assert isinstance(retriever, BaseRetriever)
     assert [node.node.get_content() for node in await retriever.aretrieve("query")] == [
         "async"

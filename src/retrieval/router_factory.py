@@ -36,6 +36,7 @@ from src.config.settings import DocMindSettings
 from src.config.settings import settings as default_settings
 from src.retrieval.async_work import AsyncWorkExecutor
 from src.retrieval.graph_config import build_graph_query_engine
+from src.retrieval.image_index import ImageCollectionIncompatibleError
 from src.retrieval.reranking import get_postprocessors
 from src.telemetry.opentelemetry import record_router_selection, router_build_span
 from src.utils.log_safety import build_pii_log_entry
@@ -394,7 +395,13 @@ def _maybe_add_multimodal_tool(
                 ),
             )
         )
-    except (ValueError, TypeError, AttributeError, ImportError) as exc:
+    except (
+        ImageCollectionIncompatibleError,
+        ValueError,
+        TypeError,
+        AttributeError,
+        ImportError,
+    ) as exc:
         _warn_once(
             "multimodal",
             "Multimodal tool construction skipped",

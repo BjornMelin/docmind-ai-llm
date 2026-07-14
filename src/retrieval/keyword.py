@@ -26,7 +26,7 @@ from qdrant_client import AsyncQdrantClient, QdrantClient
 from qdrant_client.common.client_exceptions import ResourceExhaustedResponse
 
 from src.retrieval.async_work import AsyncWorkCapacityError, AsyncWorkExecutor
-from src.retrieval.sparse_query import encode_to_qdrant
+from src.retrieval.sparse_query import SparseEncodingError, encode_to_qdrant
 from src.utils.log_safety import build_pii_log_entry
 from src.utils.qdrant_exceptions import QDRANT_SCHEMA_EXCEPTIONS
 from src.utils.qdrant_utils import QDRANT_PAYLOAD_FIELDS, nodes_from_query_result
@@ -128,7 +128,10 @@ class KeywordSparseRetriever(BaseRetriever):
         qtext = query_bundle.query_str
         t0 = time.time()
 
-        sparse_vec = encode_to_qdrant(qtext)
+        try:
+            sparse_vec = encode_to_qdrant(qtext)
+        except SparseEncodingError as exc:
+            return self._handle_sparse_encoding_failure(t0=t0, exc=exc)
         if sparse_vec is None:
             self._emit_telemetry(t0=t0, return_count=0, sparse_fallback=True)
             return []
@@ -173,6 +176,8 @@ class KeywordSparseRetriever(BaseRetriever):
         except AsyncWorkCapacityError:
             self._emit_telemetry(t0=t0, return_count=0, sparse_fallback=True)
             return []
+        except SparseEncodingError as exc:
+            return self._handle_sparse_encoding_failure(t0=t0, exc=exc)
         if sparse_vec is None:
             self._emit_telemetry(t0=t0, return_count=0, sparse_fallback=True)
             return []
@@ -207,6 +212,26 @@ class KeywordSparseRetriever(BaseRetriever):
             error_type=None,
         )
         return nodes
+
+    def _handle_sparse_encoding_failure(
+        self,
+        *,
+        t0: float,
+        exc: SparseEncodingError,
+    ) -> list[NodeWithScore]:
+        """Record a PII-safe query-encoding failure and fail open."""
+        cause = exc.__cause__ or exc
+        logger.warning(
+            "Keyword query encoding failed; returning no matches (error_type={})",
+            type(cause).__name__,
+        )
+        self._emit_telemetry(
+            t0=t0,
+            return_count=0,
+            sparse_fallback=True,
+            error_type=type(exc).__name__,
+        )
+        return []
 
     def _query_points_with_retry(self, sparse_vec: Any) -> QdrantQueryResponse:
         """Query Qdrant with rate-limit aware retries (best-effort)."""

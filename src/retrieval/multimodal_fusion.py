@@ -269,30 +269,41 @@ class MultimodalFusionRetriever(BaseRetriever):
     ) -> None:
         """Create a fusion retriever from text and image components."""
         super().__init__()
-        if text_retriever is None:
-            if not sparse_retrieval_enabled():
-                raise ValueError(
-                    "Dense multimodal fusion requires an injected text retriever"
+        with contextlib.ExitStack() as acquired:
+            if text_retriever is None:
+                if not sparse_retrieval_enabled():
+                    raise ValueError(
+                        "Dense multimodal fusion requires an injected text retriever"
+                    )
+                text_retriever = ServerHybridRetriever(
+                    HybridParams(
+                        collection=(
+                            text_collection or settings.database.qdrant_collection
+                        ),
+                        fused_top_k=settings.retrieval.fused_top_k,
+                        prefetch_sparse=settings.retrieval.prefetch_sparse_limit,
+                        prefetch_dense=settings.retrieval.prefetch_dense_limit,
+                        fusion_mode=settings.retrieval.fusion_mode,
+                        rrf_k=settings.retrieval.rrf_k,
+                        dedup_key=settings.retrieval.dedup_key,
+                    )
                 )
-            text_retriever = ServerHybridRetriever(
-                HybridParams(
-                    collection=text_collection or settings.database.qdrant_collection,
-                    fused_top_k=settings.retrieval.fused_top_k,
-                    prefetch_sparse=settings.retrieval.prefetch_sparse_limit,
-                    prefetch_dense=settings.retrieval.prefetch_dense_limit,
-                    fusion_mode=settings.retrieval.fusion_mode,
-                    rrf_k=settings.retrieval.rrf_k,
-                    dedup_key=settings.retrieval.dedup_key,
+                acquired.callback(text_retriever.close)
+            if image_retriever is None:
+                image_retriever = ImageSiglipRetriever(
+                    ImageSearchParams(
+                        collection=(
+                            image_collection
+                            or settings.database.qdrant_image_collection
+                        )
+                    )
                 )
-            )
-        self._text = text_retriever
-        self._image = image_retriever or ImageSiglipRetriever(
-            ImageSearchParams(
-                collection=image_collection or settings.database.qdrant_image_collection
-            )
-        )
-        self._fused_top_k = fused_top_k or settings.retrieval.fused_top_k
-        self._dedup_key = dedup_key or settings.retrieval.dedup_key
+                acquired.callback(image_retriever.close)
+            self._text = text_retriever
+            self._image = image_retriever
+            self._fused_top_k = fused_top_k or settings.retrieval.fused_top_k
+            self._dedup_key = dedup_key or settings.retrieval.dedup_key
+            acquired.pop_all()
 
     def close(self) -> None:
         """Close underlying retrievers (best-effort)."""

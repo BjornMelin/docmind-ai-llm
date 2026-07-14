@@ -28,12 +28,13 @@ def test_encode_to_qdrant_fastembed_available(monkeypatch):
 
 
 def test_encode_to_qdrant_encoder_failure_propagates(monkeypatch):
-    """Fail closed when the required canonical encoder is unavailable."""
+    """Normalize provider failures for query-time fallback handling."""
     from src.retrieval import sparse_query as sq
 
     def _unavailable(_cache):  # type: ignore[no-untyped-def]
         raise RuntimeError("encoder unavailable")
 
     monkeypatch.setattr(sq, "_get_sparse_encoder", _unavailable)
-    with pytest.raises(RuntimeError, match="encoder unavailable"):
+    with pytest.raises(sq.SparseEncodingError, match="query encoding failed") as exc:
         sq.encode_to_qdrant("x")
+    assert isinstance(exc.value.__cause__, RuntimeError)

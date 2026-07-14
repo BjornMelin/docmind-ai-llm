@@ -24,6 +24,7 @@ from qdrant_client import models as qmodels
 from src.config import settings
 from src.config.integrations import get_settings_embed_model
 from src.retrieval.async_work import AsyncWorkCapacityError, AsyncWorkExecutor
+from src.retrieval.sparse_query import SparseEncodingError
 from src.retrieval.sparse_query import encode_to_qdrant as _encode_sparse_query
 from src.utils.exceptions import IMPORT_EXCEPTIONS
 from src.utils.log_safety import build_pii_log_entry
@@ -173,7 +174,16 @@ class ServerHybridRetriever(BaseRetriever):
             A ``SparseVector`` when a sparse encoder is available and succeeds;
             otherwise ``None`` to indicate dense-only fallback.
         """
-        return _encode_sparse_query(text)
+        try:
+            return _encode_sparse_query(text)
+        except SparseEncodingError as exc:
+            cause = exc.__cause__ or exc
+            logger.warning(
+                "Sparse query encoding failed; using dense-only retrieval "
+                "(error_type={})",
+                type(cause).__name__,
+            )
+            return None
 
     async def _aencode_sparse(self, text: str) -> qmodels.SparseVector | None:
         """Encode sparse input without admitting unbounded native work."""

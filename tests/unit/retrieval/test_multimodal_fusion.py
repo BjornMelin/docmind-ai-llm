@@ -9,7 +9,11 @@ from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
 from qdrant_client import models as qmodels
 
 from src.config import settings
-from src.retrieval.image_index import canonical_image_collection_metadata
+from src.retrieval import multimodal_fusion as multimodal_module
+from src.retrieval.image_index import (
+    ImageCollectionIncompatibleError,
+    canonical_image_collection_metadata,
+)
 from src.retrieval.multimodal_fusion import (
     ImageSearchParams,
     ImageSiglipRetriever,
@@ -23,6 +27,33 @@ def _nws(*, node_id: str, score: float, page_id: str) -> NodeWithScore:
     node = TextNode(text="x", id_=node_id)
     node.metadata["page_id"] = page_id
     return NodeWithScore(node=node, score=float(score))
+
+
+def test_multimodal_constructor_does_not_leak_text_retriever_on_image_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Release internally acquired resources when optional image setup fails."""
+
+    class _Text:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    text = _Text()
+
+    def _fail_image(_params: ImageSearchParams) -> None:
+        raise ImageCollectionIncompatibleError("image_collection_missing")
+
+    monkeypatch.setattr(multimodal_module, "sparse_retrieval_enabled", lambda: True)
+    monkeypatch.setattr(multimodal_module, "ServerHybridRetriever", lambda _p: text)
+    monkeypatch.setattr(multimodal_module, "ImageSiglipRetriever", _fail_image)
+
+    with pytest.raises(ImageCollectionIncompatibleError):
+        MultimodalFusionRetriever(text_collection="text", image_collection="images")
+
+    assert text.closed is True
 
 
 @pytest.mark.parametrize(

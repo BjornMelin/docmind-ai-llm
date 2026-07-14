@@ -96,7 +96,12 @@ def sparse_callbacks() -> tuple[SparseEncoder, SparseEncoder]:
 
 def encode_to_qdrant(text: str) -> qmodels.SparseVector | None:
     """Encode one query using the same canonical callback as every retriever."""
-    indices_batch, values_batch = encode_queries([text])
+    try:
+        indices_batch, values_batch = encode_queries([text])
+    except SparseEncodingError:
+        raise
+    except Exception as exc:
+        raise SparseEncodingError("Canonical sparse query encoding failed") from exc
     indices = indices_batch[0]
     values = values_batch[0]
     if not indices:
