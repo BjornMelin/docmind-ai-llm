@@ -1,8 +1,8 @@
 ---
 spec: SPEC-009
 title: Persistence and Caching: DuckDBKV Ingestion Cache and Qdrant
-version: 1.1.0
-date: 2026-07-11
+version: 2.0.0
+date: 2026-07-13
 owners: ["ai-arch"]
 status: Revised
 related_requirements:
@@ -18,9 +18,9 @@ Define the implemented ingestion persistence split:
 - Qdrant stores dense and sparse vectors.
 - LlamaIndex `IngestionCache` backed by `DuckDBKVStore` caches ingestion work.
 
-The proposed SQLite WAL operational-metadata store is future design, not part
-of this release contract. See SPEC-039 and ADR-055. Existing chat and memory
-features own their separate SQLite stores.
+The proposed shared operational-metadata store was superseded without
+implementation (SPEC-039 and ADR-055). Existing chat, memory, snapshots, and
+analytics keep their subsystem-owned persistence boundaries.
 
 ## Libraries and Imports
 

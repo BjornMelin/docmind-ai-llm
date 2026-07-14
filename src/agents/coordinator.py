@@ -1,15 +1,14 @@
 """Multi-Agent Coordination System using a graph-native LangGraph supervisor.
 
-This module implements a MultiAgentCoordinator that orchestrates five specialized agents
+This module implements a MultiAgentCoordinator that orchestrates four specialized agents
 using a graph-native LangGraph `StateGraph` supervisor for query processing, with
 deadline propagation, runtime context injection, and checkpoint/store support.
 
 Features:
 - LangGraph `StateGraph` supervisor orchestration
 - Structured output mode for consistent response formatting
-- Forward message tool for direct agent communication
+- Atomic multi-agent dispatch
 - Context trimming hooks for memory management
-- DSPy integration for query optimization
 - Performance tracking and timeout protection
 
 Example:
@@ -17,10 +16,7 @@ Example:
 
         from src.agents.coordinator import MultiAgentCoordinator
         coordinator = MultiAgentCoordinator()
-        response = coordinator.process_query(
-            "Compare AI vs ML techniques",
-            context=None
-        )
+        response = coordinator.process_query("Compare AI vs ML techniques")
         # response.content contains the generated text
 """
 
@@ -28,19 +24,27 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import math
+import sqlite3
 import threading
 import time
-from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable, Coroutine
+from concurrent.futures import CancelledError as FuturesCancelledError
+from concurrent.futures import Future
 from concurrent.futures import TimeoutError as FuturesTimeoutError
-from typing import TYPE_CHECKING, Any, cast
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Literal, TypeVar, cast
 
 from langchain.agents import create_agent
 from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.messages import HumanMessage, RemoveMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.errors import GraphDrained
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
+from langgraph.runtime import RunControl
 
 # Import LlamaIndex Settings for context window access
 from llama_index.core.utils import get_tokenizer
@@ -48,36 +52,53 @@ from loguru import logger
 from opentelemetry import metrics, trace
 from opentelemetry.trace import Span
 
-# Registry utilities
-# Note: tool imports are performed lazily inside _setup_agent_graph to avoid
-# importing heavy dependencies at module import time (improves Streamlit tests
-# that stub LlamaIndex modules).
-from src.agents.registry import DefaultToolRegistry, RetryLlamaIndexLLM, ToolRegistry
+from src.agents.registry import build_agent_tool_sets
 
 # Graph-native supervisor implementation (repo-local).
 from src.agents.supervisor_graph import (
     SupervisorBuildParams,
     build_multi_agent_supervisor_graph,
-    create_forward_message_tool,
 )
+from src.agents.tools.constants import MAX_RETRIEVAL_RESULTS
 from src.agents.tools.memory import (
     MemoryConsolidationPolicy,
-    apply_consolidation_policy,
-    consolidate_memory_candidates,
+    capture_memory_namespace_generations,
+    consolidate_and_apply_memory_candidates,
     extract_memory_candidates,
+    is_memory_namespace_tombstoned,
+    memory_generation_from_state,
+    memory_namespace_generation,
+    memory_namespace_lock,
+    try_advance_memory_namespace_generation,
+    try_tombstone_memory_namespace,
+)
+from src.agents.tools.synthesis import (
+    current_retrieval_batches,
+    interleave_retrieval_documents,
+    retrieval_batch_watermark,
 )
 from src.config import settings
 from src.config.langchain_factory import build_chat_model
-from src.dspy_integration import DSPyLlamaIndexRetriever, is_dspy_available
+from src.persistence.chat_db import (
+    CHECKPOINT_IDENTITY_TABLES,
+    INCOMPATIBLE_CHECKPOINT_DB_MESSAGE,
+    LEGACY_CHECKPOINT_IDENTITY_MESSAGE,
+    LEGACY_CHECKPOINT_IDENTITY_WHERE,
+    LegacyCheckpointIdentityError,
+)
+from src.persistence.chat_db import purge_session as delete_persisted_session
+from src.persistence.checkpoint_identity import checkpoint_thread_id, memory_namespace
 from src.telemetry.opentelemetry import configure_observability
 from src.utils.log_safety import build_pii_log_entry
 from src.utils.telemetry import log_jsonl
 
 # Import agent-specific models
-from .models import AgentResponse, MultiAgentGraphState, MultiAgentState
-
-if TYPE_CHECKING:  # pragma: no cover
-    from src.utils.semantic_cache import CacheKey
+from .models import (
+    AgentResponse,
+    AgentRuntimeContext,
+    MultiAgentGraphState,
+    MultiAgentState,
+)
 
 _COORDINATOR_TRACER = trace.get_tracer("docmind.agents.coordinator")
 _COORDINATOR_LATENCY = None
@@ -85,11 +106,7 @@ _COORDINATOR_COUNTER = None
 
 
 class ContextManager:
-    """Manages context window constraints and token estimations.
-
-    Provides utilities for calculating token counts and estimating KV cache
-    memory usage for optimized context handling.
-    """
+    """Manage context-window constraints and token estimation."""
 
     def __init__(self, max_context_tokens: int = 131072) -> None:
         """Initializes the context manager with specified token limits.
@@ -99,7 +116,6 @@ class ContextManager:
         """
         self.max_context_tokens = max_context_tokens
         self.trim_threshold = int(max_context_tokens * 0.9)  # 90% threshold
-        self.kv_cache_memory_per_token = 1024  # bytes per token for FP8
         self._tokenizer = get_tokenizer()
 
     def estimate_tokens(self, messages: list[dict] | list[Any]) -> int:
@@ -127,44 +143,224 @@ class ContextManager:
 
         return total_tokens
 
-    def calculate_kv_cache_usage(self, state: dict) -> float:
-        """Calculates the estimated KV cache memory consumption in gigabytes.
-
-        Args:
-            state: The current graph state containing message history.
-
-        Returns:
-            The estimated memory usage in GB.
-        """
-        messages = state.get("messages", [])
-        tokens = self.estimate_tokens(messages)
-        usage_bytes = tokens * self.kv_cache_memory_per_token
-        return usage_bytes / (1024**3)  # Convert to GB
-
-    def structure_response(self, response: Any) -> dict[str, Any]:
-        """Wraps a raw response with metadata and optimization flags.
-
-        Args:
-            response: The raw response data to structure.
-
-        Returns:
-            A dictionary containing the response content and associated metadata.
-        """
-        return {
-            "content": str(response),
-            "structured": True,
-            "generated_at": time.time(),
-            "context_optimized": True,
-        }
-
 
 # Constants
 COORDINATION_OVERHEAD_THRESHOLD = 0.2  # seconds (200ms target)
 CONTEXT_TRIM_STRATEGY = "last"
 MEMORY_CONSOLIDATION_MAX_WORKERS = 2
 MEMORY_CONSOLIDATION_TIMEOUT_S = 10.0
-MEMORY_CONSOLIDATION_RELEASE_GRACE_S = 30.0
-SEMANTIC_CACHE_STORE_MAX_WORKERS = 2
+AGENT_GRAPH_MAX_CONCURRENT_RUNS = 4
+AGENT_GRAPH_RUNNER_CLOSE_GRACE_S = 1.0
+SESSION_PURGE_DRAIN_TIMEOUT_S = 5.0
+_TIMEOUT_REASONS = frozenset({"deadline_exceeded", "dependency_timeout"})
+_T = TypeVar("_T")
+
+
+class _GraphRunnerCapacityError(RuntimeError):
+    """Raised when the bounded graph runner has no execution slot available."""
+
+
+class _DaemonTaskExecutor:
+    """Start admitted background work on daemon threads without an exit join."""
+
+    def __init__(self, *, thread_name: str) -> None:
+        self._thread_name = thread_name
+        self._lock = threading.Lock()
+        self._closed = False
+
+    def submit(
+        self,
+        function: Callable[..., _T],
+        /,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Future[_T]:
+        """Start one already-capacity-checked task immediately."""
+        future: Future[_T] = Future()
+
+        def _run() -> None:
+            if not future.set_running_or_notify_cancel():
+                return
+            try:
+                result = function(*args, **kwargs)
+            except BaseException as exc:
+                future.set_exception(exc)
+            else:
+                future.set_result(result)
+
+        with self._lock:
+            if self._closed:
+                raise RuntimeError("Memory executor is closed")
+            threading.Thread(
+                target=_run,
+                name=self._thread_name,
+                daemon=True,
+            ).start()
+        return future
+
+    def close(self) -> None:
+        """Reject new work without joining admitted daemon tasks."""
+        with self._lock:
+            self._closed = True
+
+
+class _AsyncGraphRunner:
+    """Own one persistent event loop for bounded asynchronous graph execution."""
+
+    def __init__(self, max_concurrent: int = AGENT_GRAPH_MAX_CONCURRENT_RUNS) -> None:
+        self._loop = asyncio.new_event_loop()
+        self._slots = threading.BoundedSemaphore(max_concurrent)
+        self._lock = threading.Lock()
+        self._closed = False
+        self._async_cleanup: Callable[[], Coroutine[Any, Any, None]] | None = None
+        self._thread = threading.Thread(
+            target=self._run_loop,
+            name="docmind-agent-graph",
+            daemon=True,
+        )
+        try:
+            self._thread.start()
+        except RuntimeError:
+            self._loop.close()
+            raise
+
+    def _run_loop(self) -> None:
+        asyncio.set_event_loop(self._loop)
+        try:
+            self._loop.run_forever()
+        finally:
+            pending = asyncio.all_tasks(self._loop)
+            for task in pending:
+                task.cancel()
+            if pending:
+                _, pending = self._loop.run_until_complete(
+                    asyncio.wait(
+                        pending,
+                        timeout=AGENT_GRAPH_RUNNER_CLOSE_GRACE_S,
+                    )
+                )
+                if pending:
+                    logger.warning(
+                        "Agent graph runner abandoned {} cancellation-resistant tasks",
+                        len(pending),
+                    )
+            if self._async_cleanup is not None:
+                cleanup_task = self._loop.create_task(self._async_cleanup())
+                try:
+                    done, cleanup_pending = self._loop.run_until_complete(
+                        asyncio.wait(
+                            {cleanup_task},
+                            timeout=AGENT_GRAPH_RUNNER_CLOSE_GRACE_S,
+                        )
+                    )
+                    if cleanup_pending:
+                        cleanup_task.cancel()
+                        logger.warning(
+                            "Agent graph runner cleanup exceeded close grace period"
+                        )
+                    elif done:
+                        cleanup_task.result()
+                except Exception as exc:  # pragma: no cover - best-effort teardown
+                    logger.warning(
+                        "Agent graph runner cleanup failed (error_type={})",
+                        type(exc).__name__,
+                    )
+            shutdown_task = self._loop.create_task(self._loop.shutdown_asyncgens())
+            _, shutdown_pending = self._loop.run_until_complete(
+                asyncio.wait(
+                    {shutdown_task},
+                    timeout=AGENT_GRAPH_RUNNER_CLOSE_GRACE_S,
+                )
+            )
+            if shutdown_pending:
+                shutdown_task.cancel()
+                logger.warning("Async generator shutdown exceeded close grace period")
+            remaining = asyncio.all_tasks(self._loop)
+            for task in remaining:
+                task.cancel()
+                # The loop is closing by contract; suppress misleading destructor
+                # noise for cancellation-resistant third-party coroutines.
+                task._log_destroy_pending = False  # type: ignore[attr-defined]
+            self._loop.close()
+
+    async def _run_with_slot(
+        self, coroutine: Coroutine[Any, Any, dict[str, Any]]
+    ) -> dict[str, Any]:
+        try:
+            return await coroutine
+        finally:
+            self._slots.release()
+
+    def submit(
+        self, coroutine: Coroutine[Any, Any, dict[str, Any]]
+    ) -> Future[dict[str, Any]]:
+        """Submit one graph run without allowing unbounded queued work."""
+        if not self._slots.acquire(blocking=False):
+            coroutine.close()
+            raise _GraphRunnerCapacityError("Agent graph runner is at capacity")
+
+        with self._lock:
+            if self._closed:
+                self._slots.release()
+                coroutine.close()
+                raise RuntimeError("Agent graph runner is closed")
+
+            wrapped = self._run_with_slot(coroutine)
+            try:
+                return asyncio.run_coroutine_threadsafe(wrapped, self._loop)
+            except BaseException:
+                wrapped.close()
+                coroutine.close()
+                self._slots.release()
+                raise
+
+    def run(self, coroutine: Coroutine[Any, Any, _T]) -> _T:
+        """Run lifecycle work on the owned event loop and return its result."""
+        with self._lock:
+            if self._closed:
+                coroutine.close()
+                raise RuntimeError("Agent graph runner is closed")
+            if threading.current_thread() is self._thread:
+                coroutine.close()
+                raise RuntimeError("Cannot synchronously wait on the graph runner")
+            try:
+                future = asyncio.run_coroutine_threadsafe(coroutine, self._loop)
+            except BaseException:
+                coroutine.close()
+                raise
+        return future.result()
+
+    @property
+    def is_alive(self) -> bool:
+        """Return whether the owned event-loop thread is still running."""
+        return self._thread.is_alive()
+
+    def close(
+        self,
+        *,
+        async_cleanup: Callable[[], Coroutine[Any, Any, None]] | None = None,
+    ) -> None:
+        """Cancel pending graph tasks and stop the event loop within a fixed grace."""
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            self._async_cleanup = async_cleanup
+            if not self._loop.is_closed():
+                self._loop.call_soon_threadsafe(self._loop.stop)
+
+        if threading.current_thread() is not self._thread:
+            self._thread.join(timeout=AGENT_GRAPH_RUNNER_CLOSE_GRACE_S)
+        if self._thread.is_alive():
+            logger.warning("Agent graph runner did not stop within close grace period")
+
+
+@dataclass(slots=True)
+class _ActiveAgentRun:
+    """Run-scoped cancellation and cleanup state for one conversation thread."""
+
+    control: RunControl
+    finished: threading.Event
 
 
 class _AgentHookMiddleware(AgentMiddleware[MultiAgentGraphState, Any]):
@@ -238,19 +434,6 @@ class _AgentHookMiddleware(AgentMiddleware[MultiAgentGraphState, Any]):
         return {"optimization_metrics": metrics}
 
 
-def _ensure_event_loop() -> None:
-    """Ensures a valid asyncio event loop is active in the current thread.
-
-    Provides a fail-safe mechanism to set a new loop if a policy-managed loop
-    is unavailable, avoiding deprecated patterns.
-    """
-    try:
-        asyncio.get_event_loop_policy().get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-
 def _as_state_dict(state: Any) -> dict[str, Any]:
     """Normalizes graph state objects into plain dictionaries.
 
@@ -273,65 +456,95 @@ def _as_state_dict(state: Any) -> dict[str, Any]:
     return {}
 
 
-def _coerce_deadline_ts(initial_state: dict[str, Any]) -> float | None:
-    """Extracts and validates a monotonic deadline timestamp from state.
+def _require_deadline_ts(initial_state: dict[str, Any]) -> float:
+    """Return the required finite monotonic deadline from graph state.
 
     Args:
         initial_state: The initial state dictionary containing potential deadlines.
 
     Returns:
-        The deadline as a float timestamp, or None if invalid or missing.
+        The absolute monotonic deadline.
+
+    Raises:
+        ValueError: If the deadline is absent, non-numeric, or non-finite.
     """
     raw_deadline = initial_state.get("deadline_ts")
+    if raw_deadline is None:
+        raise ValueError("deadline_ts must be a finite monotonic timestamp")
     try:
-        return float(raw_deadline) if raw_deadline is not None else None
-    except (TypeError, ValueError):
-        return None
+        deadline_ts = float(raw_deadline)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("deadline_ts must be a finite monotonic timestamp") from exc
+    if not math.isfinite(deadline_ts):
+        raise ValueError("deadline_ts must be a finite monotonic timestamp")
+    return deadline_ts
 
 
-def _shared_llm_attempts() -> int:
-    """Calculates the maximum retry attempts for the shared LlamaIndex LLM.
+def _checkpoint_config(
+    *,
+    thread_id: str,
+    user_id: str,
+    checkpoint_id: str | None = None,
+) -> RunnableConfig:
+    """Build the sole user-scoped LangGraph persistence configuration."""
+    configurable: dict[str, Any] = {
+        "thread_id": checkpoint_thread_id(
+            thread_id=str(thread_id),
+            user_id=str(user_id),
+        ),
+        "public_thread_id": str(thread_id),
+        "user_id": str(user_id),
+    }
+    if checkpoint_id is not None:
+        configurable["checkpoint_id"] = str(checkpoint_id)
+    return {"configurable": configurable}
 
-    Returns:
-        The number of attempts (retries + 1), with a minimum of 1.
-    """
-    retries = int(getattr(settings.agents, "max_retries", 0))
-    return max(1, retries + 1)
 
-
-def _shared_llm_retries() -> int:
-    """Calculates the configured retry count for LlamaIndex LLM backends.
-
-    Returns:
-        The number of retries, with a minimum of 0.
-    """
-    return max(0, int(getattr(settings.agents, "max_retries", 0)))
-
-
-def _supports_native_llamaindex_retries(llm: Any) -> bool:
-    """Determines if a LlamaIndex LLM instance supports native max_retries.
-
-    Args:
-        llm: The LLM instance to inspect.
-
-    Returns:
-        True if the LLM exposes a 'max_retries' field via Pydantic or legacy
-        attribute naming.
-    """
-    fields = getattr(llm, "model_fields", None)
-    if isinstance(fields, dict) and "max_retries" in fields:
-        return True
-    legacy_fields = getattr(llm, "__fields__", None)
-    return isinstance(legacy_fields, dict) and "max_retries" in legacy_fields
+async def _open_async_sqlite_checkpointer(
+    path: Path,
+) -> tuple[AsyncSqliteSaver, contextlib.AsyncExitStack]:
+    """Open and initialize an async SQLite saver on the current event loop."""
+    stack = contextlib.AsyncExitStack()
+    try:
+        saver = await stack.enter_async_context(
+            AsyncSqliteSaver.from_conn_string(str(path))
+        )
+        await saver.setup()
+        for table in CHECKPOINT_IDENTITY_TABLES:
+            async with saver.conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+                (table,),
+            ) as cursor:
+                if await cursor.fetchone() is None:
+                    continue
+            try:
+                async with saver.conn.execute(
+                    f"""
+                    SELECT 1
+                    FROM {table}
+                    WHERE {LEGACY_CHECKPOINT_IDENTITY_WHERE}
+                    LIMIT 1;
+                    """,  # noqa: S608 - static internal table allowlist
+                ) as cursor:
+                    incompatible = await cursor.fetchone()
+            except sqlite3.DatabaseError as exc:
+                raise LegacyCheckpointIdentityError(
+                    INCOMPATIBLE_CHECKPOINT_DB_MESSAGE
+                ) from exc
+            if incompatible is not None:
+                raise LegacyCheckpointIdentityError(LEGACY_CHECKPOINT_IDENTITY_MESSAGE)
+    except BaseException:
+        await stack.aclose()
+        raise
+    return saver, stack
 
 
 class MultiAgentCoordinator:
-    """Orchestrates five specialized agents for document analysis.
+    """Orchestrates four specialized agents for document analysis.
 
     Uses a graph-native LangGraph supervisor pattern to manage:
-    - Router Agent: Determines query processing strategy.
     - Planner Agent: Decomposes complex queries.
-    - Retrieval Agent: Executes document search with DSPy optimization.
+    - Retrieval Agent: Executes the native retrieval router.
     - Synthesis Agent: Combines multi-source results.
     - Validation Agent: Validates final response accuracy.
 
@@ -341,122 +554,200 @@ class MultiAgentCoordinator:
 
     def __init__(
         self,
-        model_path: str | None = None,
         *,
-        max_context_length: int | None = None,
-        backend: str = "vllm",
-        enable_fallback: bool = True,
-        max_agent_timeout: float = settings.agents.decision_timeout,
-        tool_registry: ToolRegistry | None = None,
-        use_shared_llm_client: bool | None = None,
+        max_agent_timeout: float | None = None,
         checkpointer: Any | None = None,
+        checkpointer_path: Path | None = None,
         store: Any | None = None,
     ):
         """Initializes the multi-agent coordinator with runtime configurations.
 
         Args:
-            model_path: The LLM model identifier.
-            max_context_length: Maximum context window in tokens.
-            backend: Inference backend identifier.
-            enable_fallback: Whether to use basic RAG on agent failures.
-            max_agent_timeout: Timeout threshold for agent decision per turn.
-            tool_registry: Optional registry for resolving agent tools.
-            use_shared_llm_client: Flag to reuse LlamaIndex LLM client wrappers.
+            max_agent_timeout: Optional per-turn timeout override.
             checkpointer: LangGraph checkpointer for state persistence.
+            checkpointer_path: SQLite path for a coordinator-owned async saver.
             store: LangGraph BaseStore for long-term memory access.
+
+        Raises:
+            ValueError: If both a checkpointer and checkpointer path are supplied.
         """
         configure_observability(settings)
-        self.model_path = settings.effective_model if model_path is None else model_path
-        self.max_context_length = (
-            settings.effective_context_window
-            if max_context_length is None
-            else max_context_length
+        self.max_agent_timeout = float(
+            settings.agents.decision_timeout
+            if max_agent_timeout is None
+            else max_agent_timeout
         )
-        self.backend = backend
-        self.enable_fallback = enable_fallback
-        self.max_agent_timeout = max_agent_timeout
-        self.use_shared_llm_client = (
-            settings.agents.use_shared_llm_client
-            if use_shared_llm_client is None
-            else use_shared_llm_client
-        )
-
-        self.tool_registry: ToolRegistry = tool_registry or DefaultToolRegistry()
-
-        # vLLM Configuration with unified settings
-        env_vars = settings.get_vllm_env_vars()
-
-        self.vllm_config = {
-            "model": self.model_path,
-            "max_model_len": self.max_context_length,
-            **env_vars,
-        }
+        if self.max_agent_timeout <= 0:
+            raise ValueError("max_agent_timeout must be greater than zero")
+        if checkpointer is not None and checkpointer_path is not None:
+            raise ValueError(
+                "checkpointer and checkpointer_path are mutually exclusive"
+            )
 
         # Context management with unified settings
-        self.context_window = self.max_context_length
-        self.max_tokens = settings.vllm.max_tokens
         self.context_manager = ContextManager(
-            max_context_tokens=self.max_context_length
+            max_context_tokens=settings.effective_context_window
         )
 
-        # Performance tracking (ADR-011)
-        self.total_queries = 0
-        self.successful_queries = 0
-        self.fallback_queries = 0
-        self.avg_processing_time = 0.0
-        self.avg_coordination_overhead = 0.0
-
         # Checkpointer + store (ADR-058). Defaults to in-memory for tests.
-        self.checkpointer = checkpointer or InMemorySaver()
+        self._checkpointer_path = (
+            Path(checkpointer_path) if checkpointer_path is not None else None
+        )
+        if checkpointer is not None:
+            self.checkpointer = checkpointer
+        elif self._checkpointer_path is not None:
+            self.checkpointer = None
+        else:
+            self.checkpointer = InMemorySaver()
+        self._checkpointer_stack: contextlib.AsyncExitStack | None = None
+        self._checkpointer_lock = threading.Lock()
+        self._persistence_lock = threading.Lock()
         self.store = store
 
         # Initialize components
         self.llm = None
-        self.llamaindex_llm = None
-        self._shared_llm_wrapper: RetryLlamaIndexLLM | None = None
-        self.dspy_retriever = None
         self.compiled_graph = None
         self.graph = None
         self.agents = {}
 
         # Lazy initialization
+        self._setup_lock = threading.Lock()
         self._setup_complete = False
-        self._memory_executor = ThreadPoolExecutor(
-            max_workers=MEMORY_CONSOLIDATION_MAX_WORKERS,
-            thread_name_prefix="docmind-memory",
+        self._memory_executor = _DaemonTaskExecutor(
+            thread_name="docmind-memory",
         )
         self._memory_consolidation_semaphore = threading.BoundedSemaphore(
             MEMORY_CONSOLIDATION_MAX_WORKERS
         )
         self._memory_executor_closed = False
-        self._semantic_cache_executor = ThreadPoolExecutor(
-            max_workers=SEMANTIC_CACHE_STORE_MAX_WORKERS,
-            thread_name_prefix="docmind-semantic-cache",
-        )
-        self._semantic_cache_semaphore = threading.BoundedSemaphore(
-            SEMANTIC_CACHE_STORE_MAX_WORKERS
-        )
-        self._semantic_cache_executor_closed = False
+        self._memory_jobs_lock = threading.Lock()
+        self._memory_jobs: dict[tuple[str, ...], int] = {}
+        self._graph_runner: _AsyncGraphRunner | None = None
+        self._graph_runner_lock = threading.Lock()
+        self._active_runs: dict[str, _ActiveAgentRun] = {}
+        self._purged_persistence_ids: set[str] = set()
+        self._active_runs_lock = threading.Lock()
+        self._closed = False
 
-        logger.info("MultiAgentCoordinator initialized (model: {})", self.model_path)
+        logger.info(
+            "MultiAgentCoordinator initialized (model: {})", settings.effective_model
+        )
 
     def close(self) -> None:
-        """Releases system resources, including the memory consolidation executor."""
-        if self._memory_executor_closed:
-            return
-        self._memory_executor_closed = True
-        with contextlib.suppress(Exception):
-            self._memory_executor.shutdown(wait=False)
-        if self._semantic_cache_executor_closed:
-            return
-        self._semantic_cache_executor_closed = True
-        with contextlib.suppress(Exception):
-            self._semantic_cache_executor.shutdown(wait=False)
+        """Release background graph and memory resources."""
+        with self._graph_runner_lock:
+            with self._memory_jobs_lock:
+                if self._closed:
+                    return
+                self._closed = True
+                memory_namespaces = set(self._memory_jobs)
+            graph_runner = self._graph_runner
+            self._graph_runner = None
+            checkpointer_stack = self._checkpointer_stack
+            self._checkpointer_stack = None
 
-    def __del__(self) -> None:  # pragma: no cover - best-effort cleanup
-        """Best-effort cleanup during interpreter teardown."""
-        with contextlib.suppress(Exception):
-            self.close()
+        if not self._memory_executor_closed:
+            self._memory_executor_closed = True
+            with contextlib.suppress(Exception):
+                self._memory_executor.close()
+
+        for namespace in memory_namespaces:
+            # Invalidate work that has not crossed the final mutation boundary.
+            # An already-admitted synchronous commit is uncancellable, so bounded
+            # shutdown logs and skips instead of waiting on its namespace lock.
+            if try_advance_memory_namespace_generation(namespace) is None:
+                logger.warning(
+                    "Memory generation invalidation skipped during bounded shutdown; "
+                    "an admitted mutation is still running"
+                )
+        with self._active_runs_lock:
+            active_runs = tuple(self._active_runs.values())
+        for active_run in active_runs:
+            active_run.control.request_drain("coordinator_closed")
+
+        if graph_runner is not None:
+            cleanup = (
+                checkpointer_stack.aclose if checkpointer_stack is not None else None
+            )
+            # Closing must remain bounded even if setup or a synchronous
+            # persistence bridge is stuck. Saver ownership was captured atomically
+            # with the runner above; late setup publication now fails closed.
+            with contextlib.suppress(Exception):
+                graph_runner.close(async_cleanup=cleanup)
+
+    def _get_graph_runner(self) -> _AsyncGraphRunner:
+        """Return the lazily created event-loop runner owned by this coordinator."""
+        with self._graph_runner_lock:
+            if self._closed:
+                raise RuntimeError("MultiAgentCoordinator is closed")
+            if self._graph_runner is None:
+                self._graph_runner = _AsyncGraphRunner()
+            return self._graph_runner
+
+    def _ensure_checkpointer(self) -> None:
+        """Create the configured async SQLite saver on its owning runner loop."""
+        if self.checkpointer is not None:
+            return
+        if self._checkpointer_path is None:
+            raise RuntimeError("No checkpointer configuration is available")
+
+        with self._checkpointer_lock:
+            if self.checkpointer is not None:
+                return
+            runner: _AsyncGraphRunner | None = None
+            stack: contextlib.AsyncExitStack | None = None
+            try:
+                self._checkpointer_path.parent.mkdir(parents=True, exist_ok=True)
+                runner = _AsyncGraphRunner()
+                saver, stack = runner.run(
+                    _open_async_sqlite_checkpointer(self._checkpointer_path)
+                )
+                with self._graph_runner_lock:
+                    if self._closed:
+                        raise RuntimeError("MultiAgentCoordinator is closed")
+                    if self._graph_runner is not None:
+                        raise RuntimeError(
+                            "Graph runner initialized before owned checkpointer"
+                        )
+                    self._graph_runner = runner
+                    self.checkpointer = saver
+                    self._checkpointer_stack = stack
+                return
+            except BaseException as exc:
+                if stack is not None and runner is not None:
+                    with contextlib.suppress(Exception):
+                        runner.run(stack.aclose())
+                if runner is not None:
+                    with contextlib.suppress(Exception):
+                        runner.close()
+                if isinstance(exc, Exception):
+                    raise RuntimeError(
+                        "Async SQLite checkpointer initialization failed"
+                    ) from exc
+                raise
+
+    def _begin_active_run(self, persistence_id: str) -> _ActiveAgentRun | None:
+        """Fence concurrent graph mutation for one persisted conversation thread."""
+        with self._active_runs_lock:
+            if (
+                persistence_id in self._purged_persistence_ids
+                or persistence_id in self._active_runs
+            ):
+                return None
+            active_run = _ActiveAgentRun(RunControl(), threading.Event())
+            self._active_runs[persistence_id] = active_run
+            return active_run
+
+    def _finish_active_run(
+        self,
+        persistence_id: str,
+        active_run: _ActiveAgentRun,
+    ) -> None:
+        """Release a thread fence only after the async graph wrapper has exited."""
+        with self._active_runs_lock:
+            if self._active_runs.get(persistence_id) is active_run:
+                self._active_runs.pop(persistence_id, None)
+        active_run.finished.set()
 
     def _ensure_setup(self) -> bool:
         """Ensures all internal components are initialized via lazy loading.
@@ -464,81 +755,65 @@ class MultiAgentCoordinator:
         Returns:
             True if setup is successful or already complete, False on failure.
         """
-        if self._setup_complete:
-            return True
+        with self._setup_lock:
+            with self._graph_runner_lock:
+                if self._closed:
+                    return False
+                if self._setup_complete:
+                    return True
 
-        try:
-            # Initialize vLLM environment for FP8 optimization
-            from src.config import setup_llamaindex
+            try:
+                # Initialize vLLM environment for FP8 optimization
+                from src.config import setup_llamaindex
 
-            setup_llamaindex()
-            logger.info("vLLM configuration applied via unified settings")
+                setup_llamaindex()
+                logger.info("vLLM configuration applied via unified settings")
 
-            # Use LLM from unified configuration (LlamaIndex Settings)
-            from llama_index.core import Settings
+                # Use LLM from unified configuration (LlamaIndex Settings)
+                from llama_index.core import Settings
 
-            configured_llm = getattr(Settings, "_llm", None)
-            if configured_llm is not None:
-                self.llamaindex_llm = configured_llm
-                if self.use_shared_llm_client:
-                    retries = _shared_llm_retries()
-                    # Prefer native retry configuration when supported (e.g.,
-                    # OpenAI-like backends expose `max_retries`).
-                    if _supports_native_llamaindex_retries(self.llamaindex_llm):
-                        try:
-                            self.llamaindex_llm.max_retries = retries  # type: ignore[attr-defined]
-                            logger.info(
-                                "Configured shared LlamaIndex LLM retries: {}",
-                                retries,
-                            )
-                        except (AttributeError, TypeError, ValueError):
-                            self._shared_llm_wrapper = RetryLlamaIndexLLM(
-                                self.llamaindex_llm,
-                                max_attempts=_shared_llm_attempts(),
-                            )
-                            self.llamaindex_llm = self._shared_llm_wrapper
-                    else:
-                        self._shared_llm_wrapper = RetryLlamaIndexLLM(
-                            self.llamaindex_llm,
-                            max_attempts=_shared_llm_attempts(),
-                        )
-                        self.llamaindex_llm = self._shared_llm_wrapper
+                if getattr(Settings, "_llm", None) is None:
+                    raise RuntimeError(
+                        "LLM not properly configured in unified settings. "
+                        "Please ensure LlamaIndex Settings are initialized."
+                    )
                 logger.info("LlamaIndex LLM initialized from Settings")
-            else:
-                # Raise error if LLM not properly configured
-                raise RuntimeError(
-                    "LLM not properly configured in unified settings. "
-                    "Please ensure LlamaIndex Settings are initialized."
+
+                # Build expensive components as locals. Publication shares the
+                # lifecycle lock with close, so closed coordinators cannot reopen.
+                model = build_chat_model(
+                    settings,
+                    timeout_cap=self.max_agent_timeout,
+                )
+                logger.info("LangChain chat model initialized from unified settings")
+                self._ensure_checkpointer()
+                checkpointer = self.checkpointer
+                if checkpointer is None:
+                    raise RuntimeError("LangGraph checkpointer is not initialized")
+                agents, graph, compiled_graph = self._build_agent_graph_components(
+                    model=model,
+                    checkpointer=checkpointer,
                 )
 
-            # LangGraph requires a LangChain-compatible model runnable; keep it
-            # separate from the LlamaIndex LLM used by DSPy.
-            base_chat_model = build_chat_model(settings)
-            # ChatOpenAI already supports built-in retries via `max_retries`.
-            self.llm = base_chat_model
-            logger.info("LangChain chat model initialized from unified settings")
+                with self._graph_runner_lock:
+                    if self._closed:
+                        return False
+                    self.llm = model
+                    self.agents = agents
+                    self.graph = graph
+                    self.compiled_graph = compiled_graph
+                    self._setup_complete = True
+                logger.info("Agent graph setup completed successfully")
+                return True
 
-            # Initialize DSPy integration (ADR-018)
-            if is_dspy_available():
-                self.dspy_retriever = DSPyLlamaIndexRetriever(llm=self.llamaindex_llm)
-                logger.info("Real DSPy integration initialized")
-            else:
-                logger.warning("DSPy not available - using fallback optimization")
-
-            # Setup agent graph with ADR-011 compliance
-            self._setup_agent_graph()
-
-            self._setup_complete = True
-            return True
-
-        except (RuntimeError, ValueError, AttributeError, ImportError) as e:
-            redaction = build_pii_log_entry(str(e), key_id="coordinator.setup")
-            logger.error(
-                "Failed to setup coordinator (error_type={}, error={})",
-                type(e).__name__,
-                redaction.redacted,
-            )
-            return False
+            except Exception as e:
+                redaction = build_pii_log_entry(str(e), key_id="coordinator.setup")
+                logger.error(
+                    "Failed to setup coordinator (error_type={}, error={})",
+                    type(e).__name__,
+                    redaction.redacted,
+                )
+                return False
 
     def _setup_agent_graph(self) -> None:
         """Initializes the LangGraph supervisor and specialized worker nodes.
@@ -549,27 +824,26 @@ class MultiAgentCoordinator:
         Raises:
             RuntimeError: If graph initialization or compilation fails.
         """
-        try:
-            if self.llm is None:
-                raise RuntimeError("LangChain chat model is not initialized")
-            model = self.llm
+        if self.llm is None:
+            raise RuntimeError("LangChain chat model is not initialized")
+        agents, graph, compiled_graph = self._build_agent_graph_components(
+            model=self.llm,
+            checkpointer=self.checkpointer,
+        )
+        self.agents = agents
+        self.graph = graph
+        self.compiled_graph = compiled_graph
+        logger.info("Agent graph setup completed successfully")
 
-            agent_specs: tuple[tuple[str, Callable[[], list[Any]]], ...] = (
-                ("router_agent", lambda: list(self.tool_registry.get_router_tools())),
-                ("planner_agent", lambda: list(self.tool_registry.get_planner_tools())),
-                (
-                    "retrieval_agent",
-                    lambda: list(self.tool_registry.get_retrieval_tools()),
-                ),
-                (
-                    "synthesis_agent",
-                    lambda: list(self.tool_registry.get_synthesis_tools()),
-                ),
-                (
-                    "validation_agent",
-                    lambda: list(self.tool_registry.get_validation_tools()),
-                ),
-            )
+    def _build_agent_graph_components(
+        self,
+        *,
+        model: Any,
+        checkpointer: Any,
+    ) -> tuple[dict[str, Any], Any, Any]:
+        """Build graph components without publishing partial coordinator state."""
+        try:
+            agent_tool_sets = build_agent_tool_sets(settings)
 
             hook_middleware = _AgentHookMiddleware(
                 pre_model_hook=self._create_pre_model_hook(),
@@ -577,11 +851,12 @@ class MultiAgentCoordinator:
             )
 
             agents: dict[str, Any] = {}
-            for name, tool_loader in agent_specs:
+            for name, tools in agent_tool_sets.items():
                 agents[name] = create_agent(
                     model,
-                    tools=tool_loader(),
+                    tools=tools,
                     state_schema=MultiAgentGraphState,
+                    context_schema=AgentRuntimeContext,
                     middleware=[hook_middleware],
                     name=name,
                     store=self.store,
@@ -591,19 +866,18 @@ class MultiAgentCoordinator:
             system_prompt = self._create_supervisor_prompt()
 
             # Create list of agents for supervisor preserving definition order.
-            supervisor_agents = [agents[name] for name, _ in agent_specs]
-
-            forward_tool = create_forward_message_tool(supervisor_name="supervisor")
+            supervisor_agents = list(agents.values())
 
             # Graph-native supervisor (ADR-011): supervisor + subagents via
-            # `StateGraph`, using handoff tools that return `Command.PARENT`.
-            self.graph = build_multi_agent_supervisor_graph(
+            # `StateGraph`, using one atomic dispatch tool that returns
+            # `Command.PARENT`.
+            graph = build_multi_agent_supervisor_graph(
                 supervisor_agents,
                 model=model,
                 prompt=system_prompt,
                 state_schema=MultiAgentGraphState,
+                context_schema=AgentRuntimeContext,
                 middleware=[hook_middleware],
-                extra_tools=[forward_tool],
                 params=SupervisorBuildParams(
                     supervisor_name="supervisor",
                     output_mode="last_message",
@@ -612,17 +886,15 @@ class MultiAgentCoordinator:
                 ),
             )
 
-            # Store agents for reference
-            self.agents = agents
-
             # Compile graph with checkpointer + optional store (ADR-058).
-            self.compiled_graph = self.graph.compile(
-                checkpointer=self.checkpointer, store=self.store
+            compiled_graph = graph.compile(
+                checkpointer=checkpointer,
+                store=self.store,
             )
 
-            logger.info("Agent graph setup completed successfully")
+            return agents, graph, compiled_graph
 
-        except (RuntimeError, ValueError, AttributeError) as e:
+        except Exception as e:
             redaction = build_pii_log_entry(str(e), key_id="coordinator.agent_graph")
             logger.error(
                 "Failed to setup agent graph (error_type={}, error={})",
@@ -643,19 +915,19 @@ class MultiAgentCoordinator:
             "agents with parallel execution capabilities.\n\n"
             "Performance target: keep coordination overhead under 200ms per turn.\n\n"
             "Team composition:\n"
-            "- router_agent: Query analysis and strategy determination\n"
             "- planner_agent: Complex query decomposition\n"
-            "- retrieval_agent: Document search with DSPy optimization\n"
+            "- retrieval_agent: Document search through the native retrieval router\n"
             "- synthesis_agent: Multi-source result combination\n"
             "- validation_agent: Response quality validation\n\n"
             "Coordination strategy:\n"
-            "1. Always start with router_agent for strategy analysis\n"
-            "2. Use planner_agent only if needs_planning=true\n"
-            "3. Execute retrieval_agent (may run parallel tool calls)\n"
-            "4. Use synthesis_agent for multi-source results\n"
-            "5. Always end with validation_agent for quality assurance\n\n"
-            "Optimize for parallel execution and minimize unnecessary agent calls.\n\n"
-            "Respond with agent name or 'FINISH' when complete."
+            "1. Use planner_agent only when decomposition is necessary\n"
+            "2. Execute retrieval_agent; its RouterQueryEngine selects the strategy\n"
+            "3. Use synthesis_agent for multi-source results\n"
+            "4. End with validation_agent for quality assurance\n\n"
+            "Call dispatch_agents at most once per coordination step. Put every "
+            "independent worker in that call's unique destinations list so they run "
+            "in parallel. Minimize unnecessary worker calls. When the task is "
+            "complete, answer directly without another dispatch."
         )
 
     def _create_pre_model_hook(self) -> Callable[[dict], dict]:
@@ -773,14 +1045,13 @@ class MultiAgentCoordinator:
             "context_used_tokens": self.context_manager.estimate_tokens(
                 state.get("messages", [])
             ),
-            "kv_cache_usage_gb": self.context_manager.calculate_kv_cache_usage(state),
             # Normalize flag naming across code paths
             "parallel_execution_active": bool(
                 state.get("parallel_execution_active")
                 or state.get("parallel_tool_calls")
             ),
             "optimization_enabled": True,
-            "model_path": self.model_path,
+            "model_path": settings.effective_model,
             "context_trimmed": state.get("context_trimmed", False),
             "tokens_trimmed": state.get("tokens_trimmed", 0),
         }
@@ -805,7 +1076,7 @@ class MultiAgentCoordinator:
                 "token_reduction_achieved": final_state.get(
                     "token_reduction_achieved", 0.0
                 ),
-                "context_window_used": self.max_context_length,
+                "context_window_used": settings.effective_context_window,
             }
         )
         return base
@@ -860,280 +1131,72 @@ class MultiAgentCoordinator:
         self,
         query: str,
         start_time: float,
-        tools_data: dict[str, Any],
     ) -> dict[str, Any]:
         """Constructs the starting state dictionary for the agent graph.
 
         Args:
             query: The processed user input string.
             start_time: Wall-clock start timestamp for the request.
-            tools_data: Configuration and constraints for resolveable tools.
 
         Returns:
             A dictionary conforming to MultiAgentState schema.
         """
-        deadline_ts = None
-        if settings.agents.enable_deadline_propagation:
-            deadline_ts = time.monotonic() + float(self.max_agent_timeout)
         return MultiAgentState(
             messages=[HumanMessage(content=query)],
-            tools_data=tools_data,
             total_start_time=start_time,
             output_mode="last_message",
             parallel_execution_active=True,
-            deadline_ts=deadline_ts,
+            deadline_ts=time.monotonic() + self.max_agent_timeout,
         ).model_dump()
 
-    def _maybe_semantic_cache_lookup(
-        self,
-        *,
-        query: str,
-        thread_id: str,
-        user_id: str,
-        checkpoint_id: str | None,
-        start_time: float,
-        span: Span,
-    ) -> tuple[AgentResponse | None, CacheKey | None]:
-        """Performs a fail-open semantic cache lookup for new conversation threads.
-
-        Lookup is skipped if caching is disabled, history exists, or we are
-        resuming from a specific checkpoint.
-
-        Args:
-            query: User input to match against the vector store.
-            thread_id: Unique conversation identifier.
-            user_id: Namespace for memory and scoping.
-            checkpoint_id: Checkpoint ID if resuming (time travel).
-            start_time: Timestamp for processing start.
-            span: Active OpenTelemetry span.
-
-        Returns:
-            A tuple of (AgentResponse, CacheKey). Response is None on cache miss.
-        """
-        sem_cfg = getattr(settings, "semantic_cache", None)
-        if sem_cfg is None or not bool(getattr(sem_cfg, "enabled", False)):
-            return None, None
-        if checkpoint_id is not None:
-            return None, None
-
-        try:
-            has_history = bool(
-                self.list_checkpoints(thread_id=thread_id, user_id=user_id, limit=1)
-            )
-        except (
-            RuntimeError,
-            ValueError,
-            AttributeError,
-            TimeoutError,
-            ConnectionError,
-        ) as exc:
-            redaction = build_pii_log_entry(
-                str(exc), key_id="coordinator.history_check"
-            )
-            logger.warning(
-                "History check failed (error_type={}, error={})",
-                type(exc).__name__,
-                redaction.redacted,
-            )
-            has_history = True
-        if has_history:
-            return None, None
-
-        semantic_cache_key: CacheKey | None = None
-        try:
-            from src.persistence.hashing import compute_corpus_hash
-            from src.persistence.langchain_embeddings import LlamaIndexEmbeddingsAdapter
-            from src.persistence.snapshot_utils import collect_corpus_paths
-            from src.utils.semantic_cache import (
-                SemanticCache,
-                build_cache_key,
-                config_hash_for_semcache,
-            )
-            from src.utils.storage import create_sync_client
-
-            uploads_dir = settings.data_dir / "uploads"
-            corpus_hash = compute_corpus_hash(
-                collect_corpus_paths(uploads_dir),
-                base_dir=uploads_dir,
-            )
-            cfg_hash = config_hash_for_semcache(settings)
-
-            model_id = settings.effective_model
-            semantic_cache_key = build_cache_key(
-                query=str(query),
-                namespace=str(settings.semantic_cache.namespace),
-                model_id=model_id,
-                template_id="chat",
-                template_version=str(settings.app_version),
-                temperature=float(settings.vllm.temperature),
-                corpus_hash=corpus_hash,
-                config_hash=cfg_hash,
-            )
-
-            with create_sync_client() as client:
-                cache = SemanticCache(
-                    client=client,
-                    cfg=settings.semantic_cache,
-                    vector_dim=int(settings.embedding.dimension),
-                    embed_query=LlamaIndexEmbeddingsAdapter().embed_query,
-                )
-                hit = cache.lookup(key=semantic_cache_key, query=str(query))
-        except Exception as exc:  # pragma: no cover - fail open
-            redaction = build_pii_log_entry(
-                str(exc), key_id="semantic_cache.lookup.exception"
-            )
-            logger.debug(
-                "Semantic cache lookup skipped (error_type={}, error={})",
-                type(exc).__name__,
-                redaction.redacted,
-            )
-            return None, semantic_cache_key
-
-        if hit is None:
-            return None, semantic_cache_key
-
-        processing_time = time.perf_counter() - start_time
-        response = AgentResponse(
-            content=str(hit.response_text),
-            sources=[],
-            metadata={
-                "semantic_cache": {
-                    "hit": True,
-                    "kind": hit.kind,
-                    "score": hit.score,
-                }
-            },
-            validation_score=0.0,
-            processing_time=processing_time,
-            optimization_metrics={"semantic_cache": True},
-            agent_decisions=[],
-            fallback_used=False,
-        )
-        self.successful_queries += 1
-        self._update_performance_metrics(processing_time, 0.0)
-        self._record_query_metrics(processing_time, True)
-        span.set_attribute("semantic_cache.hit", True)
-        span.set_attribute("semantic_cache.kind", str(hit.kind))
-        return response, semantic_cache_key
-
-    def _maybe_semantic_cache_store(
-        self,
-        *,
-        semantic_cache_key: CacheKey,
-        query: str,
-        response_text: str,
-    ) -> None:
-        """Stores a successful response in the semantic cache asynchronously.
-
-        Args:
-            semantic_cache_key: Validated cache key for storage.
-            query: Original query string.
-            response_text: The generated content to cache.
-        """
-        sem_cfg = getattr(settings, "semantic_cache", None)
-        if sem_cfg is None or not bool(getattr(sem_cfg, "enabled", False)):
-            return
-        if self._semantic_cache_executor_closed:
-            return
-        if not self._semantic_cache_semaphore.acquire(blocking=False):
-            return
-
-        def _store_in_background() -> None:
-            try:
-                from src.persistence.langchain_embeddings import (
-                    LlamaIndexEmbeddingsAdapter,
-                )
-                from src.utils.semantic_cache import SemanticCache
-                from src.utils.storage import create_sync_client
-
-                with create_sync_client() as client:
-                    cache = SemanticCache(
-                        client=client,
-                        cfg=settings.semantic_cache,
-                        vector_dim=int(settings.embedding.dimension),
-                        embed_query=LlamaIndexEmbeddingsAdapter().embed_query,
-                    )
-                    cache.store(
-                        key=semantic_cache_key,
-                        query=str(query),
-                        response_text=str(response_text),
-                    )
-            except Exception as exc:  # pragma: no cover - fail open
-                redaction = build_pii_log_entry(
-                    str(exc), key_id="semantic_cache.store.exception"
-                )
-                logger.debug(
-                    "Semantic cache store skipped (error_type={}, error={})",
-                    type(exc).__name__,
-                    redaction.redacted,
-                )
-            finally:
-                self._semantic_cache_semaphore.release()
-
-        try:
-            self._semantic_cache_executor.submit(_store_in_background)
-        except Exception as exc:  # pragma: no cover - fail open
-            self._semantic_cache_semaphore.release()
-            redaction = build_pii_log_entry(
-                str(exc), key_id="semantic_cache.store.exception"
-            )
-            logger.debug(
-                "Semantic cache store skipped (error_type={}, error={})",
-                type(exc).__name__,
-                redaction.redacted,
-            )
-
     def _handle_timeout_response(
-        self, query: str, context: Any | None, start_time: float
-    ) -> tuple[AgentResponse, bool]:
+        self,
+        start_time: float,
+        *,
+        cancel_reason: str,
+    ) -> AgentResponse:
         """Orchestrates the response when the agent workflow exceeds its timeout.
 
-        Applies basic RAG fallback if enabled, otherwise returns a standardized
-        timeout error.
-
         Args:
-            query: The original user query.
-            context: Runtime context passed to the coordinator.
             start_time: Wall-clock start time for the entire request.
+            cancel_reason: Stable timeout classification.
 
         Returns:
-            A tuple of (AgentResponse, fallback_applied_flag).
+            A standardized timeout response.
         """
-        if self.enable_fallback:
-            response = self._fallback_basic_rag(query, context, start_time)
-            try:
-                response.metadata["reason"] = "timeout"
-                response.metadata["fallback_source"] = "basic_rag"
-                if isinstance(response.optimization_metrics, dict):
-                    response.optimization_metrics["timeout"] = True
-                else:
-                    response.optimization_metrics = {"timeout": True}
-            except (KeyError, TypeError, AttributeError) as exc:
-                redaction = build_pii_log_entry(
-                    str(exc), key_id="coordinator.fallback_metadata"
-                )
-                logger.debug(
-                    "Failed to annotate fallback metadata (error_type={}, error={})",
-                    type(exc).__name__,
-                    redaction.redacted,
-                )
-            return response, True
         processing_time = time.perf_counter() - start_time
-        response = AgentResponse(
+        return AgentResponse(
             content=("The multi-agent system timed out while processing your request."),
             sources=[],
-            metadata={"fallback_used": True, "reason": "timeout"},
+            metadata={"reason": "timeout", "cancel_reason": cancel_reason},
             validation_score=0.0,
             processing_time=processing_time,
             optimization_metrics={"timeout": True},
         )
-        return response, True
+
+    def _handle_stopped_response(
+        self,
+        start_time: float,
+        *,
+        cancel_reason: str,
+    ) -> AgentResponse:
+        """Return the canonical response for a non-timeout workflow stop."""
+        return AgentResponse(
+            content="The multi-agent system stopped before completing your request.",
+            sources=[],
+            metadata={
+                "reason": "workflow_stopped",
+                "cancel_reason": cancel_reason,
+            },
+            validation_score=0.0,
+            processing_time=time.perf_counter() - start_time,
+            optimization_metrics={"stopped": True},
+        )
 
     def _handle_workflow_result(
         self,
         result: dict[str, Any] | None,
         query: str,
-        context: Any | None,
         start_time: float,
         coordination_time: float,
     ) -> tuple[AgentResponse, bool, bool]:
@@ -1142,66 +1205,58 @@ class MultiAgentCoordinator:
         Args:
             result: Terminal graph state or None on critical failure.
             query: Original query string.
-            context: Runtime context.
             start_time: Processing start timestamp.
             coordination_time: Total accumulated overhead in coordination.
 
         Returns:
-            A tuple of (AgentResponse, timed_out_flag, fallback_used_flag).
+            A tuple of response, stopped flag, and timed-out flag.
         """
-        workflow_timed_out = bool(isinstance(result, dict) and result.get("timed_out"))
-        if not workflow_timed_out:
+        workflow_stopped = bool(
+            isinstance(result, dict) and result.get("workflow_stopped")
+        )
+        workflow_timed_out = bool(
+            workflow_stopped and isinstance(result, dict) and result.get("timed_out")
+        )
+        if not workflow_stopped:
             response = self._extract_response(
                 result or {}, query, start_time, coordination_time
             )
             return response, False, False
 
-        logger.warning("Coordinator detected timeout; invoking fallback policy")
-        response, used_fallback = self._handle_timeout_response(
-            query, context, start_time
-        )
+        cancel_reason = str((result or {}).get("cancel_reason") or "workflow_cancelled")
+        if workflow_timed_out:
+            logger.warning("Coordinator detected timeout ({})", cancel_reason)
+            response = self._handle_timeout_response(
+                start_time,
+                cancel_reason=cancel_reason,
+            )
+        else:
+            logger.warning("Coordinator detected workflow stop ({})", cancel_reason)
+            response = self._handle_stopped_response(
+                start_time,
+                cancel_reason=cancel_reason,
+            )
         self._record_query_metrics(time.perf_counter() - start_time, False)
-        return response, True, used_fallback
-
-    def _update_metrics_after_response(
-        self,
-        workflow_timed_out: bool,
-        used_fallback: bool,
-        processing_time: float,
-        coordination_time: float,
-    ) -> None:
-        """Updates internal performance averages following request completion.
-
-        Args:
-            workflow_timed_out: Indicates if the workflow exceeded limits.
-            used_fallback: Indicates if a fallback strategy was invoked.
-            processing_time: Total request duration in seconds.
-            coordination_time: coordination duration in seconds.
-        """
-        if not workflow_timed_out:
-            self.successful_queries += 1
-        self._update_performance_metrics(processing_time, coordination_time)
+        return response, True, workflow_timed_out
 
     def _annotate_span(
         self,
         span: Span,
+        workflow_stopped: bool,
         workflow_timed_out: bool,
-        used_fallback: bool,
         processing_time: float,
     ) -> None:
         """Attaches final outcome attributes to the OpenTelemetry trace span.
 
         Args:
             span: The span to annotate.
+            workflow_stopped: Whether execution stopped without a terminal result.
             workflow_timed_out: Final timeout status.
-            used_fallback: Final fallback status.
             processing_time: Terminal duration in seconds.
         """
+        span.set_attribute("coordinator.workflow_stopped", bool(workflow_stopped))
         span.set_attribute("coordinator.workflow_timeout", bool(workflow_timed_out))
-        span.set_attribute(
-            "coordinator.fallback", bool(workflow_timed_out and used_fallback)
-        )
-        span.set_attribute("coordinator.success", not workflow_timed_out)
+        span.set_attribute("coordinator.success", not workflow_stopped)
         span.set_attribute(
             "coordinator.processing_time_ms", round(processing_time * 1000.0, 3)
         )
@@ -1209,7 +1264,7 @@ class MultiAgentCoordinator:
     def process_query(
         self,
         query: str,
-        context: Any | None = None,
+        *,
         settings_override: dict[str, Any] | None = None,
         thread_id: str = "default",
         user_id: str = "local",
@@ -1222,7 +1277,6 @@ class MultiAgentCoordinator:
 
         Args:
             query: The user query to process.
-            context: Caller-provided runtime context (transient).
             settings_override: Dictionary of configuration overrides.
             thread_id: Identifier for cross-request conversation state.
             user_id: Namespace for memory and policy scoping.
@@ -1232,35 +1286,17 @@ class MultiAgentCoordinator:
             An AgentResponse containing content, sources, and metrics.
         """
         start_time = time.perf_counter()
-        self.total_queries += 1
 
         # Ensure setup is complete
         if not self._ensure_setup():
-            return self._create_error_response(
-                "Failed to initialize coordinator", start_time
-            )
+            return self._create_error_response("initialization_failed", start_time)
 
         with contextlib.ExitStack() as exit_stack:
             span = self._start_span(exit_stack, thread_id, len(query))
 
             try:
-                cached_response, semantic_cache_key = self._maybe_semantic_cache_lookup(
-                    query=query,
-                    thread_id=thread_id,
-                    user_id=user_id,
-                    checkpoint_id=checkpoint_id,
-                    start_time=start_time,
-                    span=span,
-                )
-                if cached_response is not None:
-                    return cached_response
-
-                tools_data: dict[str, Any] = self.tool_registry.build_tools_data(
-                    settings_override
-                )
-
                 # Initialize state with execution parameters
-                initial_state = self._build_initial_state(query, start_time, tools_data)
+                initial_state = self._build_initial_state(query, start_time)
 
                 # Run multi-agent workflow with performance tracking
                 coordination_start = time.perf_counter()
@@ -1273,41 +1309,22 @@ class MultiAgentCoordinator:
                 )
                 coordination_time = time.perf_counter() - coordination_start
 
-                response, workflow_timed_out, used_fallback = (
+                response, workflow_stopped, workflow_timed_out = (
                     self._handle_workflow_result(
-                        result, query, context, start_time, coordination_time
+                        result, query, start_time, coordination_time
                     )
                 )
 
-                # Best-effort semantic cache store (never impact user flow).
-                if (
-                    semantic_cache_key is not None
-                    and not workflow_timed_out
-                    and not used_fallback
-                ):
-                    self._maybe_semantic_cache_store(
-                        semantic_cache_key=semantic_cache_key,
-                        query=str(query),
-                        response_text=str(response.content),
-                    )
-
-                # Update performance metrics
                 processing_time = time.perf_counter() - start_time
-                self._update_metrics_after_response(
-                    workflow_timed_out,
-                    used_fallback,
-                    processing_time,
-                    coordination_time,
-                )
 
                 # Memory consolidation (SPEC-041)
-                if not workflow_timed_out:
+                if not workflow_stopped:
                     self._schedule_memory_consolidation(
                         result or {}, thread_id=thread_id, user_id=user_id
                     )
 
                 # Best-effort analytics logging (never impact user flow)
-                if not workflow_timed_out:
+                if not workflow_stopped:
                     self._record_query_metrics(processing_time, True)
 
                 # Validate performance targets
@@ -1318,7 +1335,10 @@ class MultiAgentCoordinator:
                     )
 
                 self._annotate_span(
-                    span, workflow_timed_out, used_fallback, processing_time
+                    span,
+                    workflow_stopped,
+                    workflow_timed_out,
+                    processing_time,
                 )
 
                 logger.info(
@@ -1342,12 +1362,9 @@ class MultiAgentCoordinator:
                     redaction.redacted,
                 )
 
-                # Fallback to basic RAG if enabled
-                if self.enable_fallback:
-                    return self._fallback_basic_rag(query, context, start_time)
-                return self._create_error_response(str(exc), start_time)
+                return self._create_error_response("execution_failed", start_time)
 
-    def _run_agent_workflow(
+    def _run_agent_workflow(  # noqa: PLR0911, PLR0915 - explicit terminal states
         self,
         initial_state: dict[str, Any],
         *,
@@ -1356,7 +1373,7 @@ class MultiAgentCoordinator:
         checkpoint_id: str | None,
         runtime_context: dict[str, Any] | None,
     ) -> dict[str, Any]:
-        """Executes the agent graph with wall-clock timeout protection.
+        """Execute the graph asynchronously behind a strict synchronous deadline.
 
         Args:
             initial_state: The starting dictionary for graph execution.
@@ -1366,73 +1383,105 @@ class MultiAgentCoordinator:
             runtime_context: Key-value pairs injected into tool execution.
 
         Returns:
-            The terminal state dictionary. 'timed_out' flag is set if the
-            decision timeout is exceeded.
+            The terminal state dictionary, including canonical stop metadata.
         """
         try:
             if self.compiled_graph is None:
                 raise RuntimeError("Agent graph is not compiled")
 
-            deadline_ts = (
-                _coerce_deadline_ts(initial_state)
-                if settings.agents.enable_deadline_propagation
-                else None
+            now = time.monotonic()
+            deadline_ts = min(
+                _require_deadline_ts(initial_state),
+                now + self.max_agent_timeout,
             )
-
-            _ensure_event_loop()
-
-            cfg: dict[str, Any] = {"thread_id": str(thread_id), "user_id": str(user_id)}
-            if checkpoint_id:
-                cfg["checkpoint_id"] = str(checkpoint_id)
-            config: RunnableConfig = {"configurable": cfg}
-
-            result: dict[str, Any] | None = None
-            graph = cast(Any, self.compiled_graph)
-            for state in graph.stream(
-                initial_state,
-                config=config,
-                context=runtime_context,
-                stream_mode="values",
-            ):
-                result = _as_state_dict(state)
-                elapsed = time.perf_counter() - float(
-                    initial_state.get("total_start_time", 0.0)
+            remaining = max(0.0, deadline_ts - now)
+            if remaining <= 0:
+                return self._build_workflow_stopped_state(
+                    initial_state,
+                    cancel_reason="deadline_exceeded",
                 )
 
-                if deadline_ts is not None and time.monotonic() > deadline_ts:
-                    logger.warning(
-                        "Agent workflow deadline exceeded after {:.2f}s", elapsed
-                    )
-                    result["timed_out"] = True
-                    result["deadline_s"] = float(self.max_agent_timeout)
-                    result["cancel_reason"] = "deadline_exceeded"
-                    with contextlib.suppress(Exception):  # pragma: no cover - telemetry
-                        log_jsonl(
-                            {
-                                "agent_deadline_exceeded": True,
-                                "decision_timeout_s": float(self.max_agent_timeout),
-                                "elapsed_s": float(elapsed),
-                            }
-                        )
-                    break
-
-                if deadline_ts is None and elapsed > self.max_agent_timeout:
-                    logger.warning("Agent workflow timeout after {:.2f}s", elapsed)
-                    result["timed_out"] = True
-                    result["deadline_s"] = float(self.max_agent_timeout)
-                    break
-
-            if result is not None:
-                return result
-            thread_redacted = build_pii_log_entry(
-                str(thread_id), key_id="coordinator.thread_id"
-            ).redacted
-            logger.warning(
-                "Agent workflow produced no result; returning initial "
-                "state (thread_id={})",
-                thread_redacted,
+            config = _checkpoint_config(
+                thread_id=thread_id,
+                user_id=user_id,
+                checkpoint_id=checkpoint_id,
             )
-            return initial_state
+            initial_state["memory_generations"] = capture_memory_namespace_generations(
+                user_id=user_id,
+                thread_id=thread_id,
+            )
+            configurable = config.get("configurable")
+            if not isinstance(configurable, dict):
+                raise RuntimeError("Checkpoint configuration is invalid")
+            persistence_id = str(configurable["thread_id"])
+            active_run = self._begin_active_run(persistence_id)
+            if active_run is None:
+                with self._active_runs_lock:
+                    run_is_purged = persistence_id in self._purged_persistence_ids
+                return self._build_workflow_stopped_state(
+                    initial_state,
+                    cancel_reason=(
+                        "session_purged" if run_is_purged else "previous_run_active"
+                    ),
+                )
+
+            try:
+                graph = cast(Any, self.compiled_graph).copy({"step_timeout": remaining})
+            except BaseException:
+                self._finish_active_run(persistence_id, active_run)
+                raise
+            coroutine = self._consume_agent_workflow(
+                graph,
+                initial_state,
+                config=config,
+                runtime_context=runtime_context,
+                deadline_ts=deadline_ts,
+                persistence_id=persistence_id,
+                public_thread_id=str(thread_id),
+                active_run=active_run,
+            )
+            try:
+                future = self._get_graph_runner().submit(coroutine)
+            except _GraphRunnerCapacityError:
+                self._finish_active_run(persistence_id, active_run)
+                return self._build_workflow_stopped_state(
+                    initial_state,
+                    cancel_reason="runner_saturated",
+                )
+            except RuntimeError:
+                coroutine.close()
+                self._finish_active_run(persistence_id, active_run)
+                if self._closed:
+                    return self._build_workflow_stopped_state(
+                        initial_state,
+                        cancel_reason="coordinator_closed",
+                    )
+                raise
+            except BaseException:
+                coroutine.close()
+                self._finish_active_run(persistence_id, active_run)
+                raise
+
+            try:
+                return future.result(timeout=max(0.0, deadline_ts - time.monotonic()))
+            except FuturesTimeoutError:
+                deadline_reached = not future.done() or time.monotonic() >= deadline_ts
+                cancel_reason = (
+                    "deadline_exceeded" if deadline_reached else "dependency_timeout"
+                )
+                active_run.control.request_drain(cancel_reason)
+                future.cancel()
+                return self._build_workflow_stopped_state(
+                    initial_state,
+                    cancel_reason=cancel_reason,
+                )
+            except (FuturesCancelledError, GraphDrained):
+                cancel_reason = active_run.control.drain_reason or "workflow_cancelled"
+                future.cancel()
+                return self._build_workflow_stopped_state(
+                    initial_state,
+                    cancel_reason=cancel_reason,
+                )
 
         except (RuntimeError, ValueError, AttributeError, TimeoutError) as e:
             redaction = build_pii_log_entry(str(e), key_id="agent_workflow.exception")
@@ -1442,6 +1491,120 @@ class MultiAgentCoordinator:
                 redaction.redacted,
             )
             raise
+
+    async def _consume_agent_workflow(
+        self,
+        graph: Any,
+        initial_state: dict[str, Any],
+        *,
+        config: RunnableConfig,
+        runtime_context: dict[str, Any] | None,
+        deadline_ts: float,
+        persistence_id: str,
+        public_thread_id: str,
+        active_run: _ActiveAgentRun,
+    ) -> dict[str, Any]:
+        """Consume one async graph stream and release its thread fence on exit."""
+        result: dict[str, Any] | None = None
+        try:
+            remaining = max(0.0, deadline_ts - time.monotonic())
+            async with asyncio.timeout(remaining):
+                async for state in graph.astream(
+                    initial_state,
+                    config=config,
+                    context=runtime_context,
+                    stream_mode="values",
+                    control=active_run.control,
+                ):
+                    result = _as_state_dict(state)
+
+            cancel_reason = active_run.control.drain_reason
+            if cancel_reason is None and time.monotonic() >= deadline_ts:
+                cancel_reason = "deadline_exceeded"
+                active_run.control.request_drain(cancel_reason)
+            if cancel_reason is not None:
+                return self._build_workflow_stopped_state(
+                    initial_state,
+                    cancel_reason=cancel_reason,
+                )
+            if result is not None:
+                # Capture provenance before releasing the per-thread run fence.
+                # Remove an input checkpoint selector so this resolves the new
+                # terminal head rather than the historical source checkpoint.
+                latest_configurable = dict(config.get("configurable") or {})
+                latest_configurable.pop("checkpoint_id", None)
+                try:
+                    terminal_state = await graph.aget_state(
+                        {"configurable": latest_configurable}
+                    )
+                    terminal_config = getattr(terminal_state, "config", None)
+                    terminal_values = (
+                        terminal_config.get("configurable")
+                        if isinstance(terminal_config, dict)
+                        else None
+                    )
+                    terminal_checkpoint_id = (
+                        terminal_values.get("checkpoint_id")
+                        if isinstance(terminal_values, dict)
+                        else None
+                    )
+                    if terminal_checkpoint_id:
+                        result["_terminal_checkpoint_id"] = str(terminal_checkpoint_id)
+                except (RuntimeError, ValueError, AttributeError, TypeError) as exc:
+                    logger.debug(
+                        "Terminal checkpoint provenance unavailable (error_type={})",
+                        type(exc).__name__,
+                    )
+                return result
+            thread_redacted = build_pii_log_entry(
+                public_thread_id, key_id="coordinator.thread_id"
+            ).redacted
+            logger.warning(
+                "Agent workflow produced no result; classifying run as "
+                "stopped (thread_id={})",
+                thread_redacted,
+            )
+            return self._build_workflow_stopped_state(
+                initial_state,
+                cancel_reason="workflow_no_result",
+            )
+        finally:
+            self._finish_active_run(persistence_id, active_run)
+
+    def _build_workflow_stopped_state(
+        self,
+        initial_state: dict[str, Any],
+        *,
+        cancel_reason: str,
+    ) -> dict[str, Any]:
+        """Build and record the canonical stopped graph state."""
+        result = dict(initial_state)
+        try:
+            started_at = float(initial_state.get("total_start_time", 0.0))
+        except (TypeError, ValueError):
+            started_at = 0.0
+        elapsed = max(0.0, time.perf_counter() - started_at)
+        timed_out = cancel_reason in _TIMEOUT_REASONS
+        result["workflow_stopped"] = True
+        result["timed_out"] = timed_out
+        result["deadline_s"] = self.max_agent_timeout
+        result["cancel_reason"] = cancel_reason
+        logger.warning(
+            "Agent workflow stopped after {:.2f}s ({})",
+            elapsed,
+            cancel_reason,
+        )
+        event: dict[str, Any] = {
+            "agent_workflow_stopped": True,
+            "decision_timeout_s": self.max_agent_timeout,
+            "elapsed_s": elapsed,
+            "cancel_reason": cancel_reason,
+        }
+        if cancel_reason == "deadline_exceeded":
+            event["agent_deadline_exceeded"] = True
+        with contextlib.suppress(Exception):  # pragma: no cover - telemetry
+            log_jsonl(event)
+        return result
 
     def _extract_response(
         self,
@@ -1471,15 +1634,33 @@ class MultiAgentCoordinator:
                 content = "No response generated by agents"
 
             # Extract sources from retrieval/synthesis results
-            sources = []
+            sources: list[dict[str, Any]] = []
+            turn_id_value = final_state.get("turn_id")
+            turn_id = turn_id_value.strip() if isinstance(turn_id_value, str) else ""
             synthesis_result = final_state.get("synthesis_result", {})
-            if synthesis_result and "documents" in synthesis_result:
-                sources = synthesis_result["documents"]
-            elif final_state.get("retrieval_results"):
-                # Use last retrieval result
-                last_retrieval = final_state["retrieval_results"][-1]
-                if "documents" in last_retrieval:
-                    sources = last_retrieval["documents"]
+            current_batches = current_retrieval_batches(final_state)
+            current_watermark = (
+                retrieval_batch_watermark(current_batches)
+                if current_batches is not None
+                else None
+            )
+            if (
+                isinstance(synthesis_result, dict)
+                and synthesis_result.get("turn_id") == turn_id
+                and current_watermark is not None
+                and synthesis_result.get("retrieval_watermark") == current_watermark
+                and isinstance(synthesis_result.get("documents"), list)
+            ):
+                sources = [
+                    source
+                    for source in synthesis_result["documents"]
+                    if isinstance(source, dict)
+                ]
+            else:
+                if current_batches is not None:
+                    sources = interleave_retrieval_documents(current_batches)[
+                        :MAX_RETRIEVAL_RESULTS
+                    ]
 
             # Get validation score
             validation_result = final_state.get("validation_result", {})
@@ -1493,19 +1674,16 @@ class MultiAgentCoordinator:
 
             # Build metadata
             metadata = {
-                "routing_decision": final_state.get("routing_decision", {}),
                 "planning_output": final_state.get("planning_output", {}),
                 "agent_timings": final_state.get("agent_timings", {}),
                 "validation_result": validation_result,
                 "processing_time_ms": round(processing_time * 1000, 2),
                 "agents_used": list(final_state.get("agent_timings", {}).keys()),
-                "fallback_used": final_state.get("fallback_used", False),
                 "errors": final_state.get("errors", []),
                 "system_info": {
-                    "agents_used": 5,
-                    "model": self.model_path,
+                    "agents_used": 4,
+                    "model": settings.effective_model,
                     "framework": "LangGraph StateGraph Supervisor",
-                    "dspy_available": is_dspy_available(),
                 },
             }
 
@@ -1541,152 +1719,33 @@ class MultiAgentCoordinator:
             )
 
     def _create_error_response(
-        self, error_msg: str, start_time: float
+        self,
+        reason: Literal["initialization_failed", "execution_failed"],
+        start_time: float,
     ) -> AgentResponse:
         """Generates a standardized error response with timing metadata.
 
         Args:
-            error_msg: Descriptive error message.
+            reason: Stable, non-sensitive failure reason.
             start_time: Processing start timestamp.
 
         Returns:
             An AgentResponse indicating initialization or execution failure.
         """
         processing_time = time.perf_counter() - start_time
+        content = (
+            "Unable to initialize the coordinator."
+            if reason == "initialization_failed"
+            else "Unable to process the query."
+        )
         return AgentResponse(
-            content=f"Error processing query: {error_msg}",
+            content=content,
             sources=[],
-            metadata={"error": error_msg, "fallback_available": self.enable_fallback},
+            metadata={"reason": reason},
             validation_score=0.0,
             processing_time=processing_time,
-            optimization_metrics={"initialization_failed": True},
+            optimization_metrics={"error": True},
         )
-
-    def _fallback_basic_rag(
-        self,
-        query: str,
-        _context: Any | None,
-        start_time: float,
-    ) -> AgentResponse:
-        """Executes a basic response strategy when the multi-agent graph fails.
-
-        Args:
-            query: The original user query.
-            _context: Transient runtime context.
-            start_time: Processing start timestamp.
-
-        Returns:
-            A simplified AgentResponse indicating system unavailability.
-        """
-        try:
-            # Update fallback counter (production behavior)
-            self.fallback_queries += 1
-            logger.info("Using basic RAG fallback")
-
-            # Simple fallback response
-            processing_time = time.perf_counter() - start_time
-
-            return AgentResponse(
-                content=(
-                    "The multi-agent system is temporarily unavailable. "
-                    "Please try again shortly."
-                ),
-                sources=[],
-                metadata={
-                    "fallback_used": True,
-                    "fallback_strategy": "basic_response",
-                    "processing_time_ms": round(processing_time * 1000, 2),
-                },
-                validation_score=0.3,  # Lower confidence for fallback
-                processing_time=processing_time,
-                optimization_metrics={"fallback_mode": True},
-            )
-
-        except (RuntimeError, ValueError, AttributeError, Exception) as e:
-            redaction = build_pii_log_entry(str(e), key_id="coordinator.fallback_rag")
-            logger.error(
-                "Fallback RAG also failed (error_type={}, error={})",
-                type(e).__name__,
-                redaction.redacted,
-            )
-            processing_time = time.perf_counter() - start_time
-            return AgentResponse(
-                content="System temporarily unavailable.",
-                sources=[],
-                metadata={
-                    "fallback_used": True,
-                    "fallback_failed": True,
-                    "error_type": type(e).__name__,
-                    "error": redaction.redacted,
-                },
-                validation_score=0.0,
-                processing_time=processing_time,
-                optimization_metrics={"system_failure": True},
-            )
-
-    def _update_performance_metrics(
-        self, processing_time: float, coordination_time: float
-    ) -> None:
-        """Updates cumulative averages for total duration and agent overhead.
-
-        Args:
-            processing_time: Total duration of the current query in seconds.
-            coordination_time: Time spent in supervisor decision turns.
-        """
-        # Update running averages
-        if self.total_queries > 0:
-            self.avg_processing_time = (
-                self.avg_processing_time * (self.total_queries - 1) + processing_time
-            ) / self.total_queries
-
-            self.avg_coordination_overhead = (
-                self.avg_coordination_overhead * (self.total_queries - 1)
-                + coordination_time
-            ) / self.total_queries
-        else:
-            self.avg_processing_time = processing_time
-            self.avg_coordination_overhead = coordination_time
-
-    def get_performance_stats(self) -> dict[str, Any]:
-        """Aggregates cumulative performance and ADR compliance statistics.
-
-        Returns:
-            A dictionary containing success rates, timing averages, and
-            compliance flags.
-        """
-        success_rate = (
-            self.successful_queries / self.total_queries
-            if self.total_queries > 0
-            else 0.0
-        )
-        fallback_rate = (
-            self.fallback_queries / self.total_queries
-            if self.total_queries > 0
-            else 0.0
-        )
-
-        stats = {
-            # Basic metrics
-            "total_queries": self.total_queries,
-            "successful_queries": self.successful_queries,
-            "fallback_queries": self.fallback_queries,
-            "success_rate": round(success_rate, 3),
-            "fallback_rate": round(fallback_rate, 3),
-            "avg_processing_time": round(self.avg_processing_time, 3),
-            "avg_coordination_overhead": round(self.avg_coordination_overhead, 3),
-            "meets_target": self.avg_coordination_overhead
-            < COORDINATION_OVERHEAD_THRESHOLD,
-            "agent_timeout": self.max_agent_timeout,
-            "fallback_enabled": self.enable_fallback,
-            "model_config": {
-                "model_path": self.model_path,
-                "max_context_length": self.max_context_length,
-                "backend": self.backend,
-            },
-        }
-        # Include ADR compliance snapshot for observability
-        stats["adr_compliance"] = self.validate_adr_compliance()
-        return stats
 
     # --- Persistence helpers (ADR-058) ---
 
@@ -1711,10 +1770,15 @@ class MultiAgentCoordinator:
             return {}
         if self.compiled_graph is None:
             return {}
-        cfg: dict[str, Any] = {"thread_id": str(thread_id), "user_id": str(user_id)}
-        if checkpoint_id:
-            cfg["checkpoint_id"] = str(checkpoint_id)
-        snap = self.compiled_graph.get_state({"configurable": cfg})
+        config = _checkpoint_config(
+            thread_id=thread_id,
+            user_id=user_id,
+            checkpoint_id=checkpoint_id,
+        )
+        with self._persistence_lock:
+            if self._closed:
+                return {}
+            snap = self.compiled_graph.get_state(config)
         values = getattr(snap, "values", None)
         return values if isinstance(values, dict) else {}
 
@@ -1735,21 +1799,28 @@ class MultiAgentCoordinator:
             return []
         if self.compiled_graph is None:
             return []
-        cfg: dict[str, Any] = {"thread_id": str(thread_id), "user_id": str(user_id)}
+        config = _checkpoint_config(thread_id=thread_id, user_id=user_id)
         out: list[dict[str, Any]] = []
         try:
-            for snap in self.compiled_graph.get_state_history(
-                {"configurable": cfg}, limit=int(limit)
-            ):
-                config = getattr(snap, "config", None)
-                conf = config.get("configurable") if isinstance(config, dict) else None
-                conf = conf if isinstance(conf, dict) else {}
-                out.append(
-                    {
-                        "checkpoint_id": conf.get("checkpoint_id"),
-                        "checkpoint_ns": conf.get("checkpoint_ns", ""),
-                    }
-                )
+            with self._persistence_lock:
+                if self._closed:
+                    return []
+                for snap in self.compiled_graph.get_state_history(
+                    config, limit=int(limit)
+                ):
+                    snapshot_config = getattr(snap, "config", None)
+                    conf = (
+                        snapshot_config.get("configurable")
+                        if isinstance(snapshot_config, dict)
+                        else None
+                    )
+                    conf = conf if isinstance(conf, dict) else {}
+                    out.append(
+                        {
+                            "checkpoint_id": conf.get("checkpoint_id"),
+                            "checkpoint_ns": conf.get("checkpoint_ns", ""),
+                        }
+                    )
         except Exception as exc:
             redaction = build_pii_log_entry(
                 str(exc), key_id="coordinator.list_checkpoints"
@@ -1761,7 +1832,7 @@ class MultiAgentCoordinator:
             )
         return out
 
-    def fork_from_checkpoint(
+    def fork_from_checkpoint(  # noqa: PLR0911 - fail-closed persistence boundary
         self,
         *,
         thread_id: str,
@@ -1784,12 +1855,15 @@ class MultiAgentCoordinator:
         if not self._ensure_setup() or self.compiled_graph is None:
             return None
 
-        cfg: dict[str, Any] = {
-            "thread_id": str(thread_id),
-            "user_id": str(user_id),
-            "checkpoint_id": str(checkpoint_id),
-        }
-        config: RunnableConfig = {"configurable": cfg}
+        config = _checkpoint_config(
+            thread_id=thread_id,
+            user_id=user_id,
+            checkpoint_id=checkpoint_id,
+        )
+        configurable = config.get("configurable")
+        if not isinstance(configurable, dict):
+            return None
+        persistence_id = str(configurable.get("thread_id") or "")
         thread_redacted = build_pii_log_entry(
             str(thread_id), key_id="coordinator.thread_id"
         ).redacted
@@ -1797,40 +1871,32 @@ class MultiAgentCoordinator:
             str(checkpoint_id), key_id="coordinator.checkpoint_id"
         ).redacted
 
-        # First, fetch the checkpoint to verify it exists and preserve metadata
+        # Fetch and fork under one mutation lock while occupying the graph-run
+        # fence. A new turn cannot begin between the active-run check and the
+        # branch write; purge either deletes a completed fork or fails it closed.
+        fork_run: _ActiveAgentRun | None = None
         try:
-            source_state = self.compiled_graph.get_state(config)
-            if not source_state or not source_state.values:
-                logger.debug(
-                    "Checkpoint not found or empty (thread_id={} checkpoint_id={})",
-                    thread_redacted,
-                    checkpoint_redacted,
+            with self._persistence_lock:
+                if self._closed:
+                    return None
+                fork_run = self._begin_active_run(persistence_id)
+                if fork_run is None:
+                    return None
+                source_state = self.compiled_graph.get_state(config)
+                if not source_state or not source_state.values:
+                    logger.debug(
+                        "Checkpoint not found or empty (thread_id={} checkpoint_id={})",
+                        thread_redacted,
+                        checkpoint_redacted,
+                    )
+                    return None
+                # ``__copy__`` clones the selected checkpoint into a new head
+                # without running the workflow.
+                new_config = self.compiled_graph.update_state(
+                    config, None, as_node="__copy__"
                 )
-                return None
-        except (RuntimeError, ValueError, AttributeError) as exc:
-            err = build_pii_log_entry(str(exc), key_id="coordinator.get_state")
-            logger.debug(
-                "Failed to fetch checkpoint (thread_id={} "
-                "checkpoint_id={} error_type={} error={})",
-                thread_redacted,
-                checkpoint_redacted,
-                type(exc).__name__,
-                err.redacted,
-            )
-            return None
-
-        # Now fork the checkpoint using update_state with __copy__ node
-        try:
-            # LangGraph special update that clones the selected checkpoint into a
-            # new head (time-travel fork) without running the workflow.
-            # Note: as_node="__copy__" is LangGraph 0.2.0+ API for
-            # metadata preservation.
-            new_config = self.compiled_graph.update_state(
-                config, None, as_node="__copy__"
-            )
         except (RuntimeError, ValueError, AttributeError, TypeError) as exc:
-            # Specific exception handling for LangGraph API errors
-            err = build_pii_log_entry(str(exc), key_id="coordinator.update_state")
+            err = build_pii_log_entry(str(exc), key_id="coordinator.checkpoint_fork")
             logger.debug(
                 "Checkpoint fork failed (thread_id={} checkpoint_id={} "
                 "error_type={} error={})",
@@ -1854,64 +1920,168 @@ class MultiAgentCoordinator:
                 err.redacted,
             )
             return None
+        finally:
+            if fork_run is not None:
+                self._finish_active_run(persistence_id, fork_run)
 
         conf = new_config.get("configurable") if isinstance(new_config, dict) else None
         conf = conf if isinstance(conf, dict) else {}
         new_checkpoint_id = conf.get("checkpoint_id")
         return str(new_checkpoint_id) if new_checkpoint_id else None
 
-    def validate_system_status(self) -> dict[str, bool]:
-        """Validates the operational status and requirements of all components.
+    @staticmethod
+    def _remaining_purge_budget(deadline: float) -> float:
+        return max(0.0, deadline - time.monotonic())
 
-        Returns:
-            A dictionary of boolean flags indicating component health.
-        """
-        return {
-            "graph_setup": self._setup_complete and self.compiled_graph is not None,
-            "model_configured": bool(self.model_path),
-            "performance_optimization": True,
-            "dspy_integration": is_dspy_available(),
-            "coordination_performance": self.avg_coordination_overhead
-            < COORDINATION_OVERHEAD_THRESHOLD,
-            "context_support": self.max_context_length >= 131072,
-        }
+    @classmethod
+    def _acquire_before(cls, lock: Any, deadline: float) -> bool:
+        remaining = cls._remaining_purge_budget(deadline)
+        return remaining > 0 and lock.acquire(timeout=remaining)
 
-    def reset_performance_stats(self) -> None:
-        """Resets all cumulative performance metrics to zero."""
-        self.total_queries = 0
-        self.successful_queries = 0
-        self.fallback_queries = 0
-        self.avg_processing_time = 0.0
-        self.avg_coordination_overhead = 0.0
-        logger.info("Performance statistics reset")
+    def _register_session_purge(
+        self,
+        *,
+        namespace: tuple[str, ...],
+        persistence_id: str,
+        deadline: float,
+    ) -> tuple[bool, _ActiveAgentRun | None]:
+        if not self._acquire_before(self._persistence_lock, deadline):
+            return False, None
+        try:
+            if self._closed or not self._acquire_before(
+                self._active_runs_lock, deadline
+            ):
+                return False, None
+            try:
+                remaining = self._remaining_purge_budget(deadline)
+                if (
+                    try_tombstone_memory_namespace(namespace, timeout_s=remaining)
+                    is None
+                ):
+                    return False, None
+                self._purged_persistence_ids.add(persistence_id)
+                return True, self._active_runs.get(persistence_id)
+            finally:
+                self._active_runs_lock.release()
+        finally:
+            self._persistence_lock.release()
 
-    def validate_adr_compliance(self) -> dict[str, bool]:
-        """Evaluates architectural requirements against current system state.
+    @classmethod
+    def _delete_session_within_budget(
+        cls,
+        conn: sqlite3.Connection,
+        *,
+        thread_id: str,
+        user_id: str,
+        deadline: float,
+    ) -> bool:
+        if cls._remaining_purge_budget(deadline) <= 0:
+            return False
+        previous_busy_timeout: int | None = None
+        try:
+            if isinstance(conn, sqlite3.Connection):
+                row = conn.execute("PRAGMA busy_timeout;").fetchone()
+                previous_busy_timeout = int(row[0]) if row is not None else None
+                remaining_ms = max(
+                    1,
+                    math.ceil(cls._remaining_purge_budget(deadline) * 1000),
+                )
+                conn.execute(f"PRAGMA busy_timeout={remaining_ms};")
+            delete_persisted_session(
+                conn,
+                thread_id=thread_id,
+                user_id=user_id,
+            )
+        except Exception as exc:
+            redaction = build_pii_log_entry(
+                str(exc), key_id="coordinator.session_purge"
+            )
+            logger.warning(
+                "Session purge failed (error_type={} error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
+            return False
+        finally:
+            if previous_busy_timeout is not None:
+                with contextlib.suppress(sqlite3.Error):
+                    conn.execute(f"PRAGMA busy_timeout={previous_busy_timeout};")
+        return True
 
-        Returns:
-            A dictionary of boolean flags for specific ADR requirements.
-        """
-        return {
-            # ADR-001: Supervisor pattern compiled and ready
-            "adr_001_supervisor_pattern": bool(
-                self._setup_complete and self.compiled_graph is not None
-            ),
-            # ADR-004: FP8 model variant used by default (suffix-based)
-            "adr_004_fp8_model": self.model_path.upper()
-            .split("/")[-1]
-            .endswith("-FP8"),
-            # Coordination under 200ms per turn
-            "coordination_under_200ms": self.avg_coordination_overhead
-            < COORDINATION_OVERHEAD_THRESHOLD,
-            # Context support for 128k tokens
-            "context_128k_support": self.max_context_length >= 131072,
-        }
+    def _delete_fenced_session(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        thread_id: str,
+        user_id: str,
+        persistence_id: str,
+        deadline: float,
+    ) -> bool:
+        if not self._acquire_before(self._persistence_lock, deadline):
+            return False
+        try:
+            if self._closed or not self._acquire_before(
+                self._active_runs_lock, deadline
+            ):
+                return False
+            try:
+                if persistence_id in self._active_runs:
+                    return False
+            finally:
+                self._active_runs_lock.release()
+            return self._delete_session_within_budget(
+                conn,
+                thread_id=thread_id,
+                user_id=user_id,
+                deadline=deadline,
+            )
+        finally:
+            self._persistence_lock.release()
+
+    def purge_session(
+        self,
+        *,
+        conn: sqlite3.Connection,
+        thread_id: str,
+        user_id: str,
+        timeout_s: float = SESSION_PURGE_DRAIN_TIMEOUT_S,
+    ) -> bool:
+        """Fence, drain, and durably delete one session within one time budget."""
+        timeout = float(timeout_s)
+        if not math.isfinite(timeout) or timeout < 0:
+            return False
+        deadline = time.monotonic() + timeout
+        namespace = memory_namespace(user_id=user_id, thread_id=thread_id)
+        persistence_id = checkpoint_thread_id(thread_id=thread_id, user_id=user_id)
+        registered, active_run = self._register_session_purge(
+            namespace=namespace,
+            persistence_id=persistence_id,
+            deadline=deadline,
+        )
+        if not registered:
+            return False
+        if active_run is not None:
+            active_run.control.request_drain("session_purged")
+            if not active_run.finished.wait(
+                timeout=self._remaining_purge_budget(deadline)
+            ):
+                logger.warning("Session purge deferred: active graph run did not drain")
+                return False
+        return self._delete_fenced_session(
+            conn,
+            thread_id=thread_id,
+            user_id=user_id,
+            persistence_id=persistence_id,
+            deadline=deadline,
+        )
 
     def _consolidate_memories(
         self,
         final_state: dict[str, Any],
         thread_id: str,
         user_id: str,
+        expected_generation: int,
+        checkpoint_id: str,
     ) -> None:
         """Executes background memory consolidation for a completed turn.
 
@@ -1923,87 +2093,62 @@ class MultiAgentCoordinator:
             final_state: The terminal state of the agent graph.
             thread_id: Unique conversation identifier.
             user_id: User namespace for memory scoping.
+            expected_generation: Namespace generation captured before scheduling.
+            checkpoint_id: Terminal checkpoint that produced ``final_state``.
         """
-        logger.debug(
-            "Starting background memory consolidation for thread {}", thread_id
-        )
-        if self.store is None:
+        logger.debug("Starting background memory consolidation")
+        namespace = memory_namespace(user_id=user_id, thread_id=thread_id)
+        if (
+            self.store is None
+            or is_memory_namespace_tombstoned(namespace)
+            or memory_namespace_generation(namespace) != expected_generation
+        ):
             return
 
         try:
-            start_time = time.monotonic()
+            deadline_ts = time.monotonic() + MEMORY_CONSOLIDATION_TIMEOUT_S
 
             def _timed_out() -> bool:
-                return (time.monotonic() - start_time) > MEMORY_CONSOLIDATION_TIMEOUT_S
+                return time.monotonic() >= deadline_ts
 
             if _timed_out():
-                logger.debug(
-                    "Memory consolidation timed out before start for thread {}",
-                    thread_id,
-                )
+                logger.debug("Memory consolidation timed out before start")
                 return
 
-            # 1. Get current checkpoint info for source tracking
-            config: RunnableConfig = {
-                "configurable": {"thread_id": thread_id, "user_id": user_id}
-            }
-            checkpoint_id = "latest"
-            if self.compiled_graph:
-                state = self.compiled_graph.get_state(config)
-                if state and state.config:
-                    checkpoint_id = state.config.get("configurable", {}).get(
-                        "checkpoint_id", "latest"
-                    )
-
-            if _timed_out():
-                logger.debug("Memory consolidation timed out for thread {}", thread_id)
-                return
-
-            policy = MemoryConsolidationPolicy(
-                similarity_threshold=float(settings.chat.memory_similarity_threshold),
-                low_importance_threshold=float(
-                    settings.chat.memory_low_importance_threshold
-                ),
-                low_importance_ttl_minutes=int(
-                    settings.chat.memory_low_importance_ttl_days
-                )
-                * 24
-                * 60,
-                max_items_per_namespace=int(
-                    settings.chat.memory_max_items_per_namespace
-                ),
-                max_candidates_per_turn=int(
-                    settings.chat.memory_max_candidates_per_turn
-                ),
-            )
+            policy = MemoryConsolidationPolicy.from_settings()
 
             # 2. Extract candidates from the conversation turn
             messages = final_state.get("messages", [])
             candidates = extract_memory_candidates(
-                messages, checkpoint_id=checkpoint_id, llm=self.llm, policy=policy
+                messages,
+                checkpoint_id=checkpoint_id,
+                llm=self.llm,
+                policy=policy,
+                deadline_ts=deadline_ts,
             )
             if not candidates:
                 return
             if _timed_out():
-                logger.debug("Memory consolidation timed out for thread {}", thread_id)
+                logger.debug("Memory consolidation timed out")
                 return
 
-            # 3. Consolidate within the specific namespace
-            # Namespace: ("memories", "{user_id}", "{thread_id}")
-            namespace = ("memories", str(user_id), str(thread_id))
-            actions = consolidate_memory_candidates(
-                candidates, self.store, namespace, policy=policy
-            )
-            if _timed_out():
-                logger.debug("Memory consolidation timed out for thread {}", thread_id)
-                return
-
-            # 4. Apply policy using the durable store
-            apply_consolidation_policy(self.store, namespace, actions, policy=policy)
+            with memory_namespace_lock(namespace):
+                if (
+                    self._closed
+                    or is_memory_namespace_tombstoned(namespace)
+                    or memory_namespace_generation(namespace) != expected_generation
+                ):
+                    return
+                consolidate_and_apply_memory_candidates(
+                    candidates,
+                    self.store,
+                    namespace,
+                    deadline_ts=deadline_ts,
+                    policy=policy,
+                    expected_generation=expected_generation,
+                )
 
         except Exception as exc:
-            from src.utils.log_safety import build_pii_log_entry
-
             redaction = build_pii_log_entry(
                 str(exc), key_id="coordinator.memory_consolidation_background"
             )
@@ -2013,7 +2158,7 @@ class MultiAgentCoordinator:
                 redaction.redacted,
             )
 
-    def _schedule_memory_consolidation(
+    def _schedule_memory_consolidation(  # noqa: PLR0915 - bounded lifecycle cleanup
         self,
         final_state: dict[str, Any],
         *,
@@ -2027,22 +2172,71 @@ class MultiAgentCoordinator:
             thread_id: Unique conversation identifier.
             user_id: User namespace for memory scoping.
         """
-        if self.store is None:
-            return
-        if not self._memory_consolidation_semaphore.acquire(blocking=False):
+        namespace = memory_namespace(user_id=user_id, thread_id=thread_id)
+        checkpoint_id_value = final_state.get("_terminal_checkpoint_id")
+        if not isinstance(checkpoint_id_value, str) or not checkpoint_id_value:
             logger.debug(
-                "Skipping memory consolidation; max in-flight reached for thread {}",
-                thread_id,
+                "Skipping memory consolidation; terminal checkpoint provenance missing"
             )
             return
+        checkpoint_id = checkpoint_id_value
+        expected_generation = memory_generation_from_state(final_state, "session")
+        if expected_generation is None:
+            logger.debug(
+                "Skipping memory consolidation; admitted generation provenance missing"
+            )
+            return
+        with memory_namespace_lock(namespace):
+            if (
+                self.store is None
+                or self._closed
+                or self._memory_executor_closed
+                or is_memory_namespace_tombstoned(namespace)
+                or memory_namespace_generation(namespace) != expected_generation
+            ):
+                return
 
-        future = self._memory_executor.submit(
-            self._consolidate_memories, final_state, thread_id, user_id
-        )
+        with self._memory_jobs_lock:
+            if self._closed or self._memory_executor_closed:
+                return
+            self._memory_jobs[namespace] = self._memory_jobs.get(namespace, 0) + 1
+
+        def _forget_job() -> None:
+            with self._memory_jobs_lock:
+                remaining = self._memory_jobs.get(namespace, 0) - 1
+                if remaining > 0:
+                    self._memory_jobs[namespace] = remaining
+                else:
+                    self._memory_jobs.pop(namespace, None)
+
+        if not self._memory_consolidation_semaphore.acquire(blocking=False):
+            _forget_job()
+            logger.debug("Skipping memory consolidation; max in-flight reached")
+            return
 
         def _release_slot() -> None:
             with contextlib.suppress(ValueError):
                 self._memory_consolidation_semaphore.release()
+
+        try:
+            future = self._memory_executor.submit(
+                self._consolidate_memories,
+                final_state,
+                thread_id,
+                user_id,
+                expected_generation,
+                checkpoint_id,
+            )
+        except RuntimeError as exc:
+            _release_slot()
+            _forget_job()
+            logger.debug(
+                "Memory consolidation submit skipped (error_type={})",
+                type(exc).__name__,
+            )
+            return
+
+        future.add_done_callback(lambda _completed: _forget_job())
 
         def _watch_future() -> None:
             should_release = True
@@ -2053,36 +2247,20 @@ class MultiAgentCoordinator:
                     return
                 released.set()
                 logger.debug(
-                    "Releasing memory consolidation slot ({}) for thread {}",
+                    "Releasing memory consolidation slot ({})",
                     reason,
-                    thread_id,
                 )
                 _release_slot()
-
-            def _release_if_stuck() -> None:
-                if future.done():
-                    return
-                logger.warning(
-                    "Memory consolidation still running after timeout+grace "
-                    "for thread {}",
-                    thread_id,
-                )
-                _release_once("grace-timeout")
 
             try:
                 future.result(timeout=MEMORY_CONSOLIDATION_TIMEOUT_S)
             except FuturesTimeoutError:
                 logger.warning(
-                    "Memory consolidation timed out after {}s for thread {}",
+                    "Memory consolidation timed out after {}s",
                     MEMORY_CONSOLIDATION_TIMEOUT_S,
-                    thread_id,
                 )
                 if not future.cancel():
-                    logger.debug(
-                        "Memory consolidation still running after timeout for "
-                        "thread {}",
-                        thread_id,
-                    )
+                    logger.debug("Memory consolidation still running after timeout")
 
                     # Attach callback to release slot when future eventually completes.
                     # This prevents semaphore leak when task doesn't respond to cancel.
@@ -2093,31 +2271,23 @@ class MultiAgentCoordinator:
 
                     try:
                         future.add_done_callback(_on_future_done)
-                        should_release = False  # Callback/timer will handle release
-                        threading.Timer(
-                            MEMORY_CONSOLIDATION_RELEASE_GRACE_S, _release_if_stuck
-                        ).start()
+                        should_release = False
                     except (RuntimeError, TypeError) as exc:
-                        from src.utils.log_safety import build_pii_log_entry
-
                         redaction = build_pii_log_entry(
                             str(exc),
                             key_id="coordinator.memory_consolidation_add_callback",
                         )
-                        # If callback cannot be added (rare; future may be done),
-                        # release immediately as fallback
                         logger.debug(
-                            "Could not attach done callback for thread {} "
-                            "(error_type={} error={}); releasing slot immediately",
-                            thread_id,
+                            "Could not attach memory completion callback "
+                            "(error_type={} error={}); waiting for worker exit",
                             type(exc).__name__,
                             redaction.redacted,
                         )
-                        _release_once("callback-failed")
-                        should_release = False  # Already released, avoid double-release
+                        with contextlib.suppress(Exception):
+                            future.result()
+                        _release_once("callback-failed-done")
+                        should_release = False
             except Exception as exc:
-                from src.utils.log_safety import build_pii_log_entry
-
                 redaction = build_pii_log_entry(
                     str(exc), key_id="coordinator.memory_consolidation_task"
                 )
@@ -2135,37 +2305,3 @@ class MultiAgentCoordinator:
             name="docmind-memory-watch",
             daemon=True,
         ).start()
-
-
-# Factory function for coordinator
-def create_multi_agent_coordinator(
-    model_path: str | None = None,
-    max_context_length: int | None = None,
-    enable_fallback: bool = True,
-    *,
-    tool_registry: ToolRegistry | None = None,
-    use_shared_llm_client: bool | None = None,
-) -> MultiAgentCoordinator:
-    """Factory function for initializing the MultiAgentCoordinator.
-
-    Args:
-        model_path: The LLM model identifier.
-        max_context_length: Maximum context window in tokens.
-        enable_fallback: Whether to use basic RAG on agent failures.
-        tool_registry: Optional registry for resolving agent tools.
-        use_shared_llm_client: Flag to reuse LlamaIndex LLM client wrappers.
-
-    Returns:
-        A fully configured MultiAgentCoordinator instance.
-    """
-    return MultiAgentCoordinator(
-        model_path=settings.effective_model if model_path is None else model_path,
-        max_context_length=(
-            settings.effective_context_window
-            if max_context_length is None
-            else max_context_length
-        ),
-        enable_fallback=enable_fallback,
-        tool_registry=tool_registry,
-        use_shared_llm_client=use_shared_llm_client,
-    )

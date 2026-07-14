@@ -1,8 +1,8 @@
 ---
 spec: SPEC-025
 title: Keyword Search Tool — Sparse-only Qdrant Retriever (text-sparse)
-version: 1.0.1
-date: 2026-01-11
+version: 2.0.0
+date: 2026-07-13
 owners: ["ai-arch"]
 status: Implemented
 related_requirements:
@@ -13,7 +13,7 @@ related_adrs: ["ADR-044","ADR-024"]
 
 ## Objective
 
-Replace the placeholder keyword tool with a real implementation that:
+Provide one optional keyword tool that:
 
 - performs **sparse-only** retrieval against Qdrant named vector `text-sparse`
 - reuses existing sparse encoding utilities (FastEmbed BM42/BM25)
@@ -22,13 +22,13 @@ Replace the placeholder keyword tool with a real implementation that:
 ## Non-goals
 
 - Adding a BM25 dependency and building a separate inverted index
-- Changing the default retrieval path (hybrid remains authoritative)
+- Bypassing the canonical LlamaIndex router
 
 ## Technical design
 
 ### Retriever
 
-Add a small retriever class (suggested location: `src/retrieval/keyword.py`) with:
+`src/retrieval/keyword.py::KeywordSparseRetriever` owns sparse-only retrieval:
 
 - `retrieve(query: str | QueryBundle) -> list[NodeWithScore]`
 - query encoding via `src.retrieval.sparse_query.encode_to_qdrant`
@@ -36,15 +36,24 @@ Add a small retriever class (suggested location: `src/retrieval/keyword.py`) wit
   - `client.query_points(collection_name=..., query=sparse_vec, using="text-sparse", limit=top_k, with_payload=[...])`
 - deterministic ordering: score desc + id asc
 - fail-open behavior:
-  - if sparse encoder unavailable, return empty list (and log telemetry)
+  - if sparse encoding or the Qdrant query fails, return an empty list and emit
+    metadata-only telemetry
+- async behavior:
+  - query Qdrant with the native async client
+  - run FastEmbed in the retriever-owned bounded executor
+  - retain executor capacity until native work finishes, even if its waiter is cancelled
 
 ### Tool wiring
 
-Update `src/agents/tool_factory.py::create_keyword_tool` to use the new sparse-only retriever and `build_retriever_query_engine`.
+`src/retrieval/router_factory.py` wraps the retriever with LlamaIndex
+`RetrieverQueryEngine.from_args(...)` and adds it to the canonical router only
+when `settings.retrieval.enable_keyword_tool` is true. The agent registry exposes
+one `retrieve_documents` tool; it does not register keyword retrieval as a second
+agent-level path.
 
 Tool description MUST clearly communicate intended use:
 
-> “Exact keyword / ID / error-code lookup; lexical matching; not semantic.”
+> "Exact keyword, identifier, and error-code lookup via sparse matching."
 
 ### Telemetry
 
@@ -55,22 +64,19 @@ Emit a JSONL event when the keyword tool:
 
 ## Testing strategy
 
-- Unit: `tests/unit/agents/test_tool_factory_keyword.py` should validate that:
-  - tool is only registered when flag true
-  - tool name is `keyword_search`
-  - telemetry event is emitted when sparse encoder is unavailable
-  - description emphasizes lexical/keyword-only semantics
-- Unit: new tests for sparse-only retriever behavior:
-  - encodes query and calls `query_points(using="text-sparse")` (mock client)
-  - deterministic ordering
-  - empty return when sparse encoder returns None
+- `tests/unit/retrieval/test_router_factory_contract.py` validates router tool
+  composition.
+- `tests/unit/retrieval/test_keyword_retriever.py` validates that the retriever:
+  - encodes the query and calls `query_points(using="text-sparse")` through a mock client
+  - orders results deterministically
+  - returns an empty result and emits telemetry when sparse encoding is unavailable
 
 ## RTM updates (docs/specs/traceability.md)
 
 FR-023 is implemented and recorded in the RTM:
 
 - FR-023: “Keyword tool (sparse-only Qdrant)”
-  - Code: `src/retrieval/keyword.py`, `src/agents/tool_factory.py`
-  - Tests: `tests/unit/agents/test_tool_factory_keyword.py`, `tests/unit/retrieval/test_keyword_retriever.py`
+  - Code: `src/retrieval/keyword.py`, `src/retrieval/router_factory.py`
+  - Tests: `tests/unit/retrieval/test_router_factory_contract.py`, `tests/unit/retrieval/test_keyword_retriever.py`
   - Verification: unit tests pass; optional Qdrant integration validation when available
   - Status: Implemented

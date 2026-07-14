@@ -51,7 +51,10 @@ Adopt **LlamaIndex RouterQueryEngine** with built‑in **HybridRetriever** (dens
 
 ### GraphRAG Router Composition (Amendment)
 
-When a property graph is present and healthy, compose tools `[vector_query_engine, graph_query_engine(include_text=true, path_depth=1)]` with selector `PydanticSingleSelector` (OpenAI) else `LLMSingleSelector`. If the graph is absent/unhealthy, route to vector only. This approach aligns with ADR‑038 and ensures graceful degradation.
+The canonical router always includes semantic search and conditionally adds
+hybrid, keyword, multimodal, and graph tools. LlamaIndex's native
+`RouterQueryEngine.from_defaults(...)` owns selection. If a graph is absent or
+unhealthy, only the graph tool is omitted. This aligns with ADR-038.
 
 ## High-Level Architecture
 
@@ -135,9 +138,8 @@ def build_adaptive_query_engine(
 DOCMIND_RETRIEVAL__TOP_K=10                    # final candidate count
 DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=false  # opt in to Qdrant server fusion
 
-# Graph tool registration requires both gates
-DOCMIND_ENABLE_GRAPHRAG=true
-DOCMIND_GRAPHRAG_CFG__ENABLED=true
+# Default state of the per-ingestion graph control
+DOCMIND_GRAPHRAG_CFG__ENABLED=false
 
 # Reranking (ADR‑037)
 DOCMIND_RETRIEVAL__USE_RERANKING=true           # set false to disable

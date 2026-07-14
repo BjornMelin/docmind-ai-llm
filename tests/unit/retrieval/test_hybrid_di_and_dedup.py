@@ -44,7 +44,7 @@ class _ClientFake:
 def test_hybrid_di_and_dedup_ordering(monkeypatch: pytest.MonkeyPatch) -> None:
     # Avoid real embedding backends by patching retriever methods
     monkeypatch.setattr(
-        "src.retrieval.hybrid.ensure_hybrid_collection",
+        "src.retrieval.hybrid.check_hybrid_collection",
         lambda *_args, **_kwargs: type("_Compatibility", (), {"compatible": True})(),
     )
 

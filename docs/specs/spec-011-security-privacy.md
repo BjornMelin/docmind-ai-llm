@@ -49,7 +49,7 @@ The system MAY encrypt page images at rest using AES‑GCM when enabled.
 - Files: Use `.enc` extension; decrypt via provided utility before reading bytes.
 - AAD: SHOULD include non‑sensitive context (e.g., page_id) to bind ciphertext to metadata.
 - Rotation: Keys SHOULD support rotation; new ingests use the new kid; old objects remain decryptable while key material exists.
-- Consumption: Consumers (e.g., SigLIP/ColPali visual rerank) SHALL decrypt to a temporary file for processing and MUST clean up the temp file on success or timeout.
+- Consumption: SigLIP visual scoring SHALL use the encrypted-aware image loader and MUST release decoded images on success, error, or timeout.
 
 ## Control network access
 
@@ -66,9 +66,10 @@ The system MAY encrypt page images at rest using AES‑GCM when enabled.
   RapidOCR path. No environment variable selects a remote parser or another PDF
   backend.
 - The parser has no remote, VLM, or arbitrary-code model fallback.
-- PDF parsing MUST fail before conversion when required model files are missing
-  or differ from their source-controlled manifests. Health output reports only
-  relative artifact paths and integrity reasons.
+- PDF parsing MUST fail before conversion when app-owned Docling files are
+  missing or differ from the source-controlled manifest. RapidOCR MUST use the
+  models and checksums supplied by its locked wheel. Health output reports only
+  relative Docling paths and integrity reasons.
 - PDF and other binary parser failures MUST fail closed with a typed parsing
   error. Binary source bytes MUST NOT be decoded as UTF-8 fallback text or
   published to retrieval stores.

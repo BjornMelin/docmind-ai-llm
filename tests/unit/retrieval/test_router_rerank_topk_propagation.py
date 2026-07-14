@@ -1,102 +1,55 @@
-"""Unit test to ensure reranking_top_k propagates into postprocessor builders.
-
-Monkeypatches get_postprocessors to capture top_n passed from router_factory,
-verifying DRY gating and consistent propagation.
-"""
+"""Reranking configuration propagation tests for the router factory."""
 
 from __future__ import annotations
 
-import importlib
-from types import SimpleNamespace
-from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
-pytest.importorskip("llama_index.core", reason="requires llama_index.core")
-
-pytestmark = pytest.mark.requires_llama
+from src.retrieval import router_factory as rf
 
 
-def _run_router_with_capture(
-    monkeypatch, *, rerank_top_k: Any, enable_hybrid: bool = True
-):
-    rfac = importlib.import_module("src.retrieval.router_factory")
+def test_router_propagates_typed_rerank_top_k(
+    monkeypatch: pytest.MonkeyPatch, router_settings
+) -> None:  # type: ignore[no-untyped-def]
     captured: dict[str, tuple[bool, int | None]] = {}
 
-    def _fake_get_pp(area: str, *, use_reranking: bool, top_n: int | None = None):
-        normalized = int(top_n) if top_n is not None else None
-        captured[area] = (use_reranking, normalized)
+    def _capture(area: str, *, use_reranking: bool, top_n: int | None = None):
+        captured[area] = (use_reranking, top_n)
         return []
 
-    import src.retrieval.reranking as rr
+    class _VectorIndex:
+        def as_query_engine(self, **_kwargs):  # type: ignore[no-untyped-def]
+            return MagicMock(name="vector_qe")
 
-    monkeypatch.setattr(rr, "get_postprocessors", _fake_get_pp, raising=False)
+    class _GraphIndex:
+        property_graph_store = object()
 
-    import src.retrieval.hybrid as hy
-
-    class _StubRetriever:
-        def __init__(self, *_a: Any, **_k: Any):
-            pass
-
-        def retrieve(self, *_a: Any, **_k: Any):
-            return []
-
-    monkeypatch.setattr(hy, "ServerHybridRetriever", _StubRetriever, raising=False)
-
-    from src.config.settings import settings as cfg
-
-    monkeypatch.setattr(cfg.retrieval, "use_reranking", True, raising=False)
-    monkeypatch.setattr(cfg.retrieval, "reranking_top_k", rerank_top_k, raising=False)
+    monkeypatch.setattr(rf, "get_postprocessors", _capture, raising=True)
     monkeypatch.setattr(
-        cfg.retrieval, "enable_server_hybrid", enable_hybrid, raising=False
+        "src.retrieval.hybrid.ServerHybridRetriever",
+        lambda _params: MagicMock(name="hybrid_retriever"),
+        raising=True,
     )
-    monkeypatch.setattr(cfg, "enable_graphrag", True, raising=False)
     monkeypatch.setattr(
-        "src.retrieval.router_factory.build_graph_query_engine",
-        lambda *_a, **_k: SimpleNamespace(
-            query_engine=SimpleNamespace(), retriever=SimpleNamespace()
-        ),
+        rf,
+        "build_graph_query_engine",
+        lambda *_a, **_k: MagicMock(query_engine=MagicMock(name="graph_qe")),
+        raising=True,
     )
 
-    class _StubIndex:
-        def as_query_engine(self, **_kwargs: Any):
-            class _QE:
-                def query(self, *_a: Any, **_k: Any):
-                    return "ok"
+    router_settings.retrieval.use_reranking = True
+    router_settings.retrieval.reranking_top_k = 7
+    router_settings.retrieval.enable_server_hybrid = True
 
-            return _QE()
+    rf.build_router_engine(
+        vector_index=_VectorIndex(),  # type: ignore[arg-type]
+        pg_index=_GraphIndex(),  # type: ignore[arg-type]
+        settings=router_settings,
+    )
 
-    class _StubGraph:
-        def __init__(self) -> None:
-            self.property_graph_store = object()
-
-        def as_retriever(self, **_kwargs: Any):
-            class _Retriever:
-                def retrieve(self, *_args: Any, **_kwargs: Any):
-                    return []
-
-            return _Retriever()
-
-    rfac.build_router_engine(vector_index=_StubIndex(), pg_index=_StubGraph())
-    return captured
-
-
-def test_router_rerank_topk_propagation(monkeypatch):  # type: ignore[no-untyped-def]
-    captured = _run_router_with_capture(monkeypatch, rerank_top_k=7)
-    assert captured.get("vector") == (True, 7)
-    assert captured.get("hybrid") == (True, 7)
-    assert captured.get("kg") == (True, 7)
-
-
-def test_router_rerank_topk_none(monkeypatch):  # type: ignore[no-untyped-def]
-    captured = _run_router_with_capture(monkeypatch, rerank_top_k=None)
-    assert captured.get("vector") == (True, None)
-    assert captured.get("hybrid") == (True, None)
-    assert captured.get("kg") == (True, None)
-
-
-def test_router_rerank_topk_invalid(monkeypatch):  # type: ignore[no-untyped-def]
-    captured = _run_router_with_capture(monkeypatch, rerank_top_k="15")
-    assert captured.get("vector") == (True, 15)
-    assert captured.get("hybrid") == (True, 15)
-    assert captured.get("kg") == (True, 15)
+    assert captured == {
+        "vector": (True, 7),
+        "hybrid": (True, 7),
+        "kg": (True, 7),
+    }

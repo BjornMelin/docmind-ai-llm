@@ -6,32 +6,29 @@ from typing import Literal
 
 import pytest
 
-from src.config.settings import _DEFAULT_OPENAI_BASE_URL, DocMindSettings, VLLMConfig
+from src.config.settings import DocMindSettings, LLMRequestConfig
 
 
 @pytest.mark.parametrize(
-    ("backend", "model", "vllm_model", "expected"),
+    ("backend", "model", "expected"),
     [
-        ("ollama", None, "Qwen/Qwen3-4B-Instruct-2507-FP8", "qwen3:4b-instruct"),
-        ("vllm", None, "served-model", "served-model"),
-        ("ollama", "explicit-model", "served-model", "explicit-model"),
+        ("ollama", None, "qwen3:4b-instruct"),
+        ("vllm", None, "Qwen/Qwen3-4B-Instruct-2507-FP8"),
+        ("ollama", "explicit-model", "explicit-model"),
     ],
 )
 def test_effective_model_is_backend_aware(
     backend: Literal["ollama", "vllm"],
     model: str | None,
-    vllm_model: str,
     expected: str,
 ) -> None:
     """Resolve one model identity for every backend-agnostic consumer."""
     settings = DocMindSettings(
         llm_backend=backend,
-        model=model,
-        vllm=VLLMConfig(model=vllm_model),
+        llm_request=LLMRequestConfig(model=model),
     )
 
     assert settings.effective_model == expected
-    assert settings.get_model_config()["model_name"] == expected
 
 
 @pytest.mark.parametrize(
@@ -62,21 +59,35 @@ def test_backend_base_url_normalization(
     assert normalized == expected
 
 
-def test_backend_base_url_openai_group_overrides_when_customized():  # type: ignore[no-untyped-def]
+def test_vllm_base_url_has_single_owner():  # type: ignore[no-untyped-def]
     s = DocMindSettings(_env_file=None)  # type: ignore[arg-type]
     s.llm_backend = "vllm"
     s.vllm_base_url = "http://localhost:8000"
     s.openai = s.openai.model_copy(update={"base_url": "http://localhost:9999/v1"})
-    assert s.backend_base_url_normalized == "http://localhost:9999/v1"
-
-
-def test_backend_base_url_openai_group_default_does_not_override():  # type: ignore[no-untyped-def]
-    s = DocMindSettings(_env_file=None)  # type: ignore[arg-type]
-    s.llm_backend = "vllm"
-    s.vllm_base_url = "http://localhost:8000"
-    # Even if explicitly set, default base URL should not override the backend base.
-    s.openai = s.openai.model_copy(update={"base_url": _DEFAULT_OPENAI_BASE_URL})
     assert s.backend_base_url_normalized == "http://localhost:8000/v1"
+
+
+@pytest.mark.parametrize(
+    ("backend", "dedicated_field", "dedicated_url"),
+    [
+        ("lmstudio", "lmstudio_base_url", "http://localhost:1234/v1"),
+        ("llamacpp", "llamacpp_base_url", "http://localhost:8080/v1"),
+    ],
+)
+def test_dedicated_backend_url_cannot_be_overridden_by_openai_config(
+    backend: Literal["lmstudio", "llamacpp"],
+    dedicated_field: str,
+    dedicated_url: str,
+) -> None:
+    """Selecting a local backend cannot reuse a prior cloud endpoint."""
+    settings = DocMindSettings(
+        llm_backend=backend,
+        openai={"base_url": "https://api.openai.com/v1", "api_key": "secret"},
+        security={"allow_remote_endpoints": True},
+        **{dedicated_field: dedicated_url},
+    )
+
+    assert settings.backend_base_url_normalized == dedicated_url
 
 
 def test_allow_remote_effective_env_override(monkeypatch):  # type: ignore[no-untyped-def]
@@ -86,7 +97,15 @@ def test_allow_remote_effective_env_override(monkeypatch):  # type: ignore[no-un
     assert s.allow_remote_effective() is False
 
 
-def test_get_vllm_config_contains_expected_keys():  # type: ignore[no-untyped-def]
-    s = DocMindSettings(_env_file=None)  # type: ignore[arg-type]
-    cfg = s.get_vllm_config()
-    assert set(cfg.keys()) >= {"model", "context_window", "temperature"}
+def test_llm_request_env_mapping(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DOCMIND_LLM_REQUEST__MODEL", "served-model")
+    monkeypatch.setenv("DOCMIND_LLM_REQUEST__CONTEXT_WINDOW", "32768")
+    monkeypatch.setenv("DOCMIND_LLM_REQUEST__MAX_OUTPUT_TOKENS", "1024")
+    monkeypatch.setenv("DOCMIND_LLM_REQUEST__TEMPERATURE", "0.3")
+
+    settings = DocMindSettings(_env_file=None)  # type: ignore[arg-type]
+
+    assert settings.effective_model == "served-model"
+    assert settings.llm_request.context_window == 32768
+    assert settings.llm_request.max_output_tokens == 1024
+    assert settings.llm_request.temperature == pytest.approx(0.3)

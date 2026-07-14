@@ -32,7 +32,7 @@ def test_dedup_before_final_truncation(monkeypatch):
 
     monkeypatch.setattr("src.retrieval.hybrid.QdrantClient", _FakeClient)
     monkeypatch.setattr(
-        "src.retrieval.hybrid.ensure_hybrid_collection",
+        "src.retrieval.hybrid.check_hybrid_collection",
         lambda *_args, **_kwargs: type("_Compatibility", (), {"compatible": True})(),
     )
 

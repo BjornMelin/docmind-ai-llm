@@ -14,7 +14,7 @@ Thank you for your interest in contributing to DocMind AI! This guide outlines t
 3. **Testing**: Ensure all tests pass.
 
     ```bash
-    uv run python scripts/run_tests.py --fast
+    uv run pytest tests/unit tests/integration -q --no-cov
     ```
 
 4. **Linting**: Run `ruff` and `pyright` to ensure code quality.
@@ -33,7 +33,7 @@ We use `uv` for dependency management and `ruff` for linting/formatting.
 - **Check Python code quality**: `uv run ruff check .`
 - **Format code**: `uv run ruff format .`
 - **Type check**: `uv run pyright`
-- **Run tests**: `uv run python scripts/run_tests.py`
+- **Run tests**: `uv run pytest tests/unit tests/integration -q --no-cov`
 - **Validate documentation links**: `python scripts/check_links.py docs/`
 
 ## Documentation Standards

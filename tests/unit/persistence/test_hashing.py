@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+
+import pytest
 
 from src.persistence.hashing import compute_config_hash, compute_corpus_hash
 
@@ -22,10 +25,25 @@ def test_compute_corpus_hash_stable(tmp_path: Path) -> None:
 
 def test_compute_corpus_hash_missing_file(tmp_path: Path) -> None:
     missing = tmp_path / "missing.txt"
-    hash_value = compute_corpus_hash([missing])
-    # Missing files should still yield a deterministic digest
-    assert isinstance(hash_value, str)
-    assert len(hash_value) == 64
+    with pytest.raises(ValueError, match="unavailable"):
+        compute_corpus_hash([missing])
+
+
+def test_compute_corpus_hash_detects_same_size_content_replacement(
+    tmp_path: Path,
+) -> None:
+    """Hash bytes, even when size and modification time are unchanged."""
+    source = tmp_path / "source.txt"
+    source.write_text("alpha", encoding="utf-8")
+    original_stat = source.stat()
+    original_hash = compute_corpus_hash([source], base_dir=tmp_path)
+
+    source.write_text("bravo", encoding="utf-8")
+    os.utime(source, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
+
+    assert source.stat().st_size == original_stat.st_size
+    assert source.stat().st_mtime_ns == original_stat.st_mtime_ns
+    assert compute_corpus_hash([source], base_dir=tmp_path) != original_hash
 
 
 def test_compute_config_hash_sorted() -> None:

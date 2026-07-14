@@ -107,8 +107,7 @@ The collection uses these named vectors:
 Hybrid retrieval and reranking have one implementation path. Environment values can disable them for operations or diagnostics, but the user interface does not create a parallel configuration owner.
 
 GraphRAG requires both application flags and uses LlamaIndex core's property
-graph store. ColPali requires the `multimodal` extra. SigLIP remains the
-canonical image embedding path.
+graph store. SigLIP is the canonical image embedding and visual reranking path.
 
 ## Endpoint security
 

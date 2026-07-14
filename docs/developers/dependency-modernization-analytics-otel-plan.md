@@ -7,6 +7,18 @@ Status: Implemented in the dependency modernization working tree.
 Historical note: this plan records the dependency state at implementation time.
 Its `readers-file` references are not current architecture; the active parser uses
 the canonical Docling, pypdfium2, and RapidOCR path documented in the parser specs.
+The v2 hard cut also removed the RAGAS helper and its pandas ownership; paths
+below remain only as implementation-history evidence.
+
+The July 2026 v2 refresh separately moved PyTorch from 2.8.0 to 2.11.0 and
+Torchvision from 0.23.0 to 0.26.0. CPU and CUDA 12.8 locks both resolve at that
+version. A later PyTorch upgrade requires its own SigLIP, parser, and GPU matrix.
+
+| v2 runtime option | Solution leverage (35%) | Application value (30%) | Maintenance (25%) | Adaptability (10%) | Weighted score | Decision |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| PyTorch 2.11 + Torchvision 0.26 | 9.5 | 9.5 | 9.2 | 8.8 | **9.3** | Selected: validated feature matrix |
+| PyTorch 2.13 | 8.7 | 7.2 | 8.7 | 9.4 | 8.4 | Deferred: requires a separate runtime matrix |
+| Keep PyTorch 2.8 | 5.5 | 6.5 | 5.5 | 4.5 | 5.7 | Rejected: avoidable runtime debt |
 
 ## Objective
 
@@ -170,17 +182,19 @@ def _query_arrow(con: duckdb.DuckDBPyConnection, sql: str) -> pa.Table:
     return con.execute(sql).fetch_arrow_table()
 ```
 
-### 3. Keep Pandas as an Eval/Reader Dependency
+### 3. Historical pandas ownership
 
-Do not remove `pandas` from `pyproject.toml` in this wave. It is still required
-by current LlamaIndex reader metadata and the RAGAS eval helper surface:
+This wave kept `pandas` in `pyproject.toml` because the then-current LlamaIndex
+reader metadata and RAGAS helper required it:
 
 - `tools/eval/run_ragas.py`
 - `tests/integration/eval_cli_helpers.py`
 - `llama-index-readers-file`
 
-The Analytics page can stop importing Pandas without turning pandas removal into
-the objective. Full pandas removal is a later eval/reader decoupling lane.
+The v2 hard cut later removed `tools/eval/run_ragas.py` and the direct pandas
+declaration. `tests/integration/eval_cli_helpers.py` remains for BEIR evaluation
+and does not import pandas. `uv.lock` now resolves pandas transitively; the
+Analytics page does not import it.
 
 ### 4. Update Tests
 
@@ -255,13 +269,13 @@ uv run pytest tests/unit/pages/test_analytics_telemetry_parsing.py -vv
 uv run pytest tests/unit/telemetry -vv
 uv run pytest tests/integration/test_pages_smoke.py -vv
 uv run pyright --threads 4
-uv run python scripts/run_tests.py --fast
+uv run pytest tests/unit tests/integration -q --no-cov
 ```
 
 Final gate for shipping:
 
 ```bash
-uv run ruff format . && uv run ruff check . --fix && uv run pyright --threads 4 && uv run python scripts/run_tests.py
+uv run ruff format . && uv run ruff check . --fix && uv run pyright --threads 4 && uv run pytest tests/unit tests/integration -q --no-cov
 ```
 
 ## Stop Rules

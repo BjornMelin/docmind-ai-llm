@@ -7,9 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from llama_index.core.query_engine import RetrieverQueryEngine
+from llama_index.core.response_synthesizers.type import ResponseMode
 from loguru import logger
 
-from src.retrieval.llama_index_adapter import get_llama_index_adapter
 from src.telemetry.opentelemetry import (
     graph_export_span,
     record_graph_export_event,
@@ -41,7 +42,6 @@ def build_graph_query_engine(
     similarity_top_k: int = 10,
     path_depth: int = 1,
     node_postprocessors: Sequence[Any] | None = None,
-    response_mode: str = "compact",
 ) -> GraphQueryArtifacts:
     """Construct graph retrieval directly through LlamaIndex core."""
     if property_graph_index is None or not hasattr(
@@ -56,14 +56,12 @@ def build_graph_query_engine(
     engine_kwargs: dict[str, Any] = {
         "retriever": retriever,
         "llm": llm,
-        "response_mode": response_mode,
+        "response_mode": ResponseMode.NO_TEXT,
         "verbose": False,
     }
     if node_postprocessors:
         engine_kwargs["node_postprocessors"] = list(node_postprocessors)
-    query_engine = get_llama_index_adapter().RetrieverQueryEngine.from_args(
-        **engine_kwargs
-    )
+    query_engine = RetrieverQueryEngine.from_args(**engine_kwargs)
     return GraphQueryArtifacts(retriever=retriever, query_engine=query_engine)
 
 

@@ -5,7 +5,6 @@
     ".": {
       "release-type": "python",
       "package-name": "docmind-ai-llm",
-      "bump-minor-pre-major": true,
       "extra-files": [
         {
           "type": "toml",

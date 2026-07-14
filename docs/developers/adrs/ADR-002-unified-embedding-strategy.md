@@ -39,7 +39,6 @@ Adopt:
 - Direct FastEmbed support for sparse text vectors
 - SigLIP for image and text-to-image vectors
 - BGE reranker v2-m3 for text reranking
-- Optional ColPali only as a later visual reranking stage
 
 Store dense and sparse text vectors under their canonical Qdrant names. Store SigLIP image vectors in the dedicated image collection.
 
@@ -84,7 +83,7 @@ Local embedding and loopback Qdrant paths do not require a hosted embedding API.
 
 - `sentence-transformers>=5.2.0,<6.0.0`
 - `fastembed>=0.5.1`
-- `torch==2.8.0`
+- `torch==2.11.0`
 - `transformers>=5.0.0,<6.0.0`
 - `llama-index-core>=0.14.21,<0.15.0`
 - `llama-index-embeddings-huggingface>=0.7.0,<0.8.0`

@@ -86,13 +86,13 @@ Implement a ship-ready container baseline:
     unnecessary module introspection; keep local development reloads enabled
   - startup preflight: `python scripts/parser_health.py --check`
   - immutable parser artifacts under `/app/parser-models`, selected through
-    `DOCMIND_OCR__MODEL_CACHE_DIR` and kept outside the `/app/cache` volume
+    `DOCMIND_PARSING__MODEL_CACHE_DIR` and kept outside the `/app/cache` volume
   - recurring liveness: `python scripts/container_health.py`, which checks only the local Streamlit TCP port
 - Update `docker-compose.yml`:
   - use canonical `DOCMIND_*` env names
   - do not hardcode secrets
   - define healthcheck(s) (either container-level or compose-level)
-  - run Ollama on CPU by default and set `DOCMIND_MODEL` to `qwen3:4b-instruct`
+  - run Ollama on CPU by default and set `DOCMIND_LLM_REQUEST__MODEL` to `qwen3:4b-instruct`
   - pin Ollama to `0.31.2` and Qdrant to `v1.18.2`
   - wait for Ollama and Qdrant readiness before starting DocMind
   - keep Ollama internal-only and connect through `DOCMIND_OLLAMA_BASE_URL=http://ollama:11434`
@@ -141,8 +141,8 @@ Implement a ship-ready container baseline:
 ## Changelog
 
 - 1.6 (2026-07-11): Install OpenCV's required `libgl1` and `libglib2.0-0`
-  runtimes and prove the baked RapidOCR artifacts through the startup
-  preflight. Retain the 225 MB Mesa/X11 layer because the smaller uv exclusion
-  leaves installed dependency metadata inconsistent.
+  runtimes and prove locked-wheel RapidOCR inference in an offline image-build
+  step. Retain the Mesa/X11 layer because the smaller uv exclusion leaves
+  installed dependency metadata inconsistent.
 - 1.5 (2026-07-11): Run CPU Ollama by default, move NVIDIA access to a minimal override, split parser startup readiness from TCP liveness, and pin a fusion-tested Qdrant server.
 - 1.1 (2026-01-10): Add “single bundled GPU backend via profile” decision; keep app image CPU-only.

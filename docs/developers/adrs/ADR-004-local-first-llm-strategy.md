@@ -127,14 +127,15 @@ def setup_llm_for_agents(settings: DocMindSettings):
 
 ```env
 DOCMIND_LLM_BACKEND=vllm
-DOCMIND_VLLM__MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8
-DOCMIND_VLLM__CONTEXT_WINDOW=131072
-DOCMIND_VLLM__KV_CACHE_DTYPE=fp8_e5m2
-DOCMIND_VLLM__GPU_MEMORY_UTILIZATION=0.90
+DOCMIND_LLM_REQUEST__MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8
+DOCMIND_LLM_REQUEST__CONTEXT_WINDOW=131072
+DOCMIND_LLM_REQUEST__MAX_OUTPUT_TOKENS=2048
+DOCMIND_LLM_REQUEST__TEMPERATURE=0.1
+DOCMIND_VLLM_BASE_URL=http://localhost:8000/v1
 DOCMIND_LLM_REQUEST_TIMEOUT_SECONDS=120
 DOCMIND_LLM_STREAMING_ENABLED=true
 
-# Configure and validate these separately in the external vLLM process.
+# Configure these on the external vLLM process.
 VLLM_ATTENTION_BACKEND=FLASHINFER
 VLLM_MAX_MODEL_LEN=131072
 ```
@@ -174,8 +175,9 @@ Run a separate inference benchmark against the target server before publishing p
 
 - Optional vLLM profile: a compatible external vLLM installation and accelerator runtime.
 - Python application environment: `llama-index-core>=0.14.21,<0.15.0`,
-  selected LlamaIndex LLM adapters, `torch==2.8.0`, and
-  `tenacity>=9.1.2,<10.0.0`.
+  selected LlamaIndex LLM adapters, and `torch==2.11.0`.
+- Agent-model retries use provider-native policies; DocMind has no custom retry
+  wrapper or direct retry dependency.
 - vLLM: external OpenAI-compatible server process (installed and managed separately from the app env).
 - Package exclusions: no `llama-index` meta-package, `llama` extra, or in-process
   vLLM dependency.

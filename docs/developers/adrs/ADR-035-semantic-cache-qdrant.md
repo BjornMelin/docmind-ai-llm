@@ -1,12 +1,12 @@
 ---
 ADR: 035
 Title: Application-Level Semantic Cache (Qdrant-backed, Guardrailed)
-Status: Implemented
-Version: 3.0.0
-Date: 2026-01-09
+Status: Superseded
+Version: 4.0.0
+Date: 2026-07-13
 Supersedes: ADR-035-semantic-cache-gptcache-sqlite-faiss.md
-Superseded-by:
-Related: 004, 010, 024, 030, 031, 032, 038
+Superseded-by: 058
+Related: 004, 010, 024, 030, 031, 032, 038, 058
 Tags: cache, semantic, qdrant, offline, privacy
 References:
 - [Qdrant — Collections](https://qdrant.tech/documentation/concepts/collections/)
@@ -15,6 +15,12 @@ References:
 - [GPTCache — Docs (alternative)](https://gptcache.readthedocs.io/en/stable/)
 - [LlamaIndex — Anthropic prompt caching (provider-specific)](https://docs.llamaindex.ai/en/stable/examples/llm/anthropic_prompt_caching/)
 ---
+
+## Supersession notice
+
+DocMind v2 removes application-level response caching. Agent responses can include user-scoped and session-scoped memory. This cache did not share that identity or the coordinator's hard-purge lifecycle. A hit could replay a memory-derived response in another namespace or after source-session purge.
+
+The coordinator now always generates responses through the live graph. Keep this ADR as historical rationale only. Restoring response caching requires a new decision with user/session isolation and atomic purge ownership.
 
 ## Description
 
@@ -163,7 +169,9 @@ class SemanticCacheProtocol(Protocol):
     def set(self, *, prompt_key: str, embedding: list[float], response: str, meta: dict) -> None: ...
 ```
 
-### Configuration
+### Historical configuration
+
+V1 used the following retired variables. They do not configure DocMind v2.
 
 ```env
 DOCMIND_SEMANTIC_CACHE__ENABLED=false
@@ -209,4 +217,6 @@ def test_cache_hit_miss(mock_cache, deterministic_embed):
 
 ## Changelog
 
+- **4.0.0 (2026-07-13)**: Supersede the application-level response cache in v2
+  because it did not share memory isolation and hard-purge boundaries.
 - **3.0.0 (2026-01-09)**: Switch primary backend to guardrailed Qdrant semantic cache with exact-match fast path and hash invalidation.

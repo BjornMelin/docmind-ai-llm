@@ -55,7 +55,7 @@ def pull(pairs: Iterable[tuple[str, str]], cache_dir: Path) -> None:
 
 def pull_siglip_snapshot(cache_dir: Path) -> None:
     """Download the pinned Transformers SigLIP snapshot used by the app."""
-    from src.utils.vision_siglip import (
+    from src.config.embedding_defaults import (
         DEFAULT_SIGLIP_MODEL_ID,
         DEFAULT_SIGLIP_MODEL_REVISION,
     )
@@ -68,6 +68,62 @@ def pull_siglip_snapshot(cache_dir: Path) -> None:
         local_files_only=False,
     )
     print(f"ok: {DEFAULT_SIGLIP_MODEL_ID}@{DEFAULT_SIGLIP_MODEL_REVISION} -> {path}")
+
+
+def resolve_bm42_snapshot(
+    cache_dir: Path,
+    *,
+    local_files_only: bool,
+) -> str:
+    """Resolve the pinned FastEmbed BM42 snapshot in one cache."""
+    from src.config.embedding_defaults import (
+        DEFAULT_BM42_FILES,
+        DEFAULT_BM42_SOURCE_REPO,
+        DEFAULT_BM42_SOURCE_REVISION,
+    )
+
+    return snapshot_download(
+        repo_id=DEFAULT_BM42_SOURCE_REPO,
+        revision=DEFAULT_BM42_SOURCE_REVISION,
+        allow_patterns=list(DEFAULT_BM42_FILES),
+        cache_dir=str(cache_dir),
+        local_files_only=local_files_only,
+    )
+
+
+def pull_bm42_snapshot(cache_dir: Path) -> None:
+    """Download the pinned FastEmbed BM42 snapshot."""
+    from src.config.embedding_defaults import (
+        DEFAULT_BM42_MODEL_ID,
+        DEFAULT_BM42_SOURCE_REPO,
+        DEFAULT_BM42_SOURCE_REVISION,
+    )
+
+    path = resolve_bm42_snapshot(cache_dir, local_files_only=False)
+    print(
+        f"ok: {DEFAULT_BM42_MODEL_ID} "
+        f"({DEFAULT_BM42_SOURCE_REPO}@{DEFAULT_BM42_SOURCE_REVISION}) -> {path}"
+    )
+
+
+def pull_bge_reranker_snapshot(cache_dir: Path) -> None:
+    """Download the complete pinned CrossEncoder snapshot for offline reuse."""
+    from src.config.embedding_defaults import (
+        DEFAULT_BGE_RERANKER_MODEL_ID,
+        DEFAULT_BGE_RERANKER_MODEL_REVISION,
+    )
+
+    path = snapshot_download(
+        repo_id=DEFAULT_BGE_RERANKER_MODEL_ID,
+        revision=DEFAULT_BGE_RERANKER_MODEL_REVISION,
+        cache_dir=str(cache_dir),
+        local_files_only=False,
+    )
+    print(
+        "ok: "
+        f"{DEFAULT_BGE_RERANKER_MODEL_ID}@{DEFAULT_BGE_RERANKER_MODEL_REVISION}"
+        f" -> {path}"
+    )
 
 
 def pull_bge_m3_snapshot(cache_dir: Path) -> None:
@@ -85,22 +141,6 @@ def pull_bge_m3_snapshot(cache_dir: Path) -> None:
         local_files_only=False,
     )
     print(f"ok: {DEFAULT_BGE_M3_MODEL_ID}@{DEFAULT_BGE_M3_MODEL_REVISION} -> {path}")
-
-
-def pull_rapidocr(cache_dir: Path, *, force: bool = False) -> None:
-    """Download RapidOCR ONNX artifacts into DocMind's local model cache."""
-    from src.processing.parsing.backends.rapidocr_backend import (
-        missing_rapidocr_onnx_models,
-        prefetch_rapidocr_models,
-        verify_rapidocr_models,
-    )
-
-    target = prefetch_rapidocr_models(cache_dir, force=force)
-    verify_rapidocr_models(cache_dir)
-    missing = missing_rapidocr_onnx_models(cache_dir)
-    if missing:
-        raise SystemExit(f"RapidOCR prefetch incomplete: {', '.join(missing)}")
-    print(f"ok: RapidOCR ONNX models -> {target}")
 
 
 def pull_docling_layout(cache_dir: Path, *, force: bool = False) -> None:
@@ -125,7 +165,7 @@ def main() -> None:
     ap.add_argument(
         "--all",
         action="store_true",
-        help="Download the pinned BGE-M3 and SigLIP snapshots",
+        help=("Download the pinned BGE-M3, BM42, BGE reranker, and SigLIP snapshots"),
     )
     ap.add_argument(
         "--bge-m3",
@@ -133,9 +173,14 @@ def main() -> None:
         help="Download the pinned canonical BGE-M3 SentenceTransformers snapshot",
     )
     ap.add_argument(
-        "--rapidocr",
+        "--bge-reranker",
         action="store_true",
-        help="Download verified RapidOCR ONNX files for local OCR",
+        help="Download the pinned canonical BGE CrossEncoder reranker snapshot",
+    )
+    ap.add_argument(
+        "--bm42",
+        action="store_true",
+        help="Download the pinned canonical FastEmbed BM42 snapshot",
     )
     ap.add_argument(
         "--docling-layout",
@@ -145,7 +190,7 @@ def main() -> None:
     ap.add_argument(
         "--parser-defaults",
         action="store_true",
-        help="Download Docling layout and RapidOCR files for default parsing",
+        help="Download the Docling layout files required for default parsing",
     )
     ap.add_argument(
         "--force",
@@ -153,9 +198,9 @@ def main() -> None:
         help="Re-download parser model files even when they already exist",
     )
     ap.add_argument(
-        "--rapidocr-cache-dir",
+        "--parser-cache-dir",
         default="./cache/models",
-        help="Destination for Docling and RapidOCR parser files",
+        help="Destination for Docling parser files",
     )
     ap.add_argument(
         "--add",
@@ -166,6 +211,7 @@ def main() -> None:
     )
     ap.add_argument("--cache_dir", default="~/.cache/huggingface/hub")
     args = ap.parse_args()
+    model_cache_dir = Path(args.cache_dir).expanduser().resolve()
 
     pairs: list[tuple[str, str]] = []
     if args.add:
@@ -173,36 +219,38 @@ def main() -> None:
 
     if args.parser_defaults or args.docling_layout:
         pull_docling_layout(
-            Path(args.rapidocr_cache_dir).expanduser(),
-            force=bool(args.force),
-        )
-
-    if args.parser_defaults or args.rapidocr:
-        pull_rapidocr(
-            Path(args.rapidocr_cache_dir).expanduser(),
+            Path(args.parser_cache_dir).expanduser(),
             force=bool(args.force),
         )
 
     if args.all:
-        pull_bge_m3_snapshot(Path(args.cache_dir).expanduser())
-        pull_siglip_snapshot(Path(args.cache_dir).expanduser())
-    elif args.bge_m3:
-        pull_bge_m3_snapshot(Path(args.cache_dir).expanduser())
+        pull_bge_m3_snapshot(model_cache_dir)
+        pull_bm42_snapshot(model_cache_dir)
+        pull_bge_reranker_snapshot(model_cache_dir)
+        pull_siglip_snapshot(model_cache_dir)
+    else:
+        if args.bge_m3:
+            pull_bge_m3_snapshot(model_cache_dir)
+        if args.bge_reranker:
+            pull_bge_reranker_snapshot(model_cache_dir)
+        if args.bm42:
+            pull_bm42_snapshot(model_cache_dir)
 
     if not pairs and not (
         args.all
         or args.bge_m3
-        or args.rapidocr
+        or args.bge_reranker
+        or args.bm42
         or args.docling_layout
         or args.parser_defaults
     ):
         ap.error(
-            "nothing to download. use --all, --bge-m3, --parser-defaults, "
-            "--rapidocr, --docling-layout, or --add REPO_ID FILENAME"
+            "nothing to download. use --all, --bge-m3, --bge-reranker, --bm42, "
+            "--parser-defaults, --docling-layout, or --add REPO_ID FILENAME"
         )
 
     if pairs:
-        pull(pairs, Path(args.cache_dir).expanduser())
+        pull(pairs, model_cache_dir)
     print("Hint: export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 for offline runtime.")
 
 

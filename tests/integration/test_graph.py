@@ -1,29 +1,17 @@
-"""Graph integration tests (consolidated).
-
-Consolidates property graph config and knowledge graph integration tests into a
-single smoke-style module to validate imports and basic API wiring.
-"""
+"""GraphRAG public-surface integration tests."""
 
 from __future__ import annotations
 
 import pytest
 
+from src.retrieval import graph_config
+
 
 @pytest.mark.integration
 class TestGraphImports:
-    """Test imports and basic API wiring for graph modules."""
+    """Test the required GraphRAG public surface."""
 
-    def test_property_graph_config_import(self):
-        """Test that graph modules can be imported successfully."""
-        try:
-            from src.retrieval import graph_config
-
-            assert hasattr(graph_config, "build_graph_query_engine")
-            assert hasattr(graph_config, "export_graph_jsonl")
-        except ImportError as e:  # pragma: no cover
-            pytest.skip(f"Graph modules unavailable: {e}")
-
-    def test_knowledge_graph_placeholder(self):
-        """Placeholder test to maintain consolidated graph test location."""
-        # Placeholder to keep a consolidated location for graph tests
-        assert True
+    def test_property_graph_entrypoints_are_callable(self) -> None:
+        """Required graph construction and export entrypoints are callable."""
+        assert callable(graph_config.build_graph_query_engine)
+        assert callable(graph_config.export_graph_jsonl)

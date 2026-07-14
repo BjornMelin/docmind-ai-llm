@@ -84,13 +84,13 @@ Following the **Divio Documentation System** for optimal developer experience:
 uv sync && uv run streamlit run app.py
 
 # Testing (see Testing Guide)
-uv run python scripts/run_tests.py                # Full test suite
-uv run python scripts/run_tests.py --unit         # Unit tests only
-uv run python scripts/run_tests.py --integration  # Integration tests
+uv run pytest tests/unit tests/integration -q --no-cov  # Full test suite
+uv run pytest tests/unit -q --no-cov                    # Unit tests only
+uv run pytest tests/integration -q --no-cov             # Integration tests
 
 # Code Quality (detailed in Developer Handbook)
 uv run ruff format . && uv run ruff check . --fix      # Format and lint
-uv run python scripts/performance_monitor.py --run-tests --check-regressions # Performance check
+uv run pytest tests/unit tests/integration -q --cov=src --cov-branch --cov-report=term-missing --cov-report=html:htmlcov --cov-report=xml:coverage.xml --cov-report=json:coverage.json --cov-fail-under=80 --junitxml=junit.xml
 ```
 
 ### Configuration Pattern
@@ -100,7 +100,7 @@ uv run python scripts/performance_monitor.py --run-tests --check-regressions # P
 from src.config import settings
 
 # Access any configuration
-model_name = settings.vllm.model
+model_name = settings.effective_model
 embedding_model = settings.embedding.model_name
 chunk_size = settings.processing.chunk_size
 ```

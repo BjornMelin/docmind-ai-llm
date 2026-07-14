@@ -10,10 +10,14 @@ from typing import Any
 import numpy as np
 import pytest
 from loguru import logger
+from qdrant_client import models as qmodels
 
 from src.persistence.artifacts import ArtifactRef
 from src.retrieval.image_index import (
+    ImageCollectionIncompatibleError,
     PageImageRecord,
+    canonical_image_collection_metadata,
+    check_siglip_image_collection,
     collect_artifact_refs_for_doc_id,
     count_artifact_references_in_image_collection,
     ensure_siglip_image_collection,
@@ -41,12 +45,28 @@ class _Client:
         self._retrieve_points: list[_Point] = []
         self._scroll_pages: list[tuple[list[_Point], object | None]] = []
         self._count_value = 0
+        self.metadata: dict[str, Any] | None = canonical_image_collection_metadata(
+            dim=768
+        )
 
     def collection_exists(self, _name: str) -> bool:
         return bool(self.exists)
 
     def create_collection(self, **kwargs: Any) -> None:
         self.create_calls.append(kwargs)
+
+    def get_collection(self, _name: str) -> SimpleNamespace:
+        params = SimpleNamespace(
+            vectors={
+                "siglip": qmodels.VectorParams(
+                    size=768,
+                    distance=qmodels.Distance.COSINE,
+                )
+            }
+        )
+        return SimpleNamespace(
+            config=SimpleNamespace(params=params, metadata=self.metadata)
+        )
 
     def retrieve(self, **_kwargs: Any) -> list[_Point]:
         self.retrieve_calls += 1
@@ -77,6 +97,39 @@ def test_ensure_siglip_image_collection_creates_when_missing() -> None:
     ensure_siglip_image_collection(client, "img")  # type: ignore[arg-type]
     assert len(client.create_calls) == 1
     assert client.create_calls[0]["collection_name"] == "img"
+    assert client.create_calls[0]["metadata"] == canonical_image_collection_metadata(
+        dim=768
+    )
+
+
+def test_check_siglip_image_collection_is_read_only() -> None:
+    client = _Client()
+    client.exists = True
+
+    check_siglip_image_collection(client, "img")  # type: ignore[arg-type]
+
+    assert client.create_calls == []
+
+
+@pytest.mark.parametrize(
+    ("metadata", "reason"),
+    [
+        (None, "image_collection_metadata_missing"),
+        ({"docmind_owner": "text"}, "image_collection_metadata_mismatch"),
+    ],
+)
+def test_check_siglip_image_collection_rejects_noncanonical_metadata(
+    metadata: dict[str, Any] | None,
+    reason: str,
+) -> None:
+    client = _Client()
+    client.exists = True
+    client.metadata = metadata
+
+    with pytest.raises(ImageCollectionIncompatibleError, match=reason):
+        check_siglip_image_collection(client, "img")  # type: ignore[arg-type]
+
+    assert client.create_calls == []
 
 
 def test_index_page_images_short_circuits_on_phash_match(
@@ -112,7 +165,7 @@ def test_index_page_images_short_circuits_on_phash_match(
         embedder=_Embed(),
         batch_size=4,
     )
-    assert indexed == 0
+    assert indexed == 1
     assert embed_calls == []
     assert client.set_payload_calls
     assert client.upsert_calls == []

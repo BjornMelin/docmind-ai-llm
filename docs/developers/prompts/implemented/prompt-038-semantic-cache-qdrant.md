@@ -1,14 +1,16 @@
 ---
 prompt: PROMPT-038
 title: Semantic Response Cache (Qdrant-backed, Guardrailed)
-status: Completed
-date: 2026-01-17
-version: 1.0
+status: Superseded
+date: 2026-07-13
+version: 2.0
 related_adrs: ["ADR-035"]
 related_specs: ["SPEC-038"]
 ---
 
-Implements `ADR-035` + `SPEC-038`.
+> **Superseded in v2:** This prompt records a v1 implementation that DocMind v2 removed. The response cache did not share user/session memory identity or the coordinator's atomic hard-purge lifecycle. Do not execute this prompt.
+
+This prompt recorded the v1 implementation of `ADR-035` and `SPEC-038`.
 
 **Read first (repo truth):**
 

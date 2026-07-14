@@ -11,7 +11,7 @@ from src.config import settings
 
 model_name = settings.effective_model
 qdrant_url = settings.database.qdrant_url
-graphrag_enabled = settings.is_graphrag_enabled()
+graphrag_enabled = settings.graphrag_cfg.enabled
 ```
 
 The shared instance does not read `.env` during import. The Streamlit entrypoint calls `bootstrap_settings()` once to load it.
@@ -44,20 +44,7 @@ All application settings use the `DOCMIND_` prefix. Use a double underscore for 
 - `DOCMIND_AGENTS__DECISION_TIMEOUT` maps to `settings.agents.decision_timeout`
 - `DOCMIND_DATABASE__QDRANT_URL` maps to `settings.database.qdrant_url`
 
-Supported top-level aliases include:
-
-| Alias | Canonical target |
-| --- | --- |
-| `DOCMIND_MODEL` | `settings.model` (backend-wide override) |
-| `DOCMIND_CONTEXT_WINDOW` | `settings.context_window` (global cap override) |
-| `DOCMIND_CONTEXT_WINDOW_SIZE` | `settings.context_window` (global cap override) |
-| `DOCMIND_CHUNK_SIZE` | `processing.chunk_size` |
-| `DOCMIND_CHUNK_OVERLAP` | `processing.chunk_overlap` |
-| `DOCMIND_ENABLE_MULTI_AGENT` | `agents.enable_multi_agent` |
-
-Prefer nested names for subsystem-specific settings. Use `DOCMIND_MODEL` and
-`DOCMIND_CONTEXT_WINDOW` only when intentionally overriding the selected
-backend's defaults.
+Use nested names for subsystem-specific settings. Model request controls live under `settings.llm_request`; chunk controls live under `settings.processing`. Neither namespace has flat aliases.
 
 ## Configure core paths
 
@@ -70,7 +57,8 @@ backend's defaults.
 | `DOCMIND_CACHE__DIR` | `./cache` | Cache root (`settings.cache.dir`) |
 | `DOCMIND_LOG_FILE` | `./logs/docmind.log` | Application log |
 
-Bare SQLite filenames move under `DOCMIND_DATA_DIR`. Absolute paths and paths with an explicit parent remain unchanged.
+The chat SQLite filename moves under `DOCMIND_DATA_DIR` when it is bare.
+Absolute paths and paths with an explicit parent remain unchanged.
 
 ## Configure language model backends
 
@@ -84,9 +72,18 @@ Bare SQLite filenames move under `DOCMIND_DATA_DIR`. Absolute paths and paths wi
 
 The last four use an OpenAI-compatible HTTP boundary. vLLM and llama.cpp run outside the application process.
 
-`settings.effective_model` owns backend-aware model selection. A non-empty
-`DOCMIND_MODEL` override wins. Without an override, Ollama uses
-`qwen3:4b-instruct`; every other backend uses `DOCMIND_VLLM__MODEL`.
+`settings.effective_model` owns backend-aware model selection. A non-empty `DOCMIND_LLM_REQUEST__MODEL` override wins. Without an override, Ollama uses `qwen3:4b-instruct`; every other backend uses `Qwen/Qwen3-4B-Instruct-2507-FP8`.
+
+### Configure model requests
+
+These provider-neutral values apply to LangChain and LlamaIndex clients:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DOCMIND_LLM_REQUEST__MODEL` | unset | Override the selected provider's model |
+| `DOCMIND_LLM_REQUEST__CONTEXT_WINDOW` | `131072` | Set the client context window |
+| `DOCMIND_LLM_REQUEST__MAX_OUTPUT_TOKENS` | `2048` | Limit generated output |
+| `DOCMIND_LLM_REQUEST__TEMPERATURE` | `0.1` | Control sampling temperature |
 
 ### Configure an OpenAI-compatible endpoint
 
@@ -100,17 +97,15 @@ The last four use an OpenAI-compatible HTTP boundary. vLLM and llama.cpp run out
 
 Local servers may use a non-secret placeholder key. Remote endpoints require an explicit security-policy change.
 
-### Configure vLLM client metadata
+### Configure an external vLLM server
 
-| Variable | Default |
-| --- | --- |
-| `DOCMIND_VLLM__MODEL` | `Qwen/Qwen3-4B-Instruct-2507-FP8` |
-| `DOCMIND_VLLM__CONTEXT_WINDOW` | `131072` |
-| `DOCMIND_VLLM__MAX_TOKENS` | `2048` |
-| `DOCMIND_VLLM__TEMPERATURE` | `0.1` |
-| `DOCMIND_VLLM__VLLM_BASE_URL` | `http://localhost:8000` |
+Set `DOCMIND_VLLM_BASE_URL` to the external server's OpenAI-compatible HTTP endpoint. DocMind normalizes the URL to one trailing `/v1`. This field is the only vLLM endpoint owner; `DOCMIND_OPENAI__BASE_URL` doesn't override it.
 
-FlashInfer, FP8 key-value cache, and GPU memory settings configure the external vLLM process. They do not install or start vLLM inside DocMind.
+Configure the model, FlashInfer, key-value cache format, GPU memory, and batching on the external vLLM process. DocMind doesn't install or start vLLM.
+
+### Configure Ollama Cloud authentication
+
+Set `DOCMIND_OLLAMA_API_KEY` only when `DOCMIND_OLLAMA_BASE_URL` targets `ollama.com` or one of its subdomains. DocMind sends that token only to Ollama Cloud hosts. Ollama clients never inherit `DOCMIND_OPENAI__API_KEY` or `DOCMIND_OPENAI__DEFAULT_HEADERS`.
 
 ## Configure endpoint security
 
@@ -122,7 +117,7 @@ FlashInfer, FP8 key-value cache, and GPU memory settings configure the external 
 
 When remote endpoints are disabled:
 
-- Loopback endpoints are allowed
+- Loopback model-service and Qdrant endpoints are allowed
 - A non-loopback hostname must be allowlisted
 - DNS resolution must succeed
 - Resolved private, link-local, reserved, or otherwise blocked addresses fail validation
@@ -133,13 +128,13 @@ Use `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true` only when the selected endpo
 
 | Variable | Default | Constraint |
 | --- | --- | --- |
-| `DOCMIND_AGENTS__ENABLE_MULTI_AGENT` | `true` | Boolean |
 | `DOCMIND_AGENTS__DECISION_TIMEOUT` | `200` seconds | 10 to 1,000 seconds |
 | `DOCMIND_AGENTS__MAX_RETRIES` | `2` | 0 to 10 |
-| `DOCMIND_AGENTS__MAX_CONCURRENT_AGENTS` | `3` | 1 to 10 |
-| `DOCMIND_AGENTS__ENABLE_FALLBACK_RAG` | `true` | Boolean |
 
-`decision_timeout` is a supervisor budget in seconds. Provider calls clamp their timeout to the remaining budget.
+`decision_timeout` is the default supervisor budget in seconds. Every run
+receives an absolute deadline. Provider request timeouts use the smallest
+configured request timeout, decision timeout, and explicit coordinator cap;
+LangGraph `step_timeout` and `Future.result(remaining)` enforce the live remainder.
 
 ## Configure document processing
 
@@ -147,8 +142,6 @@ Use `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true` only when the selected endpo
 | --- | --- | --- |
 | `DOCMIND_PROCESSING__CHUNK_SIZE` | `1500` | TokenTextSplitter chunk size |
 | `DOCMIND_PROCESSING__CHUNK_OVERLAP` | `50` | Token overlap |
-| `DOCMIND_PROCESSING__NEW_AFTER_N_CHARS` | `1200` | Enrichment boundary |
-| `DOCMIND_PROCESSING__COMBINE_TEXT_UNDER_N_CHARS` | `500` | Small-text merge boundary |
 | `DOCMIND_PROCESSING__MAX_DOCUMENT_SIZE_MB` | `100` | Source-size limit |
 | `DOCMIND_PROCESSING__ENCRYPT_PAGE_IMAGES` | `false` | Encrypt exported page images |
 
@@ -168,8 +161,8 @@ DocMind has one parser contract: Docling, pypdfium2, RapidOCR, and ONNX Runtime.
 | `DOCMIND_PARSING__DIRECT_TEXT_PROBE_BYTES` | `8192` | Binary-content probe |
 | `DOCMIND_PDF_BACKEND__RENDER_DPI` | `200` | PDF rasterization resolution |
 | `DOCMIND_PDF_BACKEND__MIN_TEXT_CHARS_PER_PAGE` | `24` | Selective OCR threshold |
+| `DOCMIND_PARSING__MODEL_CACHE_DIR` | `./cache/models` | Verified Docling layout cache |
 | `DOCMIND_OCR__FORCE_OCR` | `false` | OCR every PDF page |
-| `DOCMIND_OCR__MODEL_CACHE_DIR` | `./cache/models` | Verified model cache |
 | `DOCMIND_OCR__SEARCHABLE_PDF_ENABLED` | `false` | Optional OCRmyPDF artifact |
 | `DOCMIND_OCR__OCRMYPDF_JOBS` | `1` | OCRmyPDF worker count |
 
@@ -177,7 +170,7 @@ There is no online parser mode or configurable PDF backend. Parser model preflig
 
 ## Configure embeddings and images
 
-Text uses BGE-M3. Sparse retrieval uses direct FastEmbed support. Images use SigLIP.
+Text uses BGE-M3. Sparse retrieval uses the pinned FastEmbed BM42 source snapshot. Images use SigLIP.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -188,17 +181,16 @@ Text uses BGE-M3. Sparse retrieval uses direct FastEmbed support. Images use Sig
 | `DOCMIND_EMBEDDING__DIMENSION` | `1024` | Text vector dimension |
 | `DOCMIND_EMBEDDING__MAX_LENGTH` | `8192` | Native text sequence limit |
 | `DOCMIND_EMBEDDING__NORMALIZE_TEXT` | `true` | Normalize dense vectors |
-| `DOCMIND_EMBEDDING__ENABLE_SPARSE` | `true` | Sparse retrieval |
 | `DOCMIND_EMBEDDING__SIGLIP_MODEL_ID` | `google/siglip-base-patch16-224` | Image model |
 | `DOCMIND_EMBEDDING__SIGLIP_MODEL_REVISION` | effective `7fd15f0689c79d79e38b1c2e2e2370a7bf2761ed` for the default model | Revision override; custom models remain unpinned when unset |
 | `DOCMIND_EMBEDDING__BATCH_SIZE_TEXT_CPU` | `4` | CPU text batch |
 | `DOCMIND_EMBEDDING__BATCH_SIZE_TEXT_GPU` | `12` | GPU text batch |
 | `DOCMIND_EMBEDDING__BATCH_SIZE_IMAGE` | `8` | Image batch |
 
-The curated BGE-M3 model uses its configured revision pin. When the SigLIP
-revision is unset and its model ID remains the default, the runtime applies the
-repository-owned revision shown above. A custom model ID remains unpinned unless
-you also set its revision. Set
+The curated BGE-M3 and BM42 models use repository-owned revision pins and the
+same Hugging Face cache. When the SigLIP revision is unset and its model ID
+remains the default, the runtime applies the repository-owned revision shown
+above. A custom model ID remains unpinned unless you also set its revision. Set
 `DOCMIND_EMBEDDING__LOCAL_MODEL_PATH` to load a complete local BGE-M3 snapshot
 directly; this disables Hub model-ID and revision resolution. Missing local or
 cached models leave the embedding runtime unconfigured instead of installing a
@@ -216,22 +208,22 @@ There is no OpenCLIP or alternate image-backend selector.
 | `DOCMIND_RETRIEVAL__DEDUP_KEY` | `page_id` | `page_id` or `doc_id` |
 | `DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID` | `false` | Qdrant server fusion |
 | `DOCMIND_RETRIEVAL__USE_RERANKING` | `true` | Text reranking |
+| `DOCMIND_RETRIEVAL__RERANKER_MODEL` | `BAAI/bge-reranker-v2-m3` | Text reranker |
 | `DOCMIND_RETRIEVAL__ENABLE_IMAGE_RETRIEVAL` | `true` | SigLIP image channel |
-| `DOCMIND_RETRIEVAL__ENABLE_COLPALI` | `false` | Optional ColPali reranker |
 | `DOCMIND_RETRIEVAL__TEXT_RERANK_TIMEOUT_MS` | `250` | Text-stage deadline |
 | `DOCMIND_RETRIEVAL__SIGLIP_TIMEOUT_MS` | `150` | SigLIP-stage deadline |
-| `DOCMIND_RETRIEVAL__TOTAL_RERANK_BUDGET_MS` | `800` | Total rerank budget |
+| `DOCMIND_RETRIEVAL__TOTAL_RERANK_BUDGET_MS` | `400` | Total rerank budget |
 
-Reranking timeouts use milliseconds. Agent `decision_timeout` uses seconds.
+The canonical BGE reranker resolves its repository-owned revision from `DOCMIND_EMBEDDING__CACHE_FOLDER`. Reranking timeouts use milliseconds. Agent `decision_timeout` uses seconds.
 
 ## Configure GraphRAG
 
-Both gates default to true:
+`DOCMIND_GRAPHRAG_CFG__ENABLED` defaults to false and sets the default state of
+the per-ingestion GraphRAG control.
 
-- `DOCMIND_ENABLE_GRAPHRAG`
-- `DOCMIND_GRAPHRAG_CFG__ENABLED`
-
-Graph retrieval requires LlamaIndex core's Property Graph API and a property graph index. Without them, the router uses vector and hybrid tools.
+Graph retrieval requires LlamaIndex core's Property Graph API and a property
+graph index. Without them, the router retains semantic search and any configured
+hybrid, keyword, or multimodal tools.
 
 Install the base profile:
 
@@ -249,10 +241,12 @@ See `docs/developers/guides/graphrag.md` for GraphRAG behavior.
 | `DOCMIND_DATABASE__QDRANT_COLLECTION` | `docmind_docs` |
 | `DOCMIND_DATABASE__QDRANT_IMAGE_COLLECTION` | `docmind_images` |
 | `DOCMIND_DATABASE__QDRANT_TIMEOUT` | `60` seconds |
-| `DOCMIND_DATABASE__SQLITE_DB_PATH` | `docmind.db` |
-| `DOCMIND_DATABASE__ENABLE_WAL_MODE` | `true` |
 
-Start the host-local Qdrant service through `scripts/start_qdrant_local.sh`. Docker Compose keeps Qdrant internal to its network.
+Start the host-local Qdrant service through `scripts/start_qdrant_local.sh`.
+Docker Compose keeps Qdrant internal to its network. A remote Qdrant URL obeys
+the same endpoint allowlist as model services. Collection owners must be
+non-empty, single path-segment names. Chat persistence uses the separate
+`DOCMIND_CHAT__SQLITE_PATH` setting.
 
 ## Configure an offline run
 
@@ -261,10 +255,10 @@ Install dependencies and model bundles before disconnecting:
 ```bash
 uv sync --frozen
 uv run python tools/models/pull.py \
-  --bge-m3 \
+  --all \
   --cache_dir ./models_cache \
   --parser-defaults \
-  --rapidocr-cache-dir ./cache/models
+  --parser-cache-dir ./cache/models
 ```
 
 Then set library offline flags:
@@ -287,7 +281,7 @@ from src.config import settings
 print(settings.llm_backend)
 print(settings.backend_base_url_normalized)
 print(settings.database.qdrant_url)
-print(settings.is_graphrag_enabled())
+print(settings.graphrag_cfg.enabled)
 ```
 
 Common validation failures:

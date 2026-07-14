@@ -10,7 +10,8 @@ The parser contract is deliberately narrow:
 
 - Docling for document conversion
 - pypdfium2 for PDF inspection and rasterization
-- RapidOCR with ONNX Runtime for CPU OCR
+- RapidOCR's packaged PP-OCRv6 detector/recognizer and PP-OCRv4 classifier
+  defaults for CPU OCR
 - OCRmyPDF and Tesseract for optional searchable-PDF artifacts
 
 PaddleOCR, VLM OCR, Tesseract-as-parser, GPU OCR profiles, backend selectors, and automatic remote fallbacks are not supported. A parser failure is surfaced as a typed `DocumentParseError`; DocMind does not decode failed binary inputs as text.
@@ -24,7 +25,7 @@ Download the parser models into the application cache:
 ```bash
 uv run python tools/models/pull.py \
   --parser-defaults \
-  --rapidocr-cache-dir cache/models
+  --parser-cache-dir cache/models
 ```
 
 Then verify the local parser model supply:
@@ -33,7 +34,7 @@ Then verify the local parser model supply:
 uv run python scripts/parser_health.py --check
 ```
 
-The health command checks parser dependencies and hashes every Docling and RapidOCR model file against the source-controlled canonical manifest. Any mismatch is reported by relative path in `docling.model_issues` or `rapidocr.model_issues`. It does not run a fixture parse.
+The health command checks parser dependencies and hashes every Docling layout file against the source-controlled canonical manifest. Any mismatch is reported by relative path in `docling.model_issues`. RapidOCR validates the packaged models against its own upstream checksums during engine initialization; offline initialization and fixture inference are separate test and image gates.
 
 ## Benchmark evidence
 
@@ -56,19 +57,20 @@ Latency covers isolated parser-worker execution. It does not include application
 
 `network_egress` is recorded as `NOT_MEASURED`. The harness does not instrument the host network, so the artifact is not evidence of network isolation. Parser model preflight and application endpoint policy are separate controls.
 
-### Current release baseline
+### v2 release-candidate baseline
 
-The checked-in schema 3 artifact was generated from clean commit
-`90e20793afe882976712b617197af7d8cf4ac1aa` on Linux under WSL2 with
-CPython 3.12.13. It records Docling 2.92.0, pypdfium2 5.7.1, RapidOCR
-3.8.1, and ONNX Runtime 1.23.2.
+The checked-in schema 3 artifact records the v2 release-candidate baseline. It
+was generated from clean commit
+`77c8a62370712cca172392d64c055e30535266c0` on Linux under WSL2 with
+CPython 3.12.13. It records Docling 2.112.0, pypdfium2 5.11.0, RapidOCR
+3.9.1, and ONNX Runtime 1.27.0.
 
 - 8 of 8 fixtures passed their content assertions.
 - All 8 fixtures produced identical output hashes across three isolated runs.
 - No parser errors occurred.
-- `summary.latency_ms_median` is 4225.272 ms and
-  `summary.latency_ms_max` is 4857.878 ms.
-- `summary.rss_mb_max` is 1242.629 MiB.
+- `summary.latency_ms_median` is 4976.170 ms and
+  `summary.latency_ms_max` is 5719.963 ms.
+- `summary.rss_mb_max` is 1304.359 MiB.
 
 These values are a workstation-specific regression baseline, not a
 cross-platform performance promise. The fixture hashes, individual results,

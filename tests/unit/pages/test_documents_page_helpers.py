@@ -3,13 +3,23 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from typing import cast
 
 import pytest
 
+from src.models.processing import IngestionInput
+from src.persistence.snapshot_service import SnapshotActivation
+
 pytestmark = pytest.mark.unit
+
+_PHYSICAL_COLLECTIONS = {
+    "text": "physical-text-v2",
+    "image": "physical-image-v2",
+}
 
 
 @pytest.fixture(autouse=True)
@@ -203,7 +213,7 @@ def test_handle_ingest_submission_starts_job(monkeypatch) -> None:
     monkeypatch.setattr(
         page,
         "save_uploaded_file",
-        lambda file_obj: (Path("/tmp/doc.txt"), "a" * 64),
+        lambda file_obj, **_kwargs: (Path("/tmp/doc.txt"), "a" * 64),
     )
     monkeypatch.setattr(page, "_get_spacy_service", lambda *_a, **_k: None)
 
@@ -275,27 +285,55 @@ def test_render_ingest_results_sets_session_state(monkeypatch, tmp_path: Path) -
     monkeypatch.setattr(settings, "data_dir", tmp_path, raising=False)
 
     monkeypatch.setattr(page, "_render_image_exports", lambda _e: None)
-    monkeypatch.setattr(
-        page,
-        "_set_multimodal_retriever",
-        lambda: st.session_state.__setitem__("hybrid_retriever", object()),
-    )
-    monkeypatch.setattr(page, "build_router_engine", lambda *_a, **_k: "R")
+    router_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def _build_router(*args, **kwargs):  # type: ignore[no-untyped-def]
+        router_calls.append((args, kwargs))
+        return "R"
+
+    monkeypatch.setattr(page, "build_router_engine", _build_router)
 
     st.session_state.clear()
+    first_resource = page.VectorIndexResource("V")
     page._render_ingest_results(  # type: ignore[attr-defined]
-        {"count": 2, "vector_index": "V", "pg_index": "G"},
+        {
+            "count": 2,
+            "vector_index": "V",
+            "vector_resource": first_resource,
+            "pg_index": "G",
+            "collections": dict(_PHYSICAL_COLLECTIONS),
+        },
         use_graphrag=True,
     )
     assert st.session_state["vector_index"] == "V"
     assert st.session_state["graphrag_index"] == "G"
     assert st.session_state["router_engine"] == "R"
-    assert "hybrid_retriever" in st.session_state
 
-    # Without GraphRAG, graphrag_index is removed
+    # A requested rebuild that produces no graph clears the prior graph owner.
     st.session_state["graphrag_index"] = "G"
-    page._render_ingest_results({"count": 1, "vector_index": "V2"}, use_graphrag=False)  # type: ignore[attr-defined]
+    second_resource = page.VectorIndexResource("V2")
+    page._render_ingest_results(  # type: ignore[attr-defined]
+        {
+            "count": 1,
+            "vector_index": "V2",
+            "vector_resource": second_resource,
+            "collections": dict(_PHYSICAL_COLLECTIONS),
+        },
+        use_graphrag=True,
+    )
     assert st.session_state.get("graphrag_index") is None
+    assert first_resource.closed
+    assert [call[1] for call in router_calls] == [
+        {
+            "text_collection": "physical-text-v2",
+            "image_collection": "physical-image-v2",
+        },
+        {
+            "text_collection": "physical-text-v2",
+            "image_collection": "physical-image-v2",
+        },
+    ]
+    assert st.session_state["_snapshot_collections"] == _PHYSICAL_COLLECTIONS
 
 
 def test_render_image_exports_calls_renderer(monkeypatch) -> None:
@@ -349,7 +387,7 @@ def test_render_maintenance_controls_no_uploads(
     page = importlib.import_module("src.pages.02_documents")
     monkeypatch.setattr(settings, "data_dir", tmp_path, raising=False)
 
-    page._render_maintenance_controls()  # type: ignore[attr-defined]
+    page._render_maintenance_controls(owner_id="owner")  # type: ignore[attr-defined]
     assert "No uploaded files." in streamlit_calls["captions"][-1]
 
 
@@ -370,12 +408,16 @@ def test_render_maintenance_controls_triggers_handlers(
     target = uploads / "a.pdf"
     target.write_bytes(b"%PDF-1.4\n%fake\n")
 
-    hits: list[str] = []
+    hits: list[tuple[str, dict[str, object]]] = []
     monkeypatch.setattr(
-        page, "_handle_reindex_page_images", lambda **_k: hits.append("reindex")
+        page,
+        "_start_existing_corpus_rebuild",
+        lambda **kwargs: hits.append(("rebuild", kwargs)),
     )
     monkeypatch.setattr(
-        page, "_handle_delete_upload", lambda **_k: hits.append("delete")
+        page,
+        "_start_upload_deletion",
+        lambda **kwargs: hits.append(("delete", kwargs)),
     )
 
     def _columns(_n: int):  # type: ignore[no-untyped-def]
@@ -386,16 +428,13 @@ def test_render_maintenance_controls_triggers_handlers(
             def __exit__(self, *_a):  # type: ignore[no-untyped-def]
                 return False
 
-            def number_input(self, *_a, **_k):  # type: ignore[no-untyped-def]
-                return 1
-
             def checkbox(self, *_a, **_k):  # type: ignore[no-untyped-def]
                 return False
 
             def button(self, label, **_k):  # type: ignore[no-untyped-def]
-                return str(label) == "Reindex"
+                return str(label) == "Rebuild"
 
-        return [_C(), _C(), _C()]
+        return [_C(), _C()]
 
     monkeypatch.setattr(st, "columns", _columns, raising=False)
     monkeypatch.setattr(st, "selectbox", lambda *_a, **_k: target.name, raising=False)
@@ -409,49 +448,47 @@ def test_render_maintenance_controls_triggers_handlers(
         st, "button", lambda label, **_k: str(label) == "Delete", raising=False
     )
 
-    page._render_maintenance_controls()  # type: ignore[attr-defined]
-    assert hits == ["reindex", "delete"]
+    page._render_maintenance_controls(owner_id="owner")  # type: ignore[attr-defined]
+    assert hits == [
+        (
+            "rebuild",
+            {"uploads_dir": uploads, "encrypt": False, "owner_id": "owner"},
+        ),
+        (
+            "delete",
+            {"target": target, "encrypt": False, "owner_id": "owner"},
+        ),
+    ]
 
 
-def test_sha256_for_file_and_doc_id_for_upload(monkeypatch, tmp_path: Path) -> None:
+def test_doc_id_for_upload_uses_full_file_content(tmp_path: Path) -> None:
     import importlib
 
     page = importlib.import_module("src.pages.02_documents")
     p = tmp_path / "a.txt"
     p.write_text("hello", encoding="utf-8")
-    stt = p.stat()
-    digest = page._sha256_for_file.__wrapped__(  # type: ignore[attr-defined]
-        str(p), int(stt.st_mtime_ns), int(stt.st_size)
-    )
-    assert isinstance(digest, str)
-    assert len(digest) == 64
-
-    # Avoid Streamlit caching wrapper in tests by calling the wrapped function.
-    monkeypatch.setattr(page, "_sha256_for_file", page._sha256_for_file.__wrapped__)  # type: ignore[attr-defined]
     doc_id = page._doc_id_for_upload(p)  # type: ignore[attr-defined]
     assert doc_id.startswith("doc-")
     assert len(doc_id) == 4 + 64
 
 
-def test_sha256_cache_invalidates_on_file_stat_change(tmp_path: Path) -> None:
+def test_doc_id_changes_for_same_size_same_mtime_replacement(tmp_path: Path) -> None:
     import importlib
 
     page = importlib.import_module("src.pages.02_documents")
     path = tmp_path / "mutable.txt"
-    try:
-        page._sha256_for_file.clear()  # type: ignore[attr-defined]
-        path.write_text("a", encoding="utf-8")
-        first = page._doc_id_for_upload(path)  # type: ignore[attr-defined]
+    path.write_text("first", encoding="utf-8")
+    original_mtime = path.stat().st_mtime_ns
+    first = page._doc_id_for_upload(path)  # type: ignore[attr-defined]
 
-        path.write_text("different content", encoding="utf-8")
-        second = page._doc_id_for_upload(path)  # type: ignore[attr-defined]
+    path.write_text("other", encoding="utf-8")
+    os.utime(path, ns=(original_mtime, original_mtime))
+    second = page._doc_id_for_upload(path)  # type: ignore[attr-defined]
 
-        assert first != second
-    finally:
-        page._sha256_for_file.clear()  # type: ignore[attr-defined]
+    assert first != second
 
 
-def test_handle_delete_upload_refuses_outside_uploads(
+def test_start_upload_deletion_refuses_outside_uploads(
     monkeypatch, tmp_path: Path, streamlit_calls
 ) -> None:
     import importlib
@@ -463,11 +500,15 @@ def test_handle_delete_upload_refuses_outside_uploads(
 
     outside = tmp_path / "outside.txt"
     outside.write_text("x", encoding="utf-8")
-    page._handle_delete_upload(target=outside, purge_artifacts=False)  # type: ignore[attr-defined]
-    assert streamlit_calls["errors"][-1].startswith("Refusing to delete path")
+    page._start_upload_deletion(  # type: ignore[attr-defined]
+        target=outside,
+        encrypt=False,
+        owner_id="owner",
+    )
+    assert streamlit_calls["errors"][-1].startswith("Refusing to delete a path")
 
 
-def test_handle_delete_upload_deletes_and_reports(
+def test_start_upload_deletion_retains_source_until_generation_commits(
     monkeypatch, tmp_path: Path, streamlit_calls
 ) -> None:
     import importlib
@@ -480,71 +521,36 @@ def test_handle_delete_upload_deletes_and_reports(
     uploads.mkdir(parents=True, exist_ok=True)
     target = uploads / "a.txt"
     target.write_text("hello", encoding="utf-8")
+    retained = uploads / "b.txt"
+    retained.write_text("keep", encoding="utf-8")
 
-    # Disable Streamlit cache wrapper inside _doc_id_for_upload
-    monkeypatch.setattr(page, "_sha256_for_file", page._sha256_for_file.__wrapped__)  # type: ignore[attr-defined]
-
-    # Stub qdrant_client module to avoid network.
-    qdrant = ModuleType("qdrant_client")
-    qmodels = ModuleType("qdrant_client.models")
-    filter_keys: list[str] = []
-
-    class _Client:
-        def __init__(self, **_kwargs):  # type: ignore[no-untyped-def]
-            self.deleted = 0
-
-        def count(self, **_kwargs):  # type: ignore[no-untyped-def]
-            return SimpleNamespace(count=4)
-
-        def delete(self, **_kwargs):  # type: ignore[no-untyped-def]
-            self.deleted += 1
-            return None
-
-        def close(self) -> None:
-            return None
-
-    class _Filter:  # minimal shape
-        def __init__(self, **_kwargs):  # type: ignore[no-untyped-def]
-            return None
-
-    class _FieldCondition:
-        def __init__(self, **kwargs):  # type: ignore[no-untyped-def]
-            filter_keys.append(str(kwargs["key"]))
-
-    class _MatchValue:
-        def __init__(self, **_kwargs):  # type: ignore[no-untyped-def]
-            return None
-
-    class _FilterSelector:
-        def __init__(self, **_kwargs):  # type: ignore[no-untyped-def]
-            return None
-
-    qdrant.QdrantClient = _Client  # type: ignore[attr-defined]
-    qmodels.Filter = _Filter  # type: ignore[attr-defined]
-    qmodels.FieldCondition = _FieldCondition  # type: ignore[attr-defined]
-    qmodels.MatchValue = _MatchValue  # type: ignore[attr-defined]
-    qmodels.FilterSelector = _FilterSelector  # type: ignore[attr-defined]
-    qdrant.models = qmodels  # type: ignore[attr-defined]
-
-    monkeypatch.setitem(sys.modules, "qdrant_client", qdrant)
-    monkeypatch.setitem(sys.modules, "qdrant_client.models", qmodels)
-
-    image_index = ModuleType("src.retrieval.image_index")
-    image_index.collect_artifact_refs_for_doc_id = lambda *_a, **_k: []  # type: ignore[attr-defined]
-    image_index.count_artifact_references_in_image_collection = (  # type: ignore[attr-defined]
-        lambda *_a, **_k: 0
+    nlp_service = object()
+    calls: list[tuple[list[IngestionInput], dict[str, object]]] = []
+    monkeypatch.setattr(page, "_load_optional_spacy_service", lambda: nlp_service)
+    monkeypatch.setattr(
+        page,
+        "_start_ingestion_job",
+        lambda inputs, **kwargs: calls.append((inputs, kwargs)),
     )
-    image_index.delete_page_images_for_doc_id = lambda *_a, **_k: 2  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "src.retrieval.image_index", image_index)
 
-    monkeypatch.setattr("src.utils.storage.get_client_config", lambda: {})
+    page._start_upload_deletion(  # type: ignore[attr-defined]
+        target=target,
+        encrypt=True,
+        owner_id="owner",
+    )
 
-    page._handle_delete_upload(target=target, purge_artifacts=False)  # type: ignore[attr-defined]
-    assert not target.exists()
-    assert streamlit_calls["success"]
-    assert "image_points=2" in streamlit_calls["success"][-1]
-    assert "text_points≈4" in streamlit_calls["success"][-1]
-    assert page.CANONICAL_DOCUMENT_ID_KEY in filter_keys
+    assert target.is_file()
+    assert retained.is_file()
+    assert len(calls) == 1
+    inputs, kwargs = calls[0]
+    assert [item.source_path for item in inputs] == [retained]
+    assert all(item.encrypt_images for item in inputs)
+    assert kwargs["encrypt_images"] is True
+    assert kwargs["nlp_service"] is nlp_service
+    assert kwargs["owner_id"] == "owner"
+    assert kwargs["quarantine_source"] == target
+    assert kwargs["excluded_source_paths"] == (target,)
+    assert streamlit_calls["infos"][-1].startswith("Deletion scheduled")
 
 
 def test_render_latest_snapshot_summary(
@@ -636,29 +642,116 @@ def test_handle_manual_export_smoke(
     assert streamlit_calls["success"]
 
 
-def test_create_vector_index_fallback(monkeypatch) -> None:
+def test_ingest_job_closes_vector_resource_when_snapshot_fails(
+    monkeypatch, tmp_path: Path
+) -> None:
     import importlib
-    import sys
-    from types import ModuleType
+    import threading
 
     page = importlib.import_module("src.pages.02_documents")
 
-    li_core = ModuleType("llama_index.core")
+    class _Client:
+        closed = False
 
-    class _VectorStoreIndex:
-        @classmethod
-        def from_vector_store(cls, store):  # type: ignore[no-untyped-def]
-            return ("IDX", store)
+        def close(self) -> None:
+            self.closed = True
 
-    li_core.VectorStoreIndex = _VectorStoreIndex  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "llama_index.core", li_core)
-    monkeypatch.setattr(page, "create_vector_store", lambda *_a, **_k: "STORE")
+    client = _Client()
+    resource = page.VectorIndexResource(object(), client=client)
+    workspace = tmp_path / "storage" / "_tmp-build123"
+    collections = dict(_PHYSICAL_COLLECTIONS)
+    collection_metadata = {
+        "text": {"snapshot_id": "build123", "role": "text"},
+        "image": {"snapshot_id": "build123", "role": "image"},
+    }
 
-    out = page._create_vector_index_fallback()  # type: ignore[attr-defined]
-    assert out == ("IDX", "STORE")
+    class _Manager:
+        def __init__(self) -> None:
+            self.cleanup_calls: list[Path] = []
+
+        def begin_snapshot(self) -> Path:
+            workspace.mkdir(parents=True)
+            return workspace
+
+        def cleanup_tmp(self, path: Path) -> None:
+            self.cleanup_calls.append(path)
+
+    manager = _Manager()
+    ingest_calls: list[dict[str, object]] = []
+    rebuild_calls: list[object] = []
+    deleted_collections: list[dict[str, str]] = []
+
+    def _collection_names(path: Path) -> dict[str, str]:
+        assert path == workspace
+        return collections
+
+    monkeypatch.setattr(page, "SnapshotManager", lambda _base_dir: manager)
+    monkeypatch.setattr(page, "_physical_collection_names", _collection_names)
+    monkeypatch.setattr(
+        page,
+        "_read_collection_metadata",
+        lambda names: collection_metadata if names == collections else {},
+    )
+    monkeypatch.setattr(
+        page,
+        "_delete_staged_collections",
+        lambda names: deleted_collections.append(dict(names)),
+    )
+
+    def _ingest_inputs(*_args, **kwargs):  # type: ignore[no-untyped-def]
+        ingest_calls.append(kwargs)
+        return {
+            "vector_index": resource.index,
+            "vector_resource": resource,
+            "pg_index": None,
+            "activation_corpus_hash": "c" * 64,
+            "activation_config": {"x": 1},
+            "activation_config_hash": "f" * 64,
+            "snapshot_config_hash": "e" * 64,
+            "collections": dict(collections),
+        }
+
+    monkeypatch.setattr(
+        page,
+        "ingest_inputs",
+        _ingest_inputs,
+    )
+
+    def _rebuild_snapshot(*args, **_kwargs):  # type: ignore[no-untyped-def]
+        rebuild_calls.append(args[3])
+        raise RuntimeError("snapshot failed")
+
+    monkeypatch.setattr(
+        page,
+        "rebuild_snapshot",
+        _rebuild_snapshot,
+    )
+
+    with pytest.raises(RuntimeError, match="snapshot failed"):
+        page._run_ingest_job(  # type: ignore[attr-defined]
+            [],
+            use_graphrag=False,
+            encrypt_images=False,
+            nlp_service=None,
+            cancel_event=threading.Event(),
+            report_progress=lambda _event: None,
+        )
+
+    assert client.closed
+    assert manager.cleanup_calls == [workspace]
+    assert deleted_collections == [collections]
+    assert ingest_calls[0]["text_collection_name"] == "physical-text-v2"
+    assert ingest_calls[0]["image_collection_name"] == "physical-image-v2"
+    activation = cast(SnapshotActivation, rebuild_calls[0])
+    assert isinstance(activation, SnapshotActivation)
+    assert activation.manager is manager
+    assert activation.workspace == workspace
+    assert activation.text_collection == "physical-text-v2"
+    assert activation.image_collection == "physical-image-v2"
+    assert activation.collection_metadata == collection_metadata
 
 
-def test_render_ingest_results_uses_vector_index_fallback(
+def test_render_ingest_results_replaces_and_clears_router(
     monkeypatch, tmp_path: Path
 ) -> None:
     import importlib
@@ -670,47 +763,88 @@ def test_render_ingest_results_uses_vector_index_fallback(
     page = importlib.import_module("src.pages.02_documents")
     monkeypatch.setattr(settings, "data_dir", tmp_path, raising=False)
     monkeypatch.setattr(page, "_render_image_exports", lambda _e: None)
-    monkeypatch.setattr(page, "_create_vector_index_fallback", lambda: "V")
-    monkeypatch.setattr(page, "_set_multimodal_retriever", lambda: None)
-    monkeypatch.setattr(page, "build_router_engine", lambda *_a, **_k: "R")
 
+    class _Router:
+        def __init__(self) -> None:
+            self.closed = 0
+
+        def close(self) -> None:
+            self.closed += 1
+
+    old = _Router()
+    new = _Router()
     st.session_state.clear()
-    page._render_ingest_results({"count": 1, "vector_index": None}, use_graphrag=False)  # type: ignore[attr-defined]
-    assert st.session_state["vector_index"] == "V"
-    assert st.session_state["router_engine"] == "R"
+    st.session_state["router_engine"] = old
+    monkeypatch.setattr(page, "build_router_engine", lambda *_a, **_k: new)
+    resource = page.VectorIndexResource(object())
+
+    page._render_ingest_results(
+        {
+            "count": 1,
+            "vector_index": resource.index,
+            "vector_resource": resource,
+            "collections": dict(_PHYSICAL_COLLECTIONS),
+        },
+        use_graphrag=False,
+    )
+
+    assert old.closed == 1
+    assert new.closed == 0
+    assert st.session_state["router_engine"] is new
 
 
-def test_set_multimodal_retriever_sets_session_state(monkeypatch) -> None:
+def test_render_ingest_results_build_failure_clears_router(
+    monkeypatch, tmp_path: Path
+) -> None:
     import importlib
 
     import streamlit as st  # type: ignore
 
+    from src.config.settings import settings
+
     page = importlib.import_module("src.pages.02_documents")
+    monkeypatch.setattr(settings, "data_dir", tmp_path, raising=False)
+    monkeypatch.setattr(page, "_render_image_exports", lambda _e: None)
 
-    mm = ModuleType("src.retrieval.multimodal_fusion")
+    class _Router:
+        def __init__(self) -> None:
+            self.closed = 0
 
-    class _MM:
-        pass
+        def close(self) -> None:
+            self.closed += 1
 
-    mm.MultimodalFusionRetriever = _MM  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "src.retrieval.multimodal_fusion", mm)
+    old = _Router()
 
+    class _Client:
+        closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    client = _Client()
+    resource = page.VectorIndexResource(object(), client=client)
     st.session_state.clear()
-    page._set_multimodal_retriever()  # type: ignore[attr-defined]
-    assert isinstance(st.session_state.get("hybrid_retriever"), _MM)
-
-
-def test_handle_snapshot_rebuild_snapshot_lock(monkeypatch, streamlit_calls) -> None:
-    import importlib
-
-    page = importlib.import_module("src.pages.02_documents")
+    st.session_state["router_engine"] = old
     monkeypatch.setattr(
         page,
-        "rebuild_snapshot",
-        lambda *_a, **_k: (_ for _ in ()).throw(page.SnapshotLockTimeout()),
+        "build_router_engine",
+        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("router failed")),
     )
-    page._handle_snapshot_rebuild(vector_index=object(), pg_index=None)  # type: ignore[attr-defined]
-    assert any("already in progress" in w for w in streamlit_calls["warnings"])
+
+    with pytest.raises(RuntimeError, match="router failed"):
+        page._render_ingest_results(
+            {
+                "count": 1,
+                "vector_index": resource.index,
+                "vector_resource": resource,
+                "collections": dict(_PHYSICAL_COLLECTIONS),
+            },
+            use_graphrag=False,
+        )
+
+    assert old.closed == 1
+    assert st.session_state["router_engine"] is None
+    assert client.closed
 
 
 def test_render_export_images_handles_encrypted_without_support(
@@ -750,7 +884,7 @@ def test_render_export_images_handles_encrypted_without_support(
     )
 
 
-def test_handle_reindex_page_images_no_pdfs(
+def test_start_existing_corpus_rebuild_requires_uploads(
     monkeypatch, tmp_path: Path, streamlit_calls
 ) -> None:
     import importlib
@@ -762,12 +896,18 @@ def test_handle_reindex_page_images_no_pdfs(
 
     uploads = tmp_path / "uploads"
     uploads.mkdir(parents=True, exist_ok=True)
-    page._handle_reindex_page_images(uploads_dir=uploads, limit=1, encrypt=False)  # type: ignore[attr-defined]
-    assert streamlit_calls["infos"] == ["No PDFs found under uploads."]
+    page._start_existing_corpus_rebuild(  # type: ignore[attr-defined]
+        uploads_dir=uploads,
+        encrypt=False,
+        owner_id="owner",
+    )
+    assert streamlit_calls["infos"] == [
+        "Add a document before rebuilding the search index."
+    ]
 
 
-def test_handle_reindex_page_images_smoke(
-    monkeypatch, tmp_path: Path, streamlit_calls
+def test_start_existing_corpus_rebuild_schedules_full_generation(
+    monkeypatch, tmp_path: Path
 ) -> None:
     import importlib
 
@@ -776,34 +916,38 @@ def test_handle_reindex_page_images_smoke(
 
     page = importlib.import_module("src.pages.02_documents")
     monkeypatch.setattr(settings, "data_dir", tmp_path, raising=False)
-    monkeypatch.setattr(page, "_sha256_for_file", page._sha256_for_file.__wrapped__)  # type: ignore[attr-defined]
-
     uploads = tmp_path / "uploads"
     uploads.mkdir(parents=True, exist_ok=True)
     pdf = uploads / "a.pdf"
     pdf.write_bytes(b"%PDF-1.4\n%fake\n")
 
-    captured_inputs: list[IngestionInput] = []
-    ingestion_pipeline = ModuleType("src.processing.ingestion_pipeline")
-
-    def _reindex(_cfg: object, inputs: list[IngestionInput]) -> dict[str, object]:
-        captured_inputs.extend(inputs)
-        return {"metadata": {"image_index.indexed": 1, "image_index.skipped": 0}}
-
-    ingestion_pipeline.reindex_page_images_sync = _reindex  # type: ignore[attr-defined]
-    monkeypatch.setitem(
-        sys.modules, "src.processing.ingestion_pipeline", ingestion_pipeline
+    nlp_service = object()
+    calls: list[tuple[list[IngestionInput], dict[str, object]]] = []
+    monkeypatch.setattr(page, "_load_optional_spacy_service", lambda: nlp_service)
+    monkeypatch.setattr(
+        page,
+        "_start_ingestion_job",
+        lambda inputs, **kwargs: calls.append((inputs, kwargs)),
     )
 
-    page._handle_reindex_page_images(uploads_dir=uploads, limit=1, encrypt=False)  # type: ignore[attr-defined]
-    assert len(captured_inputs) == 1
-    assert isinstance(captured_inputs[0], IngestionInput)
-    assert captured_inputs[0].source_path == pdf
-    assert captured_inputs[0].metadata == {}
-    assert any("Reindexed" in s for s in streamlit_calls["success"])
+    page._start_existing_corpus_rebuild(  # type: ignore[attr-defined]
+        uploads_dir=uploads,
+        encrypt=False,
+        owner_id="owner",
+    )
+
+    assert len(calls) == 1
+    inputs, kwargs = calls[0]
+    assert len(inputs) == 1
+    assert isinstance(inputs[0], IngestionInput)
+    assert inputs[0].source_path == pdf
+    assert inputs[0].metadata == {}
+    assert kwargs["encrypt_images"] is False
+    assert kwargs["nlp_service"] is nlp_service
+    assert kwargs["owner_id"] == "owner"
 
 
-def test_handle_delete_upload_missing_file_warns(
+def test_start_upload_deletion_missing_file_warns(
     monkeypatch, tmp_path: Path, streamlit_calls
 ) -> None:
     import importlib
@@ -816,69 +960,12 @@ def test_handle_delete_upload_missing_file_warns(
     uploads = tmp_path / "uploads"
     uploads.mkdir(parents=True, exist_ok=True)
     missing = uploads / "missing.txt"
-    page._handle_delete_upload(target=missing, purge_artifacts=False)  # type: ignore[attr-defined]
+    page._start_upload_deletion(  # type: ignore[attr-defined]
+        target=missing,
+        encrypt=False,
+        owner_id="owner",
+    )
     assert streamlit_calls["warnings"][-1] == "File not found."
-
-
-def test_handle_delete_upload_purges_unreferenced_artifacts(
-    monkeypatch, tmp_path: Path, streamlit_calls
-) -> None:
-    import importlib
-
-    from src.config.settings import settings
-
-    page = importlib.import_module("src.pages.02_documents")
-    monkeypatch.setattr(settings, "data_dir", tmp_path, raising=False)
-
-    uploads = tmp_path / "uploads"
-    uploads.mkdir(parents=True, exist_ok=True)
-    target = uploads / "a.txt"
-    target.write_text("hello", encoding="utf-8")
-
-    monkeypatch.setattr(page, "_sha256_for_file", page._sha256_for_file.__wrapped__)  # type: ignore[attr-defined]
-
-    qdrant = ModuleType("qdrant_client")
-    qmodels = ModuleType("qdrant_client.models")
-
-    class _Client:
-        def count(self, **_kwargs):  # type: ignore[no-untyped-def]
-            return SimpleNamespace(count=0)
-
-        def delete(self, **_kwargs):  # type: ignore[no-untyped-def]
-            return None
-
-        def close(self) -> None:
-            return None
-
-    qdrant.QdrantClient = lambda **_k: _Client()  # type: ignore[attr-defined]
-    qmodels.Filter = lambda **_k: None  # type: ignore[attr-defined]
-    qmodels.FieldCondition = lambda **_k: None  # type: ignore[attr-defined]
-    qmodels.MatchValue = lambda **_k: None  # type: ignore[attr-defined]
-    qmodels.FilterSelector = lambda **_k: None  # type: ignore[attr-defined]
-    qdrant.models = qmodels  # type: ignore[attr-defined]
-
-    monkeypatch.setitem(sys.modules, "qdrant_client", qdrant)
-    monkeypatch.setitem(sys.modules, "qdrant_client.models", qmodels)
-
-    ref = page.ArtifactRef(sha256="a" * 64, suffix=".png")  # type: ignore[attr-defined]
-    image_index = ModuleType("src.retrieval.image_index")
-    image_index.collect_artifact_refs_for_doc_id = lambda *_a, **_k: [ref]  # type: ignore[attr-defined]
-    image_index.delete_page_images_for_doc_id = lambda *_a, **_k: 1  # type: ignore[attr-defined]
-    image_index.count_artifact_references_in_image_collection = lambda *_a, **_k: 0  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "src.retrieval.image_index", image_index)
-
-    deleted: list[page.ArtifactRef] = []  # type: ignore[attr-defined]
-
-    class _Store:
-        def delete(self, r):  # type: ignore[no-untyped-def]
-            deleted.append(r)
-
-    monkeypatch.setattr(page.ArtifactStore, "from_settings", lambda _s: _Store())
-    monkeypatch.setattr("src.utils.storage.get_client_config", lambda: {})
-
-    page._handle_delete_upload(target=target, purge_artifacts=True)  # type: ignore[attr-defined]
-    assert deleted == [ref]
-    assert any("Deleted local artifacts: 1" in c for c in streamlit_calls["captions"])
 
 
 def test_log_export_event_without_dest_path(monkeypatch) -> None:

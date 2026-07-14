@@ -12,32 +12,28 @@ classifiers = [
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
-    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
     # Application & Configuration (core runtime utilities)
     "python-dotenv==1.2.2",
     "loguru>=0.7.3,<1.0.0",
-    "tenacity>=9.1.2,<10.0.0",
-    "pydantic==2.12.5",
-    "pydantic-settings==2.12.0",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.14.2",
     "cryptography>=46.0.7",              # Image encryption at rest (ADR-058)
     # UI / App Framework
     "streamlit>=1.52.2,<2.0.0",
     # Document Processing & NLP
-    "docling>=2.92,<3",                  # Local multiformat document conversion
+    "docling>=2.111,<3",                 # Local multiformat document conversion
     "pypdfium2>=5.7,<6",                 # PDF inspection and rasterization
     "rapidocr>=3.8,<4",                  # CPU-safe local OCR
     "onnxruntime>=1.23,<2",              # RapidOCR CPU inference backend
     "pillow>=12.2.0,<13.0.0",            # Image handling
-    "pyarrow>=24.0.0,<25.0.0",           # Columnar data interchange
-    "spacy==3.8.11",                     # NLP pipeline (pinned for reproducibility)
-    "typer==0.21.1",                     # spaCy CLI stability (ADR-061) – prevent typer/typer-slim import conflicts with GPU extras
+    "pyarrow>=24.0.0,<25.0.0",           # Streamlit 1.59.2 requires PyArrow <25
+    "spacy==3.8.14",                     # NLP pipeline (pinned for reproducibility)
     # ML/LLM Fundamentals
-    "torch==2.8.0",                      # PyTorch runtime (CPU-first baseline; GPU via extras)
-    "transformers>=5.0.0,<6.0.0",        # HF model interfaces (Torch 2.8-compatible)
-    "tiktoken==0.12.0",
-    "openai>=2.8.0,<3.0.0",
+    "torch==2.11.0",                     # CPU-first ML runtime
+    "transformers>=5.0.0,<6.0.0",        # HF model interfaces (Torch 2.11-compatible)
     # Local LLM Backends (CPU defaults; GPU in [gpu] extra)
     "ollama==0.6.2",
     # Vector Databases & Clients
@@ -45,7 +41,6 @@ dependencies = [
     # LlamaIndex (core + selected integrations)
     "llama-index-core>=0.14.21,<0.15.0",
     "llama-index-vector-stores-qdrant>=0.10.0,<0.11.0",
-    "llama-index-vector-stores-duckdb>=0.6.0,<0.7.0",
     "llama-index-storage-kvstore-duckdb>=0.3.0,<0.4.0",
     "llama-index-llms-openai>=0.7.7,<0.8.0",
     "llama-index-llms-ollama>=0.9.1,<1.0.0",
@@ -61,14 +56,11 @@ dependencies = [
     "langchain-openai>=1.1.14,<2.0.0",
     # Retrieval & Reranking Extras
     "sentence-transformers>=5.2.0,<6.0.0",  # CrossEncoder reranking
-    # Prompt Optimization (DSPy remains runtime-gated; install separately once
-    # its dependency chain is compatible with security floors).
     "pyyaml>=6.0.3,<7.0.0",                 # YAML parser for prompt templates
     # Storage (local analytical DB used for cache KV store)
     # Keep <1.4.0 because llama-index DuckDB integrations currently cap DuckDB <1.4.0.
     "duckdb>=1.3.2,<1.4.0",
     # Analytics & Visualization
-    "pandas>=2.2,<3.0",
     "plotly>=6.7.0,<7.0.0",
     # Observability
     "opentelemetry-sdk>=1.41.1,<2.0.0",     # OTEL tracing/metrics SDK
@@ -80,8 +72,8 @@ dependencies = [
 # Optional runtime features published as extras (PEP 621).
 [project.optional-dependencies]
 gpu = [
-    "torch==2.8.0",
-    "torchvision==0.23.0",
+    "torch==2.11.0",
+    "torchvision==0.26.0",
     # Dense/image embedding and reranking use PyTorch CUDA. Sparse FastEmbed
     # remains on the core CPU runtime because fastembed and fastembed-gpu are
     # mutually exclusive distributions.
@@ -95,10 +87,6 @@ apple = [
 observability = [
     "llama-index-observability-otel>=0.6.0,<0.7.0",
 ]
-multimodal = [
-    "llama-index-postprocessor-colpali-rerank==0.3.1",
-    "colpali-engine>=0.3.13,<0.4.0",
-]
 eval = [
     "beir>=2.0.0,<3.0.0",                # IR benchmark datasets + evaluation
 ]
@@ -108,26 +96,16 @@ searchable-pdf = [
 # Note: spaCy models are not PyPI packages and must be installed separately:
 # uv run python -m spacy download en_core_web_sm
 
-[build-system]
-requires = ["setuptools==80.9.0", "wheel==0.47.0"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools.packages.find]
-include = ["src*"]
-
-[tool.setuptools.package-data]
-"src.prompting" = [
-    "templates/presets/*.yaml",
-    "templates/prompts/*.prompt.md",
-]
-
 [project.urls]
 Repository = "https://github.com/BjornMelin/docmind-ai-llm"
 Documentation = "https://github.com/BjornMelin/docmind-ai-llm/tree/main/docs"
 "GPU Setup Guide" = "https://github.com/BjornMelin/docmind-ai-llm/blob/main/docs/developers/gpu-setup.md"
 
 [tool.uv]
-required-version = "==0.11.21"
+package = false
+# Keep the lock format on uv 0.11 while allowing GitHub's Dependabot updater
+# and newer compatible local/container patch releases.
+required-version = ">=0.11.8,<0.12"
 default-groups = ["dev", "cpu"]
 conflicts = [[{ group = "cpu" }, { extra = "gpu" }]]
 # Transitive dep constraints: keep resolver away from known vulnerable/yanked ranges,
@@ -136,17 +114,12 @@ prerelease = "if-necessary-or-explicit"
 constraint-dependencies = [
     "aiohttp>=3.13.4",
     "gitpython>=3.1.47,<4.0.0",
-    "langchain-text-splitters>=1.1.2,<2.0.0",
     "langsmith>=0.7.31",
     "lxml>=6.1.0",
-    "mako>=1.3.11",
     "nltk>=3.9.4",
-    "onnx>=1.21.0",
     "orjson>=3.11.8",
     "pypdf>=6.10.2,<7.0.0",
     "python-multipart>=0.0.26",
-    "rapidfuzz>=3.14.1,<4.0.0",
-    "tornado>=6.5.5",
 ]
 
 [tool.uv.sources]
@@ -247,7 +220,6 @@ extend-select = ["RUF100", "ANN001", "ANN002", "ANN003"]
     "S404",  # subprocess usage in scripts
 ]
 "scripts/check_coverage.py" = ["RUF001", "RUF002", "RUF003"]
-"scripts/run_quality_gates.py" = ["RUF013"]
 "docs/**/*.py" = [
     "RUF001", "RUF002", "RUF003",  # unicode in examples/docstrings
 ]
@@ -308,35 +280,13 @@ filterwarnings = [
 ]
 minversion = "9.0.3"
 markers = [
-    # CI/CD Pipeline Tiers (Phase 5A Optimized)
-    "unit: Fast unit tests with mocked dependencies (95%+ success rate, <0.1s avg)",
-    "integration: Component interaction tests with lightweight models (<30s each)",
-    "system: Full system tests with real models and GPU (<5min each)",
-    "e2e: End-to-end tests using Streamlit AppTest and UI flows",
-    
-    # CI/CD Pipeline Modes
-    "pre_commit: Fastest, most reliable tests for pre-commit hooks (>99% success rate)",
-    "ci_pipeline: CI pipeline tests optimized for fast feedback (95%+ success rate)",
-    "pr_validation: Comprehensive PR validation tests (quality gate enforcement)",
-    "deployment_gate: Production deployment gate tests (full validation)",
-    
-    # Performance and Quality
-    "performance: Performance benchmarks and regression tests",
-    "quality_gate: Tests that enforce Phase 5A quality standards (95%+ success)",
-    "high_confidence: Tests with >95% historical success rate",
-    "regression_test: Tests for detecting performance/quality regressions",
-    
-    # Legacy compatibility
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "requires_gpu: marks tests that require GPU",
-    "requires_network: marks tests that require network access",
-    "requires_ollama: marks tests that require a local Ollama server",
-    "gpu_required: alias for requires_gpu",
-    "agents: Multi-agent coordination tests",
-    "retrieval: Retrieval/search tests",
-    "embeddings: Embedding model tests",
-    "multimodal: SigLIP and visual retrieval tests",
-    "timeout: Per-test timeout marker",
+    "unit: isolated unit tests",
+    "integration: component integration tests",
+    "system: opt-in tests against local services",
+    "e2e: opt-in Streamlit end-to-end tests",
+    "requires_gpu: tests that require a supported GPU runtime",
+    "requires_network: tests that require an explicitly enabled network boundary",
+    "retrieval: focused retrieval behavior tests",
 ]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
@@ -344,25 +294,17 @@ asyncio_default_fixture_loop_scope = "function"
 # Development-only dependency groups (PEP 735); not published as package metadata.
 [dependency-groups]
 cpu = [
-    "torch==2.8.0",
-    "torchvision==0.23.0",
+    "torch==2.11.0",
+    "torchvision==0.26.0",
 ]
 dev = [
-    "ruff>=0.14.14,<0.15.0",
+    "ruff>=0.15.21,<0.16.0",
     "pyright[nodejs]>=1.1.409,<1.2.0",
     "pytest>=9.0.3,<10.0.0",
     "pytest-asyncio>=1.3.0,<2.0.0",
     "pytest-cov>=7.1.0,<8.0.0",
-    "pytest-benchmark>=5.2.3,<6.0.0",
-    "hypothesis>=6.152.4,<7.0.0",
-    "bandit>=1.9.4,<2.0.0",
-    "mypy>=1.20.2,<2.0.0",
     "pytest-mock>=3.14.1",
     "responses>=0.26.0",
-    "pytest-httpx>=0.35.0",
-    "testcontainers>=4.14.2",
-    "coverage-badge>=1.1.2",
-    "tomli>=2.4.1",
     "pypdf>=6.10.2,<7.0.0",
 ]
 test = [
@@ -435,39 +377,6 @@ output = "coverage.xml"
 [tool.coverage.json]
 output = "coverage.json"
 pretty_print = true
-
-# CI/CD Quality Gates and Monitoring - Phase 5A Optimized
-[tool.pytest-quality]
-# Performance monitoring (Phase 5A: <0.1s unit test average)
-max_test_duration_seconds = 300
-max_collection_time_seconds = 30
-slow_test_threshold_seconds = 0.2
-unit_test_time_threshold_seconds = 0.1
-performance_regression_threshold = 1.5
-
-# Coverage enforcement
-min_line_coverage_percent = 80.0
-min_branch_coverage_percent = 0.0
-coverage_fail_on_decrease = false
-coverage_regression_threshold = 0.95
-
-# Success rate enforcement (Phase 5A: 95.4% success rate)
-min_success_rate_percent = 95.0
-critical_success_rate_percent = 90.0
-success_rate_fail_under = true
-
-# Health monitoring (CI/CD optimized)
-max_flaky_tests = 3
-flaky_pass_rate_threshold = 0.9
-max_anti_patterns = 5
-enable_performance_regression_detection = true
-enable_health_monitoring = true
-enable_quality_gate_enforcement = true
-
-# CI/CD Pipeline Configuration
-enable_intelligent_test_selection = true
-enable_fast_feedback_mode = true
-enable_deployment_gate_validation = true
 
 # Pyright Type Checking Configuration - Optimized for Performance
 [tool.pyright]

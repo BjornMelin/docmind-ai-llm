@@ -7,6 +7,7 @@ NodeWithScore list with deterministic ordering and server-side grouping.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import Callable
 from contextlib import suppress
@@ -14,13 +15,16 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+from llama_index.core.base.base_retriever import BaseRetriever
 from llama_index.core.schema import NodeWithScore, QueryBundle
 from loguru import logger
-from qdrant_client import QdrantClient
+from qdrant_client import AsyncQdrantClient, QdrantClient
 from qdrant_client import models as qmodels
 
 from src.config import settings
 from src.config.integrations import get_settings_embed_model
+from src.retrieval.async_work import AsyncWorkCapacityError, AsyncWorkExecutor
+from src.retrieval.sparse_query import SparseEncodingError
 from src.retrieval.sparse_query import encode_to_qdrant as _encode_sparse_query
 from src.utils.exceptions import IMPORT_EXCEPTIONS
 from src.utils.log_safety import build_pii_log_entry
@@ -32,7 +36,7 @@ from src.utils.qdrant_utils import (
 )
 from src.utils.storage import (
     QdrantCollectionIncompatibleError,
-    ensure_hybrid_collection,
+    check_hybrid_collection,
     get_client_config,
 )
 from src.utils.telemetry import log_jsonl
@@ -51,7 +55,7 @@ class HybridParams:
     dedup_key: str = "page_id"
 
 
-class ServerHybridRetriever:
+class ServerHybridRetriever(BaseRetriever):
     """Hybrid retriever using Qdrant's server-side fusion (RRF/DBSF).
 
     Computes dense and sparse query representations, prefetches candidates
@@ -69,6 +73,8 @@ class ServerHybridRetriever:
         params: HybridParams,
         client: QdrantClient | None = None,
         client_factory: Callable[[], QdrantClient] | None = None,
+        async_client: AsyncQdrantClient | None = None,
+        async_client_factory: Callable[[], AsyncQdrantClient] | None = None,
     ) -> None:
         """Initialize retriever with parameters and client.
 
@@ -77,28 +83,61 @@ class ServerHybridRetriever:
                 prefetch limits, and de-duplication key.
             client: Optional pre-configured QdrantClient instance.
             client_factory: Optional factory function to create QdrantClient.
+            async_client: Optional pre-configured AsyncQdrantClient instance.
+            async_client_factory: Optional factory for AsyncQdrantClient.
         """
+        super().__init__()
         self.params = params
+        client_config = get_client_config()
         if client is not None:
             self._client = client
         else:
-            factory = client_factory or (lambda: QdrantClient(**get_client_config()))
+            factory = client_factory or (lambda: QdrantClient(**client_config))
             self._client = factory()
-        compatibility = ensure_hybrid_collection(
+        self._async_client = async_client
+        self._async_client_factory = async_client_factory or (
+            lambda: AsyncQdrantClient(**client_config)
+        )
+        # Dense and sparse encoders run concurrently for one request. Two
+        # queue-free slots admit exactly that pair while rejecting overlap from
+        # a second request until the native work has actually exited.
+        self._cpu_work = AsyncWorkExecutor(
+            name="docmind-hybrid-cpu",
+            max_workers=2,
+        )
+        compatibility = check_hybrid_collection(
             self._client,
             self.params.collection,
             dense_dim=settings.embedding.dimension,
+            sparse_enabled=True,
         )
         if not compatibility.compatible:
+            self.close()
             raise QdrantCollectionIncompatibleError(
                 self.params.collection,
                 compatibility,
             )
 
     def close(self) -> None:
-        """Close underlying client (best-effort)."""
+        """Close the synchronous client (best-effort)."""
+        self._cpu_work.close()
         with suppress(Exception):  # pragma: no cover - defensive
             self._client.close()
+
+    async def aclose(self) -> None:
+        """Close both clients after asynchronous use (best-effort)."""
+        self.close()
+        async_client = self._async_client
+        self._async_client = None
+        if async_client is not None:
+            with suppress(Exception):  # pragma: no cover - defensive
+                await async_client.close()
+        await self._cpu_work.aclose()
+
+    def _get_async_client(self) -> AsyncQdrantClient:
+        if self._async_client is None:
+            self._async_client = self._async_client_factory()
+        return self._async_client
 
     def _embed_dense(self, text: str) -> np.ndarray:
         """Embed text into a dense vector using configured model.
@@ -121,6 +160,10 @@ class ServerHybridRetriever:
         vec = embed.get_query_embedding(text)  # type: ignore[attr-defined]
         return np.asarray(vec, dtype=np.float32)
 
+    async def _aembed_dense(self, text: str) -> np.ndarray:
+        """Embed text on the retriever's bounded, queue-free executor."""
+        return await self._cpu_work.run(self._embed_dense, text)
+
     def _encode_sparse(self, text: str) -> qmodels.SparseVector | None:
         """Encode text into a Qdrant ``SparseVector`` when available.
 
@@ -133,7 +176,20 @@ class ServerHybridRetriever:
         """
         try:
             return _encode_sparse_query(text)
-        except (ValueError, TypeError, AttributeError):  # pragma: no cover - defensive
+        except SparseEncodingError as exc:
+            cause = exc.__cause__ or exc
+            logger.warning(
+                "Sparse query encoding failed; using dense-only retrieval "
+                "(error_type={})",
+                type(cause).__name__,
+            )
+            return None
+
+    async def _aencode_sparse(self, text: str) -> qmodels.SparseVector | None:
+        """Encode sparse input without admitting unbounded native work."""
+        try:
+            return await self._cpu_work.run(self._encode_sparse, text)
+        except AsyncWorkCapacityError:
             return None
 
     def _fusion(self) -> qmodels.FusionQuery | qmodels.RrfQuery:
@@ -189,6 +245,20 @@ class ServerHybridRetriever:
     def _query_qdrant(self, prefetch: list[qmodels.Prefetch], key_name: str) -> Any:
         """Execute fused retrieval grouped by the canonical payload key."""
         return self._client.query_points_groups(
+            collection_name=self.params.collection,
+            prefetch=prefetch,
+            query=self._fusion(),
+            group_by=key_name,
+            group_size=1,
+            limit=self.params.fused_top_k,
+            with_payload=list(QDRANT_PAYLOAD_FIELDS),
+        )
+
+    async def _aquery_qdrant(
+        self, prefetch: list[qmodels.Prefetch], key_name: str
+    ) -> Any:
+        """Execute fused retrieval through Qdrant's native async client."""
+        return await self._get_async_client().query_points_groups(
             collection_name=self.params.collection,
             prefetch=prefetch,
             query=self._fusion(),
@@ -254,7 +324,7 @@ class ServerHybridRetriever:
                 redaction.redacted,
             )
 
-    def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:
+    def _retrieve(self, query_bundle: QueryBundle) -> list[NodeWithScore]:
         """Execute server-side hybrid retrieval.
 
         Computes dense and sparse queries, prefetches candidates, fuses scores
@@ -262,7 +332,7 @@ class ServerHybridRetriever:
         ``NodeWithScore`` results ordered by score (descending) and id (stable).
 
         Args:
-            query: Query text or ``QueryBundle``.
+            query_bundle: Canonical LlamaIndex query bundle.
 
         Returns:
             A list of ``NodeWithScore`` instances up to ``fused_top_k``.
@@ -271,7 +341,7 @@ class ServerHybridRetriever:
             On network or query errors, the retriever fails open and returns an
             empty list rather than raising, to avoid breaking calling pipelines.
         """
-        qtext = query.query_str if isinstance(query, QueryBundle) else str(query)
+        qtext = query_bundle.query_str
 
         t0 = time.perf_counter()
         dense_vec = self._embed_dense(qtext)
@@ -307,6 +377,40 @@ class ServerHybridRetriever:
             server_group_count=len(groups),
         )
 
+        return nodes
+
+    async def _aretrieve(self, query_bundle: QueryBundle) -> list[NodeWithScore]:
+        """Execute hybrid retrieval without blocking on network I/O."""
+        qtext = query_bundle.query_str
+        t0 = time.perf_counter()
+        dense_vec, sparse_vec = await asyncio.gather(
+            self._aembed_dense(qtext),
+            self._aencode_sparse(qtext),
+        )
+        prefetch = self._build_prefetch(dense_vec, sparse_vec)
+        key_name = (self.params.dedup_key or "page_id").strip()
+
+        try:
+            result = await self._aquery_qdrant(prefetch, key_name)
+        except QDRANT_SCHEMA_EXCEPTIONS as exc:  # pragma: no cover - network path
+            redaction = build_pii_log_entry(str(exc), key_id="hybrid.qdrant.query")
+            logger.warning(
+                "Qdrant hybrid query failed (error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
+            return []
+
+        groups = getattr(result, "groups", []) or []
+        points = [group.hits[0] for group in groups if getattr(group, "hits", None)]
+        nodes = self._build_nodes(points)
+        self._emit_telemetry(
+            t0=t0,
+            nodes=nodes,
+            sparse_vec=sparse_vec,
+            key_name=key_name,
+            server_group_count=len(groups),
+        )
         return nodes
 
 

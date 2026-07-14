@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
+from llama_index.core.base.base_retriever import BaseRetriever
 
 from src.retrieval.hybrid import HybridParams, ServerHybridRetriever
+from src.retrieval.sparse_query import SparseEncodingError
 
 
 class _Point:
@@ -22,6 +26,14 @@ class _Resp:
 @pytest.fixture(autouse=True)
 def _stub_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
     """Install a minimal BaseEmbedding-compatible stub on Settings.embed_model."""
+    monkeypatch.setattr(
+        "src.retrieval.hybrid.check_hybrid_collection",
+        lambda *_args, **_kwargs: SimpleNamespace(compatible=True),
+    )
+    monkeypatch.setattr(
+        "src.retrieval.hybrid._encode_sparse_query",
+        lambda _text: None,
+    )
     from llama_index.core import Settings  # type: ignore
 
     try:
@@ -85,13 +97,16 @@ def test_hybrid_retriever_dedup_and_order(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_hybrid_sparse_unavailable_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    # If sparse encoding unavailable, retriever still returns dense-prefetch results
+    # If sparse encoding is unavailable, use only the canonical dense prefetch.
     pts = [
         _Point("a", 0.5, {"page_id": "A", "text": "a"}),
     ]
     resp = _Resp(pts)
 
-    def _fake_query_points_groups(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+    calls: dict[str, object] = {}
+
+    def _fake_query_points_groups(*_args, **kwargs):  # type: ignore[no-untyped-def]
+        calls.update(kwargs)
         return resp
 
     params = HybridParams(collection="c")
@@ -103,3 +118,119 @@ def test_hybrid_sparse_unavailable_fallback(monkeypatch: pytest.MonkeyPatch) -> 
     out = retr.retrieve("q")
     assert len(out) == 1
     assert out[0].node.get_content() == "a"
+    assert [prefetch.using for prefetch in calls["prefetch"]] == ["text-dense"]  # type: ignore[index,union-attr]
+
+
+def test_hybrid_sparse_encoder_failure_falls_back_to_dense(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Use dense retrieval when the optional BM42 query model cannot load."""
+    calls: dict[str, object] = {}
+
+    def _fail_sparse(_text: str) -> None:
+        raise SparseEncodingError("query encoding failed")
+
+    def _query(*_args: object, **kwargs: object) -> _Resp:
+        calls.update(kwargs)
+        return _Resp([_Point("a", 0.5, {"page_id": "A", "text": "dense"})])
+
+    monkeypatch.setattr("src.retrieval.hybrid._encode_sparse_query", _fail_sparse)
+    retriever = ServerHybridRetriever(HybridParams(collection="c"))
+    monkeypatch.setattr(
+        retriever._client,
+        "query_points_groups",
+        _query,
+        raising=False,
+    )
+
+    assert [node.node.get_content() for node in retriever.retrieve("q")] == ["dense"]
+    assert [prefetch.using for prefetch in calls["prefetch"]] == ["text-dense"]  # type: ignore[index,union-attr]
+
+
+def test_hybrid_retriever_checks_schema_without_mutating(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checks: list[tuple[str, int, bool]] = []
+
+    class _Client:
+        def close(self) -> None:
+            return None
+
+        def create_collection(self, **_kwargs: object) -> None:
+            raise AssertionError("retrieval must not create collections")
+
+        def update_collection(self, **_kwargs: object) -> None:
+            raise AssertionError("retrieval must not mutate collections")
+
+    def _check(
+        _client: object,
+        collection: str,
+        *,
+        dense_dim: int,
+        sparse_enabled: bool,
+    ) -> SimpleNamespace:
+        checks.append((collection, dense_dim, sparse_enabled))
+        return SimpleNamespace(compatible=True)
+
+    monkeypatch.setattr("src.retrieval.hybrid.check_hybrid_collection", _check)
+
+    retriever = ServerHybridRetriever(
+        HybridParams(collection="canonical"),
+        client=_Client(),  # type: ignore[arg-type]
+    )
+
+    assert checks == [("canonical", 1024, True)]
+    retriever.close()
+
+
+async def test_hybrid_retriever_owns_sync_embedding_and_uses_async_qdrant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _SyncClient:
+        def close(self) -> None:
+            return None
+
+    class _AsyncClient:
+        def __init__(self) -> None:
+            self.queries = 0
+            self.closed = False
+
+        async def query_points_groups(self, **_kwargs):  # type: ignore[no-untyped-def]
+            self.queries += 1
+            return _Resp([_Point("a", 0.8, {"page_id": "A", "text": "async"})])
+
+        async def close(self) -> None:
+            self.closed = True
+
+    class _Embed:
+        def get_query_embedding(self, _text: str) -> list[float]:
+            return [0.1, 0.2, 0.3]
+
+        async def aget_query_embedding(self, _text: str) -> list[float]:
+            raise AssertionError("global async embedding path must not be used")
+
+    async_client = _AsyncClient()
+    monkeypatch.setattr(
+        "src.retrieval.hybrid.check_hybrid_collection",
+        lambda *_a, **_k: SimpleNamespace(compatible=True),
+    )
+    monkeypatch.setattr("src.retrieval.hybrid.get_settings_embed_model", _Embed)
+
+    def _fail_sparse(_text: str) -> None:
+        raise SparseEncodingError("query encoding failed")
+
+    monkeypatch.setattr("src.retrieval.hybrid._encode_sparse_query", _fail_sparse)
+
+    retriever = ServerHybridRetriever(
+        HybridParams(collection="col"),
+        client=_SyncClient(),  # type: ignore[arg-type]
+        async_client=async_client,  # type: ignore[arg-type]
+    )
+    assert isinstance(retriever, BaseRetriever)
+    assert [node.node.get_content() for node in await retriever.aretrieve("query")] == [
+        "async"
+    ]
+    assert async_client.queries == 1
+
+    await retriever.aclose()
+    assert async_client.closed is True

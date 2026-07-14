@@ -1,34 +1,11 @@
-"""Core utilities for DocMind AI - essential functions only.
-
-This module provides the most essential utilities needed by the application:
-- Hardware detection for GPU acceleration
-- Startup configuration validation
-- Basic context managers for resource management
-- Performance timing utilities
-"""
-
-import gc
-import time
-from collections.abc import AsyncGenerator, Callable
-from contextlib import asynccontextmanager
-from functools import wraps
-from typing import Any
-
-import qdrant_client
+"""Canonical device selection and CUDA capacity helpers."""
 
 try:  # Optional torch - allow module import without GPU stack present
     import torch as TORCH  # type: ignore  # noqa: N812
 except ImportError:  # pragma: no cover - torch may be unavailable in CI
     TORCH = None  # type: ignore[assignment]
-from loguru import logger
-from qdrant_client.http.exceptions import (
-    ResponseHandlingException,
-    UnexpectedResponse,
-)
 
-from src.config import settings
-from src.config.settings import DocMindSettings
-from src.utils.log_safety import build_pii_log_entry
+BYTES_PER_GIB = 1024**3
 
 
 def is_cuda_available() -> bool:
@@ -63,8 +40,7 @@ def get_vram_gb(device_index: int = 0) -> float | None:
         if not cuda_mod:
             return None
         total_bytes = cuda_mod.get_device_properties(int(device_index)).total_memory
-        divisor = float(getattr(settings.monitoring, "bytes_to_gb_divisor", 1024**3))
-        return round(total_bytes / divisor, 1)
+        return round(total_bytes / BYTES_PER_GIB, 1)
     except (
         RuntimeError,
         AttributeError,
@@ -109,54 +85,6 @@ def resolve_device(prefer: str = "auto") -> tuple[str, int | None]:
         return ("cpu", None)
 
 
-def detect_hardware() -> dict[str, Any]:
-    """Detect basic hardware capabilities for GPU acceleration.
-
-    Returns:
-        Dictionary with cuda_available, gpu_name, vram_total_gb
-    """
-    hardware_info = {
-        "cuda_available": False,
-        "gpu_name": "Unknown",
-        "vram_total_gb": None,
-    }
-
-    try:
-        cuda_ok = is_cuda_available()
-        hardware_info["cuda_available"] = cuda_ok
-        if cuda_ok:
-            cuda_mod = getattr(TORCH, "cuda", None)
-            hardware_info["gpu_name"] = (
-                cuda_mod.get_device_name(0) if cuda_mod else "Unknown"
-            )
-            vram = get_vram_gb()
-            hardware_info["vram_total_gb"] = vram
-
-    except RuntimeError as e:
-        redaction = build_pii_log_entry(str(e), key_id="core.detect_hardware.cuda")
-        logger.warning(
-            "CUDA error during hardware detection (error_type={}, error={})",
-            type(e).__name__,
-            redaction.redacted,
-        )
-    except (OSError, AttributeError) as e:
-        redaction = build_pii_log_entry(str(e), key_id="core.detect_hardware.system")
-        logger.warning(
-            "System error during hardware detection (error_type={}, error={})",
-            type(e).__name__,
-            redaction.redacted,
-        )
-    except (ImportError, ModuleNotFoundError) as e:
-        redaction = build_pii_log_entry(str(e), key_id="core.detect_hardware.import")
-        logger.error(
-            "Import error during hardware detection (error_type={}, error={})",
-            type(e).__name__,
-            redaction.redacted,
-        )
-
-    return hardware_info
-
-
 def has_cuda_vram(min_gb: float, device_index: int = 0) -> bool:
     """Return True when CUDA is available and total VRAM ≥ ``min_gb`` for a device.
 
@@ -177,8 +105,7 @@ def has_cuda_vram(min_gb: float, device_index: int = 0) -> bool:
             return False
         props = cuda_mod.get_device_properties(int(device_index))
         total_bytes = float(getattr(props, "total_memory", 0.0))
-        divisor = float(getattr(settings.monitoring, "bytes_to_gb_divisor", 1024**3))
-        required_bytes = float(min_gb) * divisor
+        required_bytes = float(min_gb) * BYTES_PER_GIB
         return total_bytes >= required_bytes
     except (RuntimeError, AttributeError, ImportError, TypeError, ValueError):
         return False
@@ -212,139 +139,3 @@ def select_device(prefer: str = "auto") -> str:
     except (RuntimeError, AttributeError, ImportError, TypeError):
         selected = "cpu"
     return selected
-
-
-def validate_startup_configuration(app_settings: DocMindSettings) -> dict[str, Any]:
-    """Validate critical startup configuration.
-
-    Args:
-        app_settings: Application settings to validate
-
-    Returns:
-        Dict with validation results and any errors
-
-    Raises:
-        RuntimeError: If critical configuration errors found
-    """
-    results = {"valid": True, "warnings": [], "errors": [], "info": []}
-
-    # Check Qdrant connectivity (graceful offline)
-    try:
-        client = qdrant_client.QdrantClient(url=app_settings.database.qdrant_url)
-        client.get_collections()
-        results["info"].append(
-            f"Qdrant connection successful: {app_settings.database.qdrant_url}"
-        )
-        client.close()
-    except (ConnectionError, ResponseHandlingException, UnexpectedResponse) as e:
-        results["errors"].append(f"Qdrant connection failed: {e}")
-        results["valid"] = False
-    except OSError as e:
-        results["errors"].append(f"Qdrant network error: {e}")
-        results["valid"] = False
-    except (RuntimeError, ValueError) as e:  # pragma: no cover - transport-specific
-        results["errors"].append(f"Qdrant error: {e}")
-        results["valid"] = False
-
-    # Check GPU configuration
-    if app_settings.enable_gpu_acceleration:
-        try:
-            if is_cuda_available():
-                cuda_mod = getattr(TORCH, "cuda", None)
-                gpu_name = cuda_mod.get_device_name(0) if cuda_mod else "Unknown"
-                results["info"].append(f"GPU available: {gpu_name}")
-            else:
-                results["warnings"].append(
-                    "GPU acceleration enabled but no GPU available"
-                )
-        except RuntimeError as e:
-            results["warnings"].append(f"CUDA error during GPU detection: {e}")
-        except (ImportError, ModuleNotFoundError) as e:
-            results["warnings"].append(f"Import error during GPU detection: {e}")
-
-    # Configuration validation complete
-
-    # Do not raise: return structured result for callers/tests to handle
-
-    return results
-
-
-@asynccontextmanager
-async def managed_gpu_operation() -> AsyncGenerator[None]:
-    """Context manager for GPU operations with cleanup."""
-    try:
-        yield
-    finally:
-        if is_cuda_available():
-            cuda_mod = getattr(TORCH, "cuda", None)
-            if cuda_mod:
-                try:
-                    cuda_mod.synchronize()
-                except RuntimeError as exc:
-                    redaction = build_pii_log_entry(
-                        str(exc), key_id="core.gpu_cleanup.synchronize"
-                    )
-                    logger.debug(
-                        "GPU synchronize failed during cleanup "
-                        "(error_type={}, error={})",
-                        type(exc).__name__,
-                        redaction.redacted,
-                    )
-                try:
-                    cuda_mod.empty_cache()
-                except RuntimeError as exc:
-                    redaction = build_pii_log_entry(
-                        str(exc), key_id="core.gpu_cleanup.empty_cache"
-                    )
-                    logger.debug(
-                        "GPU cache clear failed during cleanup "
-                        "(error_type={}, error={})",
-                        type(exc).__name__,
-                        redaction.redacted,
-                    )
-        gc.collect()
-
-
-@asynccontextmanager
-async def managed_async_qdrant_client(
-    url: str,
-) -> AsyncGenerator[object]:
-    """Context manager for AsyncQdrantClient with proper cleanup.
-
-    Args:
-        url: Qdrant server URL
-
-    Yields:
-        AsyncQdrantClient: Properly managed client instance
-    """
-    client = None
-    try:
-        client = qdrant_client.AsyncQdrantClient(url=url)
-        yield client
-    finally:
-        if client is not None:
-            await client.close()
-
-
-def async_timer(func: Callable) -> Callable:
-    """Decorator to measure async function execution time.
-
-    Args:
-        func: Async function to time
-
-    Returns:
-        Wrapped function that logs execution time
-    """
-
-    @wraps(func)
-    async def wrapper(*args: Any, **kwargs: Any) -> Any:
-        start_time = time.perf_counter()
-        try:
-            result = await func(*args, **kwargs)
-            return result
-        finally:
-            end_time = time.perf_counter()
-            duration = end_time - start_time
-            logger.info("{} completed in {:.2f}s", func.__name__, duration)
-
-    return wrapper

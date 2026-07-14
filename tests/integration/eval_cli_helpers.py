@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import importlib.util
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
-import pandas as pd
 import pytest
 
 
@@ -21,10 +18,9 @@ def run_beir_cli(tmp_path: Path, *, sample_count: int | None = None) -> None:
         patch("tools.eval.run_beir.ServerHybridRetriever.retrieve") as retr,
         patch("tools.eval.run_beir.QdrantClient") as _qdrant,
         patch("src.retrieval.hybrid.QdrantClient", create=True) as _hybrid_qdrant,
-        patch(
-            "src.retrieval.hybrid.ensure_hybrid_collection", create=True
-        ) as _ensure_hybrid,
+        patch("src.retrieval.hybrid.check_hybrid_collection") as check_hybrid,
     ):
+        check_hybrid.return_value.compatible = True
         gdl.return_value.load.return_value = (
             {},
             {"q1": "What is AI?"},
@@ -62,47 +58,3 @@ def run_beir_cli(tmp_path: Path, *, sample_count: int | None = None) -> None:
             argv.extend(["--sample_count", str(sample_count)])
         with patch.object(sys, "argv", argv):
             beir_main()
-
-
-def run_ragas_cli(tmp_path: Path, *, sample_count: int | None = None) -> None:
-    """Run the RAGAS CLI with mocked dependencies."""
-    pytest.importorskip("tools.eval.run_ragas")
-    if importlib.util.find_spec("ragas") is None:
-        pytest.skip("requires ragas; install optional eval dependencies")
-    csv = tmp_path / "data.csv"
-    pd.DataFrame({"question": ["q1"], "ground_truth": ["gt"]}).to_csv(csv, index=False)
-
-    with (
-        patch("tools.eval.run_ragas.evaluate") as ev,
-        patch(
-            "src.agents.coordinator.MultiAgentCoordinator.process_query"
-        ) as process_query,
-    ):
-        process_query.return_value = SimpleNamespace(content="answer")
-        ev.return_value = {
-            "faithfulness": pd.Series([1.0]),
-            "answer_relevancy": pd.Series([1.0]),
-            "context_recall": pd.Series([1.0]),
-            "context_precision": pd.Series([1.0]),
-        }
-
-        from tools.eval.run_ragas import main as ragas_main
-
-        argv = [
-            "x",
-            "--dataset_csv",
-            str(csv),
-            "--results_dir",
-            str(tmp_path),
-            "--ragas_mode",
-            "offline",
-        ]
-        if sample_count is not None:
-            argv.extend(
-                [
-                    "--sample_count",
-                    str(sample_count),
-                ]
-            )
-        with patch.object(sys, "argv", argv):
-            ragas_main()

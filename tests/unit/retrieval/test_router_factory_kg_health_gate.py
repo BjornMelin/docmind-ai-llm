@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -12,7 +12,9 @@ from .conftest import get_router_tool_names
 
 
 @pytest.mark.unit
-def test_kg_tool_absent_when_builder_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_kg_tool_absent_when_builder_errors(
+    monkeypatch: pytest.MonkeyPatch, router_settings
+) -> None:  # type: ignore[no-untyped-def]
     """Graph tool is omitted when build_graph_query_engine raises."""
 
     def _broken_graph_builder(*_a: object, **_k: object) -> None:
@@ -27,70 +29,35 @@ def test_kg_tool_absent_when_builder_errors(monkeypatch: pytest.MonkeyPatch) -> 
 
     class _Vec:
         def as_query_engine(self, **kwargs):  # type: ignore[no-untyped-def]
-            return SimpleNamespace(qe=True, kwargs=kwargs)
+            return MagicMock(name="vector_qe")
 
     class _Pg:
         def __init__(self) -> None:
             self.property_graph_store = object()
 
-    cfg = SimpleNamespace(
-        enable_graphrag=True,
-        retrieval=SimpleNamespace(
-            top_k=3,
-            use_reranking=False,
-            reranking_top_k=2,
-            enable_server_hybrid=False,
-            enable_image_retrieval=True,
-        ),
-        graphrag_cfg=SimpleNamespace(default_path_depth=1),
-        database=SimpleNamespace(qdrant_collection="col"),
-    )
-
-    router = rf.build_router_engine(
-        _Vec(), pg_index=_Pg(), settings=cfg, enable_hybrid=False
-    )
-    assert set(get_router_tool_names(router)) == {
-        "semantic_search",
-        "multimodal_search",
-    }
+    router = rf.build_router_engine(_Vec(), pg_index=_Pg(), settings=router_settings)
+    assert get_router_tool_names(router) == ["semantic_search"]
 
 
 @pytest.mark.unit
-def test_kg_tool_present_when_builder_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_kg_tool_present_when_builder_ok(
+    monkeypatch: pytest.MonkeyPatch, router_settings
+) -> None:  # type: ignore[no-untyped-def]
     """Graph tool is present when build_graph_query_engine succeeds."""
     monkeypatch.setattr(
         rf,
         "build_graph_query_engine",
-        lambda *_a, **_k: SimpleNamespace(query_engine=SimpleNamespace(kind="kg")),
+        lambda *_a, **_k: MagicMock(query_engine=MagicMock(name="graph_qe")),
         raising=True,
     )
 
     class _Vec:
         def as_query_engine(self, **kwargs):  # type: ignore[no-untyped-def]
-            return SimpleNamespace(qe=True, kwargs=kwargs)
+            return MagicMock(name="vector_qe")
 
     class _Pg:
         def __init__(self) -> None:
             self.property_graph_store = object()
 
-    cfg = SimpleNamespace(
-        enable_graphrag=True,
-        retrieval=SimpleNamespace(
-            top_k=3,
-            use_reranking=False,
-            reranking_top_k=2,
-            enable_server_hybrid=False,
-            enable_image_retrieval=True,
-        ),
-        graphrag_cfg=SimpleNamespace(default_path_depth=1),
-        database=SimpleNamespace(qdrant_collection="col"),
-    )
-
-    router = rf.build_router_engine(
-        _Vec(), pg_index=_Pg(), settings=cfg, enable_hybrid=False
-    )
-    assert set(get_router_tool_names(router)) == {
-        "semantic_search",
-        "multimodal_search",
-        "knowledge_graph",
-    }
+    router = rf.build_router_engine(_Vec(), pg_index=_Pg(), settings=router_settings)
+    assert get_router_tool_names(router) == ["semantic_search", "knowledge_graph"]

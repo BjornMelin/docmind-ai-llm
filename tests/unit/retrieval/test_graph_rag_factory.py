@@ -39,11 +39,7 @@ class _FakeQueryEngine:
 
 @pytest.fixture(autouse=True)
 def _stub_llama_index(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        graph_config,
-        "get_llama_index_adapter",
-        lambda: SimpleNamespace(RetrieverQueryEngine=_FakeQueryEngine),
-    )
+    monkeypatch.setattr(graph_config, "RetrieverQueryEngine", _FakeQueryEngine)
 
 
 def test_build_graph_query_engine_uses_property_graph_index() -> None:
@@ -68,15 +64,8 @@ def test_build_graph_query_engine_uses_property_graph_index() -> None:
     }
 
 
-def test_build_graph_retriever_uses_property_graph_index_directly(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_build_graph_retriever_uses_property_graph_index_directly() -> None:
     index = _FakePropertyGraphIndex()
-    monkeypatch.setattr(
-        graph_config,
-        "get_llama_index_adapter",
-        lambda: pytest.fail("retriever construction loaded query-engine dependencies"),
-    )
 
     retriever = graph_config.build_graph_retriever(
         index,

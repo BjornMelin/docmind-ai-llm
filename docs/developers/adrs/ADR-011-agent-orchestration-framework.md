@@ -2,8 +2,8 @@
 ADR: 011
 Title: Agent Orchestration with LangGraph StateGraph
 Status: Accepted (Amended)
-Version: 7.3
-Date: 2026-07-11
+Version: 7.5
+Date: 2026-07-13
 Supersedes:
 Superseded-by:
 Related: 001, 003, 004, 010, 015, 016, 024, 066
@@ -15,7 +15,7 @@ References:
 
 ## Description
 
-Use LangGraph `StateGraph` to coordinate five agent roles (router, planner, retrieval, synthesis, validation). Preserve the existing external coordinator behavior while removing the legacy third‑party supervisor wrapper (which depended on deprecated LangGraph prebuilts in the pinned version).
+Use LangGraph `StateGraph` to coordinate four agent roles: planner, retrieval, synthesis, and validation. The retrieval worker delegates strategy selection to LlamaIndex's native `RouterQueryEngine`. Preserve the external coordinator behavior while removing the legacy third-party supervisor wrapper and duplicate query-routing agent.
 
 ## Context
 
@@ -62,27 +62,25 @@ potential before replacement can be considered.
 
 ## Decision
 
-Adopt a graph-native LangGraph `StateGraph` for five-agent coordination with minimal customization. Preserve the current `MultiAgentCoordinator` external API and state fields. Keep per-role agents built with LangChain v1 `create_agent` and keep the existing tool interfaces (LangChain tools with LangGraph `InjectedState` / `ToolRuntime` injection).
+Adopt a graph-native LangGraph `StateGraph` for four-agent coordination with minimal customization. Preserve the current `MultiAgentCoordinator` external API. Keep per-role agents built with LangChain v1 `create_agent`, retain the existing LangChain tool interfaces with LangGraph `ToolRuntime` injection, and make LlamaIndex's `RouterQueryEngine` the sole retrieval-strategy selector.
 
 ### Agent Roles and Coordinator
 
 - `Supervisor/Coordinator`: Central controller that routes, hands off, and collects outcomes; owns prompt and guardrails
-- `Router`: Chooses retrieval path (hybrid, hierarchical, graph) based on query/metadata
 - `Planner`: Decomposes complex queries into sub‑tasks (optional early‑exit for simple queries)
-- `Retrieval`: Executes adaptive retrieval (ADR‑003), including multimodal reranking (ADR‑037)
+- `Retrieval`: Uses the native router for adaptive retrieval (ADR‑003), including multimodal reranking (ADR‑037)
 - `Synthesis`: Aggregates evidence into a coherent answer with citations
 - `Validation`: Checks relevance/faithfulness; may trigger correction or re‑route
 
 ## High-Level Architecture
 
-User → Supervisor → {Router → Planner → Retrieval → Synthesis → Validation} → Response
+User → Supervisor → {Planner → Retrieval → Synthesis → Validation} → Response
 
 ```mermaid
 graph TD
   U["User"] --> S["Supervisor"]
-  S --> R["Router"]
-  R -->|complex| P["Planner"]
-  R -->|simple| T["Retrieval"]
+  S -->|complex| P["Planner"]
+  S -->|simple| T["Retrieval"]
   P --> T
   T --> Y["Synthesis"]
   Y --> V["Validation"]
@@ -95,7 +93,7 @@ graph TD
 
 - FR‑1: Orchestrate multi‑agent workflows with conditional execution
 - FR‑2: Maintain conversation context and pass state
-- FR‑3: Provide fallback and retries for failed steps
+- FR‑3: Provide bounded retries and explicit timeout or error responses
 
 ### Non-Functional Requirements
 
@@ -117,7 +115,7 @@ graph TD
 
 ### Architecture Overview
 
-- Five roles implemented with LangChain v1 `create_agent`; early exits where applicable
+- Four roles implemented with LangChain v1 `create_agent`; early exits where applicable
 - Minimal prompts; rely on Supervisor primitives
 
 ### Implementation Details
@@ -131,23 +129,20 @@ from src.agents.models import MultiAgentGraphState
 from src.agents.supervisor_graph import (
     SupervisorBuildParams,
     build_multi_agent_supervisor_graph,
-    create_forward_message_tool,
 )
 
 # Build role-specific agents (LangChain v1 create_agent).
-router_agent = create_agent(model, tools=router_tools, state_schema=MultiAgentGraphState, name="router_agent")
 planner_agent = create_agent(model, tools=planner_tools, state_schema=MultiAgentGraphState, name="planner_agent")
 retrieval_agent = create_agent(model, tools=retrieval_tools, state_schema=MultiAgentGraphState, name="retrieval_agent")
 synthesis_agent = create_agent(model, tools=synthesis_tools, state_schema=MultiAgentGraphState, name="synthesis_agent")
 validation_agent = create_agent(model, tools=validation_tools, state_schema=MultiAgentGraphState, name="validation_agent")
 
-# Build a parent StateGraph supervisor that routes via handoff tools (Command.PARENT).
+# Build a parent StateGraph supervisor with one atomic dispatch tool.
 graph = build_multi_agent_supervisor_graph(
-    [router_agent, planner_agent, retrieval_agent, synthesis_agent, validation_agent],
+    [planner_agent, retrieval_agent, synthesis_agent, validation_agent],
     model=model,
     prompt=SUPERVISOR_PROMPT,
     state_schema=MultiAgentGraphState,
-    extra_tools=[create_forward_message_tool(supervisor_name="supervisor")],
     params=SupervisorBuildParams(output_mode="last_message"),
 )
 compiled = graph.compile(checkpointer=InMemorySaver(), store=store)
@@ -158,21 +153,22 @@ compiled = graph.compile(checkpointer=InMemorySaver(), store=store)
 - `output_mode`: Controls message history added by each subagent handoff. Supported values:
   - `"last_message"` (default): Add only the final agent message
   - `"full_history"`: Add the entire agent message history
-- `create_forward_message_tool`: Allow direct message passthrough when no processing is needed
-- `add_handoff_messages`: Emit coordination breadcrumbs for debugging and audits
-- `add_handoff_back_messages` (deprecated): Emit return-to-supervisor breadcrumbs after each subagent. Prefer `add_handoff_messages` unless you need explicit back-edge tracing.
+- `dispatch_agents`: The supervisor's only navigation tool. One call carries a
+  unique destination list and schedules independent workers atomically.
+- `add_handoff_messages`: Emit coordination breadcrumbs for debugging and audits.
+- `add_handoff_back_messages`: Emit return-to-supervisor breadcrumbs after each
+  worker.
 - Hooks: Apply trimming/metrics with LangChain agent middleware (`before_model`/`after_model`).
   When trimming messages, use the `RemoveMessage(id=REMOVE_ALL_MESSAGES)` mechanism so the
   `add_messages` reducer replaces history rather than appending.
 
 ### Configuration
 
-- Flags: `parallel_tool_calls`, `max_parallel_calls`, log level
-- Expose as part of unified settings (ADR‑024)
+LangGraph owns atomic dispatch scheduling. DocMind exposes only live coordinator
+budgets and injection controls through unified settings (ADR-024).
 
 ```env
-DOCMIND_AGENTS__ENABLE_PARALLEL_TOOL_EXECUTION=true
-DOCMIND_AGENTS__MAX_CONCURRENT_AGENTS=3
+DOCMIND_AGENTS__DECISION_TIMEOUT=200
 DOCMIND_LOG_LEVEL=INFO
 ```
 
@@ -191,7 +187,7 @@ def test_supervisor_boots_with_agents(supervisor_app):
 
 ## Limitations / Future Improvements
 
-- Deadline propagation: The supervisor’s wall-clock timeout (decision timeout) is enforced at the coordinator boundary. Deadlines are not yet propagated to nested LLM/tool calls, so a long-running subcall may continue even after the overall timeout has elapsed. In practice, the coordinator returns a timeout fallback quickly and stops streaming to the UI, but subcalls may continue in the background. A future enhancement should propagate an absolute deadline or remaining time budget through agent graph calls and tools to enable cooperative cancellation.
+- Deadline propagation: The supervisor’s wall-clock timeout (decision timeout) is enforced at the coordinator boundary. Deadlines are not yet propagated to every nested LLM/tool call, so a long-running subcall may continue after the overall timeout has elapsed. The coordinator returns a canonical timeout response and stops consuming supervisor state, but a subcall without cooperative cancellation may continue in the background. A future enhancement should propagate an absolute deadline or remaining time budget through every agent graph call and tool.
 - Tool invocation model: The current supervisor graph calls subagents synchronously
   via `agent.invoke(...)`. Tools SHOULD remain sync-callable (`BaseTool.invoke(...)`)
   unless the orchestration is migrated end-to-end to async. Parallel tool execution,
@@ -211,12 +207,10 @@ def test_supervisor_boots_with_agents(supervisor_app):
 
 ### Dependencies
 
-- Python and package constraints: See `pyproject.toml` and `uv.lock` for
-  authoritative versions. As of ADR-066, the lockfile contains
-  `langgraph==1.1.10`, `langgraph-checkpoint==4.0.3`,
-  `langgraph-checkpoint-sqlite==3.0.3`, `langchain==1.2.16`,
-  `langchain-core==1.3.2`, `llama-index-core==0.14.21`, selected adapters, and
-  `llama-index-workflows==2.20.0` as a transitive dependency.
+- `pyproject.toml` defines compatible dependency ranges and `uv.lock` records
+  the authoritative resolved versions. The runtime uses LangGraph, LangChain,
+  `llama-index-core`, and selected adapters. `llama-index-workflows` remains a
+  transitive dependency rather than a second orchestration runtime.
 
 ### Ongoing Maintenance & Considerations
 
@@ -226,6 +220,10 @@ def test_supervisor_boots_with_agents(supervisor_app):
 
 ## Changelog
 
+- 7.5 (2026-07-13): Hard-cut supervisor navigation to one atomic
+  `dispatch_agents` tool and remove competing parent-navigation tools.
+- 7.4 (2026-07-13): Remove the obsolete shared-client toggle and brittle lockfile
+  version snapshot; keep provider retries and resolved versions with their owners
 - 7.3 (2026-07-11): Replaced the removed LlamaIndex meta-package reference with the direct core and selected-adapter contract.
 - 7.2 (2026-05-01): Linked ADR-066 issue #86 decision; reaffirmed LangGraph as
   the default runtime and refreshed dependency posture.
@@ -234,14 +232,16 @@ def test_supervisor_boots_with_agents(supervisor_app):
 - 7.0 (2026‑01‑17): Migrate orchestration to graph-native LangGraph `StateGraph`;
   remove legacy third‑party supervisor wrapper due to deprecated prebuilt agent
   dependency.
-- 6.2 (2025‑09‑04): Restored explicit agent role list and supervisor configuration details (output_mode, create_forward_message_tool, handoff messages) with hook notes and prompt
+- 6.2 (2025‑09‑04): Restored the explicit agent role list and then-current
+  supervisor handoff options with hook notes and prompt guidance.
 - 6.1 (2025‑09‑04): Standardized to template; added diagram, PR/IR, config/tests
 - 6.0 (2025‑08‑19): Accepted Supervisor implementation; integrates ADR‑003/004/010
 
 ## Supervisor Configuration Updates
 
 - Supervisor `output_mode` MUST be one of `last_message` (default) or `full_history`. A custom `structured` output mode is NOT supported; structured metadata SHOULD be carried in state/response models.
-- Prefer `create_forward_message_tool("supervisor")` when summarization is unnecessary.
+- Finish with a direct supervisor response. Do not expose a second parent-navigation
+  tool alongside `dispatch_agents`.
 
 ## Performance & Timeouts
 

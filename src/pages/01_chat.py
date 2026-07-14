@@ -8,35 +8,44 @@ writing the response in small chunks to the UI for better perceived latency.
 
 from __future__ import annotations
 
-import atexit
 import contextlib
 import functools
 import sqlite3
 import threading
-import uuid
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import streamlit as st
 from langchain_core.messages import AIMessage, HumanMessage
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.store.sqlite import SqliteStore
 from loguru import logger
 from opentelemetry import trace
 
 from src.agents.coordinator import MultiAgentCoordinator
+from src.agents.tools.memory import (
+    MemoryCapacityError,
+    MemoryWrite,
+    advance_memory_namespace_generation,
+    delete_memory,
+    memory_namespace_lock,
+    save_memory,
+)
 from src.analysis.models import AnalysisResult, DocumentRef
 from src.analysis.service import (
     AnalysisCancelledError,
     discover_uploaded_documents,
     run_analysis,
 )
+from src.config import setup_llamaindex
 from src.config.settings import settings
 from src.persistence.artifacts import ArtifactRef, ArtifactStore
-from src.persistence.chat_db import open_chat_db, touch_session
+from src.persistence.chat_db import touch_session
+from src.persistence.checkpoint_identity import memory_namespace
 from src.persistence.langchain_embeddings import LlamaIndexEmbeddingsAdapter
-from src.persistence.memory_store import DocMindSqliteStore
+from src.persistence.memory_store import close_memory_store, open_memory_store
 from src.persistence.snapshot import (
     latest_snapshot_dir,
     load_manifest,
@@ -61,6 +70,7 @@ from src.ui.background_jobs import (
     get_job_manager,
     get_or_create_owner_id,
 )
+from src.ui.chat_runtime import get_coordinator as get_chat_coordinator
 from src.ui.chat_sessions import (
     ChatSelection,
     get_chat_db_conn,
@@ -68,89 +78,115 @@ from src.ui.chat_sessions import (
     render_time_travel_sidebar,
 )
 from src.ui.components.provider_badge import provider_badge
+from src.ui.router_session import (
+    replace_session_router,
+    session_router_is_current,
+)
+from src.ui.vector_session import VectorIndexResource, replace_session_vector_resource
 from src.utils.log_safety import build_pii_log_entry
 from src.utils.telemetry import log_jsonl
 
 # Exact UI copy required by SPEC-014 acceptance
 STALE_TOOLTIP = (
     "Snapshot is stale (content/config changed). Rebuild in Documents → "
-    "Rebuild GraphRAG Snapshot."
+    "Rebuild search index."
 )
 
 
 _TRACER = trace.get_tracer("docmind.chat")
 
-
-@st.cache_resource(show_spinner=False)
-def _get_checkpointer() -> SqliteSaver:
-    """Initialize and return the SQLite checkpointer for LangGraph.
-
-    Returns:
-        SqliteSaver: Configured checkpointer instance.
-    """
-    conn = open_chat_db(settings.chat.sqlite_path, cfg=settings)
-    saver = SqliteSaver(conn)
-    saver.setup()
-    atexit.register(_close_checkpointer, saver, conn)
-    return saver
+_MEMORY_CAPACITY_ERROR = "Memory limit reached. Delete a memory before adding another."
+_MEMORY_SAVE_ERROR = "Memory could not be saved. Please retry."
+_MEMORY_SAVE_REJECTED_ERROR = "This memory scope was purged and is no longer writable."
+_MEMORY_SEARCH_ERROR = "Memories could not be loaded. Please retry."
+_MEMORY_DELETE_ERROR = "Memory could not be deleted. Please retry."
 
 
-@st.cache_resource(show_spinner=False)
-def _get_memory_store() -> DocMindSqliteStore:
+@dataclass(frozen=True, slots=True)
+class _MemoryPurgeResult:
+    """Outcome of one verified namespace purge."""
+
+    deleted: int
+    failures: int
+    complete: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _MemoryOperationResult[ValueT]:
+    """Sanitized result of one sidebar memory-store operation."""
+
+    value: ValueT | None
+    error: str | None
+
+
+def _run_memory_operation[ValueT](
+    operation: Callable[[], ValueT],
+    *,
+    name: str,
+    error_message: str,
+    accepted: Callable[[ValueT], bool] | None = None,
+    rejected_message: str | None = None,
+) -> _MemoryOperationResult[ValueT]:
+    """Run one memory operation behind the sidebar's error boundary."""
+    try:
+        value = operation()
+    except MemoryCapacityError:
+        return _MemoryOperationResult(value=None, error=_MEMORY_CAPACITY_ERROR)
+    except Exception as exc:
+        redaction = build_pii_log_entry(str(exc), key_id=f"chat.memory_{name}")
+        logger.debug(
+            "Memory sidebar operation failed (operation={} error_type={} error={})",
+            name,
+            type(exc).__name__,
+            redaction.redacted,
+        )
+        return _MemoryOperationResult(value=None, error=error_message)
+
+    if accepted is not None and not accepted(value):
+        logger.warning("Memory sidebar operation rejected (operation={})", name)
+        return _MemoryOperationResult(
+            value=None,
+            error=rejected_message or error_message,
+        )
+    return _MemoryOperationResult(value=value, error=None)
+
+
+def _close_memory_store(store: SqliteStore) -> None:
+    """Close the memory store."""
+    with contextlib.suppress(Exception):
+        close_memory_store(store)
+
+
+@st.cache_resource(show_spinner=False, on_release=_close_memory_store)
+def _get_memory_store() -> SqliteStore:
     """Initialize and return the SQLite-backed memory store.
 
     Returns:
-        DocMindSqliteStore: Configured memory store instance.
+        Configured native LangGraph SQLite store.
     """
-    store = DocMindSqliteStore(
+    setup_llamaindex()
+    return open_memory_store(
         settings.chat.sqlite_path,
         index={
             "dims": int(settings.embedding.dimension),
             "embed": LlamaIndexEmbeddingsAdapter(),
             "fields": ["content"],
         },
-        filter_fetch_cap=int(settings.chat.memory_store_filter_fetch_cap),
         cfg=settings,
     )
-    atexit.register(_close_memory_store, store)
-    return store
 
 
-@st.cache_resource(show_spinner=False)
 def _get_coordinator() -> MultiAgentCoordinator:
     """Initialize and return the MultiAgentCoordinator.
 
     Returns:
         MultiAgentCoordinator: Configured coordinator instance.
     """
-    return MultiAgentCoordinator(
-        checkpointer=_get_checkpointer(), store=_get_memory_store()
+    return get_chat_coordinator(
+        cache_version=settings.cache_version,
+        checkpointer_path=settings.chat.sqlite_path,
+        store=_get_memory_store(),
     )
-
-
-def _close_checkpointer(saver: SqliteSaver, conn: Any) -> None:
-    """Close the checkpointer and its underlying database connection.
-
-    Args:
-        saver: The SqliteSaver instance to close.
-        conn: The SQLite connection to close.
-    """
-    with contextlib.suppress(Exception):
-        close = getattr(saver, "close", None)
-        if callable(close):
-            close()
-    with contextlib.suppress(Exception):
-        conn.close()
-
-
-def _close_memory_store(store: DocMindSqliteStore) -> None:
-    """Close the memory store.
-
-    Args:
-        store: The DocMindSqliteStore instance to close.
-    """
-    with contextlib.suppress(Exception):
-        store.close()
 
 
 def _chunked_stream(text: str, chunk_size: int = 48) -> Iterable[str]:
@@ -172,25 +208,19 @@ def _get_settings_override() -> dict[str, Any] | None:
 
     Uses a prebuilt router engine stored in Streamlit session state by the
     Documents page. When present, this enables intelligent routing in Chat.
-    Also forwards optional retrieval components when available:
-    - vector_index -> tools_data['vector'] for vector/hybrid flows
-    - hybrid_retriever -> tools_data['retriever'] for server-side fusion
-    - graphrag_index -> tools_data['kg'] for GraphRAG flows
+    The router is forwarded through LangGraph's transient
+    ``ToolRuntime.context`` and is never persisted in checkpoints.
 
     Returns:
         dict[str, Any] | None: Settings override dictionary or None.
     """
     overrides: dict[str, Any] = {}
     router = st.session_state.get("router_engine")
-    if router is not None:
+    if session_router_is_current(
+        st.session_state,
+        runtime_generation=settings.cache_version,
+    ):
         overrides["router_engine"] = router
-    # Optional retrieval components
-    if st.session_state.get("vector_index") is not None:
-        overrides["vector"] = st.session_state["vector_index"]
-    if st.session_state.get("hybrid_retriever") is not None:
-        overrides["retriever"] = st.session_state["hybrid_retriever"]
-    if st.session_state.get("graphrag_index") is not None:
-        overrides["kg"] = st.session_state["graphrag_index"]
     return overrides or None
 
 
@@ -202,8 +232,15 @@ def main() -> None:  # pragma: no cover - Streamlit page
 
     owner_id = get_or_create_owner_id()
     conn = get_chat_db_conn()
-    selection = render_session_sidebar(conn)
     coord = _get_coordinator()
+    selection = render_session_sidebar(
+        conn,
+        hard_purge=lambda thread_id, user_id: coord.purge_session(
+            conn=conn,
+            thread_id=thread_id,
+            user_id=user_id,
+        ),
+    )
     render_time_travel_sidebar(
         coord=coord,
         conn=conn,
@@ -309,11 +346,11 @@ def _memory_sidebar_namespace(
         tuple[str, ...]: The hierarchical namespace for memory storage.
     """
     if scope == "session":
-        return ("memories", str(user_id), str(thread_id))
-    return ("memories", str(user_id))
+        return memory_namespace(user_id=user_id, thread_id=thread_id)
+    return memory_namespace(user_id=user_id)
 
 
-def _render_memory_add(store: DocMindSqliteStore, ns: tuple[str, ...]) -> None:
+def _render_memory_add(store: SqliteStore, ns: tuple[str, ...]) -> None:
     """Render the UI to add a new memory.
 
     Args:
@@ -321,22 +358,34 @@ def _render_memory_add(store: DocMindSqliteStore, ns: tuple[str, ...]) -> None:
         ns: The storage namespace.
     """
     add = st.text_input("Add memory", key="memory_add")
-    last_saved = st.session_state.get("_memory_last_saved")
+    st.session_state.pop("_memory_last_saved", None)
     if st.button("Save memory", key="memory_save") and add.strip():
         content = add.strip()
-        if content != last_saved:
-            store.put(
+        result = _run_memory_operation(
+            lambda: save_memory(
+                store,
                 ns,
-                str(uuid.uuid4()),
-                {"content": content, "kind": "fact", "importance": 0.7},
-                index=["content"],
-            )
-            st.session_state["_memory_last_saved"] = content
-            st.session_state["memory_add"] = ""
-            st.rerun()
+                write=MemoryWrite(
+                    content=content,
+                    kind="fact",
+                    importance=0.7,
+                    tags=None,
+                    origin="explicit",
+                ),
+            ),
+            name="save",
+            error_message=_MEMORY_SAVE_ERROR,
+            accepted=lambda memory_id_value: memory_id_value is not None,
+            rejected_message=_MEMORY_SAVE_REJECTED_ERROR,
+        )
+        if result.error is not None:
+            st.error(result.error)
+            return
+        st.session_state["memory_add"] = ""
+        st.rerun()
 
 
-def _render_memory_results(store: DocMindSqliteStore, ns: tuple[str, ...]) -> None:
+def _render_memory_results(store: SqliteStore, ns: tuple[str, ...]) -> None:
     """Render memory search results and deletion controls.
 
     Args:
@@ -344,7 +393,19 @@ def _render_memory_results(store: DocMindSqliteStore, ns: tuple[str, ...]) -> No
         ns: The storage namespace.
     """
     q = st.text_input("Search", key="memory_search").strip()
-    results = store.search(ns, query=q or None, limit=10)
+    search_result = _run_memory_operation(
+        lambda: store.search(ns, query=q or None, limit=10),
+        name="search",
+        error_message=_MEMORY_SEARCH_ERROR,
+        accepted=lambda results: results is not None,
+    )
+    if search_result.error is not None:
+        st.error(search_result.error)
+        return
+    results = search_result.value
+    if results is None:
+        st.error(_MEMORY_SEARCH_ERROR)
+        return
     if not results:
         st.caption("No memories stored.")
         return
@@ -364,12 +425,26 @@ def _render_memory_results(store: DocMindSqliteStore, ns: tuple[str, ...]) -> No
             disabled=not confirm,
         ):
             item_namespace = getattr(item, "namespace", ns)
-            store.delete(item_namespace, str(item.key))
+            delete_result = _run_memory_operation(
+                lambda item=item, item_namespace=item_namespace: delete_memory(
+                    store,
+                    item_namespace,
+                    str(item.key),
+                ),
+                name="delete",
+                error_message=_MEMORY_DELETE_ERROR,
+                accepted=bool,
+            )
+            if delete_result.error is not None:
+                st.error(delete_result.error)
+                return
             st.session_state.pop(confirm_key, None)
             st.rerun()
 
 
-def _purge_memory_namespace(store: DocMindSqliteStore, ns: tuple[str, ...]) -> int:
+def _purge_memory_namespace(
+    store: SqliteStore, ns: tuple[str, ...]
+) -> _MemoryPurgeResult:
     """Delete all memory items in a given namespace.
 
     Args:
@@ -377,51 +452,86 @@ def _purge_memory_namespace(store: DocMindSqliteStore, ns: tuple[str, ...]) -> i
         ns: The storage namespace to purge.
 
     Returns:
-        int: Total number of items purged.
+        Verified deletion count, failure count, and completion state.
     """
     purged = 0
     max_batches = 100
     total_failures = 0
     max_failures = 50
-    for _ in range(max_batches):
-        batch = store.search(ns, query=None, limit=5000)
-        if not batch:
-            break
-
-        batch_deleted = 0
-        for item in batch:
-            try:
-                store.delete(getattr(item, "namespace", ns), str(item.key))
-                batch_deleted += 1
-            except Exception as exc:
-                redaction = build_pii_log_entry(str(exc), key_id="chat.memory_delete")
-                key_redacted = build_pii_log_entry(
-                    str(item.key), key_id="chat.memory_item_key"
-                ).redacted
-                logger.debug(
-                    "Failed to delete memory item (key={}, error_type={}, error={})",
-                    key_redacted,
-                    type(exc).__name__,
-                    redaction.redacted,
-                )
+    with memory_namespace_lock(ns):
+        advance_memory_namespace_generation(ns)
+        search_failed = False
+        for _ in range(max_batches):
+            search_result = _run_memory_operation(
+                lambda: store.search(ns, query=None, limit=5000),
+                name="purge_search",
+                error_message=_MEMORY_SEARCH_ERROR,
+                accepted=lambda results: results is not None,
+            )
+            if search_result.error is not None:
                 total_failures += 1
+                search_failed = True
+                break
+            batch = search_result.value
+            if batch is None:
+                total_failures += 1
+                search_failed = True
+                break
+            if not batch:
+                break
 
-        if batch_deleted == 0:
-            logger.warning("Purge stuck: failed to delete any items in batch")
-            break
-        if total_failures >= max_failures:
-            logger.warning("Purge aborted: too many failures ({})", total_failures)
-            break
+            batch_deleted = 0
+            for item in batch:
+                delete_result = _run_memory_operation(
+                    lambda item=item: delete_memory(
+                        store,
+                        getattr(item, "namespace", ns),
+                        str(item.key),
+                    ),
+                    name="purge_delete",
+                    error_message=_MEMORY_DELETE_ERROR,
+                    accepted=bool,
+                )
+                if delete_result.error is not None:
+                    total_failures += 1
+                else:
+                    batch_deleted += 1
 
-        purged += batch_deleted
-        if len(batch) < 5000:
-            break
+            purged += batch_deleted
+            if batch_deleted == 0:
+                logger.warning("Purge stuck: failed to delete any items in batch")
+                break
+            if total_failures >= max_failures:
+                logger.warning("Purge aborted: too many failures ({})", total_failures)
+                break
 
-    return purged
+            if len(batch) < 5000:
+                break
+
+        if search_failed:
+            complete = False
+        else:
+            verify_result = _run_memory_operation(
+                lambda: store.search(ns, query=None, limit=1),
+                name="purge_verify",
+                error_message=_MEMORY_SEARCH_ERROR,
+                accepted=lambda results: results is not None,
+            )
+            if verify_result.error is not None:
+                total_failures += 1
+                complete = False
+            else:
+                complete = not verify_result.value
+
+    return _MemoryPurgeResult(
+        deleted=purged,
+        failures=total_failures,
+        complete=complete,
+    )
 
 
 def _render_memory_purge(
-    store: DocMindSqliteStore,
+    store: SqliteStore,
     ns: tuple[str, ...],
     scope: str,
     user_id: str,
@@ -449,16 +559,22 @@ def _render_memory_purge(
         key=f"mem_purge__{scope}__{user_id}__{thread_id}",
         disabled=not purge_confirm,
     ):
-        purged = _purge_memory_namespace(store=store, ns=ns)
+        result = _purge_memory_namespace(store=store, ns=ns)
         logger.info(
-            "Purged {} memory items (scope={} user_id={} thread_id={})",
-            purged,
+            "Purged memory items (count={} failures={} complete={} scope={})",
+            result.deleted,
+            result.failures,
+            result.complete,
             scope,
-            user_id,
-            thread_id,
         )
-        st.session_state.pop(purge_confirm_key, None)
-        st.rerun()
+        if result.complete:
+            st.session_state.pop(purge_confirm_key, None)
+            st.rerun()
+        else:
+            st.error(
+                "Memory purge is incomplete. No confirmation was cleared; retry "
+                "after checking the local store."
+            )
 
 
 def _render_memory_sidebar(user_id: str, thread_id: str) -> None:
@@ -495,20 +611,29 @@ def _ensure_router_engine() -> None:
             redaction.redacted,
         )
         st.caption("Autoload skipped.")
-    if "router_engine" not in st.session_state:
-        try:
-            snap = latest_snapshot_dir()
-            if snap is not None:
-                _hydrate_router_from_snapshot(snap)
-        except Exception as exc:
-            redaction = build_pii_log_entry(str(exc), key_id="chat.hydrate_router")
-            logger.debug(
-                "Hydration from snapshot failed (error_type={}, error={})",
-                type(exc).__name__,
-                redaction.redacted,
-            )
-    if "router_engine" not in st.session_state:
-        st.session_state["router_engine"] = None
+        _clear_snapshot_runtime()
+    if not session_router_is_current(
+        st.session_state,
+        runtime_generation=settings.cache_version,
+    ):
+        _clear_snapshot_runtime()
+
+
+def _clear_snapshot_runtime() -> None:
+    """Close and forget all snapshot-owned session resources."""
+    replace_session_vector_resource(
+        st.session_state,
+        None,
+        runtime_generation=settings.cache_version,
+    )
+    replace_session_router(
+        st.session_state,
+        None,
+        runtime_generation=settings.cache_version,
+    )
+    st.session_state.pop("graphrag_index", None)
+    st.session_state.pop("_snapshot_loaded_id", None)
+    st.session_state.pop("_snapshot_collections", None)
 
 
 def _render_staleness_badge() -> None:
@@ -603,7 +728,6 @@ def _handle_chat_prompt(
     try:
         resp = coord.process_query(
             query=prompt,
-            context=None,
             settings_override=overrides,
             thread_id=selection.thread_id,
             user_id=selection.user_id,
@@ -791,9 +915,11 @@ def _render_analysis_sidebar(*, owner_id: str) -> None:
         )
 
         if cancel_clicked and has_job:
-            get_job_manager(settings.cache_version).cancel(
+            if get_job_manager(settings.cache_version).cancel(
                 str(job_id), owner_id=owner_id
-            )
+            ):
+                st.session_state["analysis_cancel_requested_id"] = str(job_id)
+                st.warning("Cancellation requested. Waiting for a safe stopping point.")
             return
 
         if not run_clicked:
@@ -859,12 +985,23 @@ def _render_analysis_job_panel(*, owner_id: str) -> None:
     if message:
         st.caption(message)
 
-    if state.status == "running":
-        if st.button("Cancel analysis", key="analysis_cancel_inline"):
-            job_manager.cancel(job_id, owner_id=owner_id)
+    if state.status in ("queued", "running"):
+        cancellation_requested = (
+            st.session_state.get("analysis_cancel_requested_id") == job_id
+        )
+        if st.button(
+            "Cancel analysis",
+            key="analysis_cancel_inline",
+            disabled=cancellation_requested,
+        ) and job_manager.cancel(job_id, owner_id=owner_id):
+            st.session_state["analysis_cancel_requested_id"] = job_id
+            cancellation_requested = True
+        if cancellation_requested:
+            st.warning("Cancellation requested. Waiting for a safe stopping point.")
         return
 
     st.session_state.pop("analysis_job_id", None)
+    st.session_state.pop("analysis_cancel_requested_id", None)
     succeeded = state.status == "succeeded"
     result_is_analysis = isinstance(state.result, AnalysisResult)
     if succeeded and result_is_analysis:
@@ -932,15 +1069,12 @@ def _visual_search_inputs() -> tuple[Any | None, int, bool]:
 
 
 @st.cache_resource
-def _get_image_siglip_retriever() -> Any:
+def _get_image_siglip_retriever(collection_name: str, cache_version: int) -> Any:
     """Get cached ImageSiglipRetriever to avoid reconnection overhead."""
     from src.retrieval.multimodal_fusion import ImageSearchParams, ImageSiglipRetriever
 
-    return ImageSiglipRetriever(
-        ImageSearchParams(
-            collection=settings.database.qdrant_image_collection, top_k=10
-        )
-    )
+    del cache_version
+    return ImageSiglipRetriever(ImageSearchParams(collection=collection_name, top_k=10))
 
 
 def _query_visual_search(upload: Any, top_k: int) -> list[Any]:
@@ -968,7 +1102,16 @@ def _query_visual_search(upload: Any, top_k: int) -> list[Any]:
         st.warning("Uploaded image could not be opened safely.")
         return []
 
-    retriever = _get_image_siglip_retriever()
+    collections = st.session_state.get("_snapshot_collections")
+    image_collection = (
+        collections.get("image") if isinstance(collections, dict) else None
+    )
+    if not isinstance(image_collection, str) or not image_collection:
+        raise RuntimeError("No activated image collection is available")
+    retriever = _get_image_siglip_retriever(
+        image_collection,
+        settings.cache_version,
+    )
     return retriever.retrieve_by_image(img, top_k=int(top_k))
 
 
@@ -1035,47 +1178,39 @@ def _load_latest_snapshot_into_session() -> None:
 
     Policies:
     - latest_non_stale (default): Load when manifest not stale.
-    - pinned: Load pinned snapshot id when configured.
-    - ignore: Do nothing.
+    - ignore: Do not autohydrate, but invalidate stale snapshot-owned runtime.
     """
     policy = getattr(settings.graphrag_cfg, "autoload_policy", "latest_non_stale")
-    if policy == "ignore":
-        return
-
-    snap_dir: Path | None = None
-    if policy == "pinned":
-        sid = getattr(settings.graphrag_cfg, "pinned_snapshot_id", None)
-        if sid:
-            storage_root = (settings.data_dir / "storage").resolve()
-            candidate = (storage_root / sid).resolve()
-            if candidate.exists() and candidate.is_relative_to(storage_root):
-                snap_dir = candidate
-    else:  # latest_non_stale
-        snap_dir = latest_snapshot_dir()
+    snap_dir = latest_snapshot_dir()
 
     if not snap_dir:
+        _clear_snapshot_runtime()
         return
 
     man = load_manifest(snap_dir)
-    if policy == "latest_non_stale":
-        # Prefer non-stale snapshots; if stale, still hydrate to enable chat
-        # while the UI shows a stale warning.
-        try:
-            uploads_dir = settings.data_dir / "uploads"
-            corpus_paths = _collect_corpus_paths(uploads_dir)
-            cfg = _current_config_dict()
-            if man:
-                compute_staleness(man, corpus_paths, cfg)
-                _hydrate_router_from_snapshot(snap_dir)
-        except (
-            OSError,
-            RuntimeError,
-            ValueError,
-            TypeError,
-        ):  # pragma: no cover - defensive
+    if not man:
+        _clear_snapshot_runtime()
+        return
+    try:
+        uploads_dir = settings.data_dir / "uploads"
+        corpus_paths = _collect_corpus_paths(uploads_dir)
+        cfg = _current_config_dict()
+        if compute_staleness(man, corpus_paths, cfg):
+            _clear_snapshot_runtime()
             return
-    else:  # pinned (skip staleness)
+        if policy == "ignore":
+            loaded_id = st.session_state.get("_snapshot_loaded_id")
+            if loaded_id is not None and str(loaded_id) != snap_dir.name:
+                _clear_snapshot_runtime()
+            return
         _hydrate_router_from_snapshot(snap_dir)
+    except (
+        OSError,
+        RuntimeError,
+        ValueError,
+        TypeError,
+    ):  # pragma: no cover - defensive
+        _clear_snapshot_runtime()
 
 
 def _hydrate_router_from_snapshot(snap_dir: Path) -> None:
@@ -1086,42 +1221,67 @@ def _hydrate_router_from_snapshot(snap_dir: Path) -> None:
     """
     # Avoid repeated hydration on every rerun; snapshot load can be expensive.
     current_id = str(getattr(snap_dir, "name", snap_dir))
-    if (
-        st.session_state.get("_snapshot_loaded_id") == current_id
-        and "router_engine" in st.session_state
+    if st.session_state.get(
+        "_snapshot_loaded_id"
+    ) == current_id and session_router_is_current(
+        st.session_state,
+        runtime_generation=settings.cache_version,
     ):
         return
 
-    vec = load_vector_index(snap_dir)
-    kg = load_property_graph_index(snap_dir)
-    # Store in session for downstream tools (keep None if not available)
-    st.session_state["vector_index"] = vec
+    resource: VectorIndexResource | None = None
+    try:
+        manifest = load_manifest(snap_dir)
+        if not manifest:
+            raise RuntimeError("Activated snapshot manifest is unavailable")
+        collections = manifest.get("collections")
+        if not isinstance(collections, dict):
+            raise RuntimeError("Activated snapshot has no collection identities")
+        text_collection = collections.get("text")
+        image_collection = collections.get("image")
+        if not isinstance(text_collection, str) or not isinstance(
+            image_collection, str
+        ):
+            raise RuntimeError("Activated snapshot collection identities are invalid")
+        vec = load_vector_index(snap_dir)
+        if vec is None:
+            raise RuntimeError("Activated snapshot has no vector index")
+        vector_store = getattr(vec, "vector_store", None)
+        if vector_store is None:
+            raise TypeError("Activated vector index does not expose its backing store")
+        resource = VectorIndexResource.from_vector_store(vec, vector_store)
+        kg = load_property_graph_index(snap_dir)
+        if manifest.get("graph_store_type") == "property_graph" and kg is None:
+            raise RuntimeError("Activated snapshot property graph is unavailable")
+    except Exception:
+        if resource is not None:
+            resource.close()
+        _clear_snapshot_runtime()
+        raise
+    replace_session_vector_resource(
+        st.session_state,
+        resource,
+        runtime_generation=settings.cache_version,
+    )
     if kg is not None:
         st.session_state["graphrag_index"] = kg
-    if vec is None:
-        logger.debug(
-            "Snapshot autoload skipped: missing vector index (snapshot_id={})",
-            current_id,
+    else:
+        st.session_state.pop("graphrag_index", None)
+    try:
+        router = build_router_engine(
+            vec,
+            kg,
+            settings,
+            text_collection=text_collection,
+            image_collection=image_collection,
         )
-        st.session_state["router_engine"] = None
+        replace_session_router(
+            st.session_state,
+            router,
+            runtime_generation=settings.cache_version,
+        )
         st.session_state["_snapshot_loaded_id"] = current_id
-        return
-    # Best-effort: provide a multimodal fusion retriever for agent tools.
-    try:
-        from src.retrieval.multimodal_fusion import MultimodalFusionRetriever
-
-        old_retriever = st.session_state.get("hybrid_retriever")
-        if old_retriever is not None:
-            with contextlib.suppress(Exception):
-                old_retriever.close()
-        st.session_state["hybrid_retriever"] = MultimodalFusionRetriever()
-    except Exception:  # pragma: no cover - fail open in UI
-        st.session_state.pop("hybrid_retriever", None)
-    # Build router with fail-open to vector-only
-    try:
-        router = build_router_engine(vec, kg, settings)
-        st.session_state["router_engine"] = router
-        st.session_state["_snapshot_loaded_id"] = current_id
+        st.session_state["_snapshot_collections"] = dict(collections)
         st.caption(
             f"Autoloaded snapshot: {snap_dir.name} (graph={'yes' if kg else 'no'})"
         )
@@ -1132,14 +1292,15 @@ def _hydrate_router_from_snapshot(snap_dir: Path) -> None:
         OSError,
         TypeError,
     ) as exc:  # pragma: no cover - defensive
-        # No router created; keep vector/graph in session for manual wiring
         redaction = build_pii_log_entry(str(exc), key_id="chat.router_from_snapshot")
         logger.debug(
-            "Failed to build router from snapshot; continuing without wiring "
+            "Failed to build router from snapshot; clearing snapshot runtime "
             "(error_type={}, error={})",
             type(exc).__name__,
             redaction.redacted,
         )
+        _clear_snapshot_runtime()
+        raise RuntimeError("Activated snapshot router construction failed") from exc
 
 
 if __name__ == "__main__":  # pragma: no cover

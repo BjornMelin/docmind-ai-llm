@@ -29,6 +29,10 @@ def test_ensure_hybrid_collection_creates_when_missing(monkeypatch):  # type: ig
     assert len(calls) == 1
     assert set(calls[0]["vectors_config"]) == {smod.DENSE_VECTOR_NAME}
     assert set(calls[0]["sparse_vectors_config"]) == {smod.SPARSE_VECTOR_NAME}
+    assert calls[0]["metadata"] == smod.canonical_text_collection_metadata(
+        dense_dim=128,
+        sparse_enabled=smod.sparse_retrieval_enabled(),
+    )
     assert result.compatible is True
     assert result.action == "created"
 
@@ -54,11 +58,22 @@ def test_ensure_hybrid_collection_leaves_compatible_schema_unchanged() -> None:
                 },
             )
             return SimpleNamespace(
-                config=SimpleNamespace(params=params),
+                config=SimpleNamespace(
+                    params=params,
+                    metadata=smod.canonical_text_collection_metadata(
+                        dense_dim=64,
+                        sparse_enabled=True,
+                    ),
+                ),
                 points_count=4,
             )
 
-    result = smod.ensure_hybrid_collection(_Client(), "c", dense_dim=64)
+    result = smod.ensure_hybrid_collection(
+        _Client(),
+        "c",
+        dense_dim=64,
+        sparse_enabled=True,
+    )
 
     assert result.compatible is True
     assert result.action == "unchanged"
@@ -86,15 +101,104 @@ def test_check_hybrid_collection_rejects_non_cosine_dense_vector() -> None:
                 },
             )
             return SimpleNamespace(
-                config=SimpleNamespace(params=params),
+                config=SimpleNamespace(
+                    params=params,
+                    metadata=smod.canonical_text_collection_metadata(
+                        dense_dim=64,
+                        sparse_enabled=True,
+                    ),
+                ),
                 points_count=0,
             )
 
-    result = smod.check_hybrid_collection(_Client(), "c", dense_dim=64)
+    result = smod.check_hybrid_collection(
+        _Client(),
+        "c",
+        dense_dim=64,
+        sparse_enabled=True,
+    )
 
     assert result.compatible is False
     assert result.action == "blocked"
     assert result.reason == "text_dense_distance_mismatch"
+
+
+def test_check_hybrid_collection_rejects_missing_metadata() -> None:
+    """A structurally valid collection without owner metadata is incompatible."""
+    smod = importlib.import_module("src.utils.storage")
+
+    class _Client:
+        def collection_exists(self, _name: str) -> bool:
+            return True
+
+        def get_collection(self, _name: str) -> SimpleNamespace:
+            params = SimpleNamespace(
+                vectors={
+                    "text-dense": SimpleNamespace(
+                        size=64,
+                        distance=qmodels.Distance.COSINE,
+                    )
+                },
+                sparse_vectors={
+                    "text-sparse": SimpleNamespace(modifier=qmodels.Modifier.IDF)
+                },
+            )
+            return SimpleNamespace(
+                config=SimpleNamespace(params=params),
+                points_count=0,
+            )
+
+    result = smod.check_hybrid_collection(
+        _Client(),
+        "c",
+        dense_dim=64,
+        sparse_enabled=True,
+    )
+
+    assert result.compatible is False
+    assert result.reason == "text_collection_metadata_missing"
+
+
+def test_check_hybrid_collection_rejects_sparse_policy_metadata_mismatch() -> None:
+    """Sparse policy is part of the collection's immutable identity."""
+    smod = importlib.import_module("src.utils.storage")
+
+    class _Client:
+        def collection_exists(self, _name: str) -> bool:
+            return True
+
+        def get_collection(self, _name: str) -> SimpleNamespace:
+            params = SimpleNamespace(
+                vectors={
+                    "text-dense": SimpleNamespace(
+                        size=64,
+                        distance=qmodels.Distance.COSINE,
+                    )
+                },
+                sparse_vectors={
+                    "text-sparse": SimpleNamespace(modifier=qmodels.Modifier.IDF)
+                },
+            )
+            return SimpleNamespace(
+                config=SimpleNamespace(
+                    params=params,
+                    metadata=smod.canonical_text_collection_metadata(
+                        dense_dim=64,
+                        sparse_enabled=False,
+                    ),
+                ),
+                points_count=0,
+            )
+
+    result = smod.check_hybrid_collection(
+        _Client(),
+        "c",
+        dense_dim=64,
+        sparse_enabled=True,
+    )
+
+    assert result.compatible is False
+    assert result.reason == "text_collection_metadata_mismatch"
 
 
 @pytest.mark.parametrize(
@@ -136,11 +240,22 @@ def test_ensure_hybrid_collection_revalidates_after_create_error(
                 },
             )
             return SimpleNamespace(
-                config=SimpleNamespace(params=params),
+                config=SimpleNamespace(
+                    params=params,
+                    metadata=smod.canonical_text_collection_metadata(
+                        dense_dim=64,
+                        sparse_enabled=True,
+                    ),
+                ),
                 points_count=0,
             )
 
-    result = smod.ensure_hybrid_collection(_Client(), "c", dense_dim=64)
+    result = smod.ensure_hybrid_collection(
+        _Client(),
+        "c",
+        dense_dim=64,
+        sparse_enabled=True,
+    )
 
     assert result.compatible is compatible
     assert result.action == action

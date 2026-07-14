@@ -47,6 +47,7 @@ coverage/
 .coverage.*
 .cache
 nosetests.xml
+junit.xml
 coverage.xml
 coverage.json
 *.cover
@@ -353,3 +354,4 @@ data/**/*.db
 # opensrc - source code for packages
 opensrc/
 data/.corpus_manifest.json
+data/.deployment-id

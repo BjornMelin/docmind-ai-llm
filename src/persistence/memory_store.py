@@ -1,983 +1,418 @@
-"""SQLite-backed LangGraph BaseStore with optional semantic search (ADR-058 / SPEC-041).
-
-This implements a persistent store compatible with LangGraph's InjectedStore
-feature. It is designed for DocMind's offline-first Streamlit UX:
-
-- Persistent across restarts (SQLite file under settings.data_dir by default)
-- Namespaces support hierarchical prefixes, used for (user_id, thread_id) scoping
-- Optional semantic search powered by sqlite-vec (vec0 virtual table)
-
-Security-by-default:
-- Parameterized SQL only
-- sqlite-vec extension loading is enabled only briefly during initialization
-
-TTL note:
-- `PutOp.ttl` values are interpreted in **minutes** (converted to milliseconds).
-"""
+"""Native LangGraph SQLite memory-store lifecycle and legacy migration."""
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import json
 import sqlite3
-import threading
-from collections.abc import Callable, Iterable
-from datetime import UTC, datetime
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
+from langgraph.store.base import IndexConfig, TTLConfig
+from langgraph.store.sqlite import SqliteStore
 from loguru import logger
 
 from src.config.settings import DocMindSettings, settings
-from src.persistence.path_utils import resolve_path_under_data_dir
-from src.utils.log_safety import build_pii_log_entry
-from src.utils.time import now_ms
+from src.persistence.chat_db import open_chat_db
+from src.persistence.checkpoint_identity import memory_id, memory_namespace
 
-try:  # pragma: no cover - optional native dependency
-    import sqlite_vec
-except (ImportError, ModuleNotFoundError):  # pragma: no cover - defensive
-    sqlite_vec = None  # type: ignore[assignment]
-
-from langgraph.store.base import (
-    BaseStore,
-    GetOp,
-    IndexConfig,
-    Item,
-    ListNamespacesOp,
-    MatchCondition,
-    PutOp,
-    Result,
-    SearchItem,
-    SearchOp,
-    ensure_embeddings,
-    get_text_at_path,
-    tokenize_path,
-)
-
-StoreOp = GetOp | PutOp | SearchOp | ListNamespacesOp
-
-# Store tables
-ITEMS_TABLE = "docmind_store_items"
-VEC_TABLE = "docmind_store_vec"
-
-# Namespace representation
-_NS_DELIM = "\x1f"
-_MAX_NS_DEPTH = 8
-
-# Namespace layout: (user_id, session_type, thread_id, ...)
-# Used by chat session purge logic (SPEC-041).
-NAMESPACE_THREAD_INDEX = 2
-
-# Oversample to compensate for vec0 offset limitations.
-VEC0_OVERSAMPLE = 256
-
-
-def _ms_to_dt(ms: int) -> datetime:
-    return datetime.fromtimestamp(ms / 1000.0, tz=UTC)
-
-
-def _ns_parts(namespace: tuple[str, ...]) -> tuple[str, ...]:
-    if len(namespace) > _MAX_NS_DEPTH:
-        raise ValueError(f"namespace depth > {_MAX_NS_DEPTH}: {namespace!r}")
-    return tuple(str(p) for p in namespace)
-
-
-def _ns_key(namespace: tuple[str, ...]) -> str:
-    parts = _ns_parts(namespace)
-    return _NS_DELIM.join(parts)
-
-
-def _get_by_dotted_path(obj: Any, dotted_path: str) -> Any:
-    """Extract a value from a nested dict using dot notation.
-
-    Safely navigates nested dictionaries using a dotted path (e.g., 'a.b.c').
-    Returns None if any component is missing or if the current value is not a dict.
-
-    Args:
-        obj: Dictionary to navigate (or any object, treated as non-dict if not a dict).
-        dotted_path: Dot-separated path string (e.g., 'metadata.user.id').
-
-    Returns:
-        The value at the dotted path, or None if the path is invalid or missing.
-
-    Example:
-        >>> _get_by_dotted_path({'a': {'b': 42}}, 'a.b')
-        42
-        >>> _get_by_dotted_path({'a': {'b': 42}}, 'a.c')
-        None
-    """
-    cur: Any = obj
-    for part in dotted_path.split("."):
-        if not part:
-            return None
-        if isinstance(cur, dict):
-            cur = cur.get(part)
-        else:
-            return None
-    return cur
-
-
-def _cmp_gt(a: Any, b: Any) -> bool:
-    """Return True if a > b with type safety."""
-    try:
-        return a is not None and a > b
-    except TypeError:
-        return False
-
-
-def _cmp_gte(a: Any, b: Any) -> bool:
-    """Return True if a >= b with type safety."""
-    try:
-        return a is not None and a >= b
-    except TypeError:
-        return False
-
-
-def _cmp_lt(a: Any, b: Any) -> bool:
-    """Return True if a < b with type safety."""
-    try:
-        return a is not None and a < b
-    except TypeError:
-        return False
-
-
-def _cmp_lte(a: Any, b: Any) -> bool:
-    """Return True if a <= b with type safety."""
-    try:
-        return a is not None and a <= b
-    except TypeError:
-        return False
-
-
-_FILTER_OPS: dict[str, Callable[[Any, Any], bool]] = {
-    "$eq": lambda a, b: a == b,
-    "$ne": lambda a, b: a != b,
-    "$gt": _cmp_gt,
-    "$gte": _cmp_gte,
-    "$lt": _cmp_lt,
-    "$lte": _cmp_lte,
+LEGACY_ITEMS_TABLE = "docmind_store_items"
+LEGACY_VEC_TABLE = "docmind_store_vec"
+_LEGACY_NAMESPACE_DELIMITER = "\x1f"
+_MEMORY_INDEX_FIELD = "content"
+_MEMORY_TTL_CONFIG: TTLConfig = {
+    "refresh_on_read": False,
+    "sweep_interval_minutes": 1,
 }
 
 
-def _matches_filter_clause(extracted: Any, clause_value: Any) -> bool:
-    """Evaluate a filter clause against extracted values.
+def open_memory_store(
+    path: Path,
+    *,
+    index: IndexConfig | None = None,
+    cfg: DocMindSettings = settings,
+) -> SqliteStore:
+    """Open and initialize the canonical native LangGraph SQLite store."""
+    conn = open_chat_db(path, cfg=cfg)
+    try:
+        # langgraph-checkpoint-sqlite 3.1 uses ``text_fields`` internally even
+        # though the public BaseStore IndexConfig calls this key ``fields``.
+        sqlite_index: dict[str, Any] | None = dict(index) if index else None
+        if sqlite_index and "fields" in sqlite_index:
+            sqlite_index["text_fields"] = sqlite_index.pop("fields")
+        store = SqliteStore(
+            conn,
+            index=cast(Any, sqlite_index),
+            ttl=_MEMORY_TTL_CONFIG,
+        )
+        store.setup()
+        migrate_legacy_memory_store(store)
+        store.start_ttl_sweeper()
+        return store
+    except BaseException:
+        with contextlib.suppress(Exception):
+            conn.close()
+        raise
 
-    Handles three clause types:
-    1. Operator dict (e.g., {'$gt': 10}): applies operators ($gt, $gte, $lt,
-       $lte, $eq, $ne)
-    2. Scalar value: direct equality check
-    3. None: checks if value is None
 
-    List values are handled via "any" semantics: if the extracted value is a
-    list, the clause matches if it matches any element in the list.
+def close_memory_store(store: SqliteStore) -> None:
+    """Stop native background work and close the store connection safely."""
+    with contextlib.suppress(Exception):
+        store.stop_ttl_sweeper(timeout=1.0)
+    with contextlib.suppress(Exception):
+        store.conn.commit()
+    with contextlib.suppress(Exception):
+        store.conn.close()
 
-    Args:
-        extracted: Value extracted from object being filtered (may be None
-            or list).
-        clause_value: The filter clause from query (scalar, operator dict, or
-            None).
 
-    Returns:
-        True if extracted value satisfies the clause, False otherwise.
-
-    Raises:
-        ValueError: If clause_value contains an unsupported operator.
-
-    Example:
-        >>> _matches_filter_clause(15, {'$gt': 10})
-        True
-        >>> _matches_filter_clause(5, {'$gt': 10})
-        False
-        >>> _matches_filter_clause([5, 15], {'$gt': 10})
-        True  # Matches because 15 > 10
-    """
-    if isinstance(extracted, list):
-        return any(_matches_filter_clause(v, clause_value) for v in extracted)
-
-    if isinstance(clause_value, dict):
-        for op, v in clause_value.items():
-            handler = _FILTER_OPS.get(op)
-            if handler is None:
-                raise ValueError(f"Unsupported filter operator: {op!r}")
-            if not handler(extracted, v):
-                return False
+def _native_memory_vector_is_valid(
+    store: SqliteStore,
+    namespace: tuple[str, ...],
+    key: str,
+) -> bool:
+    """Return whether the canonical content vector exists at the configured size."""
+    if not store.index_config:
         return True
+    dimensions = store.index_config.get("dims")
+    if (
+        isinstance(dimensions, bool)
+        or not isinstance(dimensions, int)
+        or dimensions <= 0
+    ):
+        return False
+    try:
+        row = store.conn.execute(
+            """
+            SELECT COUNT(*), MIN(vec_length(embedding)), MAX(vec_length(embedding))
+            FROM store_vectors
+            WHERE prefix=? AND key=? AND field_name=?;
+            """,
+            (".".join(namespace), key, _MEMORY_INDEX_FIELD),
+        ).fetchone()
+    except sqlite3.DatabaseError:
+        return False
+    try:
+        return bool(
+            row is not None
+            and int(row[0]) == 1
+            and int(row[1]) == dimensions
+            and int(row[2]) == dimensions
+        )
+    except (TypeError, ValueError):
+        return False
 
-    if clause_value is None:
-        return extracted is None
-    return extracted == clause_value
+
+def _native_memory_expiry_ms(
+    store: SqliteStore,
+    namespace: tuple[str, ...],
+    key: str,
+) -> int | None:
+    """Return one native record's absolute expiry without conflating TTL with None."""
+    row = store.conn.execute(
+        """
+        SELECT
+            expires_at,
+            CAST(
+                ROUND((julianday(expires_at) - 2440587.5) * 86400000.0)
+                AS INTEGER
+            )
+        FROM store
+        WHERE prefix=? AND key=?;
+        """,
+        (".".join(namespace), key),
+    ).fetchone()
+    if row is None:
+        raise RuntimeError(
+            "Legacy memory migration native record disappeared; source tables retained"
+        )
+    if row[0] is None:
+        return None
+    if row[1] is None:
+        raise RuntimeError(
+            "Legacy memory migration native expiry is invalid; source tables retained"
+        )
+    return int(row[1])
 
 
-def _match_namespace(ns: tuple[str, ...], cond: MatchCondition) -> bool:
-    """Check if namespace matches a condition with prefix/suffix matching.
+def _reindex_native_memory_preserving_metadata(
+    store: SqliteStore,
+    namespace: tuple[str, ...],
+    key: str,
+    value: dict[str, Any],
+) -> None:
+    """Repair one partial native copy without changing its value or TTL authority."""
+    prefix = ".".join(namespace)
+    metadata = store.conn.execute(
+        """
+        SELECT
+            created_at,
+            updated_at,
+            expires_at,
+            ttl_minutes,
+            CASE
+                WHEN expires_at IS NULL THEN NULL
+                ELSE MAX(
+                    0.000001,
+                    (julianday(expires_at) - julianday('now')) * 1440.0
+                )
+            END
+        FROM store
+        WHERE prefix=? AND key=?;
+        """,
+        (prefix, key),
+    ).fetchone()
+    if metadata is None:
+        raise RuntimeError(
+            "Legacy memory migration native record disappeared; source tables retained"
+        )
 
-    Supports wildcard matching using '*' to skip individual namespace
-    components.
-    - Prefix match: namespace must start with condition path (e.g.,
-      ('user1', 'session1') matches prefix ('user1', '*'))
-    - Suffix match: namespace must end with condition path (e.g.,
-      ('org', 'user1', 'session1') matches suffix ('user1', 'session1'))
+    remaining_ttl = float(metadata[4]) if metadata[4] is not None else None
+    try:
+        store.put(
+            namespace,
+            key,
+            value,
+            index=[_MEMORY_INDEX_FIELD],
+            ttl=remaining_ttl,
+        )
+    finally:
+        # SqliteStore commits its item upsert even when the following vector write
+        # raises. Restore the authoritative native metadata durably on both paths
+        # without committing an unrelated caller-owned transaction.
+        if store.conn.in_transaction:
+            raise RuntimeError(
+                "Legacy memory migration metadata repair found an open transaction; "
+                "source tables retained"
+            )
+        with store.conn:
+            store.conn.execute("BEGIN IMMEDIATE;")
+            store.conn.execute(
+                """
+                UPDATE store
+                SET created_at=?, updated_at=?, expires_at=?, ttl_minutes=?
+                WHERE prefix=? AND key=?;
+                """,
+                (*metadata[:4], prefix, key),
+            )
 
-    Args:
-        ns: The namespace tuple to test (e.g., ('user_id', 'session_type',
-            'thread_id')).
-        cond: MatchCondition with match_type ('prefix' or 'suffix') and
-            path components.
+    if not _native_memory_vector_is_valid(store, namespace, key):
+        raise RuntimeError(
+            "Legacy memory migration vector validation failed; source tables retained"
+        )
+
+
+def migrate_legacy_memory_store(store: SqliteStore) -> int:
+    """Copy active custom-store rows into the native schema, then hard-cut.
+
+    The migration is intentionally retryable. Native writes are deterministic
+    upserts; legacy tables remain intact until every active row has been read
+    back with its canonicalized value.
 
     Returns:
-        True if namespace matches condition, False otherwise (including
-        unsupported match_type).
-
-    Example:
-        >>> cond_prefix = MatchCondition(path=('user1', '*'),
-        ...     match_type='prefix')
-        >>> _match_namespace(('user1', 'session1', 'thread1'), cond_prefix)
-        True
-        >>> cond_suffix = MatchCondition(path=('session1',),
-        ...     match_type='suffix')
-        >>> _match_namespace(('user1', 'session1'), cond_suffix)
-        True
+        Number of canonical active legacy records copied and validated.
     """
-    path = cond.path
-    result = False
-    if cond.match_type == "prefix" and len(path) <= len(ns):
-        result = True
-        for i, p in enumerate(path):
-            if p == "*":
-                continue
-            if ns[i] != p:
-                result = False
-                break
-    elif cond.match_type == "suffix" and len(path) <= len(ns):
-        start = len(ns) - len(path)
-        result = True
-        for i, p in enumerate(path):
-            if p == "*":
-                continue
-            if ns[start + i] != p:
-                result = False
-                break
-    return result
+    conn = store.conn
+    if not _table_exists(conn, LEGACY_ITEMS_TABLE):
+        _drop_orphaned_legacy_vector_table(conn)
+        return 0
+
+    now_ms = int(time.time() * 1000)
+    rows = conn.execute(
+        f"""
+        SELECT item_id, ns_key, key, value_json, expires_at_ms
+        FROM {LEGACY_ITEMS_TABLE}
+        WHERE expires_at_ms IS NULL OR expires_at_ms > ?
+        ORDER BY item_id;
+        """,  # noqa: S608 # table name is a module constant
+        (now_ms,),
+    ).fetchall()
+
+    records: dict[
+        tuple[tuple[str, ...], str],
+        tuple[dict[str, Any], int | None],
+    ] = {}
+    for row in rows:
+        namespace = _canonicalize_legacy_namespace(row["ns_key"])
+        value = _canonicalize_legacy_value(row["value_json"])
+        key = memory_id(value["content"], value["kind"])
+        expires_at_ms = (
+            int(row["expires_at_ms"]) if row["expires_at_ms"] is not None else None
+        )
+        identity = (namespace, key)
+        existing = records.get(identity)
+        records[identity] = (
+            _resolve_legacy_collision(existing, value, expires_at_ms)
+            if existing is not None
+            else (value, expires_at_ms)
+        )
+
+    migrated: list[tuple[tuple[str, ...], str, dict[str, Any], bool]] = []
+    for (namespace, key), (value, expires_at_ms) in records.items():
+        existing = store.get(namespace, key, refresh_ttl=False)
+        existing_value = (
+            existing.value
+            if existing is not None and isinstance(existing.value, dict)
+            else None
+        )
+        if existing_value is not None and not (
+            existing_value.get("origin") == "consolidation"
+            and value.get("origin") == "explicit"
+        ):
+            # Existing native state is authoritative across interrupted/retried
+            # migrations. In particular, never replace an explicit user write
+            # with a legacy derived record or refresh its existing TTL.
+            ttl_row = conn.execute(
+                "SELECT ttl_minutes FROM store WHERE prefix=? AND key=?;",
+                (".".join(namespace), key),
+            ).fetchone()
+            if not _native_memory_vector_is_valid(store, namespace, key):
+                _reindex_native_memory_preserving_metadata(
+                    store,
+                    namespace,
+                    key,
+                    dict(existing_value),
+                )
+            migrated.append(
+                (
+                    namespace,
+                    key,
+                    dict(existing_value),
+                    ttl_row is None or ttl_row[0] is None,
+                )
+            )
+            continue
+        if existing_value is not None:
+            value, expires_at_ms = _resolve_legacy_collision(
+                (
+                    existing_value,
+                    _native_memory_expiry_ms(store, namespace, key),
+                ),
+                value,
+                expires_at_ms,
+            )
+        ttl_minutes = (
+            max(0.0, (int(expires_at_ms) - int(time.time() * 1000)) / 60_000)
+            if expires_at_ms is not None
+            else None
+        )
+        if ttl_minutes is not None and ttl_minutes <= 0:
+            continue
+        store.put(
+            namespace,
+            key,
+            value,
+            index=[_MEMORY_INDEX_FIELD],
+            ttl=ttl_minutes,
+        )
+        migrated.append((namespace, key, value, expires_at_ms is None))
+
+    for namespace, key, expected_value, expected_without_ttl in migrated:
+        copied = store.get(namespace, key, refresh_ttl=False)
+        if copied is None or copied.value != expected_value:
+            raise RuntimeError(
+                "Legacy memory migration validation failed; source tables retained"
+            )
+        ttl_row = conn.execute(
+            "SELECT ttl_minutes FROM store WHERE prefix=? AND key=?;",
+            (".".join(namespace), key),
+        ).fetchone()
+        if ttl_row is None or (ttl_row[0] is None) != expected_without_ttl:
+            raise RuntimeError(
+                "Legacy memory migration TTL validation failed; source tables retained"
+            )
+        if not _native_memory_vector_is_valid(store, namespace, key):
+            raise RuntimeError(
+                "Legacy memory migration vector validation failed; "
+                "source tables retained"
+            )
+
+    with conn:
+        if not conn.in_transaction:
+            conn.execute("BEGIN IMMEDIATE;")
+        conn.execute(f"DROP TABLE IF EXISTS {LEGACY_VEC_TABLE};")
+        conn.execute(f"DROP TABLE IF EXISTS {LEGACY_ITEMS_TABLE};")
+    logger.info("Migrated {} legacy memory-store rows to LangGraph", len(migrated))
+    return len(migrated)
 
 
-def _matches_filter(value: dict[str, Any], filt: dict[str, Any] | None) -> bool:
-    """Check if value object matches all clauses in a filter dict.
-
-    All clauses must match (AND semantics). Each key in the filter dict is a
-    dotted path used to extract a value from the object, then compared
-    against the clause value using _matches_filter_clause.
-
-    Args:
-        value: The object (typically an item dict) to filter.
-        filt: Filter dict mapping dotted paths to clause values, or None to
-            skip filtering.
-
-    Returns:
-        True if all clauses match (or filt is None), False if any clause
-        fails.
-
-    Example:
-        >>> obj = {'metadata': {'priority': 10, 'status': 'active'}}
-        >>> filt = {'metadata.priority': {'$gte': 5},
-        ...         'metadata.status': 'active'}
-        >>> _matches_filter(obj, filt)
-        True
-    """
-    if not filt:
-        return True
-    for k, clause in filt.items():
-        extracted = _get_by_dotted_path(value, str(k))
-        if not _matches_filter_clause(extracted, clause):
-            return False
-    return True
-
-
-class DocMindSqliteStore(BaseStore):
-    """SQLite-backed LangGraph BaseStore with vec0-powered semantic search.
-
-    TTL values are interpreted as minutes.
-    """
-
-    supports_ttl: bool = True
-
-    __slots__ = (
-        "_closed",
-        "_conn",
-        "_filter_fetch_cap",
-        "_in_batch",
-        "_lock",
-        "_path",
-        "_tokenized_fields",
-        "_vec_enabled",
-        "embeddings",
-        "index_config",
+def _canonicalize_legacy_namespace(raw_namespace: object) -> tuple[str, ...]:
+    parts = tuple(str(raw_namespace).split(_LEGACY_NAMESPACE_DELIMITER))
+    if len(parts) not in {2, 3} or parts[0] != "memories":
+        raise ValueError("Legacy memory namespace is not recognized")
+    return memory_namespace(
+        user_id=parts[1],
+        thread_id=parts[2] if len(parts) == 3 else None,
     )
 
-    def __init__(
-        self,
-        path: Path,
-        *,
-        index: IndexConfig | None = None,
-        filter_fetch_cap: int = 5000,
-        cfg: DocMindSettings = settings,
-    ) -> None:
-        """Create a persistent store bound to the given SQLite DB path.
 
-        Args:
-            path: SQLite database path (typically settings.chat.sqlite_path).
-            index: Optional semantic search configuration (dims + embed + fields).
-            filter_fetch_cap: Max rows fetched when filtering in Python.
-            cfg: DocMind settings used for data_dir validation.
-        """
-        self._path = resolve_path_under_data_dir(
-            path=path,
-            data_dir=cfg.data_dir,
-            label="Memory store",
+def _canonicalize_legacy_value(raw_value: object) -> dict[str, Any]:
+    """Decode one legacy value and make write ownership explicit."""
+    try:
+        value = json.loads(str(raw_value))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Legacy memory value is not valid JSON") from exc
+    if not isinstance(value, dict):
+        raise ValueError("Legacy memory value must be a JSON object")
+    canonical = dict(value)
+    content = canonical.get("content")
+    kind = canonical.get("kind")
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError("Legacy memory content must be a non-empty string")
+    if not isinstance(kind, str) or not kind.strip():
+        raise ValueError("Legacy memory kind must be a non-empty string")
+    canonical["content"] = content.strip()
+    canonical["kind"] = kind.strip()
+    if canonical.get("origin") not in {"explicit", "consolidation"}:
+        canonical["origin"] = (
+            "consolidation" if canonical.get("source_checkpoint_id") else "explicit"
         )
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        conn: sqlite3.Connection | None = None
-        try:
-            conn = sqlite3.connect(str(self._path), check_same_thread=False)
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA journal_mode=WAL;")
-            conn.execute("PRAGMA foreign_keys=ON;")
-            conn.execute("PRAGMA busy_timeout=5000;")
-        except Exception:
-            if conn is not None:
-                with contextlib.suppress(Exception):
-                    conn.close()
-            raise
-        self._conn = conn
-        self._lock = threading.Lock()
-        self._closed = False
-        self._filter_fetch_cap = max(1, int(filter_fetch_cap))
+    return canonical
 
-        self.index_config = index.copy() if index else None
-        self.embeddings = ensure_embeddings(index.get("embed")) if index else None
-        self._tokenized_fields: list[tuple[str, str | list[Any]]] = []
-        if self.index_config:
-            fields = self.index_config.get("fields") or ["$"]
-            self._tokenized_fields = [
-                (p, tokenize_path(p) if p != "$" else "$") for p in fields
-            ]
 
-        self._vec_enabled = False
-        self._in_batch = False
-        self._setup_schema()
+def _resolve_legacy_collision(
+    existing: tuple[dict[str, Any], int | None],
+    incoming_value: dict[str, Any],
+    incoming_expiry: int | None,
+) -> tuple[dict[str, Any], int | None]:
+    existing_value, existing_expiry = existing
+    existing_is_explicit = existing_value.get("origin") == "explicit"
+    incoming_is_explicit = incoming_value.get("origin") == "explicit"
+    winner = (
+        existing_value
+        if existing_is_explicit and not incoming_is_explicit
+        else incoming_value
+    )
+    merged = dict(winner)
+    tags: list[str] = []
+    for value in (existing_value, incoming_value):
+        raw_tags = value.get("tags")
+        if not isinstance(raw_tags, list):
+            continue
+        tags.extend(str(tag) for tag in raw_tags if tag is not None and str(tag))
+    tags = list(dict.fromkeys(tags))
+    if tags:
+        merged["tags"] = tags
+    expiry = (
+        None
+        if existing_expiry is None or incoming_expiry is None
+        else max(existing_expiry, incoming_expiry)
+    )
+    return merged, expiry
 
-    def close(self) -> None:
-        """Close the underlying SQLite connection (best-effort).
 
-        Safe to call multiple times.
-        """
-        with self._lock:
-            if self._closed:
-                return
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?;",
+        (table,),
+    ).fetchone()
+    return row is not None
 
-            with contextlib.suppress(Exception):
-                self._conn.commit()
-            with contextlib.suppress(Exception):
-                self._conn.close()
 
-            self._closed = True
-            self._vec_enabled = False
-
-    def __enter__(self) -> DocMindSqliteStore:
-        """Return self for context manager use."""
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: object,
-    ) -> None:
-        """Close the store on context manager exit."""
-        self.close()
-
-    # BaseStore API
-    def batch(self, ops: Iterable[StoreOp]) -> list[Result]:
-        """Execute a batch of store operations atomically.
-
-        All operations are wrapped in a single IMMEDIATE transaction.
-        Individual handlers suppress commits when _in_batch is True; the batch
-        method commits once after all ops succeed, or rolls back on any exception.
-        This ensures atomicity: all ops commit together or none do.
-        """
-        results: list[Result] = []
-        with self._lock:
-            self._conn.execute("BEGIN IMMEDIATE")
-            self._in_batch = True
-            try:
-                for op in ops:
-                    if isinstance(op, GetOp):
-                        results.append(self._handle_get(op))
-                    elif isinstance(op, PutOp):
-                        results.append(self._handle_put(op))
-                    elif isinstance(op, SearchOp):
-                        results.append(self._handle_search(op))
-                    elif isinstance(op, ListNamespacesOp):
-                        results.append(self._handle_list_namespaces(op))
-                    else:
-                        raise TypeError(f"Unsupported op type: {type(op).__name__}")
-            except Exception:
-                self._conn.rollback()
-                raise
-            finally:
-                self._in_batch = False
-            self._conn.commit()
-        return results
-
-    async def abatch(self, ops: Iterable[StoreOp]) -> list[Result]:
-        """Execute a batch of store operations asynchronously."""
-        return await asyncio.to_thread(self.batch, ops)
-
-    # Schema / initialization
-    def _setup_schema(self) -> None:
-        self._conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS docmind_store_items (
-                item_id INTEGER PRIMARY KEY,
-                ns0 TEXT NOT NULL DEFAULT '',
-                ns1 TEXT NOT NULL DEFAULT '',
-                ns2 TEXT NOT NULL DEFAULT '',
-                ns3 TEXT NOT NULL DEFAULT '',
-                ns4 TEXT NOT NULL DEFAULT '',
-                ns5 TEXT NOT NULL DEFAULT '',
-                ns6 TEXT NOT NULL DEFAULT '',
-                ns7 TEXT NOT NULL DEFAULT '',
-                ns_key TEXT NOT NULL,
-                key TEXT NOT NULL,
-                value_json TEXT NOT NULL,
-                created_at_ms INTEGER NOT NULL,
-                updated_at_ms INTEGER NOT NULL,
-                accessed_at_ms INTEGER NOT NULL,
-                expires_at_ms INTEGER,
-                UNIQUE(ns_key, key)
-            );
-            """
-        )
-        self._conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_docmind_store_items_ns0 "
-            "ON docmind_store_items(ns0);"
-        )
-        self._conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_docmind_store_items_ns_key "
-            "ON docmind_store_items(ns_key);"
-        )
-        self._conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_docmind_store_items_updated "
-            "ON docmind_store_items(updated_at_ms);"
-        )
-        self._conn.commit()
-
-        self._setup_vec0()
-
-    def _setup_vec0(self) -> None:
-        if not self.index_config or not self.embeddings:
-            self._vec_enabled = False
-            return
-        if sqlite_vec is None:
-            logger.warning("sqlite-vec unavailable; semantic store search disabled")
-            self._vec_enabled = False
-            return
-        dims = int(self.index_config.get("dims") or 0)
-        if dims <= 0:
-            raise ValueError("index.dims must be set for semantic store search")
-        try:
-            self._conn.enable_load_extension(True)
-            sqlite_vec.load(self._conn)
-        except Exception as exc:  # pragma: no cover - depends on platform
-            redaction = build_pii_log_entry(str(exc), key_id="memory_store.sqlite_vec")
-            logger.warning(
-                "sqlite-vec load failed; semantic search disabled "
-                "(error_type={}, error={})",
-                type(exc).__name__,
-                redaction.redacted,
-            )
-            self._vec_enabled = False
-            return
-        finally:
-            with contextlib.suppress(Exception):  # pragma: no cover
-                self._conn.enable_load_extension(False)
-
-        # vec0 metadata constraints only support simple operators; we store namespace
-        # parts in dedicated columns to support prefix matching via equality.
-        self._conn.execute(
-            f"""
-            CREATE VIRTUAL TABLE IF NOT EXISTS {VEC_TABLE}
-            USING vec0(
-                item_id INTEGER PRIMARY KEY,
-                ns0 TEXT,
-                ns1 TEXT,
-                ns2 TEXT,
-                ns3 TEXT,
-                ns4 TEXT,
-                ns5 TEXT,
-                ns6 TEXT,
-                ns7 TEXT,
-                embedding float[{dims}] distance_metric=cosine
-            );
-            """
-        )
-        self._conn.commit()
-        self._vec_enabled = True
-
-    # Op handlers
-    def _handle_get(self, op: GetOp) -> Item | None:
-        now = now_ms()
-        ns_key = _ns_key(op.namespace)
-        row = self._conn.execute(
-            """
-            SELECT
-                item_id,
-                value_json,
-                created_at_ms,
-                updated_at_ms,
-                accessed_at_ms,
-                expires_at_ms
-            FROM docmind_store_items
-            WHERE ns_key=? AND key=?
-              AND (expires_at_ms IS NULL OR expires_at_ms > ?);
-            """,
-            (ns_key, str(op.key), now),
-        ).fetchone()
-        if row is None:
-            return None
-
-        value = json.loads(str(row["value_json"]))
-        created = int(row["created_at_ms"])
-        updated = int(row["updated_at_ms"])
-
-        refresh = bool(op.refresh_ttl)
-        if refresh and row["expires_at_ms"] is not None:
-            # Sliding TTL: refresh access timestamp and extend expiry by the
-            # same TTL delta.
-            ttl_delta_ms = int(row["expires_at_ms"]) - int(row["accessed_at_ms"])
-            if ttl_delta_ms < 0:
-                logger.debug(
-                    "Negative TTL delta detected (item_id={}, key={}, accessed={}, "
-                    "expires={}, now={}, delta={}); clamping to zero",
-                    row["item_id"],
-                    op.key,
-                    row["accessed_at_ms"],
-                    row["expires_at_ms"],
-                    now,
-                    ttl_delta_ms,
-                )
-            expires_at_ms = now + max(0, ttl_delta_ms)
-            self._conn.execute(
-                """
-                UPDATE docmind_store_items
-                SET accessed_at_ms=?, expires_at_ms=?
-                WHERE item_id=?;
-                """,
-                (now, expires_at_ms, int(row["item_id"])),
-            )
-            if not self._in_batch:
-                self._conn.commit()
-
-        return Item(
-            value=value,
-            key=str(op.key),
-            namespace=tuple(op.namespace),
-            created_at=_ms_to_dt(created),
-            updated_at=_ms_to_dt(updated),
-        )
-
-    def _handle_put(self, op: PutOp) -> Item | None:
-        now = now_ms()
-        ns_parts = _ns_parts(op.namespace)
-        ns_key = _NS_DELIM.join(ns_parts)
-        key = str(op.key)
-
-        if op.value is None:
-            row = self._conn.execute(
-                "SELECT item_id FROM docmind_store_items WHERE ns_key=? AND key=?;",
-                (ns_key, key),
-            ).fetchone()
-            if row is not None:
-                item_id = int(row["item_id"])
-                if self._vec_enabled:
-                    with contextlib.suppress(sqlite3.OperationalError):
-                        self._conn.execute(
-                            "DELETE FROM docmind_store_vec WHERE item_id=?;",
-                            (item_id,),
-                        )
-                self._conn.execute(
-                    "DELETE FROM docmind_store_items WHERE item_id=?;",
-                    (item_id,),
-                )
-                if not self._in_batch:
-                    self._conn.commit()
-            return None
-
-        value_json = json.dumps(op.value, ensure_ascii=False, separators=(",", ":"))
-        existing = self._conn.execute(
-            """
-            SELECT item_id, created_at_ms
-            FROM docmind_store_items
-            WHERE ns_key=? AND key=?;
-            """,
-            (ns_key, key),
-        ).fetchone()
-
-        expires_at_ms: int | None = None
-        if op.ttl is not None:
-            # op.ttl is specified in minutes.
-            expires_at_ms = now + int(float(op.ttl) * 60_000.0)
-
-        ns_cols = list(ns_parts) + [""] * (_MAX_NS_DEPTH - len(ns_parts))
-        if existing is None:
-            cur = self._conn.execute(
-                """
-                INSERT INTO docmind_store_items
-                    (ns0, ns1, ns2, ns3, ns4, ns5, ns6, ns7, ns_key, key, value_json,
-                     created_at_ms, updated_at_ms, accessed_at_ms, expires_at_ms)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-                """,
-                (
-                    *ns_cols[:_MAX_NS_DEPTH],
-                    ns_key,
-                    key,
-                    value_json,
-                    now,
-                    now,
-                    now,
-                    expires_at_ms,
-                ),
-            )
-            if cur.lastrowid is None:  # pragma: no cover - defensive
-                raise RuntimeError("SQLite insert did not return lastrowid")
-            item_id = int(cur.lastrowid)
-            created_at_ms = now
-        else:
-            item_id = int(existing["item_id"])
-            created_at_ms = int(existing["created_at_ms"])
-            self._conn.execute(
-                """
-                UPDATE docmind_store_items
-                SET value_json=?, updated_at_ms=?, accessed_at_ms=?, expires_at_ms=?,
-                    ns0=?, ns1=?, ns2=?, ns3=?, ns4=?, ns5=?, ns6=?, ns7=?
-                WHERE item_id=?;
-                """,
-                (
-                    value_json,
-                    now,
-                    now,
-                    expires_at_ms,
-                    *ns_cols[:_MAX_NS_DEPTH],
-                    item_id,
-                ),
-            )
-
-        # Indexing control: False disables embedding updates for this item.
-        if self._vec_enabled and op.index is not False:
-            try:
-                embedding = self._embed_value(op.value, override_fields=op.index)
-                self._upsert_embedding(
-                    item_id=item_id, ns_cols=ns_cols, embedding=embedding
-                )
-            except ValueError as exc:  # pragma: no cover - fail-open
-                redaction = build_pii_log_entry(
-                    str(exc), key_id="memory_store.embed_dim"
-                )
-                logger.warning(
-                    "Memory embedding dimension mismatch (error_type={} error={})",
-                    type(exc).__name__,
-                    redaction.redacted,
-                )
-            except Exception as exc:  # pragma: no cover - fail-open
-                redaction = build_pii_log_entry(
-                    str(exc), key_id="memory_store.embed_update"
-                )
-                logger.warning(
-                    "Memory embedding update failed; continuing "
-                    "(error_type={} error={})",
-                    type(exc).__name__,
-                    redaction.redacted,
-                )
-
-        if not self._in_batch:
-            self._conn.commit()
-        return Item(
-            value=op.value,
-            key=key,
-            namespace=tuple(op.namespace),
-            created_at=_ms_to_dt(created_at_ms),
-            updated_at=_ms_to_dt(now),
-        )
-
-    def _handle_search(self, op: SearchOp) -> list[SearchItem]:
-        now = now_ms()
-        prefix_parts = _ns_parts(op.namespace_prefix)
-        prefix_key = _ns_key(prefix_parts) if prefix_parts else None
-        prefix_like = f"{prefix_key}{_NS_DELIM}%" if prefix_key else None
-
-        if op.query and self._vec_enabled and self.embeddings:
-            return self._search_semantic(
-                op,
-                prefix_parts=prefix_parts,
-                now=now,
-            )
-
-        requested_limit = int(op.limit)
-        requested_offset = int(op.offset)
-
-        # Non-semantic search: return most recently updated items.
-        if op.filter:
-            # Apply filters in Python to avoid dynamic SQL construction.
-            # NOTE: _filter_fetch_cap (default 5000) bounds this work; raise the
-            # cap or use DB-side filtering for heavy workloads.
-            fetch_limit = min(
-                self._filter_fetch_cap,
-                requested_limit + requested_offset + 512,
-            )
-            sql_limit = fetch_limit
-            sql_offset = 0
-            if fetch_limit >= self._filter_fetch_cap:
-                logger.warning(
-                    "Filter fetch cap reached (cap={}, limit={}, offset={}, "
-                    "fetch_limit={}); results may be incomplete",
-                    self._filter_fetch_cap,
-                    requested_limit,
-                    requested_offset,
-                    fetch_limit,
-                )
-        else:
-            sql_limit = requested_limit
-            sql_offset = requested_offset
-
-        cur = self._conn.execute(
-            """
-            SELECT ns_key, key, value_json, created_at_ms, updated_at_ms
-            FROM docmind_store_items
-            WHERE (expires_at_ms IS NULL OR expires_at_ms > ?)
-              AND (? IS NULL OR ns_key = ? OR ns_key LIKE ?)
-            ORDER BY updated_at_ms DESC
-            LIMIT ? OFFSET ?;
-            """,
-            (
-                now,
-                prefix_key,
-                prefix_key,
-                prefix_like,
-                sql_limit,
-                sql_offset,
-            ),
-        )
-        rows = cur.fetchall()
-        items: list[SearchItem] = []
-        for r in rows:
-            value = json.loads(str(r["value_json"]))
-            if op.filter and not _matches_filter(value, op.filter):
-                continue
-            ns_tuple = tuple(str(r["ns_key"]).split(_NS_DELIM)) if r["ns_key"] else ()
-            items.append(
-                SearchItem(
-                    namespace=ns_tuple,
-                    key=str(r["key"]),
-                    value=value,
-                    created_at=_ms_to_dt(int(r["created_at_ms"])),
-                    updated_at=_ms_to_dt(int(r["updated_at_ms"])),
-                    score=None,
-                )
-            )
-
-        if op.filter:
-            return items[requested_offset : requested_offset + requested_limit]
-        return items
-
-    def _handle_list_namespaces(self, op: ListNamespacesOp) -> list[tuple[str, ...]]:
-        if not op.match_conditions:
-            cur = self._conn.execute(
-                "SELECT DISTINCT ns_key FROM docmind_store_items "
-                "ORDER BY ns_key LIMIT ? OFFSET ?;",
-                (int(op.limit), int(op.offset)),
-            )
-            raw = [str(r["ns_key"]) for r in cur.fetchall()]
-            namespaces = [tuple(x.split(_NS_DELIM)) if x else () for x in raw]
-            return (
-                namespaces
-                if op.max_depth is None
-                else [ns[: op.max_depth] for ns in namespaces]
-            )
-
-        requested_limit = max(0, int(op.limit))
-        requested_offset = max(0, int(op.offset))
-        if requested_limit == 0:
-            return []
-
-        batch_size = max(100, requested_limit * 2)
-        filtered: list[tuple[str, ...]] = []
-        matched_seen = 0
-        sql_offset = 0
-        conditions = op.match_conditions or ()
-        while True:
-            cur = self._conn.execute(
-                "SELECT DISTINCT ns_key FROM docmind_store_items "
-                "ORDER BY ns_key LIMIT ? OFFSET ?;",
-                (batch_size, sql_offset),
-            )
-            rows = cur.fetchall()
-            if not rows:
-                break
-            sql_offset += len(rows)
-            for r in rows:
-                ns = tuple(str(r["ns_key"]).split(_NS_DELIM)) if r["ns_key"] else ()
-                if not all(_match_namespace(ns, cond) for cond in conditions):
-                    continue
-                matched_seen += 1
-                if matched_seen <= requested_offset:
-                    continue
-                if op.max_depth is not None:
-                    ns = ns[: op.max_depth]
-                filtered.append(ns)
-                if len(filtered) >= requested_limit:
-                    return filtered
-
-        return filtered
-
-    # Query helpers
-    def _vec_namespace_prefix_params(self, prefix_parts: tuple[str, ...]) -> list[Any]:
-        values: list[Any] = [None] * _MAX_NS_DEPTH
-        for i, p in enumerate(prefix_parts[:_MAX_NS_DEPTH]):
-            values[i] = p
-        # Predicate uses (? IS NULL OR nsX = ?) pairs.
-        params: list[Any] = []
-        for v in values:
-            params.extend([v, v])
-        return params
-
-    def _embed_value(self, value: dict[str, Any], override_fields: Any) -> list[float]:
-        if not self.embeddings or not self.index_config:
-            raise RuntimeError("Embeddings not configured")
-        # Use override fields if provided, else defaults.
-        fields: list[tuple[str, str | list[Any]]] = self._tokenized_fields
-        if isinstance(override_fields, list):
-            fields = [
-                (p, tokenize_path(p) if p != "$" else "$") for p in override_fields
-            ]
-
-        texts: list[str] = []
-        for _, tokenized in fields:
-            if tokenized == "$":
-                texts.append(json.dumps(value, ensure_ascii=False))
-                continue
-            extracted = get_text_at_path(value, tokenized)
-            if not extracted:
-                continue
-            if isinstance(extracted, list):
-                texts.extend([str(x) for x in extracted if x])
-            else:
-                texts.append(str(extracted))
-        joined = "\n".join([t for t in texts if t]).strip()
-        if not joined:
-            joined = json.dumps(value, ensure_ascii=False)
-        vec = self.embeddings.embed_documents([joined])[0]
-        return [float(x) for x in vec]
-
-    def _upsert_embedding(
-        self, *, item_id: int, ns_cols: list[str], embedding: list[float]
-    ) -> None:
-        if sqlite_vec is None:
-            return
-        if self.index_config:
-            dims = int(self.index_config.get("dims") or 0)
-            if dims and len(embedding) != dims:
-                raise ValueError(
-                    "Embedding dimension mismatch: "
-                    f"expected {dims}, got {len(embedding)}"
-                )
-        blob = sqlite_vec.serialize_float32(embedding)
-        self._conn.execute(
-            """
-            INSERT OR REPLACE INTO docmind_store_vec
-                (item_id, ns0, ns1, ns2, ns3, ns4, ns5, ns6, ns7, embedding)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-            """,
-            (item_id, *ns_cols[:_MAX_NS_DEPTH], blob),
-        )
-
-    def _search_semantic(
-        self,
-        op: SearchOp,
-        *,
-        prefix_parts: tuple[str, ...],
-        now: int,
-    ) -> list[SearchItem]:
-        if op.query is None or self.embeddings is None:
-            return []
-        if sqlite_vec is None:
-            return []
-        query_vec = [float(x) for x in self.embeddings.embed_query(str(op.query))]
-        blob = sqlite_vec.serialize_float32(query_vec)
-
-        requested_limit = int(op.limit)
-        requested_offset = int(op.offset)
-
-        # vec0 supports offset poorly; oversample and slice client-side.
-        k = max(1, requested_limit + requested_offset + VEC0_OVERSAMPLE)
-
-        ns_params = self._vec_namespace_prefix_params(prefix_parts)
-
-        cur = self._conn.execute(
-            """
-            WITH knn AS (
-                SELECT item_id, distance
-                FROM docmind_store_vec
-                WHERE embedding MATCH ?
-                  AND k = ?
-                  AND (
-                    (? IS NULL OR ns0 = ?) AND
-                    (? IS NULL OR ns1 = ?) AND
-                    (? IS NULL OR ns2 = ?) AND
-                    (? IS NULL OR ns3 = ?) AND
-                    (? IS NULL OR ns4 = ?) AND
-                    (? IS NULL OR ns5 = ?) AND
-                    (? IS NULL OR ns6 = ?) AND
-                    (? IS NULL OR ns7 = ?)
-                  )
-                ORDER BY distance
-            )
-            SELECT
-                i.ns_key,
-                i.key,
-                i.value_json,
-                i.created_at_ms,
-                i.updated_at_ms,
-                knn.distance
-            FROM knn
-            JOIN docmind_store_items i USING(item_id)
-            WHERE (i.expires_at_ms IS NULL OR i.expires_at_ms > ?)
-            ORDER BY knn.distance
-            LIMIT ?;
-            """,
-            (
-                blob,
-                k,
-                *ns_params,
-                now,
-                k,
-            ),
-        )
-        rows = cur.fetchall()
-        items: list[SearchItem] = []
-        for r in rows:
-            value = json.loads(str(r["value_json"]))
-            if op.filter and not _matches_filter(value, op.filter):
-                continue
-            ns_tuple = tuple(str(r["ns_key"]).split(_NS_DELIM)) if r["ns_key"] else ()
-            distance = float(r["distance"])
-            items.append(
-                SearchItem(
-                    namespace=ns_tuple,
-                    key=str(r["key"]),
-                    value=value,
-                    created_at=_ms_to_dt(int(r["created_at_ms"])),
-                    updated_at=_ms_to_dt(int(r["updated_at_ms"])),
-                    score=float((2.0 - distance) / 2.0),
-                )
-            )
-        return items[requested_offset : requested_offset + requested_limit]
+def _drop_orphaned_legacy_vector_table(conn: sqlite3.Connection) -> None:
+    if not _table_exists(conn, LEGACY_VEC_TABLE):
+        return
+    with conn:
+        if not conn.in_transaction:
+            conn.execute("BEGIN IMMEDIATE;")
+        conn.execute(f"DROP TABLE IF EXISTS {LEGACY_VEC_TABLE};")

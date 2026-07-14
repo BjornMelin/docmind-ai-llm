@@ -63,19 +63,23 @@ docker compose up -d qdrant
 
 ## Prefetch and verify required local models
 
-Dense indexing requires BGE-M3. PDF parsing requires the pinned Docling and
-RapidOCR model bundles:
+The default retrieval pipeline requires BGE-M3, BM42, the BGE reranker, and
+SigLIP. PDF parsing requires the pinned Docling layout bundle. RapidOCR uses the
+models packaged in its locked wheel:
 
 ```bash
 uv run python tools/models/pull.py \
-  --bge-m3 \
+  --all \
   --cache_dir ./models_cache \
   --parser-defaults \
-  --rapidocr-cache-dir ./cache/models
+  --parser-cache-dir ./cache/models
 uv run python scripts/parser_health.py --check
 ```
 
-The health command hashes every file in both canonical manifests. A missing, extra, linked, truncated, or modified file blocks PDF readiness.
+The health command checks parser imports and hashes every file in the app-owned
+Docling manifest. A missing, extra, linked, truncated, or modified Docling file
+blocks dependency readiness. RapidOCR's locked wheel owns its model files and
+checksums; the test and image-build gates run a real offline OCR fixture.
 
 The parser framework, parser profile, and optical character recognition (OCR) engine are fixed. Configure parser resource limits and OCR behavior, but do not treat those fixed literals as backend selectors.
 
@@ -92,7 +96,7 @@ Use a loopback Ollama service for the default local backend:
 ```env
 DOCMIND_LLM_BACKEND=ollama
 DOCMIND_OLLAMA_BASE_URL=http://localhost:11434
-DOCMIND_MODEL=qwen3:4b-instruct
+DOCMIND_LLM_REQUEST__MODEL=qwen3:4b-instruct
 ```
 
 ```bash
@@ -103,7 +107,7 @@ Use an external vLLM service through its OpenAI-compatible endpoint:
 
 ```env
 DOCMIND_LLM_BACKEND=vllm
-DOCMIND_OPENAI__BASE_URL=http://localhost:8000/v1
+DOCMIND_VLLM_BASE_URL=http://localhost:8000/v1
 DOCMIND_OPENAI__API_KEY=local_api_key_not_used
 ```
 
@@ -145,8 +149,8 @@ uv run pytest tests/path/to/test_file.py -q
 Use the repository runners for broader gates:
 
 ```bash
-uv run python scripts/run_tests.py --fast
-uv run python scripts/run_quality_gates.py --ci --report
+uv run pytest tests/unit tests/integration -q --no-cov
+uv run pytest tests/unit tests/integration -q --cov=src --cov-branch --cov-report=term-missing --cov-report=html:htmlcov --cov-report=xml:coverage.xml --cov-report=json:coverage.json --cov-fail-under=80 --junitxml=junit.xml
 ```
 
 Before shipping a branch, run the full static and test gates:
@@ -155,7 +159,7 @@ Before shipping a branch, run the full static and test gates:
 uv run ruff format --check .
 uv run ruff check .
 uv run pyright --threads 4
-uv run python scripts/run_tests.py
+uv run pytest tests/unit tests/integration -q --no-cov
 ```
 
 ## Validate system boundaries
@@ -173,7 +177,9 @@ Run the canonical container health command inside a running application containe
 python scripts/container_health.py
 ```
 
-The container command verifies parser model integrity and a TCP connection to Streamlit. It does not issue an HTTP request.
+The container command is a recurring liveness probe that opens a TCP connection
+to Streamlit without issuing an HTTP request. The entrypoint runs parser
+dependency and Docling-model checks once before Streamlit starts.
 
 Regenerate the parser benchmark only after the working tree is frozen:
 

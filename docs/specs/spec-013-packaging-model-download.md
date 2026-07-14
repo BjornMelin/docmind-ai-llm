@@ -1,8 +1,8 @@
 ---
 spec: SPEC-013
 title: Packaging: Model Pre-download with huggingface_hub and Integrity Checks
-version: 1.1.0
-date: 2026-07-11
+version: 1.3.0
+date: 2026-07-14
 owners: ["ai-arch"]
 status: Final
 related_requirements:
@@ -15,8 +15,10 @@ related_adrs: ["ADR-040"]
 ## Objective
 
 Provide a CLI tool to pre-download complete text and image embedding snapshots
-at repository-owned revisions through `huggingface_hub`. Parser artifacts use
-separate app-owned manifests with exact size and SHA-256 verification.
+and the default text reranker at repository-owned revisions through
+`huggingface_hub`. The Docling layout bundle uses one app-owned manifest with
+exact size and SHA-256 verification. RapidOCR's locked wheel owns its model
+files and checksums.
 
 ## Libraries and Imports
 
@@ -33,12 +35,17 @@ from huggingface_hub import hf_hub_download
 ### Model IDs (default set)
 
 - Text embeddings: `BAAI/bge-m3`
+- Sparse text: `Qdrant/bm42-all-minilm-l6-v2-attentions` from
+  `Qdrant/all_miniLM_L6_v2_with_attentions`
+- Text reranking: `BAAI/bge-reranker-v2-m3`
 - Image/text (multimodal): `google/siglip-base-patch16-224`
 
-`--all` downloads complete pinned snapshots for those two models. Parser
-artifacts use `--parser-defaults` and their app-owned manifests. Text reranking
-and sparse encoding are optional, fail-open stages; the CLI does not pretend
-that one detached weight file is a runnable local model.
+`--all` downloads complete pinned snapshots for those four models. The Docling
+layout bundle uses `--parser-defaults` and its app-owned manifest. RapidOCR is
+not a downloader target because its locked wheel supplies the runnable models.
+The BGE reranker manifest contains every Transformers file required by the
+runtime CrossEncoder. The BM42 manifest contains FastEmbed's ONNX model,
+tokenizer, and stopword files. The model-free BM25 fallback needs no snapshot.
 
 Offline flags to set before runtime: `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1`.
 
@@ -49,6 +56,10 @@ Feature: Pre-download
   Scenario: Download bge-m3
     When I run the CLI with model BAAI/bge-m3
     Then weights SHALL exist under the HF cache directory
+
+  Scenario: Download runtime defaults
+    When I run the CLI with --all
+    Then the pinned BGE-M3, BM42, BGE reranker, and SigLIP snapshots SHALL exist under one HF cache directory
 ```
 
 ## References

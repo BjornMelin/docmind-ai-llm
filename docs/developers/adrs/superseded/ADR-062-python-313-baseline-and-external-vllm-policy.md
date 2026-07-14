@@ -101,7 +101,7 @@ Weights: Complexity 40% · Performance/Scale 30% · Ecosystem Alignment 30% (10 
 - `.github/workflows/ci.yml` tests against 3.11, 3.12, and 3.13.11.
 - `Dockerfile` pins `python:3.13.11-slim-bookworm`.
 - GPU dependency lanes remain explicit (CUDA index specified on install) and are not globally applied.
-- vLLM-specific knobs in `DOCMIND_VLLM__*` are treated as *server-launch helper inputs* (see `settings.get_vllm_env_vars()`); the app uses OpenAI-compatible HTTP at runtime.
+- Operators pass vLLM-specific launch knobs directly to the external server. The app owns only the OpenAI-compatible HTTP endpoint and provider-neutral request values.
 
 ## Consequences
 

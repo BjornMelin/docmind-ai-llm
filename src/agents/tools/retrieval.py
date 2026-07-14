@@ -2,562 +2,285 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
-import importlib
 import json
 import re
 import time
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
-from langchain_core.tools import tool
+from langchain_core.messages import ToolMessage
+from langchain_core.tools import InjectedToolCallId, tool
 from langgraph.prebuilt import InjectedState, ToolRuntime
-from llama_index.core import Document
+from langgraph.types import Command
+from llama_index.core.base.base_query_engine import BaseQueryEngine
+from llama_index.core.base.response.schema import RESPONSE_TYPE, Response
 from loguru import logger
 
-from src.config.settings import settings
+from src.agents.deadlines import remaining_deadline_seconds
+from src.agents.models import AgentRuntimeContext
 from src.utils.log_safety import build_pii_log_entry
 from src.utils.telemetry import log_jsonl
 
-from .constants import (
-    CONTENT_KEY_LENGTH,
-    MAX_RETRIEVAL_RESULTS,
-    VARIANT_QUERY_LIMIT,
-)
-
-
-def _safe_query_for_log(query: str, *, max_len: int = 200) -> str:
-    """Return a compact query string for internal logging/debugging.
-
-    The return value is intended for non-sensitive troubleshooting and must not
-    be used to log raw user content. It exists primarily to cap log sizes and
-    to support targeted unit tests that validate truncation behavior.
-
-    Args:
-        query: Query string to truncate.
-        max_len: Maximum number of characters to keep before appending an
-            ellipsis. When the query exceeds this length, the returned string is
-            `max_len + 1` characters (including the ellipsis).
-
-    Returns:
-        A compact string. When truncated, it ends with the unicode ellipsis
-        character ("…").
-    """
-    normalized = " ".join(str(query).split())
-    if max_len <= 0:
-        return "…" if normalized else ""
-    if len(normalized) <= max_len:
-        return normalized
-    return normalized[:max_len].rstrip() + "…"
+from .constants import MAX_RETRIEVAL_RESULTS
 
 
 def _resolve_router_engine(
-    state: dict | None, runtime: ToolRuntime | None
-) -> Any | None:
-    """Resolves the router engine from either injected state or tool runtime.
+    runtime: ToolRuntime[AgentRuntimeContext, dict[str, Any]],
+) -> BaseQueryEngine | None:
+    """Resolve the router engine from transient tool runtime context.
 
     Args:
-        state: The current graph state containing tool data.
         runtime: The LangGraph ToolRuntime providing caller context.
 
     Returns:
         The router engine instance if found, otherwise None.
     """
-    runtime_ctx = runtime.context if runtime is not None else None
+    runtime_ctx = runtime.context
     if isinstance(runtime_ctx, dict):
         router_engine = runtime_ctx.get("router_engine")
-        if router_engine is not None:
-            return router_engine
-
-    tools_data = state.get("tools_data") if isinstance(state, dict) else None
-    if isinstance(tools_data, dict):
-        router_engine = tools_data.get("router_engine")
-        if router_engine is not None:
-            return router_engine
+        if isinstance(router_engine, BaseQueryEngine):
+            return cast(BaseQueryEngine, router_engine)
 
     return None
 
 
-def _emit_router_injection_event(*, used: bool, reason: str) -> None:
-    """Logs a telemetry event for router injection attempts.
+def _emit_router_event(*, outcome: str) -> None:
+    """Log a PII-safe event for the canonical router boundary.
 
     Args:
-        used: Whether the router injection was successfully applied.
-        reason: Descriptive reason for the injection status.
+        outcome: Stable router outcome label.
     """
     with contextlib.suppress(Exception):  # pragma: no cover - telemetry
         log_jsonl(
             {
-                "router_injection_attempted": True,
-                "used": bool(used),
-                "reason": reason,
+                "retrieval.backend": "llama_index_router",
+                "retrieval.outcome": outcome,
             }
         )
 
 
-def _maybe_router_injection_response(
+def _router_error_response(
     *,
     query: str,
-    state: dict | None,
-    runtime: ToolRuntime | None,
-    start_time: float,
-) -> str | None:
-    """Attempts to intercept the retrieval flow with a direct router response.
+    turn_id: str,
+    message: str,
+    error_type: str | None = None,
+    error_fingerprint: str | None = None,
+) -> str:
+    """Return the stable JSON error contract for document retrieval.
 
     Args:
         query: User input query.
-        state: Injected graph state.
-        runtime: Tool runtime context.
-        start_time: Wall-clock start time for latency calculation.
+        turn_id: Non-model-authored identifier for the current coordinator run.
+        message: User-safe error message.
+        error_type: Optional exception class name.
+        error_fingerprint: Optional redacted diagnostic fingerprint.
 
     Returns:
-        JSON-encoded retrieval results if successful, otherwise None.
+        JSON-encoded retrieval error.
     """
-    if not settings.agents.enable_router_injection:
-        return None
+    payload: dict[str, Any] = {
+        "documents": [],
+        "error": message,
+        "strategy_used": "router",
+        "query_optimized": query,
+        "turn_id": turn_id,
+    }
+    if error_type is not None:
+        payload["error_type"] = error_type
+    if error_fingerprint is not None:
+        payload["error_fingerprint"] = error_fingerprint
+    return json.dumps(payload, default=str)
 
-    router_engine = _resolve_router_engine(state, runtime)
-    if router_engine is None:
-        _emit_router_injection_event(used=False, reason="router_engine_missing")
-        return None
 
-    try:
-        resp = router_engine.query(query)
-    except Exception as exc:  # pragma: no cover - fail open
-        _emit_router_injection_event(used=False, reason="router_query_failed")
-        redaction = build_pii_log_entry(
-            str(exc), key_id="retrieve_documents.router_injection"
-        )
-        logger.debug(
-            "router injection failed (error_type={}, error={})",
-            type(exc).__name__,
-            redaction.redacted,
-        )
-        return None
-
-    documents = _parse_tool_result(resp)
-    _emit_router_injection_event(used=True, reason="router_engine_present")
-    processing_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
+def _router_response(
+    *,
+    query: str,
+    turn_id: str,
+    documents: list[dict[str, Any]],
+    start_time: float,
+) -> str:
+    """Return the stable JSON success contract for document retrieval."""
     return json.dumps(
         {
-            "documents": documents[:MAX_RETRIEVAL_RESULTS],
-            "strategy_used": "router_injection",
+            "documents": documents,
+            "strategy_used": "router",
             "query_original": query,
             "query_optimized": query,
+            "turn_id": turn_id,
             "document_count": len(documents),
-            "processing_time_ms": processing_time_ms,
-            "dspy_used": False,
-            "graphrag_used": False,
-            "router_injection": True,
+            "processing_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
+            "router_used": True,
         },
         default=str,
     )
 
 
-@tool
-def retrieve_documents(
-    query: str,
-    strategy: str = "hybrid",
-    use_dspy: bool = True,
-    use_graphrag: bool = False,
-    state: Annotated[dict, InjectedState] | None = None,
-    runtime: ToolRuntime | None = None,
-) -> str:
-    """Executes multi-strategy document retrieval with query optimization.
+def _retrieval_command(content: str, *, tool_call_id: str) -> Command:
+    """Persist one retrieval batch while returning its JSON to the model."""
+    payload = cast(dict[str, Any], json.loads(content))
+    # LangGraph injects this hidden argument. Pairing the provider's call ID with
+    # the coordinator-owned turn ID gives reducer/delta reconciliation a stable
+    # per-turn identity even when a local provider reuses call IDs.
+    payload["retrieval_id"] = tool_call_id
+    content = json.dumps(payload, default=str)
+    return Command(
+        update={
+            "messages": [ToolMessage(content=content, tool_call_id=tool_call_id)],
+            "retrieval_results": [payload],
+        }
+    )
 
-    Coordinates between vector search, knowledge graph (GraphRAG), and hybrid
-    fusion retrievers. Supports semantic query expansion via DSPy.
+
+@tool
+async def retrieve_documents(
+    query: str,
+    runtime: ToolRuntime[AgentRuntimeContext, dict[str, Any]],
+    state: Annotated[dict[str, Any], InjectedState],
+    tool_call_id: Annotated[str, InjectedToolCallId],
+) -> Command:
+    """Retrieve documents through the prebuilt LlamaIndex router.
+
+    The router is the sole owner of vector, hybrid, multimodal, keyword, and
+    GraphRAG strategy selection. It is supplied through transient
+    ``ToolRuntime.context`` and never persisted in graph state.
 
     Args:
         query: User input query string.
-        strategy: Retrieval strategy ('hybrid', 'vector', or 'graphrag').
-        use_dspy: Whether to enable DSPy-based query optimization.
-        use_graphrag: Whether to attempt GraphRAG retrieval if available.
-        state: Injected LangGraph state containing indexes.
-        runtime: LangGraph ToolRuntime for transient context access.
+        runtime: LangGraph ToolRuntime containing the canonical router engine.
+        state: Injected LangGraph state used only for conversational recall.
+        tool_call_id: Injected identifier for the model-visible tool response.
 
     Returns:
-        JSON-encoded string containing retrieved documents and strategy metadata.
+        A state update containing the retrieval batch and model-visible JSON.
     """
-    try:
-        start_time = time.perf_counter()
-
-        router_response = _maybe_router_injection_response(
-            query=query,
-            state=state,
-            runtime=runtime,
-            start_time=start_time,
+    start_time = time.perf_counter()
+    turn_id_value = state.get("turn_id")
+    turn_id = turn_id_value.strip() if isinstance(turn_id_value, str) else ""
+    if not turn_id:
+        _emit_router_event(outcome="turn_missing")
+        return _retrieval_command(
+            _router_error_response(
+                query=query,
+                turn_id="",
+                message="Retrieval turn unavailable",
+            ),
+            tool_call_id=tool_call_id,
         )
-        if router_response is not None:
-            return router_response
 
-        vector_index, kg_index, retriever = _extract_indexes(state, runtime)
+    router_engine = _resolve_router_engine(runtime)
+    if router_engine is None:
+        _emit_router_event(outcome="router_missing")
+        return _retrieval_command(
+            _router_error_response(
+                query=query,
+                turn_id=turn_id,
+                message="Document router unavailable",
+            ),
+            tool_call_id=tool_call_id,
+        )
 
-        if vector_index is None and retriever is None and kg_index is None:
-            return json.dumps(
-                {
-                    "documents": [],
-                    "error": "No retrieval tools available",
-                    "strategy_used": strategy,
-                    "query_optimized": query,
-                },
-                default=str,
-            )
-
-        # Optional aggregator fast-path for resilience testing scenarios
-        st = state if isinstance(state, dict) else {}
-        if st and any(
-            st.get(k)
-            for k in (
-                "error_isolation_enabled",
-                "continue_on_tool_failure",
-                "resilience_mode_enabled",
-                "partial_results_acceptable",
-                "auto_cleanup_on_memory_pressure",
-            )
-        ):
-            collected = _collect_via_tool_factory(
-                query,
-                vector_index,
-                kg_index,
-                retriever,
-            )
-            if collected:
-                return json.dumps(
-                    {
-                        "documents": collected[:MAX_RETRIEVAL_RESULTS],
-                        "strategy_used": "mixed",
-                        "query_original": query,
-                        "query_optimized": query,
-                        "document_count": len(collected),
-                        "processing_time_ms": round(
-                            (time.perf_counter() - start_time) * 1000, 2
-                        ),
-                        "partial_results": True,
-                    },
-                    default=str,
-                )
-
-        # Use detailed path with query optimization and strategy-specific tools
-
-        # Optimize queries (DSPy or fallback)
-        primary_query, query_variants = _optimize_queries(query, use_dspy)
-        queries_to_process = [primary_query, *query_variants[:VARIANT_QUERY_LIMIT]]
-
-        # Run GraphRAG if requested
-        documents: list[dict] = []
-        strategy_used = strategy
-        if strategy == "graphrag" and use_graphrag and kg_index:
-            docs, fallback = _run_graphrag(kg_index, queries_to_process)
-            documents.extend(docs)
-            if fallback:
-                strategy_used = "hybrid"
-
-        # Run hybrid/vector if needed
-        if strategy in ["hybrid", "vector"] or (
-            strategy == "graphrag" and not documents
-        ):
-            docs, last_used, error_json = _run_vector_hybrid(
-                strategy, retriever, vector_index, queries_to_process, primary_query
-            )
-            if error_json:
-                return error_json
-            documents.extend(docs)
-            strategy_used = last_used or strategy_used
+    try:
+        remaining = remaining_deadline_seconds(
+            state,
+            operation="Document retrieval",
+        )
+        async with asyncio.timeout(remaining):
+            documents = _parse_tool_result(await router_engine.aquery(query))
 
         # Contextual recall: if user references prior context and retrieval returned
         # nothing, reuse most recent sources from persisted state. This enables
         # "what does that chart show?" flows across reloads without storing images.
         if not documents and _looks_contextual(query):
-            recalled = _recall_recent_sources(st)
+            recalled = _recall_recent_sources(state)
             if recalled:
                 documents.extend(recalled)
-                strategy_used = f"{strategy_used}+recall"
 
-        # Deduplicate
         documents = _deduplicate_documents(documents)
+        _emit_router_event(outcome="success")
+        return _retrieval_command(
+            _router_response(
+                query=query,
+                turn_id=turn_id,
+                documents=documents,
+                start_time=start_time,
+            ),
+            tool_call_id=tool_call_id,
+        )
 
-        processing_time = time.perf_counter() - start_time
-        result_data = {
-            "documents": documents,
-            "strategy_used": strategy_used,
-            "query_original": query,
-            "query_optimized": primary_query,
-            "document_count": len(documents),
-            "processing_time_ms": round(processing_time * 1000, 2),
-            "dspy_used": use_dspy,
-            "graphrag_used": use_graphrag and strategy == "graphrag",
-        }
-        return json.dumps(result_data, default=str)
-
-    except (OSError, RuntimeError, ValueError, AttributeError) as e:
-        redaction = build_pii_log_entry(str(e), key_id="retrieve_documents.exception")
+    except TimeoutError as exc:
+        _emit_router_event(outcome="deadline_exceeded")
+        return _retrieval_command(
+            _router_error_response(
+                query=query,
+                turn_id=turn_id,
+                message="Document retrieval deadline exceeded",
+                error_type=type(exc).__name__,
+            ),
+            tool_call_id=tool_call_id,
+        )
+    except Exception as exc:  # external query engines expose heterogeneous errors
+        redaction = build_pii_log_entry(
+            str(exc), key_id="retrieve_documents.router_query"
+        )
         logger.error(
             "Document retrieval failed (error_type={}, error={})",
-            type(e).__name__,
+            type(exc).__name__,
             redaction.redacted,
         )
-        return json.dumps(
-            {
-                "documents": [],
-                "error": "Document retrieval failed",
-                "error_type": type(e).__name__,
-                "error_fingerprint": redaction.fingerprint[:12],
-                "strategy_used": strategy,
-                "query_optimized": query,
-            },
-            default=str,
+        _emit_router_event(outcome="query_failed")
+        return _retrieval_command(
+            _router_error_response(
+                query=query,
+                turn_id=turn_id,
+                message="Document retrieval failed",
+                error_type=type(exc).__name__,
+                error_fingerprint=redaction.fingerprint[:12],
+            ),
+            tool_call_id=tool_call_id,
         )
 
 
-def _extract_indexes(state: dict | None, runtime: ToolRuntime | None):
-    """Extracts search indexes from runtime context or persisted state.
+def document_identity(document: dict[str, Any]) -> str | None:
+    """Return a stable retrieved-node identity when one is available."""
+    for key in ("id", "node_id"):
+        value = document.get(key)
+        if value is not None and str(value):
+            return f"{key}:{value}"
 
-    Args:
-        state: Persisted graph state.
-        runtime: Transient tool runtime context.
-
-    Returns:
-        A tuple of (vector_index, kg_index, retriever).
-    """
-    # Prefer runtime context (not persisted) for heavy objects like indexes.
-    # Fall back to state.tools_data for any missing entries.
-    runtime_ctx = runtime.context if runtime is not None else None
-
-    # Start with runtime values if available
-    v = None
-    kg = None
-    r = None
-
-    if isinstance(runtime_ctx, dict):
-        v = runtime_ctx.get("vector")
-        kg = runtime_ctx.get("kg")
-        r = runtime_ctx.get("retriever")
-
-    # Fall back to tools_data for missing entries
-    tools_data = state.get("tools_data") if state else None
-    if tools_data:
-        if v is None:
-            v = tools_data.get("vector")
-        if kg is None:
-            kg = tools_data.get("kg")
-        if r is None:
-            r = tools_data.get("retriever")
-
-    if not any((v, kg, r)):
-        logger.warning("No tools data available in state, using fallback")
-
-    return v, kg, r
+    metadata = document.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    for key in ("chunk_id", "page_id"):
+        value = metadata.get(key)
+        if value is not None and str(value):
+            return f"{key}:{value}"
+    return None
 
 
-# Fast-path via ToolFactory.create_tools_from_indexes was removed for clarity
-# and testability. Use explicit tools for each strategy instead.
-
-
-def _optimize_queries(query: str, use_dspy: bool) -> tuple[str, list[str]]:
-    """Generates optimized query variants for broader search recall.
-
-    Args:
-        query: The raw input query.
-        use_dspy: Whether to use the DSPy optimizer.
-
-    Returns:
-        A tuple containing the primary refined query and a list of variants.
-    """
-    optimized = {"refined": query, "variants": []}
-    if use_dspy:
-        try:
-            from src.dspy_integration import DSPyLlamaIndexRetriever
-
-            optimized = DSPyLlamaIndexRetriever.optimize_query(query)
-            logger.debug(
-                "DSPy optimization produced {} variants",
-                len(optimized.get("variants", [])),
-            )
-        except ImportError:
-            logger.warning(
-                "DSPy integration not available - using fallback optimization"
-            )
-            if len(query.split()) < 3:
-                optimized = {
-                    "refined": f"Find documents about {query}",
-                    "variants": [f"What is {query}?", f"Explain {query}"],
-                }
-        else:
-            # Ensure short queries still generate variants if DSPy returns none
-            if not optimized.get("variants") and len(query.split()) < 3:
-                optimized = {
-                    "refined": optimized.get("refined", query),
-                    "variants": [f"What is {query}?", f"Explain {query}"],
-                }
-    return optimized["refined"], optimized.get("variants", [])
-
-
-def _run_graphrag(kg_index: Any, queries: list[str]) -> tuple[list[dict], bool]:
-    """Executes knowledge graph retrieval across multiple query variants.
-
-    Args:
-        kg_index: Knowledge graph index instance.
-        queries: List of search queries to execute.
-
-    Returns:
-        A tuple of (retrieved_documents, fallback_required_flag).
-    """
-    documents: list[dict] = []
-    fallback = False
-    for q in queries:
-        search_tool = _get_tool_factory().create_kg_search_tool(kg_index)
-        if not search_tool:
-            continue
-        try:
-            result = search_tool.call(q)
-            new_docs = _parse_tool_result(result)
-            documents.extend(new_docs)
-            logger.debug("GraphRAG retrieved {} documents", len(new_docs))
-        except (OSError, RuntimeError, ValueError, AttributeError) as e:
-            redaction = build_pii_log_entry(str(e), key_id="graphrag.query.exception")
-            logger.warning(
-                "GraphRAG query failed (error_type={}, error={})",
-                type(e).__name__,
-                redaction.redacted,
-            )
-            fallback = True
-            break
-    return documents, fallback
-
-
-def _run_vector_hybrid(
-    strategy: str,
-    retriever: Any,
-    vector_index: Any,
-    queries: list[str],
-    primary_query: str,
-) -> tuple[list[dict], str | None, str | None]:
-    """Executes vector or hybrid search across multiple query variants.
-
-    Args:
-        strategy: Requested retrieval strategy.
-        retriever: Hybrid retriever instance.
-        vector_index: Vector search index instance.
-        queries: List of search queries to execute.
-        primary_query: The original non-expanded query for fallback.
-
-    Returns:
-        A tuple of (retrieved_documents, strategy_used, error_json).
-    """
-    documents: list[dict] = []
-    strategy_used: str | None = None
-    for idx, q in enumerate(queries):
-        if strategy == "hybrid" and retriever:
-            search_tool = _get_tool_factory().create_hybrid_search_tool(retriever)
-            strategy_used = "hybrid_fusion"
-        elif vector_index:
-            if strategy == "hybrid":
-                search_tool = _get_tool_factory().create_hybrid_vector_tool(
-                    vector_index
-                )
-                strategy_used = "hybrid_vector"
-            else:
-                search_tool = _get_tool_factory().create_vector_search_tool(
-                    vector_index
-                )
-                strategy_used = "vector"
-        else:
-            logger.error("No vector index available for retrieval")
-            return (
-                [],
-                None,
-                json.dumps(
-                    {
-                        "documents": [],
-                        "error": "No vector index available",
-                        "strategy_used": strategy,
-                        "query_optimized": primary_query,
-                    },
-                    default=str,
-                ),
-            )
-        try:
-            result = search_tool.call(q)
-            new_docs = _parse_tool_result(result)
-            documents.extend(new_docs)
-            logger.debug(
-                "{} retrieved {} documents",
-                strategy_used,
-                len(new_docs),
-            )
-            # If this is the primary query and hybrid returned empty, fallback to vector
-            if (
-                strategy in ["hybrid"]
-                and idx == 0
-                and retriever
-                and vector_index
-                and not new_docs
-            ):
-                try:
-                    from .telemetry import log_event  # local import
-                except ImportError:  # pragma: no cover - defensive
-                    log_event = None
-                try:
-                    vtool = _get_tool_factory().create_vector_search_tool(vector_index)
-                    vres = vtool.call(primary_query)
-                    vdocs = _parse_tool_result(vres)
-                    if vdocs:
-                        documents.extend(vdocs)
-                        strategy_used = "vector"
-                        if log_event:
-                            log_event(
-                                "hybrid_fallback",
-                                reason="empty_results",
-                                query_len=len(primary_query),
-                            )
-                except (OSError, RuntimeError, ValueError, AttributeError) as fe:
-                    redaction = build_pii_log_entry(
-                        str(fe), key_id="vector_fallback.exception"
-                    )
-                    logger.warning(
-                        "Vector fallback failed (error_type={}, error={})",
-                        type(fe).__name__,
-                        redaction.redacted,
-                    )
-        except (OSError, RuntimeError, ValueError, AttributeError) as e:
-            redaction = build_pii_log_entry(str(e), key_id="vector_hybrid.exception")
-            logger.error(
-                "Retrieval failed (error_type={}, error={})",
-                type(e).__name__,
-                redaction.redacted,
-            )
-    return documents, strategy_used, None
-
-
-def _deduplicate_documents(documents: list[dict]) -> list[dict]:
-    """Removes redundant documents based on content snippets and stable IDs.
+def _deduplicate_documents(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Deduplicate stable node identities while preserving native rank order.
 
     Args:
         documents: Raw list of retrieved document dictionaries.
 
     Returns:
-        A unique list of documents, capped by MAX_RETRIEVAL_RESULTS.
+        Documents in their native order, capped by ``MAX_RETRIEVAL_RESULTS``.
     """
-    if not documents:
-        return []
-    seen_content: dict[str, dict] = {}
-    for doc in documents:
-        content = str(doc.get("content", "") or "")
-        meta = doc.get("metadata") if isinstance(doc, dict) else None
-        meta = meta if isinstance(meta, dict) else {}
-        # For multimodal nodes, content may be empty; prefer stable ids.
-        stable = meta.get("page_id") or meta.get("chunk_id") or meta.get("doc_id")
-        stable = stable or meta.get("document_id")
-        stable = stable or meta.get("source")
-        content_key = (content[:CONTENT_KEY_LENGTH] if content else str(stable or ""))[
-            :CONTENT_KEY_LENGTH
-        ]
-        if content_key not in seen_content or doc.get("score", 0) > seen_content[
-            content_key
-        ].get("score", 0):
-            seen_content[content_key] = doc
-    return list(seen_content.values())[:MAX_RETRIEVAL_RESULTS]
+    seen: set[str] = set()
+    unique: list[dict[str, Any]] = []
+    for document in documents:
+        identity = document_identity(document)
+        if identity is not None:
+            if identity in seen:
+                continue
+            seen.add(identity)
+        unique.append(document)
+        if len(unique) >= MAX_RETRIEVAL_RESULTS:
+            break
+    return unique
 
 
 def _looks_contextual(query: str) -> bool:
@@ -569,10 +292,12 @@ def _looks_contextual(query: str) -> bool:
     Returns:
         True if contextual keywords or pronouns are detected.
     """
-    # Intentionally broad: err on false-positives to trigger recall.
+    # Require a deictic reference. Bare nouns such as "image" or "table" are
+    # ordinary retrieval subjects and must not silently recall prior evidence.
     pattern = (
-        r"\b(this|that|they|them|above|previous|chart|figure|diagram|table|"
-        r"image|photo)\b"
+        r"\b(?:this|that|these|those|they|them|above|previous|earlier|mentioned)\b"
+        r"|\b(?:this|that|the|above|previous|earlier)\s+"
+        r"(?:chart|figure|diagram|table|image|photo)\b"
         r"|\bit\b(?=\s+(?:is|was|seems|refers|referring|about|in|on|of))"
     )
     return re.search(pattern, str(query), flags=re.IGNORECASE) is not None
@@ -594,7 +319,11 @@ def _recall_recent_sources(state: dict[str, Any] | None) -> list[dict[str, Any]]
     if isinstance(sr, dict):
         docs = sr.get("documents")
         if isinstance(docs, list):
-            return [_sanitize_document_dict(d) for d in docs if isinstance(d, dict)]
+            sanitized = [
+                _sanitize_document_dict(d) for d in docs if isinstance(d, dict)
+            ]
+            if sanitized:
+                return sanitized
 
     rr = state.get("retrieval_results")
     if isinstance(rr, list):
@@ -602,9 +331,11 @@ def _recall_recent_sources(state: dict[str, Any] | None) -> list[dict[str, Any]]
             if isinstance(item, dict):
                 docs = item.get("documents")
                 if isinstance(docs, list):
-                    return [
+                    sanitized = [
                         _sanitize_document_dict(d) for d in docs if isinstance(d, dict)
                     ]
+                    if sanitized:
+                        return sanitized
     return []
 
 
@@ -682,143 +413,32 @@ def _sanitize_document_dict(doc: dict[str, Any]) -> dict[str, Any]:
     return cleaned
 
 
-def _parse_tool_result(result: Any) -> list[dict[str, Any]]:
-    """Normalizes various tool output formats into a standard document list.
-
-    Handles LlamaIndex response objects, LangChain messages, and raw dictionaries.
+def _parse_tool_result(result: RESPONSE_TYPE) -> list[dict[str, Any]]:
+    """Normalize the canonical non-streaming LlamaIndex response.
 
     Args:
-        result: The raw output from a retrieval tool.
+        result: Response from the configured LlamaIndex router.
 
     Returns:
-        A list of dictionaries conforming to document schema.
+        Sanitized source-node dictionaries in native rank order.
+
+    Raises:
+        TypeError: If the router returns a noncanonical response type.
     """
-    if isinstance(result, str):
-        # Tool returned text response — create a minimal document entry
-        return [
-            {"content": result, "metadata": {"source": "tool_response"}, "score": 1.0}
-        ]
-    if hasattr(result, "source_nodes"):
-        nodes = getattr(result, "source_nodes", None)
-        if nodes is None:
-            nodes = []
-        elif not isinstance(nodes, list):
-            try:
-                nodes = list(nodes)
-            except TypeError:
-                nodes = []
-        docs: list[dict[str, Any]] = []
-        for nws in nodes:
-            node = getattr(nws, "node", None) or getattr(nws, "document", None) or nws
-            score = float(getattr(nws, "score", 0.0) or 0.0)
-            text = ""
-            try:
-                text_attr = getattr(node, "text", None)
-                if text_attr is not None:
-                    text = str(text_attr)
-                else:
-                    get_content = getattr(node, "get_content", None)
-                    text = str(get_content()) if callable(get_content) else str(node)
-            except Exception as exc:
-                redaction = build_pii_log_entry(str(exc), key_id="retrieval.parse_node")
-                logger.debug(
-                    "Failed to extract text from node; falling back to str(node) "
-                    "(node_type={} error_type={} error={})",
-                    type(node).__name__,
-                    type(exc).__name__,
-                    redaction.redacted,
-                )
-                text = str(node)
-            meta = _sanitize_metadata(getattr(node, "metadata", None) or {})
-            docs.append({"content": text, "metadata": meta, "score": score})
-        if docs:
-            return docs
-    if hasattr(result, "response"):
-        # LlamaIndex response object
-        return [
+    if not isinstance(result, Response):
+        raise TypeError("RouterQueryEngine must return a non-streaming Response")
+
+    documents: list[dict[str, Any]] = []
+    for node_with_score in result.source_nodes:
+        node = node_with_score.node
+        documents.append(
             {
-                "content": result.response,
-                "metadata": _sanitize_metadata(getattr(result, "metadata", None)),
-                "score": 1.0,
+                "id": node.node_id,
+                "content": node.get_content(),
+                "metadata": _sanitize_metadata(node.metadata),
+                "score": float(node_with_score.score or 0.0),
             }
-        ]
-    if isinstance(result, list):
-        # List of documents
-        documents: list[dict[str, Any]] = []
-        for item in result:
-            if isinstance(item, Document):
-                documents.append(
-                    {
-                        "content": item.text,
-                        "metadata": _sanitize_metadata(item.metadata),
-                        "score": getattr(item, "score", 1.0),
-                    }
-                )
-            elif isinstance(item, dict):
-                documents.append(_sanitize_document_dict(item))
+        )
+    if documents:
         return documents
-    # Fallback - convert to string
-    return [{"content": str(result), "metadata": {"source": "unknown"}, "score": 1.0}]
-
-
-def _collect_via_tool_factory(
-    query: str, vector_index: Any, kg_index: Any, retriever: Any
-) -> list[dict[str, Any]]:
-    """Executes multiple retrieval tools sequentially via the tool factory.
-
-    Args:
-        query: Search query string.
-        vector_index: Optional vector index.
-        kg_index: Optional knowledge graph index.
-        retriever: Optional hybrid retriever.
-
-    Returns:
-        A consolidated list of retrieved document dictionaries.
-    """
-    try:
-        tool_list = _get_tool_factory().create_tools_from_indexes(
-            vector_index=vector_index, kg_index=kg_index, retriever=retriever
-        )
-    except Exception as exc:
-        redaction = build_pii_log_entry(str(exc), key_id="retrieval.tool_collect")
-        logger.debug(
-            "Tool collection path failed; using detailed path (error_type={} error={})",
-            type(exc).__name__,
-            redaction.redacted,
-        )
-        return []
-
-    if not tool_list:
-        return []
-
-    collected: list[dict[str, Any]] = []
-    for tool_obj in tool_list:
-        try:
-            if hasattr(tool_obj, "invoke"):
-                res = tool_obj.invoke(query)
-            elif hasattr(tool_obj, "call"):
-                res = tool_obj.call(query)
-            else:
-                raise TypeError(
-                    f"Unsupported tool interface: {type(tool_obj).__name__}"
-                )
-            collected.extend(_parse_tool_result(res))
-        except Exception as exc:
-            redaction = build_pii_log_entry(str(exc), key_id="retrieval.tool_execute")
-            logger.error(
-                "Tool execution failed (error_type={} error={})",
-                type(exc).__name__,
-                redaction.redacted,
-            )
-            continue
-
-    return collected
-
-
-def _get_tool_factory():
-    """Retrieves the ToolFactory class for dynamic tool generation.
-
-    Returns:
-        The ToolFactory class from src.agents.tool_factory.
-    """
-    return importlib.import_module("src.agents.tool_factory").ToolFactory
+    return []

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -10,6 +9,8 @@ import pytest
 pytest.importorskip("llama_index.core", reason="requires llama_index.core")
 
 from src.retrieval.router_factory import build_router_engine
+
+from .conftest import get_router_tool_names
 
 pytestmark = pytest.mark.requires_llama
 
@@ -24,22 +25,16 @@ class _PgIndex:
         self.property_graph_store = object()
 
 
-def _tool_count(router) -> int:  # type: ignore[no-untyped-def]
-    for attr in ("query_engine_tools", "_query_engine_tools"):
-        tools = getattr(router, attr, None)
-        if tools is not None:
-            return len(list(tools))
-    return 0
-
-
-def test_graph_depth_uses_graphrag_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_graph_depth_uses_graphrag_cfg(
+    monkeypatch: pytest.MonkeyPatch, router_settings
+) -> None:  # type: ignore[no-untyped-def]
     """Graph tool respects settings.graphrag_cfg.default_path_depth."""
     captured: dict[str, object] = {}
 
     def _fake_build_graph_query_engine(pg_index, **kwargs):  # type: ignore[no-untyped-def]
         del pg_index
         captured.update(kwargs)
-        return SimpleNamespace(query_engine=MagicMock(name="graph_qe"))
+        return MagicMock(query_engine=MagicMock(name="graph_qe"))
 
     monkeypatch.setattr(
         "src.retrieval.router_factory.build_graph_query_engine",
@@ -47,25 +42,19 @@ def test_graph_depth_uses_graphrag_cfg(monkeypatch: pytest.MonkeyPatch) -> None:
         raising=True,
     )
     monkeypatch.setattr(
-        "src.retrieval.reranking.get_postprocessors",
+        "src.retrieval.router_factory.get_postprocessors",
         lambda *_a, **_k: [],
-        raising=False,
+        raising=True,
     )
 
-    cfg = SimpleNamespace(
-        enable_graphrag=True,
-        retrieval=SimpleNamespace(
-            top_k=8, use_reranking=False, enable_server_hybrid=False, reranking_top_k=4
-        ),
-        graphrag_cfg=SimpleNamespace(default_path_depth=3),
-        database=SimpleNamespace(qdrant_collection="col"),
-    )
+    router_settings.retrieval.top_k = 8
+    router_settings.graphrag_cfg.default_path_depth = 3
 
-    build_router_engine(_VecIndex(), pg_index=_PgIndex(), settings=cfg)
+    build_router_engine(_VecIndex(), pg_index=_PgIndex(), settings=router_settings)
     assert captured.get("path_depth") == 3
 
 
-def test_graph_disabled_when_store_missing() -> None:
+def test_graph_disabled_when_store_missing(router_settings) -> None:  # type: ignore[no-untyped-def]
     """No graph tool added when property_graph_store is absent."""
 
     class _PgMissing:
@@ -74,13 +63,6 @@ def test_graph_disabled_when_store_missing() -> None:
     router = build_router_engine(
         _VecIndex(),
         pg_index=_PgMissing(),
-        settings=SimpleNamespace(
-            enable_graphrag=True,
-            retrieval=SimpleNamespace(
-                top_k=5, use_reranking=False, enable_server_hybrid=False
-            ),
-            graphrag_cfg=SimpleNamespace(default_path_depth=1),
-            database=SimpleNamespace(qdrant_collection="col"),
-        ),
+        settings=router_settings,
     )
-    assert _tool_count(router) == 1
+    assert get_router_tool_names(router) == ["semantic_search"]

@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
 from src.retrieval import router_factory as rf
+from src.retrieval.hybrid import HybridParams
+
+from .conftest import get_router_tool_names
 
 
 def _pp(mode, *, use_reranking: bool, **kwargs):  # type: ignore[no-untyped-def]
     """Shared postprocessor helper for hybrid tests."""
     del mode, kwargs
-    return [] if use_reranking else None
+    return ["pp"] if use_reranking else None
 
 
 class _VecIndex:
@@ -21,61 +23,40 @@ class _VecIndex:
         return MagicMock(name="vector_qe")
 
 
-class _HealthyStore:
-    def get_nodes(self):  # pragma: no cover - unused branch helper
-        yield {"id": "n1"}
-
-
-class _PgIndex:
-    def __init__(self) -> None:
-        self.property_graph_store = _HealthyStore()
-
-    def as_query_engine(self, include_text=True):  # type: ignore[no-untyped-def]
-        del include_text
-        return MagicMock(name="graph_qe")
-
-
-def test_hybrid_params_respected(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_hybrid_params_respected(
+    monkeypatch: pytest.MonkeyPatch, router_settings
+) -> None:  # type: ignore[no-untyped-def]
     """Hybrid retriever receives parameters derived from settings."""
-    captured: dict[str, SimpleNamespace] = {}
+    captured: dict[str, object] = {}
 
     class _DummyHybrid:
         def __init__(self, params):  # type: ignore[no-untyped-def]
             captured["params"] = params
 
     monkeypatch.setattr("src.retrieval.hybrid.ServerHybridRetriever", _DummyHybrid)
-    monkeypatch.setattr(rf, "_safe_get_postprocessors", lambda: _pp)
+    monkeypatch.setattr(rf, "get_postprocessors", _pp)
 
-    vec = _VecIndex()
-    pg = _PgIndex()
-    cfg = SimpleNamespace(
-        enable_graphrag=True,
-        retrieval=SimpleNamespace(
-            top_k=5,
-            use_reranking=True,
-            enable_server_hybrid=False,
-            fused_top_k=37,
-            prefetch_sparse_limit=222,
-            prefetch_dense_limit=111,
-            fusion_mode="rrf",
-            dedup_key="doc_id",
-            reranking_top_k=3,
-        ),
-        graphrag_cfg=SimpleNamespace(default_path_depth=1),
-        database=SimpleNamespace(qdrant_collection="col"),
-    )
+    router_settings.retrieval.enable_server_hybrid = True
+    router_settings.retrieval.fused_top_k = 37
+    router_settings.retrieval.prefetch_sparse_limit = 222
+    router_settings.retrieval.prefetch_dense_limit = 111
+    router_settings.retrieval.dedup_key = "doc_id"
 
-    rf.build_router_engine(vec, pg, settings=cfg, enable_hybrid=True)
+    router = rf.build_router_engine(_VecIndex(), settings=router_settings)
 
     params = captured["params"]
+    assert isinstance(params, HybridParams)
     assert params.fused_top_k == 37
     assert params.prefetch_sparse == 222
     assert params.prefetch_dense == 111
     assert params.dedup_key == "doc_id"
+    assert get_router_tool_names(router) == ["semantic_search", "hybrid_search"]
 
 
 @pytest.mark.parametrize("use_rerank", [True, False])
-def test_hybrid_rerank_flag_propagation(monkeypatch, use_rerank: bool) -> None:  # type: ignore[no-untyped-def]
+def test_hybrid_rerank_flag_propagation(
+    monkeypatch: pytest.MonkeyPatch, router_settings, use_rerank: bool
+) -> None:  # type: ignore[no-untyped-def]
     """Hybrid path toggles node_postprocessors when reranking is enabled."""
     last_kwargs: dict[str, object] = {}
 
@@ -87,36 +68,15 @@ def test_hybrid_rerank_flag_propagation(monkeypatch, use_rerank: bool) -> None: 
         @classmethod
         def from_args(cls, **kwargs):  # type: ignore[no-untyped-def]
             last_kwargs.update(kwargs)
-            return SimpleNamespace(qe=True, kwargs=kwargs)
+            return MagicMock(name="hybrid_qe")
 
     monkeypatch.setattr("src.retrieval.hybrid.ServerHybridRetriever", _DummyHybrid)
-    monkeypatch.setattr(rf, "_safe_get_postprocessors", lambda: _pp)
+    monkeypatch.setattr(rf, "get_postprocessors", _pp)
+    monkeypatch.setattr(rf, "RetrieverQueryEngine", _RecordingRQE)
 
-    monkeypatch.setattr(
-        rf,
-        "build_retriever_query_engine",
-        lambda retriever, post, **kwargs: _RecordingRQE.from_args(
-            retriever=retriever,
-            node_postprocessors=post,
-            **kwargs,
-        ),
-    )
-
-    vec = _VecIndex()
-    pg = _PgIndex()
-    cfg = SimpleNamespace(
-        enable_graphrag=True,
-        retrieval=SimpleNamespace(
-            top_k=5,
-            use_reranking=use_rerank,
-            enable_server_hybrid=False,
-            reranking_top_k=2,
-        ),
-        graphrag_cfg=SimpleNamespace(default_path_depth=1),
-        database=SimpleNamespace(qdrant_collection="col"),
-    )
-
-    rf.build_router_engine(vec, pg, settings=cfg, enable_hybrid=True)
+    router_settings.retrieval.enable_server_hybrid = True
+    router_settings.retrieval.use_reranking = use_rerank
+    rf.build_router_engine(_VecIndex(), settings=router_settings)
 
     if use_rerank:
         assert last_kwargs.get("node_postprocessors") is not None

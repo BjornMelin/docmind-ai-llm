@@ -10,7 +10,7 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 from loguru import logger
 
-from src.utils.monitoring import log_error_with_context
+from src.utils.log_safety import log_error_with_context
 
 from .constants import (
     ACCEPT_CONFIDENCE_THRESHOLD,

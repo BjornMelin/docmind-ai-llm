@@ -2,177 +2,95 @@
 ADR: 023
 Title: Document Analysis Modes (Separate / Combined / Auto)
 Status: Accepted
-Version: 2.0
-Date: 2026-01-10
+Version: 3.0
+Date: 2026-07-13
 Supersedes:
 Superseded-by:
-Related: 001, 003, 009, 011, 013, 016, 022, 024, 052
-Tags: analysis, modes, routing, parallel, aggregation
+Related: 001, 003, 009, 013, 016, 024, 052
+Tags: analysis, modes, routing, parallel
 References:
-- [Streamlit — Tabs](https://docs.streamlit.io/develop/api-reference/layout/st.tabs)
-- [Python — concurrent.futures](https://docs.python.org/3/library/concurrent.futures.html)
-- [LlamaIndex — Query Pipeline](https://docs.llamaindex.ai/en/stable/module_guides/querying/query_pipeline/)
-- [LangGraph — Concepts](https://langchain-ai.github.io/langgraph/concepts/)
+- [Streamlit Tabs](https://docs.streamlit.io/develop/api-reference/layout/st.tabs)
+- [Python concurrent.futures](https://docs.python.org/3/library/concurrent.futures.html)
 ---
 
 ## Description
 
-Provide three analysis modes for working with a document set:
+DocMind supports three analysis modes over the active LlamaIndex vector index:
 
-- **Separate**: per-document analysis in parallel, with an optional “compare/synthesize” reduce step.
-- **Combined**: a single holistic analysis across all selected documents.
-- **Auto**: chooses Separate vs. Combined based on corpus size and doc count.
+- **Separate**: query each selected document concurrently
+- **Combined**: query the selected documents as one corpus
+- **Auto**: select separate or combined mode from the document count and worker limit
 
-This adds an explicit user-facing knob (UI + config) and a small, testable domain service that routes work through existing retrieval + multi-agent synthesis rather than duplicating business logic in Streamlit pages.
+`src/analysis/service.py` owns mode selection and execution. Streamlit owns selection and rendering, not analysis behavior.
 
 ## Context
 
-Users need document‑specific insights and cross‑document synthesis. Separate mode preserves context and supports comparisons; Combined mode surfaces patterns and unified summaries. We require fast parallelism for Separate mode, simple aggregation, and UI control for mode selection. Solution leverages QueryPipeline and the existing agent orchestration (ADR‑001/011).
+Document-specific questions need metadata filters, while corpus questions need one combined query. The service must keep Streamlit calls off worker threads, bound concurrency, preserve citations, and stop cooperatively when cancellation is requested.
 
-## Decision Drivers
+## Decision drivers
 
-- Flexibility to support per‑document and holistic analysis
-- Parallel performance for Separate mode
-- Simple aggregation and clear result presentation
-- Minimal additional complexity; library‑first approach
+- Preserve document-level filtering
+- Bound per-document concurrency
+- Keep one typed result contract
+- Reuse LlamaIndex vector query engines
+- Keep user-interface code free of analysis logic
 
-## Alternatives
+## Decision framework
 
-- A: Combined only — simple, but no doc‑specific insights
-- B: Sequential per‑doc — simple, but slow; no synthesis
-- C: ThreadPool “map” + lightweight reduce (Selected) — simple, fast, integrates with existing coordinator
-- D: LangGraph-native MapReduce graph — powerful but higher complexity
+Weights: solution leverage 35%, application value 30%, maintenance and cognitive load 25%, architectural adaptability 10%.
 
-### Decision Framework
+| Option | Leverage | Value | Maintenance | Adaptability | Total |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Bounded service over the active vector index | 9.5 | 9.2 | 9.4 | 8.8 | **9.31** |
+| Sequential per-document queries | 8.5 | 6.5 | 9.2 | 7.5 | 7.98 |
+| A second agent graph for analysis modes | 5.5 | 8.0 | 4.0 | 7.0 | 6.03 |
 
-Weights: Capability 35% · Performance 35% · Simplicity 20% · Maintenance 10%
-
-| Model / Option | Capability (35%) | Performance (35%) | Simplicity (20%) | Maintenance (10%) | Total Score | Decision |
-| --- | --- | --- | --- | --- | --- | --- |
-| C: ThreadPool map + lightweight reduce | 9 | 9 | 9 | 9 | **9.0** | Selected |
-| D: LangGraph-native MapReduce | 9 | 9 | 6 | 7 | 7.9 | Rejected |
-| B: Sequential per-doc | 7 | 4 | 9 | 9 | 6.6 | Rejected |
-| A: Combined only | 5 | 7 | 10 | 10 | 7.0 | Rejected |
-
-### Architecture Tier-2 ≥9.0 (Complexity/Perf/Alignment)
-
-Weights: Complexity 40% · Perf 30% · Alignment 30% (10 = best)
-
-| Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total | Decision |
-| --- | --- | --- | --- | --- | --- |
-| ThreadPool map + lightweight reduce | 9.5 | 9.0 | 9.5 | **9.35** | Selected |
-| LangGraph-native MapReduce graph | 7.0 | 9.0 | 9.0 | 8.10 | Rejected |
+The bounded service is selected.
 
 ## Decision
 
-Adopt a conditional analysis strategy implemented as a small domain-layer service:
+`run_analysis(...)` accepts the query, requested mode, active vector index, selected document references, settings, and optional cancellation and progress callbacks.
 
-1) **Route** the request into `separate` or `combined` mode (auto selection supported).
-2) **Separate** runs per-document analyses concurrently (ThreadPool), each using the existing retrieval + agent synthesis stack with a doc filter applied.
-3) **Reduce** (optional) synthesizes a short cross-document comparison using the per-doc outputs (bounded input size).
-4) **Combined** performs a single analysis over the full document set.
+Auto mode applies the rules in `auto_select_mode(...)`:
 
-This keeps Streamlit pages thin and makes the behavior easy to test offline with the existing MockLLM and retrieval stubs.
+- no selected documents or one selected document resolves to combined mode
+- two or three selected documents resolve to separate mode when at least two workers are available
+- larger selections resolve to combined mode
 
-## High-Level Architecture
+Combined mode creates one vector query engine with an OR filter over selected document IDs. It may run without filters only when the index does not accept the filter argument.
 
-```mermaid
-graph TD
-  U["Upload + Mode Selection"] --> R["Mode Router"]
-  R -->|Separate| P["Parallel per-doc analysis (ThreadPool)"]
-  R -->|Combined| C["Single combined analysis"]
-  P --> A["Optional reduce: compare/synthesize"]
-  C --> V["Combined result"]
-  A --> V["Results UI (tabs + summary)"]
-```
+Separate mode creates one filtered query per document and uses a bounded `ThreadPoolExecutor`. It does not fall back to an unfiltered query because that could mix document results.
 
-## Related Requirements
+Both modes return `AnalysisResult` values from `src/analysis/models.py`. The service emits metadata-only selection, completion, cancellation, and failure events.
 
-### Functional Requirements
-
-- FR‑1: Separate mode produces individual results per document
-- FR‑2: Combined mode produces unified cross‑document result
-- FR‑3: Separate mode executes in parallel
-- FR‑4: Optional reduce step merges insights and comparisons
-
-### Non-Functional Requirements
-
-- NFR‑1 (Performance): 3–5x speedup for Separate mode with ≥4 docs
-- NFR‑2 (Memory): Bounded resource use per worker
-- NFR‑3 (Quality): Comparable output quality across modes
-
-### Performance Requirements
-
-- PR‑1: Mode selection <100ms; aggregation <500ms
-
-### Integration Requirements
-
-- IR‑1: UI exposes mode selection (ADR‑016); export formats follow ADR‑022
-- IR‑2: Retrieval adapts to mode (ADR‑003)
-
-## Design
-
-### Architecture Overview
-
-- Separate: spawn parallel per‑document analyses; preserve doc context via doc-level retrieval filters
-- Combined: run one analysis across the selected corpus
-- Reduce: merge the per-doc outputs into a short comparison/summary (optional)
-
-### Implementation Details
-
-In `src/analysis/service.py` (illustrative):
-
-```python
-from concurrent.futures import ThreadPoolExecutor
-
-def analyze_documents(documents, query, mode, settings):
-    # Separate: map over docs in parallel (bounded by settings.analysis.max_workers)
-    # Combined: single run over corpus
-    ...
-```
-
-### Configuration
+## Configuration
 
 ```env
-DOCMIND_ANALYSIS__MODE=auto   # separate|combined|auto
+DOCMIND_ANALYSIS__MODE=auto
 DOCMIND_ANALYSIS__MAX_WORKERS=4
 ```
 
-## Testing
+## Verification
 
-```python
-import pytest
-
-@pytest.mark.asyncio
-async def test_parallel_separate(fake_docs, analyzer):
-    res = await analyzer.analyze_documents(fake_docs, "q", mode="separate")
-    assert len(res.individual_results) == len(fake_docs)
-```
+- `tests/unit/analysis/test_analysis_service.py` covers mode selection, filters, concurrency, cancellation, and result contracts
+- `tests/integration/ui/test_analysis_modes.py` covers Streamlit selection and rendering with the service stubbed
 
 ## Consequences
 
-### Positive Outcomes
+### Positive outcomes
 
-- Flexible user choice of modes; fast parallel Separate mode
-- Cross‑document synthesis in Combined mode
-- Clean integration with existing agents and retrieval
+- One service owns analysis-mode behavior
+- Separate mode preserves per-document attribution
+- Combined mode avoids an unnecessary second orchestration graph
+- Tests can use a compatible vector-index stub without network access
 
-### Negative Consequences / Trade-offs
+### Trade-offs
 
-- Additional routing/aggregation complexity
-- Higher resource use in parallel paths
-
-### Ongoing Maintenance & Considerations
-
-- Tune thresholds for auto selection as datasets vary.
-
-- Keep aggregation minimal; extend only with clear value
-
-### Dependencies
-
-- Python: `concurrent.futures`, `asyncio`
-- LlamaIndex: QueryPipeline, VectorStoreIndex
+- Separate mode consumes one worker per active document up to the configured limit
+- Cooperative cancellation cannot terminate dependency work that ignores cancellation
+- Combined mode may query the full corpus when an index does not accept metadata filters
 
 ## Changelog
 
-- **2.0 (2026-01-10)**: Tier-2 decision gate added; updated references and maintenance notes.
+- 3.0 (2026-07-13): Replaced QueryPipeline and illustrative contracts with the shipped vector-index service.
+- 2.0 (2026-01-10): Added the original tier-two decision gate.

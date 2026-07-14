@@ -24,7 +24,6 @@ if TYPE_CHECKING:  # pragma: no cover
     from src.retrieval.reranking import (
         MultimodalReranker,
         build_text_reranker,
-        build_visual_reranker,
     )
     from src.retrieval.router_factory import build_router_engine
 
@@ -36,7 +35,6 @@ __all__ = [
     "build_graph_retriever",
     "build_router_engine",
     "build_text_reranker",
-    "build_visual_reranker",
     "export_graph_jsonl",
     "export_graph_parquet",
     "get_export_seed_ids",
@@ -52,7 +50,6 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "ServerHybridRetriever": (".hybrid", "ServerHybridRetriever"),
     "MultimodalReranker": (".reranking", "MultimodalReranker"),
     "build_text_reranker": (".reranking", "build_text_reranker"),
-    "build_visual_reranker": (".reranking", "build_visual_reranker"),
     "build_router_engine": (".router_factory", "build_router_engine"),
 }
 

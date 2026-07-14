@@ -30,6 +30,8 @@ related_adrs:
   - "ADR-058"
 ---
 
+> **Historical v1 record:** WP16 shipped in v1. DocMind v2 removed the response cache because it did not share user/session memory identity or hard-purge ownership. ADR-035 and SPEC-038 are superseded.
+
 ## Objective
 
 Define the **complete set of work packages** required to ship the first finished DocMind AI release with:
@@ -80,10 +82,10 @@ Each work package MUST ship with:
 
 All ADR/SPEC/prompt files referenced above are stored under `docs/` in this repo and are part of this release plan.
 
-The proposed SQLite operational-metadata store in ADR-055 and the draft
-SPEC-039 are future design material, not a v1 release requirement. Current
-background jobs remain process-local, while durable chat state, snapshots, and
-the ingestion cache use their existing canonical stores.
+The proposed SQLite operational-metadata store in ADR-055 and SPEC-039 was
+superseded without implementation. Background jobs remain process-local, while
+durable chat state, snapshots, and the ingestion cache use their existing
+canonical stores.
 
 ## Execution order and dependencies
 
@@ -112,12 +114,13 @@ uv sync --frozen
 uv run ruff format --check .
 uv run ruff check .
 uv run pyright --threads 4
-uv run python scripts/run_tests.py --fast
-uv run python scripts/run_tests.py --coverage
-rm -rf build docmind_ai_llm.egg-info
-uv build --wheel --clear
-uv run python scripts/smoke_built_wheel.py
+uv run pytest tests/unit tests/integration -q --no-cov
+uv run pytest tests/unit tests/integration -q --cov=src --cov-branch --cov-report=term-missing --cov-report=html:htmlcov --cov-report=xml:coverage.xml --cov-report=json:coverage.json --cov-fail-under=80 --junitxml=junit.xml
 ```
+
+> **v2 note:** SPEC-044 supersedes the v1 wheel gate. DocMind is now a
+> repository/container application and no longer publishes an unsupported
+> Python library artifact.
 
 Containerization packages MUST also pass:
 

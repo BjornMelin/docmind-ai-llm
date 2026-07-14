@@ -13,6 +13,6 @@ def test_staleness_tooltip_exact_copy():
     chat_page = importlib.import_module("src.pages.01_chat")
     expected = (
         "Snapshot is stale (content/config changed). Rebuild in Documents → "
-        "Rebuild GraphRAG Snapshot."
+        "Rebuild search index."
     )
     assert getattr(chat_page, "STALE_TOOLTIP", None) == expected

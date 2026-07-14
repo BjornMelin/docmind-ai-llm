@@ -31,7 +31,7 @@ def test_validate_env_key_rejects_invalid_keys(key: str) -> None:
         "A",
         "ABC",
         "A_1",
-        "DOCMIND_MODEL",
+        "DOCMIND_LLM_REQUEST__MODEL",
         "DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS",
     ],
 )

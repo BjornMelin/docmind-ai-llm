@@ -13,10 +13,12 @@ pytestmark = pytest.mark.unit
 
 
 def _settings(model_cache_dir: Path) -> DocMindSettings:
-    return DocMindSettings.model_validate({"ocr": {"model_cache_dir": model_cache_dir}})
+    return DocMindSettings.model_validate(
+        {"parsing": {"model_cache_dir": model_cache_dir}}
+    )
 
 
-def test_pdf_ready_requires_every_core_package_import(
+def test_pdf_dependencies_ready_requires_every_core_package_import(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -33,7 +35,9 @@ def test_pdf_ready_requires_every_core_package_import(
         }
 
     monkeypatch.setattr(health, "_package_health", _package_health)
-    monkeypatch.setattr(health, "model_directory_issues", lambda _root, _bundle: {})
+    monkeypatch.setattr(
+        health, "cached_model_directory_issues", lambda _root, _bundle: {}
+    )
     monkeypatch.setattr(
         health,
         "ocrmypdf_health",
@@ -42,11 +46,11 @@ def test_pdf_ready_requires_every_core_package_import(
 
     result = health.parser_health(_settings(tmp_path))
 
-    assert result["pdf_ready"] is False
+    assert result["pdf_dependencies_ready"] is False
     assert result["onnxruntime"]["importable"] is False
 
 
-def test_pdf_ready_requires_models_but_not_optional_ocrmypdf(
+def test_pdf_dependencies_ready_requires_models_but_not_optional_ocrmypdf(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -59,7 +63,9 @@ def test_pdf_ready_requires_models_but_not_optional_ocrmypdf(
             "importable": True,
         },
     )
-    monkeypatch.setattr(health, "model_directory_issues", lambda _root, _bundle: {})
+    monkeypatch.setattr(
+        health, "cached_model_directory_issues", lambda _root, _bundle: {}
+    )
     monkeypatch.setattr(
         health,
         "ocrmypdf_health",
@@ -69,21 +75,17 @@ def test_pdf_ready_requires_models_but_not_optional_ocrmypdf(
     ready = health.parser_health(_settings(tmp_path))
     monkeypatch.setattr(
         health,
-        "model_directory_issues",
-        lambda _root, bundle: (
-            {"detector.onnx": "SHA-256 mismatch"}
-            if bundle is health.RAPIDOCR_ENGLISH_BUNDLE
-            else {}
-        ),
+        "cached_model_directory_issues",
+        lambda _root, _bundle: {"model.safetensors": "SHA-256 mismatch"},
     )
     missing_model = health.parser_health(_settings(tmp_path))
 
-    assert ready["pdf_ready"] is True
-    assert ready["rapidocr"]["offline_ready"] is True
-    assert missing_model["pdf_ready"] is False
-    assert missing_model["rapidocr"]["offline_ready"] is False
-    assert missing_model["rapidocr"]["model_issues"] == {
-        "detector.onnx": "SHA-256 mismatch"
+    assert ready["pdf_dependencies_ready"] is True
+    assert ready["rapidocr"]["dependencies_ready"] is True
+    assert missing_model["pdf_dependencies_ready"] is False
+    assert missing_model["docling"]["models_ready"] is False
+    assert missing_model["docling"]["model_issues"] == {
+        "model.safetensors": "SHA-256 mismatch"
     }
 
 
@@ -101,7 +103,9 @@ def test_prefetch_command_uses_configured_cache_path(
             "importable": True,
         },
     )
-    monkeypatch.setattr(health, "model_directory_issues", lambda _root, _bundle: {})
+    monkeypatch.setattr(
+        health, "cached_model_directory_issues", lambda _root, _bundle: {}
+    )
     monkeypatch.setattr(
         health,
         "ocrmypdf_health",
@@ -110,4 +114,4 @@ def test_prefetch_command_uses_configured_cache_path(
 
     result = health.parser_health(_settings(model_cache))
 
-    assert result["prefetch_command"].endswith(f"--rapidocr-cache-dir '{model_cache}'")
+    assert result["prefetch_command"].endswith(f"--parser-cache-dir '{model_cache}'")

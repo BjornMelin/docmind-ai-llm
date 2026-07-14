@@ -9,10 +9,10 @@ from loguru import logger
 
 from src.utils.log_safety import (
     fingerprint_text,
+    log_error_with_context,
     redact_text_backstop,
     safe_url_for_log,
 )
-from src.utils.monitoring import log_error_with_context
 
 pytestmark = pytest.mark.unit
 
@@ -56,7 +56,7 @@ def test_canary_string_does_not_appear_in_logs_or_telemetry(
     canary = "CANARY_SECRET_12345"
     captured_events: list[dict[str, object]] = []
     monkeypatch.setattr(
-        "src.utils.monitoring.log_jsonl",
+        "src.utils.log_safety.log_jsonl",
         lambda event: captured_events.append(dict(event)),
     )
 

@@ -103,12 +103,8 @@ messages = format_messages(
 )
 ```
 
-### Configuration
-
-```env
-DOCMIND_PROMPT__DEFAULT_TONE=professional
-DOCMIND_PROMPT__DEFAULT_ROLE=researcher
-```
+Prompt selection is explicit at the call site. DocMind does not publish a
+second environment configuration surface for default roles or tones.
 
 ## Testing
 

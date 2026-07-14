@@ -21,17 +21,20 @@ class _CoordinatorStub:
     def __init__(self, *_, **__) -> None:
         self._messages: list[object] = []
 
+    def close(self) -> None:
+        """Match the production coordinator lifecycle surface."""
+        return None
+
     def process_query(
         self,
         *,
         query: str,
-        context: object | None = None,
         settings_override: dict[str, object] | None = None,
         thread_id: str = "default",
         user_id: str = "local",
         checkpoint_id: str | None = None,
     ) -> AgentResponse:
-        _ = (context, settings_override, thread_id, user_id, checkpoint_id)
+        _ = (settings_override, thread_id, user_id, checkpoint_id)
         return AgentResponse(content=f"Echo: {query}")
 
     def get_state_values(self, *_, **__) -> dict[str, object]:
@@ -106,12 +109,10 @@ def chat_app_smoke(
 
     original_data_dir = app_settings.data_dir
     original_chat_path = app_settings.chat.sqlite_path
-    original_ops_path = app_settings.database.sqlite_db_path
     original_autoload = app_settings.graphrag_cfg.autoload_policy
 
     app_settings.data_dir = tmp_path
     app_settings.chat.sqlite_path = tmp_path / "chat.db"
-    app_settings.database.sqlite_db_path = tmp_path / "docmind.db"
     app_settings.graphrag_cfg.autoload_policy = "ignore"
 
     st.cache_resource.clear()
@@ -131,7 +132,6 @@ def chat_app_smoke(
     finally:
         app_settings.data_dir = original_data_dir
         app_settings.chat.sqlite_path = original_chat_path
-        app_settings.database.sqlite_db_path = original_ops_path
         app_settings.graphrag_cfg.autoload_policy = original_autoload
         st.cache_resource.clear()
         st.cache_data.clear()

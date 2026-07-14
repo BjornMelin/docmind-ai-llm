@@ -161,12 +161,6 @@ class JobManager:
                 return False
             state.last_seen_at = _now_utc()
             state.cancel_event.set()
-            if state.status in ("queued", "running"):
-                state.status = "canceled"
-            fut = self._futures.get(job_id)
-            if fut is not None:
-                with contextlib.suppress(Exception):
-                    fut.cancel()
             return True
 
     def get(self, job_id: str, *, owner_id: str) -> JobState | None:
@@ -257,7 +251,7 @@ class JobManager:
         if futures:
             wait(futures, timeout=max(0.0, self._shutdown_grace_period_sec))
         with contextlib.suppress(Exception):
-            self._executor.shutdown(wait=False, cancel_futures=True)
+            self._executor.shutdown(wait=False, cancel_futures=False)
 
         # Mark any non-terminal jobs as canceled.
         with self._lock:
@@ -274,8 +268,7 @@ class JobManager:
             state = self._jobs.get(job_id)
             if state is None:
                 return None
-            if state.cancel_event.is_set() or state.status == "canceled":
-                state.status = "canceled"
+            if state.status in ("succeeded", "failed"):
                 return None
             state.status = "running"
             cancel_event = state.cancel_event
@@ -292,14 +285,9 @@ class JobManager:
             with self._lock:
                 st_state = self._jobs.get(job_id)
                 if st_state is not None:
-                    if st_state.cancel_event.is_set():
-                        st_state.status = "canceled"
-                        st_state.result = None
-                        final_result = None
-                    else:
-                        st_state.status = "succeeded"
-                        st_state.result = final_result
-                        st_state.error = None
+                    st_state.status = "succeeded"
+                    st_state.result = final_result
+                    st_state.error = None
         except JobCanceledError:
             with self._lock:
                 st_state = self._jobs.get(job_id)

@@ -1,8 +1,8 @@
 ---
 spec: SPEC-032
 title: Documents Snapshot Service Boundary (Snapshot Rebuild/Export Service)
-version: 1.0.1
-date: 2026-01-09
+version: 2.1.0
+date: 2026-07-14
 owners: ["ai-arch"]
 status: Implemented
 related_requirements:
@@ -20,8 +20,7 @@ related_adrs: ["ADR-051", "ADR-031", "ADR-038", "ADR-013", "ADR-016"]
 ## Non-goals
 
 - Introducing background execution/progress/cancellation (handled separately).
-- Adding new export formats or changing existing snapshot schema.
-- Changing snapshot locking/atomicity semantics.
+- Adding new export formats.
 
 ## Technical Design
 
@@ -29,40 +28,62 @@ related_adrs: ["ADR-051", "ADR-031", "ADR-038", "ADR-013", "ADR-016"]
 
 Add a small, typed orchestration service that:
 
-- begins a snapshot workspace (`SnapshotManager.begin_snapshot`)
-- persists vector index (`persist_vector_index`)
-- persists graph store when present (`persist_graph_store`)
+- receives a caller-owned `SnapshotManager` and pre-opened workspace
+- records the immutable physical text/image Qdrant collection identities
+- persists the complete native property-graph `StorageContext` when present
+  (`persist_graph_storage_context`), including the graph-local vector store
+  required for semantic graph retrieval after restart
 - optionally packages graph exports into the workspace under `graph/`:
   - JSONL required
   - Parquet optional (PyArrow-gated)
 - computes and records export metadata:
-  - relative path (within workspace)
+  - export filename basename (`graph/` is implicit)
   - format
   - `seed_count`, `size_bytes`, `duration_ms`
   - `sha256`
 - computes corpus/config hashes and writes manifest metadata (`SnapshotManager.write_manifest`)
 - finalizes the snapshot atomically (`SnapshotManager.finalize_snapshot`)
-- cleans up workspace on failure (`SnapshotManager.cleanup_tmp`)
+
+The caller acquires the snapshot lock and opens the workspace before building
+physical collections. It retains cleanup ownership until finalization commits.
+The service never begins or cleans up a workspace.
 
 ### Service API (minimal)
 
-- `rebuild_snapshot(*, vector_index: Any, pg_index: Any | None, settings_obj: Any) -> SnapshotRebuildResult`
+- `rebuild_snapshot(vector_index, pg_index, settings_obj, activation,
+  commit_source_changes=..., ...) -> Path`
+- `SnapshotActivation(manager, workspace, text_collection, image_collection,
+  expected_corpus_hash, expected_config_hash, activation_config,
+  activation_config_hash, collection_metadata, graph_requested)`
 
-Where `SnapshotRebuildResult` includes:
+The return value is the committed snapshot directory. `text_collection` and
+`image_collection` are required physical identities; mutable settings names are
+not used as activation fallbacks. `manager` must hold the transaction lock and
+`workspace` must be the workspace opened before collection construction. The
+required `expected_corpus_hash` is the adapter's content-derived identity for the
+entire selected upload corpus, including the empty corpus. The service prepares
+graph payloads and the incomplete manifest before calling the durable late-source
+commit callback. It then recomputes the canonical uploads-relative identity and
+rejects any mismatch before finalization. Promotion, quarantine, and snapshot
+activation journals recover crashes without inferring a replacement `CURRENT`.
 
-- `snapshot_dir: Path`
-- `manifest_meta: dict[str, Any]` (or `None` if caller prefers to reload from disk)
-- `graph_exports: list[dict[str, Any]]`
+`expected_config_hash` identifies current global index-affecting settings for
+staleness. `activation_config` and `activation_config_hash` preserve exact build
+provenance, including one-off parser, encryption, and GraphRAG choices, without
+making a deliberate one-off choice immediately stale.
 
 ### Snapshot manifest schema (manifest.meta.json)
 
 The service must write manifest metadata with the following fields (matching `SnapshotManager.write_manifest`):
 
-- Required: `index_id`, `graph_store_type`, `vector_store_type`, `corpus_hash`, `config_hash`, `versions`
-- Optional: `graph_exports`
+- Required: `index_id`, `graph_store_type`, `vector_store_type`, `collections`,
+  `corpus_hash`, `config_hash`, `versions`, `collection_metadata`,
+  `graph_exports`, `activation_config`, `activation_config_hash`
 
-`corpus_hash` and `config_hash` are computed via `compute_corpus_hash` and `compute_config_hash`
-(`src/persistence/hashing.py`) using the uploaded corpus paths and the current settings config.
+`corpus_hash` is the canonical relative-path plus full-content identity.
+`config_hash` identifies current global index-affecting settings.
+`activation_config_hash` covers the exact effective build provenance. All hashes
+use `src/persistence/hashing.py` and are lowercase 64-character SHA-256 values.
 
 When present, `graph_exports` entries include export metadata such as:
 
@@ -73,16 +94,21 @@ When present, `graph_exports` entries include export metadata such as:
 
 `src/pages/02_documents.py` becomes:
 
-- ingestion UI wiring (`ingest_files(…)`)
+- transaction-scoped ingestion UI wiring (`ingest_inputs(…)`)
+- caller-side snapshot transaction acquisition and failure cleanup
 - storing indices/router in `st.session_state`
 - calling `snapshot_service.rebuild_snapshot(…)` and rendering results
+
+Physical collection deletion is not a page or activation responsibility. The
+offline cleanup CLI requires a quiesced application, a dry-run review, verified
+retained manifests, and the exact local deployment identity.
 
 ### Import-time performance
 
 The service and page must avoid heavy imports at module import time:
 
 - move LlamaIndex/Qdrant imports inside functions where possible
-- keep Streamlit page importable for `tests/integration/test_pages_smoke.py`
+- keep Streamlit wiring testable through focused page helpers and AppTest
 
 ## Observability
 
@@ -96,30 +122,32 @@ The service and page must avoid heavy imports at module import time:
 - Export paths are workspace-relative; no user-provided paths are used.
 - Never log secrets or raw document contents.
 
-## Testing Strategy
+## Test evidence
 
 ### Unit
 
-- Move snapshot rebuild tests from `tests/unit/ui/test_documents_snapshot_utils.py` to a new persistence-focused test module (or update the existing tests to import the service directly).
-- Use lightweight stub indices that expose `storage_context.persist`.
+- `tests/unit/persistence/test_snapshot_service.py` proves manifest fields,
+  caller-owned workspace lifetime, graph persistence/exports, source commit order,
+  and corpus/config identity checks.
+- `tests/unit/pages/test_documents_upload_transactions.py` proves pending upload
+  promotion, quarantine, rollback, and activation journal wiring.
+- `tests/unit/pages/test_documents_page_helpers.py` covers the remaining thin page
+  helpers without importing a second persistence implementation.
 
 ### Integration (AppTest)
 
-- Update `tests/integration/ui/test_documents_snapshot_button.py` to stub the service rather than patching per-function exports inside the page.
-- Prefer stubbing `src.persistence.snapshot_service.rebuild_snapshot` and avoid
-  polling/sleeps in UI tests; run a single `AppTest.run()` and assert on UI
-  state/output.
-- Use `tests/helpers/apptest_utils.py` (`apptest_timeout_sec()`) for
-  `default_timeout=`; override with `TEST_TIMEOUT=<seconds>` for slow runners.
+- `tests/integration/ui/test_documents_ingestion_job.py` proves the Documents
+  page schedules and completes the background ingestion transaction.
+- `tests/integration/test_graphrag_exports.py` proves native property-graph
+  export behavior and snapshot packaging.
 
 ## Rollout / Migration
 
-- Pure refactor; no user data migration.
-- Rollback by reverting the new service module and restoring page-local snapshot rebuild.
+- This is a v2 hard cut. Rebuild v1 snapshots into physical collections; v1
+  manifests do not satisfy the activation contract.
 
-## RTM Updates
+## Traceability
 
-Update `docs/specs/traceability.md` row `FR-009` (GraphRAG persistence/snapshots):
-
-- add `src/persistence/snapshot_service.py` to Code file(s)
-- move unit tests to service module
+`docs/specs/traceability.md` maps this boundary to
+`src/persistence/snapshot_service.py`, the current transaction tests, and the
+Documents ingestion AppTest evidence listed above.

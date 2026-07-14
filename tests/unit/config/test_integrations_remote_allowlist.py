@@ -40,7 +40,8 @@ def test_remote_forbidden_without_allowance(monkeypatch):
 
     monkeypatch.setitem(integ.__dict__, "settings", cfg)
 
-    integ.setup_llamaindex(force_llm=True, force_embed=False)
+    with pytest.raises(ValueError, match="Remote endpoints are disabled"):
+        integ.setup_llamaindex(force_llm=True, force_embed=False)
 
     assert integ.Settings.llm is None
 

@@ -12,9 +12,10 @@ DocMind separates tests by boundary:
 | Integration | `tests/integration` | Cross-component behavior and Streamlit AppTest |
 | End to end | `tests/e2e` | Application workflows through public surfaces |
 | System | `tests/system` | Explicit local-service and runtime validation |
-| Validation | `tests/validation` | Production-readiness contracts |
 
 System tests are opt-in. Set `DOCMIND_RUN_SYSTEM=1` before running `tests/system`.
+
+Required CI jobs establish release readiness. DocMind has no separate collector that converts failed checks into a passing report.
 
 ## Unit layout
 
@@ -29,9 +30,9 @@ System tests are opt-in. Set `DOCMIND_RUN_SYSTEM=1` before running `tests/system
 - `processing`: parser, ingestion, OCR, page fidelity, and model integrity
 - `prompting`: packaged templates and rendering
 - `retrieval`: hybrid search, deduplication, reranking, GraphRAG, and SigLIP
-- `scripts`: benchmark, container, model, package, and Qdrant operator commands
+- `scripts`: benchmark, container, model, release, and Qdrant operator commands
 - `security` and `telemetry`: security boundaries and metadata-only events
-- `utils`: shared storage, image, monitoring, and canonicalization helpers
+- `utils`: shared storage, image, log-safety, and canonicalization helpers
 
 See `tests/README.md` for the compact directory reference.
 
@@ -40,38 +41,34 @@ See `tests/README.md` for the compact directory reference.
 Start with the owner’s test file:
 
 ```bash
-uv run pytest tests/unit/processing/test_parser_contract.py -vv
+uv run pytest tests/unit/processing/test_parser_contract.py -vv --no-cov
 ```
 
 Run a domain when a change crosses several files:
 
 ```bash
-uv run pytest tests/unit/processing -q
-uv run pytest tests/unit/retrieval -q
+uv run pytest tests/unit/processing -q --no-cov
+uv run pytest tests/unit/retrieval -q --no-cov
 ```
 
 Run an integration boundary after changing wiring:
 
 ```bash
-uv run pytest tests/integration/test_ingestion_pipeline_pdf_images.py -vv
+uv run pytest tests/integration/test_ingestion_pipeline_pdf_images.py -vv --no-cov
 ```
 
-## Run the tiered test runner
+## Run native Pytest lanes
 
-`scripts/run_tests.py` supports these current lanes:
+Pytest owns test selection and execution:
 
 ```bash
-uv run python scripts/run_tests.py --unit
-uv run python scripts/run_tests.py --integration
-uv run python scripts/run_tests.py --fast
-uv run python scripts/run_tests.py --gpu
-uv run python scripts/run_tests.py --coverage
-uv run python scripts/run_tests.py --validate-imports
+uv run pytest tests/unit -q --no-cov
+uv run pytest tests/integration -q --no-cov
+uv run pytest tests/unit tests/integration -q --no-cov
+uv run --no-sync pytest -m requires_gpu --no-cov
 ```
 
-The runner has no `--extras` lane. LlamaIndex core is a required dependency, not an optional test profile.
-
-The default runner executes unit and integration tiers. System tests remain explicit.
+LlamaIndex core is a required dependency, not an optional test profile. System tests remain explicit.
 
 ## Test dependency profiles
 
@@ -85,14 +82,15 @@ GraphRAG storage tests use the required LlamaIndex core package:
 
 ```bash
 uv run pytest --no-cov \
-  tests/unit/retrieval/test_llama_index_adapter.py \
   tests/unit/retrieval/test_graph_rag_factory.py \
   tests/unit/retrieval/test_router_factory_contract.py \
   tests/integration/test_graph.py \
   tests/integration/test_graphrag_exports.py
 ```
 
-The `requires_llama` marker means a test needs the real installed `llama_index.core` instead of the default router stub. It does not refer to a `llama` extra.
+The `requires_llama` marker identifies tests that exercise the installed
+`llama_index.core` APIs directly. The suite does not install a router stub, and
+the marker does not refer to a `llama` extra.
 
 Local runs skip a `requires_llama` test when the required package is missing. Continuous integration (CI) sets `REQUIRE_REAL_LLAMA=1` so that missing core packages fail.
 
@@ -112,7 +110,7 @@ GPU testing is optional:
 
 ```bash
 uv sync --frozen --no-group cpu --extra gpu
-uv run python scripts/run_tests.py --gpu
+uv run --no-sync pytest -m requires_gpu --no-cov
 ```
 
 Mark tests that require hardware with `requires_gpu`. A test that only exercises device selection should use a stub and remain in the CPU lane.
@@ -158,20 +156,6 @@ The harness records `network_egress: NOT_MEASURED`. Do not present the artifact 
 
 The current code emits benchmark schema 3. Treat a schema 2 artifact as stale, and regenerate it after the final implementation and dependency state is frozen.
 
-## Validate the wheel
-
-Build and inspect the wheel:
-
-```bash
-rm -rf build docmind_ai_llm.egg-info
-uv build --wheel --clear
-uv run python scripts/smoke_built_wheel.py
-```
-
-The smoke test validates wheel files and metadata, then installs the wheel with `--no-deps` in an isolated environment. It proves package contents, version import, and prompt-resource loading. It does not prove a full pip dependency installation.
-
-Focused wheel-contract tests live under `tests/unit/scripts/test_smoke_built_wheel.py`.
-
 ## Run code and documentation gates
 
 Run code gates:
@@ -180,7 +164,7 @@ Run code gates:
 uv run ruff format --check .
 uv run ruff check .
 uv run pyright --threads 4
-uv run python scripts/run_tests.py --fast
+uv run pytest tests/unit tests/integration -q --no-cov
 ```
 
 Run documentation gates:
@@ -237,12 +221,20 @@ Do not import one domain’s `conftest.py` from another domain. Move a genuinely
 
 ## Coverage and quality
 
-Generate coverage through the runner:
+Generate every coverage and test-report artifact explicitly:
 
 ```bash
-uv run python scripts/run_tests.py --coverage
+uv run pytest tests/unit tests/integration -q \
+  --cov=src \
+  --cov-branch \
+  --cov-report=term-missing \
+  --cov-report=html:htmlcov \
+  --cov-report=xml:coverage.xml \
+  --cov-report=json:coverage.json \
+  --cov-fail-under=80 \
+  --junitxml=junit.xml
 ```
 
-The configured line-coverage floor is 80 percent. Branch coverage is recorded only when the selected command enables it.
+The command enforces 80 percent line coverage and records branch coverage.
 
 Do not weaken a gate to accommodate an unrelated failure. Record the existing failure, prove the scoped change independently, and route the failure to its owner.

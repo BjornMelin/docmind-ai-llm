@@ -36,7 +36,7 @@ select the locked official CUDA 12.8 wheels.
 
 ```bash
 uv sync --frozen --no-group cpu --extra gpu
-uv run python -m spacy download en_core_web_sm
+uv run --no-sync python -m spacy download en_core_web_sm
 ```
 
 ### vLLM serving (external)
@@ -65,8 +65,8 @@ export SPACY_GPU_ID=0
 ### Verify (spaCy / CUDA)
 
 ```bash
-uv run python -c "import torch; print(torch.cuda.is_available())"
-uv run python -c "import spacy; print(spacy.__version__); print(spacy.prefer_gpu(0))"
+uv run --no-sync python -c "import torch; print(torch.cuda.is_available())"
+uv run --no-sync python -c "import spacy; print(spacy.__version__); print(spacy.prefer_gpu(0))"
 ```
 
 ## Apple Silicon (macOS arm64, best effort)
@@ -78,7 +78,7 @@ release-validated on CPython 3.13 or in dedicated macOS CI.
 
 ```bash
 uv sync --frozen --extra apple
-uv run python -m spacy download en_core_web_sm
+uv run --no-sync python -m spacy download en_core_web_sm
 ```
 
 ### Runtime selection (spaCy / Apple)
@@ -90,7 +90,7 @@ export DOCMIND_SPACY__DEVICE=auto   # or apple
 ### Verify (spaCy / Apple)
 
 ```bash
-uv run python -c "import spacy; print(spacy.__version__); print(spacy.prefer_gpu(0))"
+uv run --no-sync python -c "import spacy; print(spacy.__version__); print(spacy.prefer_gpu(0))"
 ```
 
 ## Notes on spaCy CUDA extras

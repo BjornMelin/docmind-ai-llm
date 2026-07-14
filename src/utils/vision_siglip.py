@@ -7,12 +7,14 @@ with device selection delegated to utils.core.select_device.
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, cast
 
+from src.config.embedding_defaults import (
+    DEFAULT_SIGLIP_MODEL_ID,
+    DEFAULT_SIGLIP_MODEL_REVISION,
+)
 from src.utils.core import select_device
-
-DEFAULT_SIGLIP_MODEL_ID = "google/siglip-base-patch16-224"
-DEFAULT_SIGLIP_MODEL_REVISION = "7fd15f0689c79d79e38b1c2e2e2370a7bf2761ed"
 
 
 def siglip_features(output: Any, *, normalize: bool = True) -> Any:
@@ -50,10 +52,20 @@ def siglip_features(output: Any, *, normalize: bool = True) -> Any:
 
 
 @lru_cache(maxsize=16)
-def _cached(model_id: str, revision: str | None, device: str) -> tuple[Any, Any, str]:
+def _cached(
+    model_id: str,
+    revision: str | None,
+    cache_folder: str,
+    device: str,
+) -> tuple[Any, Any, str]:
     from transformers import SiglipModel, SiglipProcessor  # type: ignore
 
-    pretrained_kwargs = {"revision": revision} if revision is not None else {}
+    pretrained_kwargs: dict[str, str | bool] = {
+        "cache_dir": cache_folder,
+        "local_files_only": True,
+    }
+    if revision is not None:
+        pretrained_kwargs["revision"] = revision
     siglip_model = cast(Any, SiglipModel)
     siglip_processor = cast(Any, SiglipProcessor)
     model: Any = siglip_model.from_pretrained(  # nosec B615
@@ -62,10 +74,29 @@ def _cached(model_id: str, revision: str | None, device: str) -> tuple[Any, Any,
     )
     if device in {"cuda", "mps"} and hasattr(model, "to"):
         model = model.to(device)
-    processor = siglip_processor.from_pretrained(  # nosec B615
-        model_id,
-        **pretrained_kwargs,
-    )
+    try:
+        processor = siglip_processor.from_pretrained(  # nosec B615
+            model_id,
+            **pretrained_kwargs,
+        )
+    except ImportError:
+        from transformers import (  # type: ignore
+            PreTrainedTokenizerFast,
+            SiglipImageProcessor,
+        )
+
+        image_processor = cast(Any, SiglipImageProcessor).from_pretrained(  # nosec B615
+            model_id,
+            **pretrained_kwargs,
+        )
+        tokenizer = cast(Any, PreTrainedTokenizerFast).from_pretrained(  # nosec B615
+            model_id,
+            **pretrained_kwargs,
+        )
+        processor = siglip_processor(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
+        )
     return model, processor, device
 
 
@@ -73,6 +104,7 @@ def load_siglip(
     model_id: str | None = None,
     device: str | None = None,
     revision: str | None = None,
+    cache_folder: str | Path | None = None,
 ) -> tuple[Any, Any, str]:
     """Load SigLIP model+processor and choose device.
 
@@ -80,14 +112,20 @@ def load_siglip(
         model_id: Hugging Face model id. Defaults to google/siglip-base-patch16-224.
         device: Preferred device ("auto"|"cpu"|"cuda"|"mps"). Defaults to auto.
         revision: Pinned Hugging Face revision for supply-chain stability.
+        cache_folder: Hugging Face cache root. Defaults to the embedding setting.
 
     Returns:
         (model, processor, device_str)
     """
     resolved_id = model_id or DEFAULT_SIGLIP_MODEL_ID
     resolved_revision = _resolve_revision(resolved_id, revision)
+    if cache_folder is None:
+        from src.config import settings
+
+        cache_folder = settings.embedding.cache_folder
+    resolved_cache = str(Path(cache_folder).expanduser().resolve())
     dev = select_device(device or "auto")
-    return _cached(resolved_id, resolved_revision, dev)
+    return _cached(resolved_id, resolved_revision, resolved_cache, dev)
 
 
 def _resolve_revision(model_id: str, revision: str | None) -> str | None:

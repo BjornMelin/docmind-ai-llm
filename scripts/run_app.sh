@@ -18,15 +18,11 @@ if [ ! -f "app.py" ]; then
     exit 1
 fi
 
-# Set default port from unified settings env; fall back to 8501
-# Note: prefer nested settings key DOCMIND_UI__STREAMLIT_PORT
-PORT=${DOCMIND_UI__STREAMLIT_PORT:-8501}
-
 echo "📋 Configuration:"
-echo "   Port: $PORT"
 echo "   Python: $(uv run python --version)"
 echo ""
 
-# Run the application with port configuration
-echo "✅ Launching DocMind AI on http://localhost:$PORT"
-uv run streamlit run app.py --server.port "$PORT"
+# Streamlit owns server configuration through .streamlit/config.toml, native
+# STREAMLIT_* environment variables, and CLI flags.
+echo "✅ Launching DocMind AI"
+uv run streamlit run app.py

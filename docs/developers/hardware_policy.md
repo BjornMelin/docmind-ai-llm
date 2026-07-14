@@ -15,9 +15,11 @@ consistent across the codebase.
     `("mps", None)`, or `("cpu", None)`.
 - `has_cuda_vram(min_gb: float, device_index: int = 0) -> bool`
   - Returns `True` if CUDA is available and the queried device’s total VRAM (in raw bytes)
-    meets the threshold (GiB). Uses `settings.monitoring.bytes_to_gb_divisor`.
+    meets the threshold (GiB). Byte conversion uses the runtime-owned
+    `BYTES_PER_GIB` constant.
 - `get_vram_gb(device_index: int = 0) -> float | None`
-  - Reports total VRAM for display/telemetry, using safe divisor access and rounding for readability.
+  - Reports total VRAM for display/telemetry with fixed GiB conversion and
+    readable rounding.
 
 ## Usage Guidelines
 

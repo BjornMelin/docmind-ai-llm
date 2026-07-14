@@ -1,4 +1,4 @@
-"""Report DocMind parser dependency and offline-readiness health as JSON."""
+"""Report DocMind parser dependency and model availability as JSON."""
 
 from __future__ import annotations
 
@@ -19,12 +19,12 @@ def main() -> None:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="Exit nonzero unless offline PDF parser models are ready.",
+        help="Exit nonzero unless PDF dependencies and Docling models are available.",
     )
     args = parser.parse_args()
     health = parser_health(settings)
     print(json.dumps(health, indent=2, sort_keys=True))
-    if args.check and not health["pdf_ready"]:
+    if args.check and not health["pdf_dependencies_ready"]:
         raise SystemExit(1)
 
 

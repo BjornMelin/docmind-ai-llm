@@ -39,7 +39,9 @@ DocMind's environment.
 
 ## Choose a supported installation path
 
-Use the locked uv environment for local development or the repository Docker image for containers. The wheel smoke test installs with `--no-deps` to validate package contents and metadata. It does not validate pip dependency resolution.
+Use the locked uv environment for local development or the repository Docker
+image for containers. DocMind does not publish a supported Python wheel or
+library API.
 
 ## Start Qdrant
 
@@ -47,7 +49,7 @@ The launcher binds Qdrant REST and gRPC ports to loopback and refuses to reuse a
 
 ```bash
 ./scripts/start_qdrant_local.sh
-curl --fail http://127.0.0.1:6333/health
+curl --fail http://127.0.0.1:6333/readyz
 uv run python scripts/qdrant_schema.py check
 ```
 
@@ -55,15 +57,16 @@ Docker Compose keeps Qdrant internal to the Compose network. Use the launcher wh
 
 ## Prefetch required local models
 
-DocMind requires BGE-M3 for dense indexing and verified Docling and RapidOCR
-model bundles for PDF parsing:
+DocMind requires BGE-M3, BM42, the BGE reranker, and SigLIP for the default
+retrieval pipeline. PDF parsing requires the verified Docling layout bundle.
+RapidOCR models are packaged in its locked wheel:
 
 ```bash
 uv run python tools/models/pull.py \
-  --bge-m3 \
+  --all \
   --cache_dir ./models_cache \
   --parser-defaults \
-  --rapidocr-cache-dir ./cache/models
+  --parser-cache-dir ./cache/models
 uv run python scripts/parser_health.py --check
 ```
 
@@ -82,7 +85,7 @@ Keep `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` for loopback-only backends
 ```bash
 echo 'DOCMIND_LLM_BACKEND=ollama' >> .env
 echo 'DOCMIND_OLLAMA_BASE_URL=http://localhost:11434' >> .env
-echo 'DOCMIND_MODEL=qwen3:4b-instruct' >> .env
+echo 'DOCMIND_LLM_REQUEST__MODEL=qwen3:4b-instruct' >> .env
 ollama pull qwen3:4b-instruct
 ```
 
@@ -90,7 +93,7 @@ ollama pull qwen3:4b-instruct
 
 ```bash
 echo 'DOCMIND_LLM_BACKEND=vllm' >> .env
-echo 'DOCMIND_OPENAI__BASE_URL=http://localhost:8000/v1' >> .env
+echo 'DOCMIND_VLLM_BASE_URL=http://localhost:8000/v1' >> .env
 echo 'DOCMIND_OPENAI__API_KEY=local_api_key_not_used' >> .env
 ```
 

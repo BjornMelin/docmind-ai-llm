@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from src.processing.parsing import model_artifacts
 from src.processing.parsing.backends.docling_backend import (
     _pinned_docling_layout_config,
 )
@@ -12,6 +13,7 @@ from src.processing.parsing.model_artifacts import (
     ModelArtifact,
     ModelBundle,
     ModelIntegrityError,
+    cached_model_directory_issues,
     verify_model_bundle,
 )
 
@@ -38,6 +40,58 @@ def test_model_bundle_verification_accepts_exact_manifest(tmp_path: Path) -> Non
     model.write_bytes(b"trusted-model")
 
     assert verify_model_bundle(tmp_path, _TEST_BUNDLE) == model.parent
+
+
+def test_unchanged_model_bundle_reuses_integrity_digest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    model = tmp_path / _TEST_BUNDLE.root / "model.bin"
+    model.parent.mkdir()
+    model.write_bytes(b"trusted-model")
+    calls = 0
+    real_file_digest = model_artifacts.file_digest
+
+    def _counted_digest(*args: object, **kwargs: object):
+        nonlocal calls
+        calls += 1
+        return real_file_digest(*args, **kwargs)
+
+    monkeypatch.setattr(model_artifacts, "file_digest", _counted_digest)
+
+    cached_model_directory_issues(model.parent, _TEST_BUNDLE)
+    cached_model_directory_issues(model.parent, _TEST_BUNDLE)
+
+    assert calls == 1
+
+
+def test_model_bundle_cache_invalidates_on_file_change(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    model = tmp_path / _TEST_BUNDLE.root / "model.bin"
+    model.parent.mkdir()
+    model.write_bytes(b"trusted-model")
+    calls = 0
+    real_file_digest = model_artifacts.file_digest
+
+    def _counted_digest(*args: object, **kwargs: object):
+        nonlocal calls
+        calls += 1
+        return real_file_digest(*args, **kwargs)
+
+    monkeypatch.setattr(model_artifacts, "file_digest", _counted_digest)
+    now = 0.0
+    monkeypatch.setattr(model_artifacts, "monotonic", lambda: now)
+    assert cached_model_directory_issues(model.parent, _TEST_BUNDLE) == {}
+    model.write_bytes(b"tampered-mode")
+    now = 31.0
+
+    assert cached_model_directory_issues(model.parent, _TEST_BUNDLE) == {
+        "model.bin": "SHA-256 mismatch"
+    }
+
+    assert calls == 2
 
 
 def test_model_bundle_verification_rejects_sha256_mismatch(tmp_path: Path) -> None:

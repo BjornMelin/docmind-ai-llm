@@ -1,8 +1,7 @@
 """Unit tests for src.utils.siglip_adapter.SiglipEmbedding.
 
 The tests avoid importing heavy libraries by stubbing internals. They focus on
-device selection, lazy-loading behavior, and failure fallbacks returning
-deterministic zero vectors.
+device selection, lazy-loading behavior, and fail-closed inference errors.
 """
 
 from __future__ import annotations
@@ -10,12 +9,11 @@ from __future__ import annotations
 from types import ModuleType
 from typing import Any
 
-import numpy as np
 import pytest
 
 
-def test_siglip_embedding_returns_zeros_when_not_loaded(monkeypatch):
-    """If model/proc are absent after _ensure_loaded, returns zero vector of _dim."""
+def test_siglip_embedding_rejects_missing_loaded_model(monkeypatch):
+    """Missing model state is an explicit failure, never a synthetic embedding."""
     from src.utils.siglip_adapter import SiglipEmbedding
 
     emb = SiglipEmbedding(model_id="dummy/none", device="cpu")
@@ -26,10 +24,8 @@ def test_siglip_embedding_returns_zeros_when_not_loaded(monkeypatch):
     emb._proc = None
     emb._dim = 256
 
-    vec = emb.get_image_embedding(image=None)
-    assert isinstance(vec, np.ndarray)
-    assert vec.shape == (256,)
-    assert np.allclose(vec, 0.0)
+    with pytest.raises(RuntimeError, match="image model did not initialize"):
+        emb.get_image_embedding(image=None)
 
 
 def test_siglip_embedding_choose_device_cpu_when_no_torch(monkeypatch):
@@ -43,8 +39,8 @@ def test_siglip_embedding_choose_device_cpu_when_no_torch(monkeypatch):
     assert emb.device == "cpu"
 
 
-def test_siglip_embedding_forward_error_returns_zero(monkeypatch):
-    """If forward pass raises, adapter returns zeros with known dimension."""
+def test_siglip_embedding_forward_error_raises(monkeypatch):
+    """Inference errors fail closed rather than returning a plausible vector."""
     from src.utils.siglip_adapter import SiglipEmbedding
 
     emb = SiglipEmbedding(model_id="dummy/ok", device="cpu")
@@ -77,9 +73,11 @@ def test_siglip_embedding_forward_error_returns_zero(monkeypatch):
     torch_stub.no_grad = _NoGrad
     monkeypatch.setitem(__import__("sys").modules, "torch", torch_stub)
 
-    out = emb.get_image_embedding(image=None)
-    assert out.shape == (128,)
-    assert np.all(out == 0)
+    with pytest.raises(RuntimeError, match="image embedding failed") as exc_info:
+        emb.get_image_embedding(image=None)
+
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert str(exc_info.value.__cause__) == "boom"
 
 
 def test_siglip_adapter_dim_inference_from_config(monkeypatch):
@@ -104,13 +102,13 @@ def test_siglip_adapter_dim_inference_from_config(monkeypatch):
         s._dim = getattr(s._model.config, "projection_dim", None)
 
     monkeypatch.setattr(s, "_ensure_loaded", _fake_ensure)
-    _ = s.get_image_embedding(image=None)
+    assert s._try_ensure_loaded() is True
     assert s._dim == 640
 
 
 @pytest.mark.unit
-def test_siglip_adapter_try_ensure_loaded_catches_unexpected_errors(monkeypatch):
-    """_try_ensure_loaded should fail open on unexpected load-time exceptions."""
+def test_siglip_adapter_try_ensure_loaded_propagates_unexpected_errors(monkeypatch):
+    """Load-time errors propagate instead of producing a zero-vector fallback."""
     from src.utils.siglip_adapter import SiglipEmbedding
 
     s = SiglipEmbedding(model_id="dummy/ok", device="cpu")
@@ -120,7 +118,8 @@ def test_siglip_adapter_try_ensure_loaded_catches_unexpected_errors(monkeypatch)
 
     monkeypatch.setattr(s, "_ensure_loaded", _raise)
 
-    assert s._try_ensure_loaded() is False
+    with pytest.raises(KeyError, match="boom"):
+        s._try_ensure_loaded()
 
 
 @pytest.mark.unit

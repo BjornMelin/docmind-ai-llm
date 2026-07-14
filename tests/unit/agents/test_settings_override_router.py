@@ -1,8 +1,7 @@
-"""Unit test to verify settings_override passes router_engine to tools_data.
+"""Unit test for settings_override runtime-context ownership.
 
 This test patches internal methods of MultiAgentCoordinator to avoid heavy
-dependencies and ensures that the router_engine override is preserved in the
-initial state passed to the agent workflow.
+dependencies and ensures that router engines never enter persisted state.
 """
 
 from __future__ import annotations
@@ -22,8 +21,7 @@ def test_settings_override_router_engine_passthrough() -> None:
     captured = {}
 
     def fake_run(initial_state, **kwargs):  # type: ignore[no-untyped-def]
-        # MultiAgentState is a Pydantic model; access attributes directly
-        captured["tools_data"] = dict(getattr(initial_state, "tools_data", {}) or {})
+        captured["initial_state"] = dict(initial_state)
         captured["runtime_context"] = kwargs.get("runtime_context")
         # Return a minimal state compatible with _extract_response
         return {
@@ -46,5 +44,5 @@ def test_settings_override_router_engine_passthrough() -> None:
     router = object()
     resp = coord.process_query("hi", settings_override={"router_engine": router})
     assert getattr(resp, "content", "") == "answer"
-    assert captured["tools_data"].get("router_engine") is None
+    assert "tools_data" not in captured["initial_state"]
     assert captured["runtime_context"].get("router_engine") is router

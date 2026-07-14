@@ -2,8 +2,8 @@
 ADR: 038
 Title: GraphRAG Persistence and Router Integration
 Status: Accepted
-Version: 1.2
-Date: 2026-01-09
+Version: 1.4
+Date: 2026-07-14
 Supersedes:
 Superseded-by:
 Related: 003, 013, 016, 019, 022, 024, 031, 033, 034
@@ -20,7 +20,8 @@ Adopt a library‑first GraphRAG strategy and wire it via a RouterQueryEngine to
 
 Update (Phase‑2):
 
-- Unify on `router_factory` and remove legacy/custom router code. Compose tools [semantic_search, hybrid_search, knowledge_graph].
+- Unify on `router_factory` and remove legacy/custom router code. Always compose
+  `semantic_search`; add configured hybrid, keyword, multimodal, and graph tools.
 - Provide a dedicated `ServerHybridRetriever` using Qdrant Query API (RRF default, DBSF optional) as a standalone module; no legacy router paths retained.
 - Enrich snapshot manifest with versions, schema/persist versions; use relpath hashing under uploads.
 
@@ -51,21 +52,27 @@ GraphRAG was accepted (ADR‑019) as an optional enhancement, but lacked standar
 
 ## Decision
 
-- Router: When a graph exists and is healthy, compose tools `[vector_query_engine, graph_query_engine(include_text=true, path_depth=1)]` with `PydanticSingleSelector` (OpenAI) else `LLMSingleSelector`. If graph absent/unhealthy, use vector tool only.
+- Router: Always compose semantic search, then add configured hybrid, keyword,
+  multimodal, and graph query engines. LlamaIndex's native
+  `RouterQueryEngine.from_defaults(...)` owns selection. If graph is absent or
+  unhealthy, only the graph tool is omitted.
 - Graph helpers: Use documented APIs (`property_graph_store.get`, `get_rel_map`) and `PropertyGraphIndex.as_retriever/as_query_engine`. No index mutation.
 - Persistence: Implement SnapshotManager to write to `storage/_tmp-<uuid>`
   and atomically rename to `storage/<timestamp>`. Each snapshot contains
   `manifest.jsonl`, `manifest.meta.json`, and `manifest.checksum`.
-  `manifest.meta.json` owns `corpus_hash`, `config_hash`, `created_at`,
-  `versions`, and `complete`. The flag remains `false` while staged and through
-  the atomic rename; finalization then sets it to `true` and refreshes the
-  checksum. Readers ignore incomplete manifests. Use a lockfile to ensure a
-  single writer. Load the latest snapshot in Chat and show a staleness badge on
-  mismatch.
+  `manifest.meta.json` owns the physical Qdrant collection identities,
+  `corpus_hash`, `config_hash`, activation provenance, versions, and completion
+  state. Graph-enabled snapshots persist LlamaIndex's complete native
+  `StorageContext`: graph, document, index, and graph-local vector-store files.
+  The graph-local vector store retains property-graph node embeddings across
+  restart; app snapshots do not serialize the live Qdrant corpus vectors.
+  Finalization uses a durable activation journal before rename and commits only
+  through `CURRENT`. Readers ignore incomplete manifests. The required
+  operating-system lock ensures a single writer.
 - Exports: JSONL baseline (one relation per line from `get_rel_map`); Parquet
   optional if `pyarrow` is available. Metadata is recorded under
-  `manifest.meta.json`'s `graph_exports` field with `seed_count`, `duration_ms`,
-  `size_bytes`, and `sha256`.
+  `manifest.meta.json`'s `graph_exports` field with basename-only `filename`,
+  `format`, `seed_count`, `duration_ms`, `size_bytes`, and `sha256`.
 - UI: Documents page “Build GraphRAG (beta)” toggle (default off, configurable). Chat defaults to router when graph present and shows staleness badge when hashes mismatch.
 
 ## High-Level Architecture
@@ -80,7 +87,8 @@ flowchart LR
   T1 & T2 --> R[RouterQueryEngine]
   R --> A[Answer + Sources]
   PG --> E[Exports JSONL/Parquet]
-  V & PG --> S[SnapshotManager]
+  V -->|collection identities| S[SnapshotManager]
+  PG -->|native graph payload| S
   S --> M[manifest.jsonl + manifest.meta.json + manifest.checksum]
 ```
 
@@ -109,7 +117,8 @@ flowchart LR
 ### Architecture Overview
 
 - Build router engine via a factory that conditionally includes graph tool
-- SnapshotManager orchestrates vector/graph persistence + manifest
+- SnapshotManager records physical Qdrant collection identity and packages the
+  optional graph plus its activation manifest
 - UI reads latest manifest to compute staleness
 
 ### Implementation Details (code anchors)
@@ -124,7 +133,7 @@ flowchart LR
 
 ```env
 # Global GraphRAG feature flag (used by router + UI)
-DOCMIND_ENABLE_GRAPHRAG=false
+DOCMIND_GRAPHRAG_CFG__ENABLED=false
 
 # Advanced GraphRAG tuning (nested GraphRAG config model)
 DOCMIND_GRAPHRAG_CFG__DEFAULT_PATH_DEPTH=1
@@ -138,8 +147,14 @@ DOCMIND_GRAPHRAG_CFG__DEFAULT_PATH_DEPTH=1
 
 ## Telemetry & Observability
 
-- Graph export and router composition emit OpenTelemetry spans via `configure_observability` (SPEC-012). Spans are no-op unless `settings.observability.enabled` configures SDK providers.
-- Structured local telemetry events (`router_selected`, `snapshot_stale_detected`, `export_performed`, and `traversal_depth` where applicable) are logged via `log_jsonl` and export metadata is mirrored into snapshot manifests.
+- Graph export and router composition emit OpenTelemetry spans via
+  `configure_observability` (SPEC-012). Spans are no-op unless
+  `settings.observability.enabled` configures SDK providers. Router construction
+  emits the OpenTelemetry `router_selected` event with tool count and names.
+- Structured local telemetry records retrieval backend/outcome,
+  `snapshot_stale_detected`, and `export_performed`. Export events mirror the
+  manifest's identity measurements with telemetry-specific field names. DocMind
+  does not emit per-query route or traversal-depth JSONL events.
 - Exporters are disabled by default (offline-first). Tests may patch exporters to console; production uses OTLP exporters when enabled.
 
 ## Consequences
@@ -164,6 +179,10 @@ DOCMIND_GRAPHRAG_CFG__DEFAULT_PATH_DEPTH=1
 
 ## Changelog
 
+- 1.4 (2026-07-14): Persist and reload the complete native property-graph
+  StorageContext so semantic graph retrieval survives process restart.
+- 1.3 (2026-07-14): Align native property-graph persistence, activation
+  journaling, export metadata, and implemented telemetry contracts.
 - 1.2 (2026-01-09): Docs-only: align observability notes with current SPEC-012 + implementation (no implicit console fallback; remove lock_takeover mention).
 - 1.1 (2025-09-16): Accepted; documented manifest metadata and OpenTelemetry instrumentation
 - 1.0 (2025-09-09): Initial proposed ADR for GraphRAG router+SnapshotManager

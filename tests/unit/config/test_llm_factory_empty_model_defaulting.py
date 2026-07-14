@@ -1,11 +1,11 @@
-"""LLM factory model defaulting when top-level model is None."""
+"""LLM factory model defaulting without a request override."""
 
 import pytest
 
 pytestmark = pytest.mark.unit
 
 
-def test_llm_factory_uses_backend_model_when_top_level_none(monkeypatch):
+def test_llm_factory_uses_backend_default_without_override(monkeypatch):
     from src.config.llm_factory import build_llm
     from src.config.settings import DocMindSettings
 
@@ -22,7 +22,5 @@ def test_llm_factory_uses_backend_model_when_top_level_none(monkeypatch):
 
     cfg = DocMindSettings()
     cfg.llm_backend = "vllm"
-    cfg.model = None
-    cfg.vllm.model = "fallback-model"
     out = build_llm(cfg)
-    assert getattr(out, "model", None) == "fallback-model"
+    assert getattr(out, "model", None) == "Qwen/Qwen3-4B-Instruct-2507-FP8"

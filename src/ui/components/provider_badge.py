@@ -25,7 +25,6 @@ def provider_badge(
     from src.retrieval.llama_index_adapter import get_graphrag_health
 
     provider = cfg.llm_backend
-    vllm_cfg = getattr(cfg, "vllm", None)
     model = cfg.effective_model
     base_url: str | None = None
     if provider == "ollama":
@@ -33,10 +32,7 @@ def provider_badge(
     elif provider == "lmstudio":
         base_url = str(cfg.lmstudio_base_url).rstrip("/")
     elif provider == "vllm":
-        candidate = cfg.vllm_base_url or (
-            getattr(vllm_cfg, "vllm_base_url", None) if vllm_cfg else None
-        )
-        base_url = str(candidate).rstrip("/") if candidate else None
+        base_url = str(cfg.vllm_base_url).rstrip("/")
     elif provider == "llamacpp":
         base_url = (
             str(cfg.llamacpp_base_url).rstrip("/") if cfg.llamacpp_base_url else None

@@ -13,12 +13,9 @@ from __future__ import annotations
 
 import contextlib
 import shutil
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
-
-from loguru import logger
 
 from src.utils.hashing import sha256_file
 
@@ -116,47 +113,6 @@ class ArtifactStore:
         if not path.exists():
             return
         path.unlink()
-
-    def prune(self, *, max_total_bytes: int, min_age_seconds: int = 0) -> int:
-        """Best-effort GC: delete oldest artifacts until under budget.
-
-        Returns number of deleted files. Concurrent modifications may make the
-        byte totals approximate; failures are handled best-effort.
-        """
-        root = self.root
-        files: list[tuple[float, int, Path]] = []
-        total = 0
-        for p in root.glob("*"):
-            if not p.is_file():
-                continue
-            try:
-                st = p.stat()
-            except OSError:
-                continue
-            total += int(st.st_size)
-            files.append((float(st.st_mtime), int(st.st_size), p))
-
-        if total <= max_total_bytes:
-            return 0
-
-        cutoff = time.time() - max(0, int(min_age_seconds))
-        # Oldest-first eviction.
-        files.sort(key=lambda t: (t[0], str(t[2])))
-        deleted = 0
-        for mtime, size, path in files:
-            if total <= max_total_bytes:
-                break
-            if mtime > cutoff:
-                continue
-            try:
-                path.unlink()
-                total -= int(size)
-                deleted += 1
-            except OSError:
-                continue
-        if deleted:
-            logger.info("ArtifactStore GC deleted {} file(s)", deleted)
-        return deleted
 
 
 __all__ = ["ArtifactRef", "ArtifactStore"]

@@ -17,11 +17,6 @@ from src.config import llm_factory
 def test_build_llm_unsupported_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_settings = types.SimpleNamespace(
         llm_backend="unsupported",
-        effective_model="qwen",
-        model=None,
-        context_window=None,
-        vllm=types.SimpleNamespace(context_window=1024, model="qwen"),
-        ui=types.SimpleNamespace(request_timeout_seconds=5.0),
     )
     monkeypatch.setattr(llm_factory, "DocMindSettings", object)  # avoid type import
     with pytest.raises(ValueError, match="Unsupported"):

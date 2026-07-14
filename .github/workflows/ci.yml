@@ -14,8 +14,32 @@ permissions:
   contents: read
 
 jobs:
+  release-contract:
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'release-please--') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: '0.11.28'
+          enable-cache: false
+
+      - name: Validate release metadata and lockfile
+        run: |
+          python scripts/check_release_contract.py
+          uv lock --check
+
   build-test:
-    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -45,6 +69,7 @@ jobs:
       - name: Install uv (with cache)
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
+          version: '0.11.28'
           enable-cache: true
           cache-suffix: build-test-py312
 
@@ -79,14 +104,6 @@ jobs:
           DOCMIND_RUN_SYSTEM: '1'
         run: uv run pytest tests/system/test_e2e_offline.py -q --no-cov
 
-      - name: Build and smoke-test wheel contents
-        run: |
-          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct HEAD)"
-          umask 022
-          rm -rf build docmind_ai_llm.egg-info
-          uv build --wheel --clear
-          uv run python scripts/smoke_built_wheel.py
-
       - name: Quality Gate - No TODO/FIXME/XXX placeholders
         run: |
           if rg -n "\\b(TODO|FIXME|XXX)\\b" src tests docs scripts tools; then
@@ -98,7 +115,15 @@ jobs:
 
       - name: Run unit/integration with coverage
         run: |
-          uv run python scripts/run_tests.py --coverage
+          uv run pytest tests/unit tests/integration -q \
+            --cov=src \
+            --cov-branch \
+            --cov-report=term-missing \
+            --cov-report=html:htmlcov \
+            --cov-report=xml:coverage.xml \
+            --cov-report=json:coverage.json \
+            --cov-fail-under=80 \
+            --junitxml=junit.xml
 
       - name: Validate evaluation leaderboard schemas (if present)
         run: |
@@ -113,10 +138,10 @@ jobs:
             htmlcov
             coverage.xml
             coverage.json
+            junit.xml
           if-no-files-found: ignore
 
   compatibility-python-313:
-    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -136,6 +161,7 @@ jobs:
       - name: Install uv (with cache)
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
+          version: '0.11.28'
           enable-cache: true
           cache-suffix: compatibility-py313
 
@@ -147,19 +173,17 @@ jobs:
           uv run python -c "import importlib.util; assert importlib.util.find_spec('llama_index.core'); assert importlib.util.find_spec('kuzu') is None"
 
       - name: Run full unit suite
-        run: uv run python scripts/run_tests.py --unit
+        run: uv run pytest tests/unit -q --no-cov
 
       - name: Run focused GraphRAG integrations
         run: |
           uv run pytest --no-cov \
-            tests/unit/retrieval/test_llama_index_adapter.py \
             tests/unit/retrieval/test_graph_rag_factory.py \
             tests/unit/retrieval/test_router_factory_contract.py \
             tests/integration/test_graph.py \
             tests/integration/test_graphrag_exports.py
 
   qdrant-fusion:
-    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -186,6 +210,7 @@ jobs:
       - name: Install uv (with cache)
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
+          version: '0.11.28'
           enable-cache: true
           cache-suffix: qdrant-fusion-py312
 
@@ -198,7 +223,6 @@ jobs:
             python scripts/qdrant_fusion_smoke.py
 
   container-static:
-    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -379,7 +403,6 @@ jobs:
           echo "Static checks: OK"
 
   container-build:
-    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:

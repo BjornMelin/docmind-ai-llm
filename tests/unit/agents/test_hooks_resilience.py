@@ -32,12 +32,7 @@ def test_pre_post_hooks_resilience(monkeypatch) -> None:  # type: ignore[no-unty
     assert out_pre.get("hook_error") is True
     assert out_pre.get("hook_name") == "pre_model_hook"
 
-    # Ensure post hook exception path also sets flags
-    # (simulate by raising in calculate_kv_cache_usage)
-    def _boom_kv(_state: dict) -> float:
-        raise RuntimeError("boom-kv")
-
-    monkeypatch.setattr(coord.context_manager, "calculate_kv_cache_usage", _boom_kv)
+    # The same failing token boundary is exercised by the post hook.
     out_post = post_hook(state.copy())
     assert out_post.get("hook_error") is True
     assert out_post.get("hook_name") == "post_model_hook"

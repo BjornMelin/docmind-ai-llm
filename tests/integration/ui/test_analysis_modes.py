@@ -7,13 +7,15 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from streamlit.testing.v1 import AppTest
 
 import src.ui.background_jobs as bg
 from src.analysis.models import AnalysisResult, PerDocResult
+from src.ui.router_session import replace_session_router
+from src.ui.vector_session import VectorIndexResource, replace_session_vector_resource
 from tests.fixtures.vector_index import FakeVectorIndex
 from tests.helpers.apptest_utils import apptest_timeout_sec
 
@@ -21,7 +23,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def chat_analysis_app_test(
+def chat_analysis_app_test(  # noqa: PLR0915 - complete AppTest boundary fixture
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     fake_job_manager,
@@ -47,12 +49,10 @@ def chat_analysis_app_test(
 
     original_data_dir = app_settings.data_dir
     original_chat_path = app_settings.chat.sqlite_path
-    original_db_path = app_settings.database.sqlite_db_path
     original_autoload = app_settings.graphrag_cfg.autoload_policy
 
     app_settings.data_dir = tmp_path
     app_settings.chat.sqlite_path = tmp_path / "chat.db"
-    app_settings.database.sqlite_db_path = tmp_path / "docmind.db"
     app_settings.graphrag_cfg.autoload_policy = "ignore"
 
     uploads_dir = tmp_path / "uploads"
@@ -66,6 +66,10 @@ def chat_analysis_app_test(
 
     class _CoordStub:
         """Minimal coordinator stub for the analysis UI integration test."""
+
+        def close(self) -> None:
+            """Match the production coordinator lifecycle surface."""
+            return None
 
         def list_checkpoints(self, *_args, **_kwargs) -> list[object]:
             """Return no checkpoints to keep UI rendering deterministic."""
@@ -84,7 +88,7 @@ def chat_analysis_app_test(
     chat_sessions_mod: Any = ModuleType("src.ui.chat_sessions")
     chat_sessions_mod.ChatSelection = _ChatSelection
     chat_sessions_mod.get_chat_db_conn = lambda: object()
-    chat_sessions_mod.render_session_sidebar = lambda _conn: _ChatSelection(
+    chat_sessions_mod.render_session_sidebar = lambda _conn, **_kwargs: _ChatSelection(
         thread_id="t", user_id="local"
     )
     chat_sessions_mod.render_time_travel_sidebar = lambda *_, **__: None
@@ -120,16 +124,46 @@ def chat_analysis_app_test(
     monkeypatch.setattr(bg, "get_job_manager", lambda *_a, **_k: fake_job_manager)
     monkeypatch.setattr(bg, "get_or_create_owner_id", lambda: fake_job_owner_id)
 
+    # Analysis requires a vector resource bound to the active CURRENT snapshot.
+    import src.persistence.snapshot as snapshot
+    import src.persistence.snapshot_utils as snapshot_utils
+
+    active_snapshot = tmp_path / "storage" / "active"
+    active_snapshot.mkdir(parents=True)
+    monkeypatch.setattr(
+        snapshot, "latest_snapshot_dir", lambda *_a, **_k: active_snapshot
+    )
+    monkeypatch.setattr(snapshot, "load_manifest", lambda *_a, **_k: {"active": True})
+    monkeypatch.setattr(snapshot_utils, "compute_staleness", lambda *_a, **_k: False)
+
     root = Path(__file__).resolve().parents[3]
     page_path = root / "src" / "pages" / "01_chat.py"
     at = AppTest.from_file(str(page_path), default_timeout=apptest_timeout_sec())
-    at.session_state["vector_index"] = FakeVectorIndex()
+    vector_resource = VectorIndexResource(FakeVectorIndex())
+    runtime_state: dict[str, object] = {}
+    replace_session_vector_resource(
+        runtime_state,
+        vector_resource,
+        runtime_generation=app_settings.cache_version,
+    )
+    replace_session_router(
+        runtime_state,
+        cast(Any, object()),
+        runtime_generation=app_settings.cache_version,
+    )
+    for key, value in runtime_state.items():
+        at.session_state[key] = value
+    at.session_state["_snapshot_loaded_id"] = active_snapshot.name
     try:
         yield at
     finally:
+        replace_session_vector_resource(
+            runtime_state,
+            None,
+            runtime_generation=app_settings.cache_version,
+        )
         app_settings.data_dir = original_data_dir
         app_settings.chat.sqlite_path = original_chat_path
-        app_settings.database.sqlite_db_path = original_db_path
         app_settings.graphrag_cfg.autoload_policy = original_autoload
 
 

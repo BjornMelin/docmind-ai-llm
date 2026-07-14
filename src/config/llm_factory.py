@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.config.ollama_client import resolve_ollama_auth
 from src.config.settings import DocMindSettings
 
 
@@ -57,27 +58,25 @@ def build_llm(settings: DocMindSettings) -> Any:
 
     model_name = settings.effective_model
     context_window = settings.effective_context_window
-    timeout_s = float(
-        getattr(
-            settings, "llm_request_timeout_seconds", settings.ui.request_timeout_seconds
-        )
-    )
-    agents = getattr(settings, "agents", None)
-    if getattr(agents, "enable_deadline_propagation", False):
-        timeout_s = min(
-            timeout_s, float(getattr(agents, "decision_timeout", timeout_s))
-        )
+    request = settings.llm_request
+    max_retries = int(settings.agents.max_retries)
+    timeout_s = float(settings.llm_request_timeout_seconds)
+    timeout_s = min(timeout_s, float(settings.agents.decision_timeout))
 
     llm: Any
 
     if backend == "ollama":
         from llama_index.llms.ollama import Ollama  # type: ignore
 
+        _, ollama_headers = resolve_ollama_auth(settings)
         llm = Ollama(
             base_url=str(settings.ollama_base_url).rstrip("/"),
             model=model_name,
             request_timeout=timeout_s,
             context_window=context_window,
+            temperature=float(request.temperature),
+            additional_kwargs={"num_predict": int(request.max_output_tokens)},
+            headers=ollama_headers or None,
         )
     elif backend == "openai_compatible":
         api_base = settings.backend_base_url_normalized
@@ -95,7 +94,10 @@ def build_llm(settings: DocMindSettings) -> Any:
                 api_key=api_key,
                 default_headers=settings.openai.default_headers,
                 timeout=timeout_s,
+                max_retries=max_retries,
                 context_window=context_window,
+                temperature=float(request.temperature),
+                max_output_tokens=int(request.max_output_tokens),
             )
         else:
             from llama_index.llms.openai_like import OpenAILike  # type: ignore
@@ -108,7 +110,10 @@ def build_llm(settings: DocMindSettings) -> Any:
                 is_function_calling_model=False,
                 context_window=context_window,
                 timeout=timeout_s,
+                max_retries=max_retries,
                 default_headers=settings.openai.default_headers,
+                temperature=float(request.temperature),
+                max_tokens=int(request.max_output_tokens),
             )
     elif backend in {"vllm", "lmstudio", "llamacpp"}:
         from llama_index.llms.openai_like import OpenAILike  # type: ignore
@@ -120,12 +125,15 @@ def build_llm(settings: DocMindSettings) -> Any:
         llm = OpenAILike(
             model=model_name,
             api_base=api_base,
-            api_key=_resolve_api_key(settings),
+            api_key="not-needed",
             is_chat_model=True,
             is_function_calling_model=False,
             context_window=context_window,
             timeout=timeout_s,
-            default_headers=settings.openai.default_headers,
+            max_retries=max_retries,
+            default_headers=None,
+            temperature=float(request.temperature),
+            max_tokens=int(request.max_output_tokens),
         )
     else:
         raise ValueError(f"Unsupported llm_backend: {backend}")

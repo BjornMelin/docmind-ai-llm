@@ -2,8 +2,8 @@
 ADR: 044
 Title: Keyword Search Tool via Sparse-only Qdrant Query (No New BM25 Dependency)
 Status: Implemented
-Version: 1.1
-Date: 2026-01-09
+Version: 2.0
+Date: 2026-07-13
 Supersedes:
 Superseded-by:
 Related: 003, 024, 028
@@ -19,7 +19,7 @@ Implement DocMind’s optional `keyword_search` tool as a **sparse-only Qdrant q
 
 ## Context
 
-The current keyword tool is a placeholder (`src/agents/tool_factory.py`) and is disabled by default. DocMind already supports server-side hybrid retrieval (dense+sparse fusion) via Qdrant Query API, but agent routing benefits from a distinct “keyword/lexical” tool for:
+`src/retrieval/router_factory.py` is the sole retrieval-composition owner. When keyword retrieval is enabled, it wraps `KeywordSparseRetriever` with LlamaIndex `RetrieverQueryEngine.from_args(...)` and registers `keyword_search` in the native router. The separate lexical tool supports:
 
 - exact term/ID/error code lookups
 - acronym-heavy corpora
@@ -27,9 +27,9 @@ The current keyword tool is a placeholder (`src/agents/tool_factory.py`) and is 
 
 Adding a separate BM25 dependency or building a parallel inverted index would violate KISS and increase maintenance.
 
-## Decision Drivers
+## Decision drivers
 
-- No new dependencies for v1
+- No dedicated lexical-search dependency
 - Keep Qdrant as the single retrieval source-of-truth
 - Provide distinct tool semantics for agent routing
 - Reuse existing sparse encoding (`src/retrieval/sparse_query.py`)
@@ -46,7 +46,7 @@ Adding a separate BM25 dependency or building a parallel inverted index would vi
 | --- | --- | --- | --- | --- | --- |
 | B: Sparse-only Qdrant | 9 | 9 | 10 | **9.3** | Selected |
 | A: Remove | 10 | 7 | 6 | 7.9 | Rejected |
-| C: BM25 dep | 5 | 8 | 6 | 6.1 | Rejected |
+| C: BM25 dependency | 5 | 8 | 6 | 6.2 | Rejected |
 
 ## Decision
 
@@ -56,18 +56,18 @@ Implement `keyword_search` as a retriever that:
 - queries Qdrant with `query_points(..., query=sparse_vec, using="text-sparse")`
 - returns `NodeWithScore` results with payload fields required downstream
 
-The tool remains **disabled by default** behind `settings.retrieval.enable_keyword_tool`.
+`src/retrieval/router_factory.py` registers the tool only when `settings.retrieval.enable_keyword_tool` is true. The setting defaults to false.
 
-## Security & Privacy
+## Security and privacy
 
 - No new network surfaces beyond the existing Qdrant dependency.
 - Do not log raw query content; use safe summaries.
 
 ## Consequences
 
-### Positive Outcomes
+### Positive outcomes
 
-- Keyword tool becomes real and useful without new deps.
+- Keyword search remains useful without another dependency.
 - Clearer tool differentiation for agent routing.
 
 ### Trade-offs
@@ -78,3 +78,4 @@ The tool remains **disabled by default** behind `settings.retrieval.enable_keywo
 
 - 1.0 (2026-01-09): Proposed for v1 release hardening.
 - 1.1 (2026-01-11): Implemented sparse-only Qdrant keyword tool and unit tests.
+- 2.0 (2026-07-13): Aligned ownership with the native router and removed the deleted ToolFactory path.

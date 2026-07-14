@@ -97,19 +97,16 @@ graph TD
 ### Configuration
 
 ```env
-# Global GraphRAG feature flag (used by router + UI)
-DOCMIND_ENABLE_GRAPHRAG=true
-
-# Advanced GraphRAG tuning (nested GraphRAG config model)
+# GraphRAG ingestion default and tuning
+DOCMIND_GRAPHRAG_CFG__ENABLED=false
 DOCMIND_GRAPHRAG_CFG__DEFAULT_PATH_DEPTH=1
 ```
 
 Notes:
 
-- `DOCMIND_ENABLE_GRAPHRAG` is the authoritative gate for router/UI behavior.
-- `DOCMIND_GRAPHRAG_CFG__ENABLED` controls the nested GraphRAG config helper; keep it in sync with the top-level flag.
-- **Both flags must be `true` for GraphRAG to be enabled.** If either is `false`, the feature is disabled.
-- Legacy `DOCMIND_GRAPHRAG__*` variables were used in early drafts and are deprecated in favor of the names above.
+- `DOCMIND_GRAPHRAG_CFG__ENABLED` sets the per-ingestion control's default.
+- The submitted control decides whether ingestion builds a property graph index.
+- The native router includes any supplied healthy property graph index. It does not recheck configuration.
 
 ## Testing
 
@@ -131,8 +128,11 @@ def test_graph_build_smoke():
 
 ### Instrumentation
 
-- Graph build, export, and router selection SHALL emit OpenTelemetry spans via `configure_observability` (SPEC-012).
-- `export_performed` and `router_selected` telemetry events provide structured logging for audits and offline analysis.
+- Graph export helpers and router construction emit OpenTelemetry spans via
+  `configure_observability` (SPEC-012). Router construction adds the
+  `router_selected` span event with tool count and names.
+- Snapshot and manual graph exports emit local `export_performed` JSONL events.
+  The runtime does not emit per-query route or traversal-depth JSONL events.
 
 ### Ongoing Maintenance & Considerations
 

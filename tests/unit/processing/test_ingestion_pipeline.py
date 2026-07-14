@@ -195,13 +195,13 @@ async def test_exact_retry_replays_cached_nodes_without_zero_node_failure(
 
 
 @pytest.mark.asyncio
-async def test_mixed_retry_preserves_unchanged_vectors(
+async def test_mixed_retry_builds_complete_immutable_generation(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """A mixed cached/new batch does not delete unchanged document vectors."""
+    """A mixed cached/new batch fully verifies one new physical collection."""
     from src.processing import ingestion_pipeline as module
-    from src.ui import _ingest_adapter_impl as adapter
+    from src.ui import ingest_adapter as adapter
 
     monkeypatch.setattr(module.app_settings.spacy, "enabled", False)
     cfg = IngestionConfig(
@@ -221,8 +221,7 @@ async def test_mixed_retry_preserves_unchanged_vectors(
     embedding = DummyEmbedding()
 
     first = await ingest_documents(cfg, [unchanged], embedding=embedding)
-    adapter._assign_stable_node_ids(first.nodes)
-    previous_ids = {node.node_id for node in first.nodes}
+    assert first.nodes
 
     mixed = await ingest_documents(cfg, [unchanged, new], embedding=embedding)
     assert {node.metadata["document_id"] for node in mixed.nodes} == {
@@ -231,26 +230,58 @@ async def test_mixed_retry_preserves_unchanged_vectors(
     }
 
     class _Client:
+        def __init__(self) -> None:
+            self.closed = False
+            self.count_calls: list[tuple[str, bool]] = []
+            self.retrieve_calls: list[list[str]] = []
+
+        def count(self, *, collection_name: str, exact: bool) -> SimpleNamespace:
+            self.count_calls.append((collection_name, exact))
+            return SimpleNamespace(count=len(mixed.nodes))
+
+        def retrieve(
+            self,
+            *,
+            collection_name: str,
+            ids: list[str],
+            with_payload: list[str],
+            with_vectors: bool,
+        ) -> list[SimpleNamespace]:
+            assert collection_name == "physical-text-build-2"
+            assert with_payload == [adapter.CANONICAL_DOCUMENT_ID_KEY]
+            assert with_vectors is True
+            self.retrieve_calls.append(ids)
+            nodes_by_id = {str(node.node_id): node for node in mixed.nodes}
+            return [
+                SimpleNamespace(
+                    id=node_id,
+                    payload={
+                        adapter.CANONICAL_DOCUMENT_ID_KEY: nodes_by_id[
+                            node_id
+                        ].metadata[adapter.CANONICAL_DOCUMENT_ID_KEY]
+                    },
+                    vector={adapter.DENSE_VECTOR_NAME: [1.0]},
+                )
+                for node_id in ids
+            ]
+
         def close(self) -> None:
-            return None
+            self.closed = True
 
     class _Store:
-        collection_name = "documents"
-        client = _Client()
-
         def __init__(self) -> None:
-            self.deleted: list[str | int] = []
-
-        def delete_nodes(self, *, node_ids: list[str | int]) -> None:
-            self.deleted.extend(node_ids)
+            self.collection_name = "physical-text-build-2"
+            self.client = _Client()
 
     store = _Store()
-    monkeypatch.setattr(adapter, "create_vector_store", lambda *_args, **_kwargs: store)
-    monkeypatch.setattr(
-        adapter,
-        "_existing_text_point_ids",
-        lambda _store, _document_ids: previous_ids,
-    )
+    collection_calls: list[str] = []
+
+    def _create_vector_store(collection_name: str):  # type: ignore[no-untyped-def]
+        collection_calls.append(collection_name)
+        return store
+
+    monkeypatch.setattr(adapter, "create_vector_store", _create_vector_store)
+    monkeypatch.setattr(adapter, "sparse_retrieval_enabled", lambda: False)
     monkeypatch.setattr(
         adapter,
         "StorageContext",
@@ -265,10 +296,18 @@ async def test_mixed_retry_preserves_unchanged_vectors(
     result = adapter._build_vector_index(
         mixed.nodes,
         document_ids={"doc-unchanged", "doc-new"},
+        collection_name="physical-text-build-2",
     )
 
-    assert result == "vector-index"
-    assert store.deleted == []
+    assert isinstance(result, adapter.VectorIndexResource)
+    assert result.index == "vector-index"
+    assert collection_calls == ["physical-text-build-2"]
+    assert store.client.count_calls == [("physical-text-build-2", True)]
+    assert set().union(*map(set, store.client.retrieve_calls)) == {
+        str(node.node_id) for node in mixed.nodes
+    }
+    result.close()
+    assert store.client.closed is True
 
 
 @pytest.mark.asyncio
@@ -335,7 +374,7 @@ def test_collect_parsing_provenance_keeps_searchable_artifacts() -> None:
                 "framework": "docling",
                 "profile": "cpu_safe",
                 "config_hash": "a" * 64,
-                "health": {"rapidocr": {"offline_ready": True}},
+                "health": {"rapidocr": {"dependencies_ready": True}},
                 "ocr_applied_pages": [1],
                 "searchable_pdf_artifacts": [
                     {"kind": "searchable_pdf", "artifact_id": "abc", "suffix": ".pdf"}
@@ -348,7 +387,7 @@ def test_collect_parsing_provenance_keeps_searchable_artifacts() -> None:
     by_doc = provenance["parsing.provenance"]["doc-1"]
 
     assert by_doc["config_hash"] == "a" * 64
-    assert by_doc["health"]["rapidocr"]["offline_ready"] is True
+    assert by_doc["health"]["rapidocr"]["dependencies_ready"] is True
     assert by_doc["searchable_pdf_artifacts"][0]["artifact_id"] == "abc"
     assert provenance["parsing.profile"] == "cpu_safe"
 

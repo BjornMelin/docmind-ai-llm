@@ -6,10 +6,12 @@ import random
 from unittest.mock import Mock
 
 import pytest
+from llama_index.core.base.base_retriever import BaseRetriever
 from qdrant_client import models as qmodels
 from qdrant_client.common.client_exceptions import ResourceExhaustedResponse
 
 from src.retrieval.keyword import KeywordParams, KeywordSparseRetriever
+from src.retrieval.sparse_query import SparseEncodingError
 
 
 class _Point:
@@ -50,6 +52,28 @@ def test_keyword_sparse_unavailable_fails_open_and_emits_telemetry(
 
 
 @pytest.mark.unit
+def test_keyword_sparse_encoder_failure_fails_open(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Return no keyword matches when the optional BM42 model cannot load."""
+    client = Mock()
+    retriever = KeywordSparseRetriever(KeywordParams(collection="col"), client=client)
+    events: list[dict] = []
+
+    def _fail_sparse(_text: str) -> None:
+        raise SparseEncodingError("query encoding failed")
+
+    monkeypatch.setattr("src.retrieval.keyword.encode_to_qdrant", _fail_sparse)
+    monkeypatch.setattr("src.retrieval.keyword.log_jsonl", events.append)
+
+    assert retriever.retrieve("private query") == []
+    client.query_points.assert_not_called()
+    assert events[-1]["retrieval.sparse_fallback"] is True
+    assert events[-1]["retrieval.error_type"] == "SparseEncodingError"
+    assert "private query" not in str(events)
+
+
+@pytest.mark.unit
 def test_keyword_retriever_queries_qdrant_sparse_only_and_orders_deterministically(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -72,7 +96,7 @@ def test_keyword_retriever_queries_qdrant_sparse_only_and_orders_deterministical
     )
 
     out = retr.retrieve("q")
-    assert [n.node.text for n in out] == ["three", "one", "two"]
+    assert [n.node.get_content() for n in out] == ["three", "one", "two"]
 
     client.query_points.assert_called_once()
     _args, kwargs = client.query_points.call_args
@@ -121,7 +145,7 @@ def test_keyword_retriever_retries_on_rate_limit(
     retr = KeywordSparseRetriever(params, client_factory=_Client)  # type: ignore[arg-type]
 
     out = retr.retrieve("q")
-    assert [n.node.text for n in out] == ["one"]
+    assert [n.node.get_content() for n in out] == ["one"]
     assert sleep_calls == [0.0]
 
 
@@ -220,3 +244,64 @@ def test_emit_telemetry_swallows_io_errors(monkeypatch: pytest.MonkeyPatch) -> N
         lambda _ev: (_ for _ in ()).throw(OSError("nope")),
     )
     retr._emit_telemetry(t0=0.0, return_count=0, sparse_fallback=False, error_type="X")
+
+
+async def test_keyword_retriever_uses_native_async_qdrant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _AsyncClient:
+        def __init__(self) -> None:
+            self.queries = 0
+            self.closed = False
+
+        async def query_points(self, **_kwargs):  # type: ignore[no-untyped-def]
+            self.queries += 1
+            return _Resp([_Point("1", 0.9, {"text": "async"})])
+
+        async def close(self) -> None:
+            self.closed = True
+
+    async_client = _AsyncClient()
+    monkeypatch.setattr(
+        "src.retrieval.keyword.encode_to_qdrant",
+        lambda _text: qmodels.SparseVector(indices=[1], values=[1.0]),
+    )
+    retriever = KeywordSparseRetriever(
+        KeywordParams(collection="col"),
+        async_client=async_client,  # type: ignore[arg-type]
+    )
+
+    assert isinstance(retriever, BaseRetriever)
+    assert [node.node.get_content() for node in await retriever.aretrieve("query")] == [
+        "async"
+    ]
+    assert async_client.queries == 1
+
+    await retriever.aclose()
+    assert async_client.closed is True
+
+
+async def test_keyword_async_sparse_encoder_failure_fails_open(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Handle a domain encoding failure from the owned worker thread."""
+    async_client = Mock()
+    events: list[dict] = []
+
+    def _fail_sparse(_text: str) -> None:
+        raise SparseEncodingError("query encoding failed")
+
+    monkeypatch.setattr("src.retrieval.keyword.encode_to_qdrant", _fail_sparse)
+    monkeypatch.setattr("src.retrieval.keyword.log_jsonl", events.append)
+    retriever = KeywordSparseRetriever(
+        KeywordParams(collection="col"),
+        async_client=async_client,
+    )
+
+    assert await retriever.aretrieve("private query") == []
+    async_client.query_points.assert_not_called()
+    assert events[-1]["retrieval.sparse_fallback"] is True
+    assert events[-1]["retrieval.error_type"] == "SparseEncodingError"
+    assert "private query" not in str(events)
+
+    await retriever.aclose()

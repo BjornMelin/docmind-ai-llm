@@ -23,12 +23,40 @@ Architecture Decision:
     the hybrid organization strategy.
 """
 
+import uuid
 from typing import Annotated, Any, NotRequired
 
 from langchain.agents import AgentState
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 from pydantic import BaseModel, Field
+from typing_extensions import TypedDict
+
+MAX_RETRIEVAL_HISTORY_BATCHES = 32
+
+
+def merge_retrieval_results(
+    left: list[dict[str, Any]], right: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Append retrieval batches while bounding checkpoint growth.
+
+    Taking the tail after each merge is associative, so this reducer remains safe
+    when LangGraph combines parallel worker updates in either order.
+    """
+    return [*left, *right][-MAX_RETRIEVAL_HISTORY_BATCHES:]
+
+
+class AgentRuntimeContext(TypedDict):
+    """Transient, non-checkpointed dependencies available to agent tools."""
+
+    router_engine: NotRequired[Any]
+
+
+class MemoryNamespaceGenerations(TypedDict):
+    """Memory mutation generations captured when a graph turn is admitted."""
+
+    session: int
+    user: int
 
 
 class AgentResponse(BaseModel):
@@ -46,7 +74,6 @@ class AgentResponse(BaseModel):
         processing_time: Total processing time in seconds
         optimization_metrics: FP8 optimization and parallel execution metrics
         agent_decisions: Decisions made by agents during processing
-        fallback_used: Whether fallback to basic RAG was used
     """
 
     content: str = Field(description="Generated response content")
@@ -68,9 +95,6 @@ class AgentResponse(BaseModel):
     agent_decisions: list[dict[str, Any]] = Field(
         default_factory=list, description="Decisions made by agents during processing"
     )
-    fallback_used: bool = Field(
-        default=False, description="Whether fallback to basic RAG was used"
-    )
 
 
 class MultiAgentGraphState(AgentState[Any]):
@@ -81,10 +105,11 @@ class MultiAgentGraphState(AgentState[Any]):
     validation/serialization helper used by DocMind code and tests.
     """
 
-    tools_data: NotRequired[dict[str, Any]]
-    routing_decision: NotRequired[dict[str, Any]]
     planning_output: NotRequired[dict[str, Any]]
-    retrieval_results: NotRequired[list[dict[str, Any]]]
+    retrieval_results: NotRequired[
+        Annotated[list[dict[str, Any]], merge_retrieval_results]
+    ]
+    turn_id: str
     synthesis_result: NotRequired[dict[str, Any]]
     validation_result: NotRequired[dict[str, Any]]
     agent_timings: NotRequired[dict[str, float]]
@@ -93,14 +118,14 @@ class MultiAgentGraphState(AgentState[Any]):
     token_reduction_achieved: NotRequired[float]
     context_trimmed: NotRequired[bool]
     tokens_trimmed: NotRequired[int]
-    kv_cache_usage_gb: NotRequired[float]
     output_mode: NotRequired[str]
     errors: NotRequired[list[str]]
-    fallback_used: NotRequired[bool]
     remaining_steps: NotRequired[int]
+    workflow_stopped: NotRequired[bool]
     timed_out: NotRequired[bool]
     deadline_s: NotRequired[float]
-    deadline_ts: NotRequired[float]
+    deadline_ts: float
+    memory_generations: MemoryNamespaceGenerations
     cancel_reason: NotRequired[str]
 
 
@@ -115,9 +140,7 @@ class MultiAgentState(BaseModel):
         MessagesState: Base LangGraph state with message handling capabilities
 
     Additional Fields:
-        tools_data: Tool-specific data and configurations
         context: Chat memory buffer for conversation context
-        routing_decision: Decision made by routing agent
         planning_output: Output from planning agent
         retrieval_results: Results from retrieval agent
         synthesis_result: Result from synthesis agent
@@ -128,11 +151,10 @@ class MultiAgentState(BaseModel):
         token_reduction_achieved: Token reduction percentage achieved
         context_trimmed: Whether context was trimmed for token limits
         tokens_trimmed: Number of tokens trimmed
-        kv_cache_usage_gb: KV cache usage in gigabytes
         output_mode: Output formatting mode
         errors: List of errors encountered during processing
-        fallback_used: Whether fallback RAG mode was used
         remaining_steps: Remaining steps for LangGraph supervisor
+        workflow_stopped: Whether the workflow stopped before a terminal result
         timed_out: Whether the workflow timed out
         deadline_s: Decision timeout budget in seconds
         deadline_ts: Absolute deadline timestamp (time.monotonic)
@@ -141,12 +163,11 @@ class MultiAgentState(BaseModel):
 
     # Core state
     messages: Annotated[list[AnyMessage], add_messages] = Field(default_factory=list)
-    tools_data: dict[str, Any] = Field(default_factory=dict)
 
     # Agent decisions and results
-    routing_decision: dict[str, Any] = Field(default_factory=dict)
     planning_output: dict[str, Any] = Field(default_factory=dict)
     retrieval_results: list[dict[str, Any]] = Field(default_factory=list)
+    turn_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     synthesis_result: dict[str, Any] = Field(default_factory=dict)
     validation_result: dict[str, Any] = Field(default_factory=dict)
 
@@ -159,20 +180,20 @@ class MultiAgentState(BaseModel):
     # Context management (ADR-004, ADR-011)
     context_trimmed: bool = Field(default=False)
     tokens_trimmed: int = Field(default=0)
-    kv_cache_usage_gb: float = Field(default=0.0)
 
     # Output mode configuration (ADR-011)
     output_mode: str = Field(default="structured")
 
     # Error handling
     errors: list[str] = Field(default_factory=list)
-    fallback_used: bool = Field(default=False)
 
     # LangGraph supervisor requirements (ADR-011)
     remaining_steps: int = Field(
         default=10, description="Remaining steps for supervisor"
     )
+    workflow_stopped: bool = Field(default=False)
     timed_out: bool = Field(default=False)
     deadline_s: float = Field(default=0.0)
-    deadline_ts: float | None = Field(default=None)
+    deadline_ts: float
+    memory_generations: MemoryNamespaceGenerations | None = None
     cancel_reason: str | None = Field(default=None)

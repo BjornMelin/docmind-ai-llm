@@ -27,6 +27,7 @@ class _StreamlitStub:
     def __init__(self) -> None:
         self.cache_data = types.SimpleNamespace(clear=self._clear_data)
         self.cache_resource = types.SimpleNamespace(clear=self._clear_resource)
+        self.session_state: dict[str, object] = {}
         self._api = _CacheAPI()
 
     def _clear_data(self) -> None:  # pragma: no cover - trivial
@@ -51,3 +52,49 @@ def test_clear_caches_bumps_version_and_clears(monkeypatch: pytest.MonkeyPatch) 
     # Ensure best-effort clears invoked
     assert stub._api.cleared_data == 1
     assert stub._api.cleared_resource == 1
+
+
+@pytest.mark.unit
+def test_clear_caches_closes_router_before_coordinator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.ui import chat_runtime
+    from src.ui.router_session import replace_session_router
+    from src.ui.vector_session import (
+        VectorIndexResource,
+        replace_session_vector_resource,
+    )
+
+    events: list[str] = []
+
+    class _Router:
+        def close(self) -> None:
+            events.append("router")
+
+    class _Client:
+        def close(self) -> None:
+            events.append("vector")
+
+    stub = _StreamlitStub()
+    replace_session_vector_resource(
+        stub.session_state,
+        VectorIndexResource(object(), client=_Client()),
+        runtime_generation=0,
+    )
+    replace_session_router(
+        stub.session_state,
+        _Router(),
+        runtime_generation=0,
+    )
+    monkeypatch.setattr(cache_mod, "st", stub, raising=True)
+    monkeypatch.setattr(
+        chat_runtime,
+        "invalidate_coordinator",
+        lambda: events.append("coordinator"),
+    )
+
+    cache_mod.clear_caches(types.SimpleNamespace(cache_version=0))
+
+    assert events == ["router", "vector", "coordinator"]
+    assert stub.session_state["router_engine"] is None
+    assert stub.session_state["vector_index"] is None

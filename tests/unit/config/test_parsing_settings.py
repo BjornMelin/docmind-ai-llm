@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.config.settings import DocMindSettings, OcrConfig
+from src.config.settings import DocMindSettings, DocumentParsingConfig
 
 pytestmark = pytest.mark.unit
 
@@ -15,7 +15,7 @@ def test_parsing_defaults_are_local_first() -> None:
     assert cfg.parsing.framework == "docling"
     assert cfg.parsing.profile == "cpu_safe"
     assert cfg.ocr.engine == "rapidocr"
-    assert cfg.ocr.model_cache_dir == cfg.cache.dir / "models"
+    assert cfg.parsing.model_cache_dir == cfg.cache.dir / "models"
     assert cfg.pdf_backend.render_dpi == 200
     assert cfg.pdf_backend.min_text_chars_per_page == 24
     assert cfg.parsing.max_pages == 500
@@ -28,19 +28,19 @@ def test_parsing_defaults_are_local_first() -> None:
 
 
 @pytest.mark.parametrize("value", ["", " \t "])
-def test_ocr_config_rejects_blank_model_cache_dir(value: str) -> None:
+def test_parsing_config_rejects_blank_model_cache_dir(value: str) -> None:
     with pytest.raises(ValueError, match="model_cache_dir must not be empty"):
-        OcrConfig(model_cache_dir=value)
+        DocumentParsingConfig(model_cache_dir=value)
 
 
 @pytest.mark.parametrize("value", ["", " \t "])
-def test_ocr_model_cache_env_rejects_blank_paths(
+def test_parser_model_cache_env_rejects_blank_paths(
     monkeypatch: pytest.MonkeyPatch,
     value: str,
 ) -> None:
-    monkeypatch.setenv("DOCMIND_OCR__MODEL_CACHE_DIR", value)
+    monkeypatch.setenv("DOCMIND_PARSING__MODEL_CACHE_DIR", value)
 
-    with pytest.raises(ValueError, match=r"ocr\.model_cache_dir"):
+    with pytest.raises(ValueError, match=r"parsing\.model_cache_dir"):
         DocMindSettings(_env_file=None)  # type: ignore[arg-type]
 
 

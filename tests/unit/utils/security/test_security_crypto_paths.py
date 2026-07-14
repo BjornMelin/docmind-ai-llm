@@ -1,4 +1,4 @@
-"""Security crypto roundtrip tests (skipped if cryptography missing)."""
+"""Security crypto roundtrip tests."""
 
 import os
 from pathlib import Path
@@ -8,10 +8,6 @@ import pytest
 pytestmark = pytest.mark.unit
 
 
-@pytest.mark.skipif(
-    __import__("importlib").util.find_spec("cryptography") is None,
-    reason="cryptography not available",
-)
 def test_encrypt_decrypt_roundtrip(tmp_path, monkeypatch):
     from src.config.settings import settings
     from src.utils.security import decrypt_file, encrypt_file

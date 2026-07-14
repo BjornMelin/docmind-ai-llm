@@ -1,9 +1,4 @@
-"""Portalocker-backed file locks for snapshot persistence.
-
-This module exposes a thin wrapper around ``portalocker`` to provide cross-platform
-single-writer locking with heartbeat metadata and TTL-based takeover. Locks are
-represented by a sentinel file plus a JSON sidecar recording ownership details.
-"""
+"""Cross-platform, OS-fenced single-writer locks for snapshot persistence."""
 
 from __future__ import annotations
 
@@ -12,7 +7,7 @@ import json
 import os
 import socket
 import threading
-import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -21,14 +16,12 @@ from typing import Any, Final, cast
 
 from loguru import logger
 
-from src.utils.log_safety import build_pii_log_entry
-
 try:  # pragma: no cover - optional dependency guard
     import portalocker
     from portalocker.exceptions import LockException
-except ImportError:  # pragma: no cover - handled at runtime
+except ImportError:  # pragma: no cover - fail-closed runtime guard
     portalocker = None  # type: ignore[assignment]
-    LockException = RuntimeError  # sentinel fallback
+    LockException = RuntimeError
 
 __all__ = [
     "SnapshotLock",
@@ -37,7 +30,6 @@ __all__ = [
 ]
 
 SCHEMA_VERSION: Final[int] = 1
-_DEFAULT_SLEEP: Final[float] = 0.1
 
 
 class SnapshotLockError(RuntimeError):
@@ -92,7 +84,7 @@ class _LockMetadata:
 
 @dataclass
 class SnapshotLock:
-    """Portalocker-backed lock with TTL-based takeover semantics.
+    """Single-writer lock with informational heartbeat metadata.
 
     Parameters
     ----------
@@ -101,22 +93,17 @@ class SnapshotLock:
     timeout:
         Maximum number of seconds to wait when attempting to acquire the lock.
     ttl_seconds:
-        Time-to-live for an acquired lock. If the holder fails to refresh within
-        this window, contenders can treat the lock as stale and forcibly take
-        ownership by deleting the stale sentinel.
+        Heartbeat interval basis for informational lease metadata. The operating
+        system lock remains the sole ownership authority.
     """
 
     path: Path
     timeout: float
     ttl_seconds: float = 30.0
-    grace_seconds: float = 0.0
     _lock: Any | None = field(init=False, default=None)
     _handle: object | None = field(init=False, default=None)
     _metadata: _LockMetadata | None = field(init=False, default=None)
-    _pending_takeover_count: int = field(init=False, default=0)
-    _use_portalocker: bool = field(init=False, default=True)
-    _fd: int | None = field(init=False, default=None)
-    _hb_stop: bool = field(init=False, default=False)
+    _hb_stop: threading.Event = field(init=False, default_factory=threading.Event)
     _hb_thread: threading.Thread | None = field(init=False, default=None)
     _metadata_lock: threading.Lock = field(init=False, default_factory=threading.Lock)
 
@@ -128,11 +115,9 @@ class SnapshotLock:
         """
         self.path = self.path.expanduser().resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._use_portalocker = portalocker is not None
-        if not self._use_portalocker:
-            logger.warning(
-                "portalocker is unavailable; using fallback O_EXCL file lock at {}",
-                self.path.name,
+        if portalocker is None:
+            raise SnapshotLockError(
+                "portalocker is required for OS-fenced snapshot locking"
             )
 
     def __enter__(self) -> SnapshotLock:
@@ -151,51 +136,38 @@ class SnapshotLock:
         self.release()
 
     def acquire(self) -> None:
-        """Acquire the lock, evicting stale holders when necessary."""
-        deadline = time.monotonic() + self.timeout
-        while True:
-            takeover_count, within_grace = self._evict_if_stale()
-            self._pending_takeover_count = takeover_count
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise SnapshotLockTimeoutError(
-                    f"Timed out acquiring snapshot lock at {self.path} "
-                    f"after {self.timeout:.1f}s"
-                )
-            if within_grace:
-                time.sleep(min(_DEFAULT_SLEEP, max(0.0, remaining)))
-                continue
-            try:
-                if self._use_portalocker:
-                    portalocker_mod = cast(Any, portalocker)
-                    lock = portalocker_mod.Lock(
-                        str(self.path), mode="a+", timeout=remaining
-                    )
-                    handle = lock.acquire()
-                    self._lock = lock
-                    self._handle = handle
-                else:
-                    fd = os.open(
-                        str(self.path), os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600
-                    )
-                    self._fd = fd
-                    self._handle = os.fdopen(fd, "a+")
-                now = datetime.now(UTC)
-                self._metadata = _LockMetadata(
-                    owner_id=_owner_id(),
-                    created_at=now,
-                    last_heartbeat=now,
-                    ttl_seconds=self.ttl_seconds,
-                    takeover_count=self._pending_takeover_count,
-                )
-                self._write_metadata()
-                self._start_heartbeat()
-                logger.debug("Acquired snapshot lock {}", self.path.name)
-                return
-            except LockException:  # pragma: no cover - depends on timing
-                time.sleep(min(_DEFAULT_SLEEP, max(0.0, remaining)))
-            except FileExistsError:  # pragma: no cover - depends on timing
-                time.sleep(min(_DEFAULT_SLEEP, max(0.0, remaining)))
+        """Acquire the operating-system lock and initialize lease metadata."""
+        portalocker_mod = cast(Any, portalocker)
+        try:
+            lock = portalocker_mod.Lock(str(self.path), mode="a+", timeout=self.timeout)
+            handle = lock.acquire()
+        except LockException as exc:
+            raise SnapshotLockTimeoutError(
+                f"Timed out acquiring snapshot lock at {self.path} "
+                f"after {self.timeout:.1f}s"
+            ) from exc
+
+        self._lock = lock
+        self._handle = handle
+        now = datetime.now(UTC)
+        self._metadata = _LockMetadata(
+            owner_id=_owner_id(),
+            created_at=now,
+            last_heartbeat=now,
+            ttl_seconds=self.ttl_seconds,
+        )
+        try:
+            self._write_metadata()
+            self._start_heartbeat()
+        except BaseException as exc:
+            with contextlib.suppress(Exception):
+                self.release()
+            if isinstance(exc, SnapshotLockError):
+                raise
+            raise SnapshotLockError(
+                "Snapshot lock metadata initialization failed"
+            ) from exc
+        logger.debug("Acquired snapshot lock {}", self.path.name)
 
     def refresh(self) -> None:
         """Refresh lock heartbeat to prevent TTL expiry."""
@@ -205,14 +177,13 @@ class SnapshotLock:
         self._write_metadata()
 
     def release(self) -> None:
-        """Release the lock and clean up sidecar metadata."""
+        """Release the OS lock while preserving its permanent sentinel inode."""
         try:
             self._stop_heartbeat()
             if self._lock is not None:
+                _remove_if_exists(self._metadata_path())
+            if self._lock is not None:
                 self._lock.release()
-            elif self._fd is not None:
-                with contextlib.suppress(OSError):
-                    os.close(self._fd)
         finally:
             if self._handle is not None:
                 with contextlib.suppress(Exception):  # pragma: no cover - defensive
@@ -220,22 +191,16 @@ class SnapshotLock:
             self._lock = None
             self._handle = None
             self._metadata = None
-            self._fd = None
             self._hb_thread = None
-            _remove_if_exists(self._metadata_path())
-            _remove_if_exists(self.path)
             logger.debug("Released snapshot lock {}", self.path.name)
 
     def _start_heartbeat(self) -> None:
         """Start a background thread that periodically refreshes the lock."""
-        self._hb_stop = False
+        self._hb_stop.clear()
         interval = max(1.0, self.ttl_seconds / 2.0)
 
         def _worker() -> None:
-            while not self._hb_stop:
-                time.sleep(interval)
-                if self._hb_stop:
-                    break
+            while not self._hb_stop.wait(interval):
                 try:
                     self.refresh()
                 except SnapshotLockError:
@@ -248,7 +213,7 @@ class SnapshotLock:
 
     def _stop_heartbeat(self) -> None:
         """Stop the background heartbeat thread if running."""
-        self._hb_stop = True
+        self._hb_stop.set()
         thread = self._hb_thread
         if thread is None:
             return
@@ -258,49 +223,14 @@ class SnapshotLock:
     def _metadata_path(self) -> Path:
         return self.path.with_suffix(self.path.suffix + ".meta.json")
 
-    def _evict_if_stale(self) -> tuple[int, bool]:
-        metadata_path = self._metadata_path()
-        if not metadata_path.exists():
-            return 0, False
-        try:
-            data = json.loads(metadata_path.read_text(encoding="utf-8"))
-            metadata = _LockMetadata.from_json(data)
-        except SnapshotLockError as exc:
-            redaction = build_pii_log_entry(str(exc), key_id="snapshot_lock.metadata")
-            logger.warning(
-                "Lock metadata corrupted at {} (error_type={}, error={})",
-                metadata_path.name,
-                type(exc).__name__,
-                redaction.redacted,
-            )
-            _remove_if_exists(metadata_path)
-            _remove_if_exists(self.path)
-            return 0, False
-        now = datetime.now(UTC)
-        elapsed = (now - metadata.last_heartbeat).total_seconds()
-        effective_ttl = metadata.ttl_seconds + self.grace_seconds
-        if elapsed <= effective_ttl:
-            return metadata.takeover_count, True
-        logger.warning(
-            "Evicting stale snapshot lock {} held by {} "
-            "(elapsed {:.1f}s > TTL {:.1f}s)",
-            self.path.name,
-            metadata.owner_id,
-            elapsed,
-            metadata.ttl_seconds,
-        )
-        new_takeover = metadata.takeover_count + 1
-        _rotate_stale_lock(
-            self.path, metadata_path, metadata.owner_id, metadata.takeover_count
-        )
-        return new_takeover, False
-
     def _write_metadata(self) -> None:
         if self._metadata is None:
             return
         payload = self._metadata.to_json()
         with self._metadata_lock:
-            tmp_path = self._metadata_path().with_suffix(".tmp")
+            tmp_path = self._metadata_path().with_name(
+                f".{self._metadata_path().name}.{uuid.uuid4().hex}.tmp"
+            )
             tmp_path.write_text(
                 json.dumps(payload, separators=(",", ":")), encoding="utf-8"
             )
@@ -310,7 +240,7 @@ class SnapshotLock:
 
 
 def _owner_id() -> str:
-    return f"{os.getpid()}@{socket.gethostname()}"
+    return f"{os.getpid()}@{socket.gethostname()}-{uuid.uuid4().hex}"
 
 
 def _fsync_file(path: Path) -> None:
@@ -321,19 +251,3 @@ def _fsync_file(path: Path) -> None:
 def _remove_if_exists(path: Path) -> None:
     with contextlib.suppress(FileNotFoundError):
         path.unlink()
-
-
-def _rotate_stale_lock(
-    lock_path: Path, meta_path: Path, owner_id: str, takeover_count: int
-) -> None:
-    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
-    suffix = f".stale-{timestamp}-{owner_id.replace('@', '_')}-{takeover_count}"
-    for target in (lock_path, meta_path):
-        if target.exists():
-            rotated = target.with_name(target.name + suffix)
-            try:
-                os.replace(target, rotated)
-            except OSError:
-                _remove_if_exists(target)
-            else:
-                _fsync_file(rotated)

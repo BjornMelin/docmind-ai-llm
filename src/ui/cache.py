@@ -37,6 +37,20 @@ def clear_caches(settings_obj: Any | None = None) -> int:
     except (ValueError, TypeError, AttributeError):
         settings_obj.cache_version = 1
 
+    with suppress(Exception):
+        from src.ui.vector_session import replace_session_vector_resource
+
+        replace_session_vector_resource(
+            st.session_state,
+            None,
+            runtime_generation=int(settings_obj.cache_version),
+        )
+
+    with suppress(Exception):
+        from src.ui.chat_runtime import invalidate_coordinator
+
+        invalidate_coordinator()
+
     # Best-effort cache clearing; never raise
     with suppress(Exception):  # pragma: no cover - defensive
         try:

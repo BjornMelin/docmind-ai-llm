@@ -20,25 +20,37 @@ is a broken installation, not a feature-specific extra to install.
 
 ## Understand runtime gates
 
-The router adds `knowledge_graph` only when all gates pass:
+The router adds `knowledge_graph` only when all runtime conditions pass:
 
-1. `DOCMIND_ENABLE_GRAPHRAG` is true.
-2. `DOCMIND_GRAPHRAG_CFG__ENABLED` is true.
-3. A property graph index is present.
-4. LlamaIndex can construct its graph retriever and query engine.
+1. The ingestion run produced a property graph index.
+2. The index exposes a property graph store.
+3. LlamaIndex can construct its graph retriever and query engine.
 
-The application falls back to vector and hybrid retrieval when a graph index is
-unavailable. `get_graphrag_health()` reports whether the required LlamaIndex
-Property Graph API is importable for the Streamlit status badge.
+`DOCMIND_GRAPHRAG_CFG__ENABLED` sets the default state of the per-ingestion
+GraphRAG control. The submitted control decides whether that run builds an
+index. A supplied healthy index is the router's sole GraphRAG availability
+signal.
+
+The router retains semantic search and any configured hybrid, keyword, or
+multimodal tools when a graph index is unavailable. `get_graphrag_health()`
+reports whether the required LlamaIndex Property Graph API is available for the
+Streamlit status display. Availability does not imply enablement.
 
 ## Runtime ownership
 
-- `src/retrieval/llama_index_adapter.py` lazily imports the LlamaIndex router
-  classes and owns the GraphRAG health check.
+- `src/retrieval/router_factory.py` imports the required LlamaIndex router and
+  tool classes directly; tests patch those constructor boundaries when needed.
+- `src/retrieval/llama_index_adapter.py` retains only the settings-facing
+  GraphRAG health result.
 - `src/retrieval/graph_config.py` calls `PropertyGraphIndex.as_retriever()` and
   builds `RetrieverQueryEngine` directly.
+- Snapshot persistence writes and reloads the complete native property-graph
+  `StorageContext`. Its graph-local vector store is required for semantic graph
+  retrieval after restart; it is separate from the live Qdrant corpus vectors.
 - Graph exports use the property graph store's `get()` and `get_rel_map()` APIs.
-- OpenTelemetry export spans remain the single graph-export telemetry path.
+- Graph helpers emit OpenTelemetry `graph_export.<format>` spans. Snapshot and
+  manual exports also emit metadata-only local `export_performed` JSONL events
+  and record optional OpenTelemetry metrics when a meter is configured.
 
 Do not add a second graph backend, registry, factory, or no-op telemetry hook
 without a shipped product requirement.
@@ -47,12 +59,11 @@ without a shipped product requirement.
 
 ```bash
 uv run pytest --no-cov \
-  tests/unit/retrieval/test_llama_index_adapter.py \
   tests/unit/retrieval/test_graph_rag_factory.py \
   tests/unit/retrieval/test_router_factory_contract.py \
   tests/integration/test_graph.py \
   tests/integration/test_graphrag_exports.py
 ```
 
-The `requires_llama` marker disables the default test stub and exercises the
-required `llama_index.core` installation.
+The `requires_llama` marker identifies tests that exercise the required
+`llama_index.core` installation directly.

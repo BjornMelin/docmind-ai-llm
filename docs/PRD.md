@@ -4,7 +4,10 @@ This document defines DocMind AI’s current product contract and release accept
 
 ## Current state
 
-The `feat/local-first-doc-parser` working tree contains the July 10, 2026 modernization effort. It is not a shipped release yet.
+DocMind v1.0.0 shipped on July 11, 2026 after the local-first parser
+modernization merged through pull request #151. The current post-v1 lane keeps
+that product contract while removing inert surfaces, updating compatible
+dependencies, and strengthening verification and release automation.
 
 Implemented behavior:
 
@@ -15,18 +18,22 @@ Implemented behavior:
 - Qdrant owns dense, sparse, and SigLIP image vectors
 - SigLIP is the only image embedding backend
 - The default uv and Docker environments use official CPU-only PyTorch wheels
-- GPU, multimodal reranking, observability, evaluation, and searchable-PDF capabilities are explicit extras; GraphRAG uses LlamaIndex core
-- Parser model bundles use pinned revisions, file sizes, and SHA-256 hashes from `src/processing/parsing/model_artifacts.py`
-- Package wheels include the parser, version module, and prompt resources
+- GPU acceleration, observability, evaluation, and searchable-PDF capabilities are explicit extras; GraphRAG uses LlamaIndex core
+- The app-owned Docling layout bundle uses pinned revisions, file sizes, and SHA-256 hashes from `src/processing/parsing/model_artifacts.py`; RapidOCR's locked wheel owns its model files and checksums
+- The supported distribution paths are the cloned repository and production container image
 
-The current branch has passed focused and complete tiered tests, dependency
-locking, byte-identical wheel builds and isolated content smoke, the real local
-Qdrant system test, a production Docker build and container health smoke, and
+The v1 release passed focused and complete tiered tests, dependency locking,
+byte-identical wheel builds and isolated content smoke, the real local Qdrant
+system test, a production Docker build and container health smoke, and
 independent code, runtime, and documentation reviews. The checked-in schema 3
 parser artifact validates all eight fixtures over three deterministic isolated
-runs. Pull-request CI, merge, and release publication remain pending. Separate
-security hardening is tracked in issues #145–#150 and is not part of this
-release lane.
+runs. Main CI, documentation gates, release publication, and the v1.0.0 wheel
+completed successfully. Separate security hardening is tracked in issues
+145–150 and 156 and is not part of this modernization lane.
+
+The v2 contract stops publishing the misleading `src` wheel. DocMind has no
+stable library API or installed command; the locked repository environment and
+container image are the two supported application distribution paths.
 
 The parser benchmark records network egress as `NOT_MEASURED`. It does not prove zero egress.
 
@@ -80,7 +87,7 @@ DocMind supports these primary workflows:
 - PRD-FR-016: Use the repo-owned LangGraph `StateGraph` supervisor for agent orchestration
 - PRD-FR-017: Build role agents through LangChain’s `create_agent` API
 - PRD-FR-018: Expose retrieval and analysis tools through the central registry
-- PRD-FR-019: Preserve deadline, retry, fallback, and checkpoint behavior across graph execution
+- PRD-FR-019: Preserve deadline, retry, explicit error, and checkpoint behavior across graph execution
 - PRD-FR-020: Support Ollama and OpenAI-compatible endpoints for vLLM, LM Studio, llama.cpp server, and approved remote providers
 
 ### Persist local state
@@ -104,7 +111,7 @@ DocMind supports these primary workflows:
 ### Security and privacy
 
 - NFR-1: Use local parser models with no hosted parser fallback
-- NFR-2: Validate parser model files against the canonical immutable manifest before model initialization
+- NFR-2: Validate app-owned Docling model files against the canonical immutable manifest before model initialization, and prove locked-wheel RapidOCR inference in the image and test gates
 - NFR-3: Reject symlink traversal and remove path-like metadata before persistence
 - NFR-4: Validate non-loopback endpoints through explicit policy and DNS checks
 - NFR-5: Keep secrets and raw content out of logs and telemetry
@@ -165,17 +172,16 @@ The exact dependency contract lives in `pyproject.toml` and `uv.lock`.
 | Text embeddings | BGE-M3 through the LlamaIndex Hugging Face adapter |
 | Sparse embeddings | Direct `fastembed>=0.5.1` |
 | Image embeddings | SigLIP through Transformers and Torch |
-| PyTorch | `torch==2.8.0`; official CPU wheel by default |
+| PyTorch | `torch==2.11.0`; official CPU wheel by default |
 | Vector database | `qdrant-client>=1.15.1,<2.0.0` |
 | Local LLM client | `ollama==0.6.2` |
 
-The package does not publish the `llama-index` meta-package, a `llama` extra, the removed OpenAI, FastEmbed, or CLIP LlamaIndex embedding adapters, or Whisper. It retains selected LlamaIndex LLM adapters, including OpenAI and OpenAI-compatible clients.
+The application environment does not include the `llama-index` meta-package, a `llama` extra, the removed OpenAI, FastEmbed, or CLIP LlamaIndex embedding adapters, or Whisper. It retains selected LlamaIndex LLM adapters, including OpenAI and OpenAI-compatible clients.
 
-The wheel smoke test validates package contents and metadata. It installs the built wheel with `--no-deps`, so it does not prove pip dependency resolution. Supported installations use the locked uv environment or the repository Docker image.
+## v1.0.0 historical verification
 
-## Verified behavior
-
-The following evidence exists for the current modernization branch:
+The following evidence belongs to the shipped v1.0.0 release. It does not verify
+the in-progress v2 contract:
 
 | Evidence | Result |
 | --- | --- |
@@ -189,37 +195,41 @@ The following evidence exists for the current modernization branch:
 | Runtime validation | Real Qdrant system test and production container health smoke passed |
 | Independent review | Final code, release/runtime, and documentation passes returned no findings |
 
-The parser benchmark artifact records clean source commit
+The v1.0.0 parser benchmark artifact records clean source commit
 `90e20793afe882976712b617197af7d8cf4ac1aa`, the runtime identity, fixture
 hashes, content assertions, and repeat-three output hashes. Its performance
 values are a workstation-specific regression baseline.
 
-## Release acceptance
+## v1.0.0 release acceptance
+
+The checked items below record the completed v1.0.0 release. V2 release gates
+remain pending until they are rerun against a clean v2 commit.
 
 ### Required behavior
 
-- [ ] Supported documents parse without publishing partial binary output
-- [ ] Parser model integrity failures block parser readiness
-- [ ] Hybrid retrieval returns source-attributed results
-- [ ] SigLIP image retrieval uses the canonical image collection
-- [ ] LangGraph orchestration preserves state and tool boundaries
-- [ ] Snapshot creation and restore preserve manifest integrity
-- [ ] The default install resolves official CPU-only Torch
-- [ ] The wheel contains required source and prompt resources
-- [ ] Remote endpoints remain opt-in
+- [x] Supported documents parse without publishing partial binary output
+- [x] Parser model integrity failures block parser readiness
+- [x] Hybrid retrieval returns source-attributed results
+- [x] SigLIP image retrieval uses the canonical image collection
+- [x] LangGraph orchestration preserves state and tool boundaries
+- [x] Snapshot creation and restore preserve manifest integrity
+- [x] The default install resolves official CPU-only Torch
+- [x] The repository and container contain required source and prompt resources
+- [x] Remote endpoints remain opt-in
 
 ### Required release gates
 
 - [x] Fast unit and integration gate
-- [x] Wheel build, metadata validation, and content smoke
+- [x] Locked environment and production-container validation
 - [x] Schema 3 repeat-three parser benchmark regeneration
 - [x] Final full test suite after all combined edits
 - [x] Explicit system test with local Qdrant
 - [x] Live Docker build and canonical container health check
 - [x] Fresh independent code and documentation review
-- [ ] Commit, pull request, hosted continuous integration, and merge
+- [x] Commit, pull request, hosted continuous integration, merge, and v1.0.0 publication
 
-Security hardening outside this release lane is tracked in issues #145–#150.
+Security hardening outside this release lane is tracked in issues 145–150 and
+156.
 
 ## Product targets that still need evidence
 
@@ -250,7 +260,7 @@ No throughput, latency, video memory, token-reduction, or zero-egress figure is 
 
 - Local model and service setup can block first use
 - Hardware differences can change latency and memory behavior
-- Optional GraphRAG indexing and ColPali reranking expand the validation matrix
+- Optional GraphRAG indexing expands the validation matrix
 - Schema or embedding changes can require explicit reindexing
 - A stale or incompatible Qdrant collection requires an operator decision
 - Remote model endpoints change the privacy boundary

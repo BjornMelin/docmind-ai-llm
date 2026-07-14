@@ -16,9 +16,9 @@ and docs under `docs/specs/` + `docs/developers/adrs/`.
 - `src/agents/`: LangGraph coordinator (graph-native supervisor via `StateGraph`)
 - `src/persistence/`: snapshots, hashing, locking, chat DB
 - `src/telemetry/` + `src/utils/telemetry.py`: OTEL + JSONL events
-- `src/prompting/templates/`: packaged prompt templates and presets
+- `src/prompting/templates/`: bundled prompt templates and presets
 - `docs/specs/` + `docs/developers/adrs/`: specs/ADRs (source-of-truth docs)
-- `scripts/` + `tools/`: dev utilities (tests, perf, model pull)
+- `scripts/` + `tools/`: benchmarks, health checks, documentation gates, and model pull
 
 ## Quick commands with uv
 
@@ -30,17 +30,19 @@ and docs under `docs/specs/` + `docs/developers/adrs/`.
   - Lint (all): `uv run ruff check .`
   - Type (paths): `uv run pyright --threads 4 <paths>`
   - Tools-only (when `tools/` changed): `uv run pyright --threads 4 tools`
-  - Tests (focused): `uv run pytest <tests/...> -vv` (or `-k <expr>` for a narrow slice)
+  - Tests (focused): `uv run pytest <tests/...> -vv --no-cov` (or `-k <expr>` for a narrow slice)
 - Verify (final): before finishing the task/prompt, run non-mutating full lint/type
   checks, then full tests: `uv run ruff format --check . && uv run ruff check . &&
-  uv run pyright --threads 4 && uv run python scripts/run_tests.py`
-- Tests (fast): `uv run python scripts/run_tests.py --fast`
-- Coverage: `uv run python scripts/run_tests.py --coverage`
+  uv run pyright --threads 4 && uv run pytest tests/unit tests/integration -q --no-cov`
+- Tests (unit): `uv run pytest tests/unit -q --no-cov`
+- Tests (integration): `uv run pytest tests/integration -q --no-cov`
+- Tests (fast/full): `uv run pytest tests/unit tests/integration -q --no-cov`
+- Tests (GPU): `uv run pytest -m requires_gpu --no-cov`
+- Coverage: `uv run pytest tests/unit tests/integration -q --cov=src --cov-branch --cov-report=term-missing --cov-report=html:htmlcov --cov-report=xml:coverage.xml --cov-report=json:coverage.json --cov-fail-under=80 --junitxml=junit.xml`
 - Coverage report: `uv run python scripts/check_coverage.py --collect --report --html`
-- Quality gates (CI): `uv run python scripts/run_quality_gates.py --ci --report`
-- Perf check: `uv run python scripts/performance_monitor.py --run-tests --check-regressions --report`
+- Parser benchmark: `uv run python scripts/benchmark_parsing.py --generate-minimal-fixtures --output cache/benchmarks/parsing/results.json`
 - GPU check: `uv run python scripts/test_gpu.py --quick`
-- Prefetch required BGE-M3 and parser models: `uv run python tools/models/pull.py --bge-m3 --cache_dir ./models_cache --parser-defaults --rapidocr-cache-dir ./cache/models`
+- Prefetch default retrieval and Docling layout models: `uv run python tools/models/pull.py --all --cache_dir ./models_cache --parser-defaults --parser-cache-dir ./cache/models`; RapidOCR models come from its locked wheel.
 - spaCy model (opt): `uv run python -m spacy download en_core_web_sm`
 - Review triage: `uv run python scripts/analyze_github_reviews.py --json-file <path>` (or set `DOCMIND_REVIEW_JSON`)
 
@@ -81,8 +83,7 @@ When resuming after compaction:
 
 - `uv sync --frozen --no-group cpu --extra gpu` (PyTorch CUDA and CuPy;
   sparse FastEmbed remains CPU-based)
-- `uv sync --frozen --extra multimodal` (ColPali reranker)
-- `uv sync --frozen --extra observability` (OTLP exporters + portalocker)
+- `uv sync --frozen --extra observability` (LlamaIndex OpenTelemetry instrumentation)
 - `uv sync --frozen --extra eval` (beir)
 
 ## Dependency constraints (don’t drift)
@@ -91,7 +92,7 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
 - Python: `>=3.12,<3.14` (primary dev/runtime: Python 3.12.13)
 - Keep these coupled:
-  - Torch 2.8.x ↔ Transformers `>=5.0,<6.0` (vLLM is external-only via OpenAI-compatible HTTP)
+  - Torch 2.11.x ↔ Transformers `>=5.0,<6.0` (vLLM is external-only via OpenAI-compatible HTTP)
   - DuckDB `<1.4.0` (LlamaIndex integrations cap it)
   - `llama-index-core>=0.14.21,<0.15.0` plus selected integration packages
   - Direct `fastembed>=0.5.1`; do not restore the removed LlamaIndex FastEmbed adapter
@@ -107,15 +108,14 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 - Prefer `from src.config import settings` (exports the settings object).
 - No `os.getenv`/`os.environ` outside `src/config/*` (env bridges live there).
 - Avoid import-time IO; use `startup_init()` + `initialize_integrations()` (`src/config/integrations.py`).
-- Agent tool parallelism: `DOCMIND_AGENTS__ENABLE_PARALLEL_TOOL_EXECUTION=true|false` (ADR-010).
 
 ## LLM backends
 
 - Backends: `ollama|vllm|lmstudio|llamacpp|openai_compatible` via `DOCMIND_LLM_BACKEND`.
 - OpenAI-compatible base URLs are normalized to a single `/v1` segment.
 - Prefer `DOCMIND_OPENAI__BASE_URL` + `DOCMIND_OPENAI__API_KEY` for OpenAI-like servers (local servers can use placeholder keys).
-- Backend-specific base URLs: `DOCMIND_LMSTUDIO_BASE_URL`, `DOCMIND_VLLM__VLLM_BASE_URL`, `DOCMIND_LLAMACPP_BASE_URL`.
-- `DOCMIND_MODEL` overrides `DOCMIND_VLLM__MODEL`.
+- Backend-specific base URLs: `DOCMIND_LMSTUDIO_BASE_URL`, `DOCMIND_VLLM_BASE_URL`, `DOCMIND_LLAMACPP_BASE_URL`.
+- Provider-neutral request controls use `DOCMIND_LLM_REQUEST__MODEL`, `DOCMIND_LLM_REQUEST__CONTEXT_WINDOW`, `DOCMIND_LLM_REQUEST__MAX_OUTPUT_TOKENS`, and `DOCMIND_LLM_REQUEST__TEMPERATURE`.
 
 ## Security policy
 
@@ -144,8 +144,10 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 - Use `src/processing/parsing/` as the parser boundary. The parser always uses
   local Docling, pypdfium2, and RapidOCR artifacts. Plain text and Markdown use
   the direct text loader.
-- Prefetch parser artifacts before PDF parsing. Health checks hash every file in
-  the canonical manifests and report integrity issues with relative paths.
+- Prefetch the app-owned Docling layout bundle before PDF parsing. Health checks
+  hash its manifest files and report relative-path integrity issues. RapidOCR's
+  locked wheel owns its model files and checksums; the image/test gate proves
+  offline fixture inference.
 - Searchable-PDF export is an optional, fail-open OCRmyPDF utility. It requires
   POSIX process groups; use WSL2 on Windows. Cancellation and timeout paths must
   kill and reap the whole subprocess group.
@@ -157,7 +159,10 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
   as `doc-<full lowercase SHA-256>` through `src/utils/hashing.py`.
 - Cache: DuckDB KV store (`DOCMIND_CACHE__DIR`, `DOCMIND_CACHE__FILENAME`).
 - PDF page images: pypdfium2 rendering; optional AES-GCM (`DOCMIND_IMG_AES_KEY_BASE64`, `DOCMIND_IMG_DELETE_PLAINTEXT`).
-- Multimodal artifacts: store page images/thumbnails as content-addressed `ArtifactRef` in the local ArtifactStore (`DOCMIND_ARTIFACTS__*`).
+- Multimodal artifacts: store page images/thumbnails as content-addressed
+  `ArtifactRef` in the local ArtifactStore (`DOCMIND_ARTIFACTS__*`). Historical
+  chats and snapshots can retain those references; do not add automatic
+  artifact garbage collection.
 
 ## Retrieval
 
@@ -172,26 +177,31 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
 ## Router
 
-- Router composes tools: `semantic_search`, optional `hybrid_search`, optional `knowledge_graph`.
-- Selector: prefer `PydanticSingleSelector`; fall back to `LLMSingleSelector`.
+- Router composes `semantic_search` plus configured `hybrid_search`,
+  `keyword_search`, `multimodal_search`, and `knowledge_graph` tools.
+- LlamaIndex's native `RouterQueryEngine` owns tool selection.
 - Build routers via `src/retrieval/router_factory.py` to keep tool metadata/postprocessors consistent.
+- Close the session router before invalidating its Chat coordinator; async
+  Qdrant clients are bound to the graph loop that first uses them.
+- Run retrieval and reranking CPU work through
+  `src/retrieval/async_work.py`; do not use `asyncio.to_thread` for FastEmbed,
+  BGE, or SigLIP inference.
 
 ## Reranking
 
 - Text rerank: BGE cross-encoder (`BAAI/bge-reranker-v2-m3`).
-- Visual rerank: SigLIP when image nodes exist; ColPali is optional (`--extra multimodal`).
+- Visual rerank: SigLIP when image nodes exist.
 - SigLIP Hugging Face model/processor loading is centralized in
   `src/utils/vision_siglip.py`; do not add alternate `from_pretrained` loaders,
   fallback canary flags, or duplicate revision pins.
 - Fail open on timeouts; respect `settings.retrieval.*_timeout_ms`.
-
-## DSPy (opt)
-
-- Gated by `DOCMIND_ENABLE_DSPY_OPTIMIZATION=true`; guard imports and fail open if unavailable.
+- Rerankers own one queue-free worker. A timed-out call retains that worker's
+  capacity until native inference exits. Async router close drains it; a
+  sync-only router close rejects new work without blocking on native exit.
 
 ## GraphRAG
 
-- Enable only when both are true: `DOCMIND_ENABLE_GRAPHRAG=true` and `DOCMIND_GRAPHRAG_CFG__ENABLED=true`.
+- Use `DOCMIND_GRAPHRAG_CFG__ENABLED` as the sole ingestion default; router inclusion is owned by the presence of a healthy property graph index.
 - Uses LlamaIndex core's `PropertyGraphIndex` and `SimplePropertyGraphStore`; there is no graph extra.
 - Exports: JSONL baseline; Parquet optional (PyArrow). Preserve `get_rel_map` labels (fallback `related`).
 - Seed policy: graph retriever → vector retriever → deterministic fallback.
@@ -199,20 +209,58 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 ## Snapshots
 
 - Location: `data/storage/`; write via temp workspace + atomic finalize.
+- `portalocker` is required. The permanent `.lock` sentinel's OS lock is the
+  sole writer authority; heartbeat metadata is diagnostic only.
 - Manifest triad: `manifest.jsonl`, `manifest.meta.json`, `manifest.checksum`.
-- `manifest.meta.json` includes `index_id`, `graph_store_type`, `vector_store_type`, `corpus_hash`, `config_hash`, `versions`, optional `graph_exports`.
+- App snapshots own the activation manifest plus optional property-graph artifacts;
+  Qdrant backups alone own point-in-time vector data.
+- `manifest.meta.json` includes physical `collections.text` and
+  `collections.image` identities, optional collection metadata, hashes,
+  versions, graph type, and optional `graph_exports`.
+- `CURRENT` is the sole activation boundary. Never infer an active snapshot from
+  directory ordering or promote an unreferenced snapshot during recovery.
+- `data/.deployment-id` is the stable ownership boundary for DocMind Qdrant
+  collections. Bootstrap it atomically only before durable snapshots exist. A
+  missing, invalid, or replaced identity with retained snapshot state fails closed.
+- Source promotion and quarantine journals recover under the snapshot writer lock
+  against exact physical collection identities. The activation journal removes an
+  uncommitted promoted snapshot or retires itself after `CURRENT` commits; recovery
+  never chooses a snapshot by directory ordering.
+- Never delete physical Qdrant generations during online activation. After stopping
+  every app reader and writer, use `scripts/cleanup_collections.py` (dry-run by
+  default) and review its deployment-scoped candidates before adding `--delete`.
 - Don’t persist base64 blobs or raw filesystem paths; persist `ArtifactRef` and sanitize path-like metadata to basenames.
-- Locking: `portalocker` when available (fallback `O_EXCL`). Persist via `SnapshotManager` APIs.
+- Persist via `SnapshotManager` APIs; do not add lease-file lock fallbacks.
 
 ## SQLite and WAL
 
-- Don’t share a sqlite connection across threads; prefer one connection per operation.
-- Persist metadata only (no raw prompt/doc text).
+- Use native `SqliteStore` and `AsyncSqliteSaver` for LangGraph persistence; do not add parallel store or checkpoint schemas.
+- Let each long-lived LangGraph primitive own its connection. Do not share raw connections between components.
+- Keep the Ops DB metadata-only. Treat Chat DB checkpoints and memories as local user data.
+
+## Backups
+
+- Quiesce DocMind writers before backup/restore; use SQLite online backup and
+  DuckDB `COPY FROM DATABASE`, never raw live database-file copies.
+- A complete recovery point includes chat, ingestion cache, the verified
+  `CURRENT` snapshot, authoritative uploads, `data/.deployment-id`, the existing
+  `ArtifactStore`, and exact verified single-node Qdrant snapshots. Distributed
+  Qdrant requires its per-node procedure. Maintenance warnings do not invalidate
+  an otherwise complete recovery point.
+- Retention may delete only `backup_*` directories with `manifest.complete=true`.
+  Recoverability warnings produce `incomplete-backup_*`, which never evicts a
+  recovery point. `maintenance_warnings` do not invalidate verified recovery data.
+- Restore Qdrant into a fresh, writer-quiesced target using the exact physical
+  names in `activation.collections`. Verify checksum and point count, and preserve
+  the prior Qdrant instance as the rollback owner until acceptance.
 
 ## Observability / telemetry
 
 - OTEL is optional: `DOCMIND_OBSERVABILITY__ENABLED=true` + `--extra observability`.
-- JSONL telemetry is local-first (`logs/telemetry.jsonl`): `router_selected`, `export_performed`, `snapshot_stale_detected`, rerank fallback events.
+- Router construction emits an OpenTelemetry `router_selected` event with tool
+  count and names. Local JSONL telemetry records retrieval backend/outcome,
+  `export_performed`, `snapshot_stale_detected`, and rerank fallback events; it
+  does not claim per-query route or graph traversal events.
 - Log safety:
   - No secrets/API keys; no raw prompt/doc/model output.
   - URLs: log origin only; sanitize exception strings before logging.
@@ -220,11 +268,11 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
 ## Agent budgets
 
-- When deadline propagation is enabled, cap per-call timeouts to the supervisor budget (avoid a single call exceeding `settings.agents.decision_timeout`).
+- Cap every provider request timeout to the supervisor budget. Every graph run carries an absolute deadline, and no call may exceed `settings.agents.decision_timeout`.
 
 ## Offline-first
 
-- Predownload required BGE-M3 and parser defaults: `uv run python tools/models/pull.py --bge-m3 --cache_dir ./models_cache --parser-defaults --rapidocr-cache-dir ./cache/models`.
+- Predownload BGE-M3, BM42, the BGE reranker, SigLIP, and Docling layout defaults: `uv run python tools/models/pull.py --all --cache_dir ./models_cache --parser-defaults --parser-cache-dir ./cache/models`; never copy or separately prefetch RapidOCR's packaged models.
 - Check parser readiness: `uv run python scripts/parser_health.py --check`.
 - Use `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` for offline runs; tests must remain deterministic/offline unless explicitly marked.
 
@@ -247,7 +295,8 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 ## Testing
 
 - Boundary-first; keep unit tests <5s and integration <30s when possible.
-- Use markers: `unit|integration|system` + `requires_gpu|requires_network|requires_ollama`.
+- Use markers: `unit|integration|system|e2e|retrieval` plus
+  `requires_gpu|requires_network|requires_llama`.
 - AppTest: temp cwd; reuse fixtures; deterministic stubs; `default_timeout` (CI).
 - Prefer patching real consumer seams, not `src.app` (see `docs/developers/testing-notes.md`).
 

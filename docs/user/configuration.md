@@ -60,8 +60,8 @@ DOCMIND_RETRIEVAL__PREFETCH_SPARSE_LIMIT=400
 # Reranking policy (always-on; override via env)
 DOCMIND_RETRIEVAL__USE_RERANKING=true   # set false to disable
 
-# GraphRAG toggle (default ON)
-DOCMIND_ENABLE_GRAPHRAG=true          # set false to disable
+# GraphRAG ingestion default (off)
+DOCMIND_GRAPHRAG_CFG__ENABLED=false
 
 # Enable server-side hybrid tool (default OFF)
 DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=false
@@ -75,8 +75,8 @@ DOCMIND_TELEMETRY__JSONL_PATH=./logs/telemetry.jsonl  # advanced: override path
 # aliases, while double underscore (e.g., DOCMIND_TELEMETRY__JSONL_PATH) targets
 # nested settings directly.
 
-# Hybrid fusion mode toggle (boolean convenience)
-DOCMIND_RETRIEVAL__DBSF_ENABLED=false   # when true, force DBSF
+# Hybrid fusion algorithm
+DOCMIND_RETRIEVAL__FUSION_MODE=rrf      # rrf or dbsf
 ```
 
 Notes:
@@ -85,7 +85,7 @@ Notes:
 - The knowledge_graph router tool is activated only when a PropertyGraphIndex is present and healthy; traversal depth defaults to path_depth=1.
 - When `DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=true`, the router factory registers a
   server-side hybrid tool that executes Qdrant Query API `prefetch` + `Fusion.RRF` (DBSF optional).
-  Precedence: an explicit function argument to the router factory always overrides the setting.
+  `settings.retrieval.enable_server_hybrid` is the sole runtime owner of this policy.
 
 ## NLP Enrichment (spaCy)
 
@@ -117,17 +117,3 @@ GPU installs:
 - Apple Silicon (best effort on macOS arm64 with CPython 3.12): `uv sync --frozen --extra apple`
 
 Details: `docs/specs/spec-015-nlp-enrichment-spacy.md` and `docs/developers/gpu-setup.md`.
-
-## DSPy Optimization (Optional)
-
-```bash
-DOCMIND_ENABLE_DSPY_OPTIMIZATION=false
-DOCMIND_DSPY_OPTIMIZATION_ITERATIONS=10
-DOCMIND_DSPY_OPTIMIZATION_SAMPLES=20
-DOCMIND_DSPY_MAX_RETRIES=3
-DOCMIND_DSPY_TEMPERATURE=0.1
-DOCMIND_DSPY_METRIC_THRESHOLD=0.8
-DOCMIND_ENABLE_DSPY_BOOTSTRAPPING=true
-```
-
-DSPy runs in the agents layer and augments queries; retrieval (Qdrant + reranking) works independently when DSPy is disabled or unavailable.

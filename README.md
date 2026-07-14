@@ -17,18 +17,23 @@ Design goals:
 
 - Privacy by default: remote endpoints are blocked unless explicitly allowed.
 - Reproducibility: deterministic ingestion caching and snapshot manifests.
-- Extensibility: RouterQueryEngine routes across vector, hybrid, and optional graph retrieval.
+- Extensibility: `RouterQueryEngine` owns vector, hybrid, keyword, multimodal,
+  and graph retrieval selection.
 
 ## ✨ Features of DocMind AI
 
 - **Privacy-focused, local-first:** Remote LLM endpoints are blocked by default; enable explicitly when needed.
 - **CPU-safe ingestion pipeline:** LlamaIndex `IngestionPipeline` fed by DocMind's local parser service: Docling conversion, pypdfium2 PDF inspection/rasterization, RapidOCR CPU OCR, `TokenTextSplitter`, and optional spaCy enrichment.
 - **Multi-format parsing:** Docling covers PDFs and common office/HTML formats; only explicit text formats use the direct UTF-8 loader. Binary parser failures stop ingestion instead of decoding source bytes as text.
-- **Hybrid retrieval with routing:** RouterQueryEngine with `semantic_search`, optional `hybrid_search` (Qdrant server-side fusion), and optional `knowledge_graph` (GraphRAG).
+- **Hybrid retrieval with routing:** `RouterQueryEngine` with required
+  `semantic_search` plus configured `hybrid_search`, `keyword_search`,
+  `multimodal_search`, and `knowledge_graph` tools.
 - **Qdrant server-side fusion:** Query API RRF (default) or DBSF over named vectors `text-dense` and `text-sparse`; sparse queries use FastEmbed BM42/BM25 when available.
-- **Reranking and multimodal:** Text rerank via BGE cross-encoder; SigLIP visual rerank runs when visual nodes are present; ColPali optional via the `multimodal` extra.
-- **Multi-agent coordination:** LangGraph supervisor orchestrates five agents (router, planner, retrieval, synthesis, validation).
-- **Snapshots and reproducibility:** DuckDB KV cache plus snapshot manifests with corpus/config hashes; graph exports as JSONL/Parquet (Parquet requires PyArrow).
+- **Reranking and multimodal:** Text rerank uses a BGE cross-encoder; SigLIP reranks visual nodes.
+- **Multi-agent coordination:** LangGraph supervisor orchestrates four agents (planner, retrieval, synthesis, validation); LlamaIndex owns retrieval routing.
+- **Snapshots and reproducibility:** Qdrant owns live vectors; app snapshots bind
+  immutable physical text/image collections to corpus/config hashes and package
+  optional graph exports as JSONL/Parquet (Parquet requires PyArrow).
 - **PDF page images:** pypdfium2 renders page images to WebP/JPEG; optional AES-GCM encryption with `.enc` outputs and just-in-time decryption for visual scoring.
 - **ArtifactStore (multimodal durability):** Page images/thumbnails are stored as content-addressed `ArtifactRef(sha256, suffix)` (no base64 blobs or host paths in durable stores).
 - **Multimodal UX:** Chat renders image sources and supports query-by-image “Visual search” (SigLIP) for image-rich PDFs.
@@ -36,7 +41,7 @@ Design goals:
   remote endpoints must be explicitly enabled. The release benchmark does not
   claim independently measured zero egress.
 - **GPU acceleration:** The optional NVIDIA profile accelerates PyTorch-based dense/image embeddings and reranking; sparse FastEmbed remains CPU-based. vLLM runs as an external OpenAI-compatible server.
-- **Robust retries and logging:** Tenacity-backed retries for LLM calls and structured logging via Loguru.
+- **Bounded model calls and logging:** Provider-native timeouts/retry controls and structured logging via Loguru.
 - **Observability and operations:** Optional OTLP tracing/metrics plus JSONL telemetry; Docker and Compose included for local deployments.
 
 ## Table of Contents
@@ -48,6 +53,7 @@ Design goals:
     - [Prerequisites](#prerequisites)
     - [Installation](#installation)
     - [Running the App](#running-the-app)
+  - [Upgrade from v1](#upgrade-from-v1)
   - [Usage](#usage)
     - [Configure LLM Runtime (Settings page)](#configure-llm-runtime-settings-page)
     - [Ingest Documents and Build Snapshots (Documents page)](#ingest-documents-and-build-snapshots-documents-page)
@@ -69,9 +75,8 @@ Design goals:
     - [Understand `DOCMIND_*` provider variables](#understand-docmind_-provider-variables)
     - [Configuration Philosophy](#configuration-philosophy)
     - [Environment Variables](#environment-variables)
-    - [Enable DSPy Optimization (optional)](#enable-dspy-optimization-optional)
     - [Additional Configuration](#additional-configuration)
-  - [Performance Defaults and Monitoring](#performance-defaults-and-monitoring)
+  - [Performance Defaults and Measurement](#performance-defaults-and-measurement)
     - [Configured Defaults](#configured-defaults)
     - [Measure Locally](#measure-locally)
     - [Retrieval \& Reranking Defaults](#retrieval--reranking-defaults)
@@ -139,12 +144,6 @@ best effort until they have dedicated CI coverage.
    uv sync --frozen --extra observability
    ```
 
-   GraphRAG uses LlamaIndex core's built-in property graph store. Install the optional multimodal extra when you need ColPali reranking:
-
-   ```bash
-   uv sync --frozen --extra multimodal
-   ```
-
    Searchable-PDF export is POSIX-only (Linux, macOS, or WSL2; native Windows
    is unsupported) and requires the OCRmyPDF and Tesseract executables:
 
@@ -152,15 +151,15 @@ best effort until they have dedicated CI coverage.
    uv sync --frozen --extra searchable-pdf
    ```
 
-   Prefetch the required parser and BGE-M3 artifacts, then verify the parser
+   Prefetch the default retrieval and parser artifacts, then verify the parser
    manifests:
 
    ```bash
    uv run python tools/models/pull.py \
-     --bge-m3 \
+     --all \
      --cache_dir ./models_cache \
      --parser-defaults \
-     --rapidocr-cache-dir ./cache/models
+     --parser-cache-dir ./cache/models
    uv run python scripts/parser_health.py --check
    ```
 
@@ -189,17 +188,16 @@ best effort until they have dedicated CI coverage.
    **Key Dependencies Included:**
 
    - **LlamaIndex Core (>=0.14.21,<0.15.0)**: Ingestion, retrieval, selectors, and query engines, with selected LLM, Hugging Face, Qdrant, and DuckDB adapters
-   - **LangGraph (>=1.0.10,<2.0.0)**: 5-agent supervisor orchestration (graph-native `StateGraph`, no external supervisor wrapper)
+   - **LangGraph (>=1.0.10,<2.0.0)**: Four-worker supervisor orchestration (graph-native `StateGraph`, no external supervisor wrapper)
    - **Streamlit (>=1.52.2,<2.0.0)**: Web interface framework
    - **Ollama (0.6.2)**: Local LLM integration
    - **Qdrant Client (>=1.15.1,<2.0.0)**: Vector database operations
-   - **Docling (>=2.92,<3)**: Multi-format document conversion.
+   - **Docling (>=2.111,<3)**: Multi-format document conversion.
    - **pypdfium2 (>=5.7,<6)**: PDF inspection and page rasterization.
-   - **RapidOCR (>=3.8,<4)**: CPU-safe local OCR with explicit model prefetch.
+   - **RapidOCR (>=3.8,<4)**: CPU-safe local OCR using the locked wheel's hash-verified packaged models.
    - **FastEmbed (>=0.5.1)**: Direct CPU sparse query encoding
-   - **Tenacity (>=9.1.2,<10.0.0)**: Retry strategies with exponential backoff
    - **Loguru (>=0.7.3,<1.0.0)**: Structured logging
-   - **Pydantic (2.12.5)**: Data validation and settings.
+   - **Pydantic (2.13.4)**: Data validation and settings.
 
 3. **Install spaCy language model:**
 
@@ -246,30 +244,30 @@ best effort until they have dedicated CI coverage.
    # Model names are backend-specific:
    #   - Ollama: use the local tag (e.g., qwen3:4b-instruct)
    #   - vLLM/LM Studio/llama.cpp: use the served model name
-   # NOTE: DOCMIND_MODEL (top-level) overrides backend-specific model vars such as DOCMIND_VLLM__MODEL at runtime.
+   # DOCMIND_LLM_REQUEST__MODEL is the optional model override for every backend.
 
    # Example - Ollama (local, default):
    #   DOCMIND_LLM_BACKEND=ollama
    #   DOCMIND_OLLAMA_BASE_URL=http://localhost:11434
-   #   DOCMIND_MODEL=qwen3:4b-instruct
+   #   DOCMIND_LLM_REQUEST__MODEL=qwen3:4b-instruct
 
    # Example - LM Studio (local, OpenAI-compatible):
    #   DOCMIND_LLM_BACKEND=lmstudio
-   #   DOCMIND_OPENAI__BASE_URL=http://localhost:1234/v1
+   #   DOCMIND_LMSTUDIO_BASE_URL=http://localhost:1234/v1
    #   DOCMIND_OPENAI__API_KEY=not-needed
-   #   DOCMIND_MODEL=your-model-name
+   #   DOCMIND_LLM_REQUEST__MODEL=your_model_name
 
    # Example - vLLM OpenAI-compatible server:
    #   DOCMIND_LLM_BACKEND=vllm
-   #   DOCMIND_OPENAI__BASE_URL=http://localhost:8000/v1
+   #   DOCMIND_VLLM_BASE_URL=http://localhost:8000/v1
    #   DOCMIND_OPENAI__API_KEY=not-needed
-   #   DOCMIND_VLLM__MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8
+   #   DOCMIND_LLM_REQUEST__MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8
 
    # Example - llama.cpp server:
    #   DOCMIND_LLM_BACKEND=llamacpp
    #   DOCMIND_LLAMACPP_BASE_URL=http://localhost:8080/v1
    #   DOCMIND_OPENAI__API_KEY=not-needed
-   #   DOCMIND_MODEL=local-gguf
+   #   DOCMIND_LLM_REQUEST__MODEL=local-gguf
 
    # Offline-first recommended:
    #   HF_HUB_OFFLINE=1
@@ -295,7 +293,7 @@ best effort until they have dedicated CI coverage.
      --ctx-size 8192 -ngl 999 -fa --host 127.0.0.1 --port 8080
    ```
 
-   Use the `--alias` value as `DOCMIND_MODEL`, keep `/v1` in
+   Use the `--alias` value as `DOCMIND_LLM_REQUEST__MODEL`, keep `/v1` in
    `DOCMIND_LLAMACPP_BASE_URL`, and bind to loopback unless remote access is
    explicitly required. For remote access, start `llama-server` with
    `--api-key` and configure `DOCMIND_OPENAI__API_KEY`.
@@ -312,8 +310,11 @@ best effort until they have dedicated CI coverage.
    ```bash
    nvidia-smi
    uv sync --frozen --no-group cpu --extra gpu
-   uv run python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
+   uv run --no-sync python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
    ```
+
+   `--no-sync` is required for GPU validation commands. A plain `uv run`
+   reconciles the environment to the default CPU profile before running.
 
    **Hardware guidance:**
 
@@ -323,7 +324,7 @@ best effort until they have dedicated CI coverage.
    **Notes:**
 
    - vLLM is supported via an external OpenAI-compatible server (see Troubleshooting section 6 for connectivity checks).
-   - Measure performance on your hardware with `uv run python scripts/performance_monitor.py`.
+   - Validate the GPU profile with `uv run --no-sync python scripts/test_gpu.py --quick` and benchmark parsing with the reproducible harness below.
 
    See [GPU Setup Guide](docs/developers/gpu-setup.md) (installation) and [Hardware Policy](docs/developers/hardware_policy.md) (hardware/VRAM guidance).
 
@@ -335,7 +336,7 @@ best effort until they have dedicated CI coverage.
 uv run streamlit run app.py
 ```
 
-To honor `DOCMIND_UI__STREAMLIT_PORT`, use:
+To use the repository's standard Streamlit launch options, run:
 
 ```bash
 ./scripts/run_app.sh
@@ -348,7 +349,7 @@ docker compose up --build -d
 docker compose exec ollama ollama pull qwen3:4b-instruct
 ```
 
-The base stack runs DocMind, Qdrant, and the single bundled Ollama backend on CPU. It configures `DOCMIND_MODEL=qwen3:4b-instruct` unless you override `DOCMIND_MODEL` in the shell or `.env`. Pull the model once per Ollama volume, then open `http://localhost:8501`.
+The base stack runs DocMind, Qdrant, and the bundled Ollama backend on CPU. It configures `DOCMIND_LLM_REQUEST__MODEL=qwen3:4b-instruct` unless you override that variable in the shell or `.env`. Pull the model once per Ollama volume, then open `http://localhost:8501`.
 
 Use the NVIDIA override with Docker Compose v2 and the NVIDIA Container Toolkit:
 
@@ -359,12 +360,47 @@ docker compose exec ollama ollama pull qwen3:4b-instruct
 
 The GPU override changes only Ollama's device reservation. DocMind keeps one bundled language model backend in both modes.
 
+## Upgrade from v1
+
+DocMind v2 is a forward-only application release, not a compatible Python
+library update.
+
+- Use a fresh repository checkout with `uv sync --frozen`, or rebuild the
+  production container. When reusing a v1 checkout, repair the retired
+  `typer-slim` overlap once with
+  `uv sync --frozen --reinstall-package typer`. DocMind no longer publishes or
+  supports a Python wheel.
+- Construct `MultiAgentCoordinator` with keyword-only runtime seams. Call
+  `process_query(query, *, settings_override, thread_id, user_id,
+  checkpoint_id)`; model, backend, context-window, and default timeout policy
+  come from canonical settings. Role tools under `src/agents/tools/` are
+  internal graph details.
+- Remove v1 DSPy/RAGAS integrations and obsolete no-op environment variables
+  from local automation. Reconcile `.env` against the tracked `.env.example`;
+  removed agent fallback, UI, cache-limit, monitoring-limit, and legacy
+  GraphRAG knobs no longer change runtime behavior.
+- Stop DocMind before the v2 upgrade. V1 stored raw public thread IDs, while v2 hashes each `(user_id, public_thread_id)` pair for LangGraph checkpoints. V2 has no checkpoint-key migration. Startup rejects a Chat DB that contains raw v1 checkpoint identities. Archive the database and its write-ahead log (WAL) sidecars, then let v2 create a fresh database:
+
+  ```bash
+  mkdir -p data/archive/v1-chat
+  find data -maxdepth 1 -type f \
+    \( -name 'chat.db' -o -name 'chat.db-wal' -o -name 'chat.db-shm' \) \
+    -exec mv {} data/archive/v1-chat/ \;
+  ```
+
+  The one-shot legacy memory-table migration does not migrate checkpoints and is not a supported path for retaining v1 chat history.
+- Back up retained data before upgrading. Builds that predate full-SHA document
+  identity must also follow the
+  [full-SHA ingestion migration](#full-sha-ingestion-identity-migration) and
+  re-ingest their corpus.
+
 ## Usage
 
 ### Configure LLM Runtime (Settings page)
 
-- Select the active provider (`ollama`, `vllm`, `lmstudio`, `llamacpp`).
-- Set model, context window, timeout, and GPU acceleration toggle.
+- Select the active provider (`ollama`, `vllm`, `lmstudio`, `llamacpp`, or `openai_compatible`).
+- Set the optional model override, context window, output limit, temperature,
+  timeout, and GPU acceleration preference.
 - Model IDs are backend-specific (Ollama tags vs OpenAI-compatible model names).
 - OpenAI-compatible base URLs are normalized to include `/v1` (LM Studio enforces `/v1`).
 - When `DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false` (default), loopback hosts are always allowed, but non-loopback hosts must be allowlisted via `DOCMIND_SECURITY__ENDPOINT_ALLOWLIST` and must DNS-resolve to public IPs (private/link-local/reserved ranges are rejected).
@@ -378,7 +414,14 @@ The GPU override changes only Ollama's device reservation. DocMind keeps one bun
   - **Encrypt page images (AES-GCM)** to store rendered PDF images as `.enc`.
 - GraphRAG uses the required LlamaIndex core Property Graph API; the Settings
   page shows its runtime status.
-- Ingestion builds a vector index (Qdrant) and optional graph index, then writes a snapshot to `data/storage/`.
+- Ingestion builds new physical Qdrant text/image collections, then atomically
+  activates their manifest and optional graph artifacts through
+  `data/storage/CURRENT`.
+- Snapshot activation never deletes Qdrant collections while readers may still
+  use them. To inspect orphaned generations, stop every DocMind process and run
+  `uv run python scripts/cleanup_collections.py --confirm-app-stopped`. The
+  command is dry-run by default; review its deployment-scoped output before
+  adding `--delete`.
 - Graph exports (JSONL/Parquet) are available when a graph index exists.
 
 ### Chat with Documents (Chat page)
@@ -431,17 +474,29 @@ store = create_vector_store(
     settings.database.qdrant_collection,
     enable_hybrid=settings.retrieval.enable_server_hybrid,
 )
-storage_context = StorageContext.from_defaults(vector_store=store)
-vector_index = VectorStoreIndex(result.nodes, storage_context=storage_context, show_progress=False)
-
-router = build_router_engine(vector_index, pg_index=None, settings=settings)
-coord = MultiAgentCoordinator()
-resp = coord.process_query(
-    "Summarize the key findings and action items",
-    context=None,
-    settings_override={"router_engine": router, "vector": vector_index},
-)
-print(resp.content)
+router = None
+coord = None
+try:
+    storage_context = StorageContext.from_defaults(vector_store=store)
+    vector_index = VectorStoreIndex(
+        result.nodes,
+        storage_context=storage_context,
+        show_progress=False,
+    )
+    router = build_router_engine(vector_index, pg_index=None, settings=settings)
+    coord = MultiAgentCoordinator()
+    resp = coord.process_query(
+        "Summarize the key findings and action items",
+        settings_override={"router_engine": router},
+    )
+    print(resp.content)
+finally:
+    # Retire the loop-bound router before its store and coordinator-owned loop.
+    if router is not None:
+        router.close()
+    store.client.close()
+    if coord is not None:
+        coord.close()
 ```
 
 ### Prompt Templates (developer API)
@@ -462,7 +517,8 @@ print(prompt)
 ```
 
 Templates live in `src/prompting/templates/prompts/*.prompt.md`. Presets are in
-`src/prompting/templates/presets/*.yaml` and are included in built wheels.
+`src/prompting/templates/presets/*.yaml`. DocMind is a repository application,
+not a published Python library; run it from the locked uv environment or image.
 
 ### Custom Configuration
 
@@ -472,23 +528,23 @@ import os
 from src.config.settings import DocMindSettings
 
 os.environ["DOCMIND_LLM_BACKEND"] = "vllm"
-os.environ["DOCMIND_VLLM__MODEL"] = "Qwen/Qwen3-4B-Instruct-2507-FP8"
-os.environ["DOCMIND_VLLM__CONTEXT_WINDOW"] = "131072"
+os.environ["DOCMIND_LLM_REQUEST__MODEL"] = "Qwen/Qwen3-4B-Instruct-2507-FP8"
+os.environ["DOCMIND_LLM_REQUEST__CONTEXT_WINDOW"] = "131072"
+os.environ["DOCMIND_VLLM_BASE_URL"] = "http://localhost:8000/v1"
 os.environ["DOCMIND_ENABLE_GPU_ACCELERATION"] = "true"
 
 settings = DocMindSettings()
-print(settings.llm_backend, settings.vllm.model, settings.effective_context_window)
+print(settings.llm_backend, settings.effective_model, settings.effective_context_window)
 ```
 
 ### Batch Document Processing
 
 ```python
-import hashlib
 from pathlib import Path
 
 from src.models.processing import IngestionConfig, IngestionInput
 from src.processing.ingestion_pipeline import ingest_documents_sync
-from src.utils.hashing import document_id_from_sha256
+from src.utils.hashing import document_id_from_sha256, sha256_file
 
 folder = Path("/path/to/documents")
 extensions = {".pdf", ".docx", ".txt", ".md", ".pptx", ".xlsx"}
@@ -496,7 +552,7 @@ paths = [p for p in folder.rglob("*") if p.suffix.lower() in extensions]
 
 inputs = []
 for path in paths:
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    digest = sha256_file(path)
     inputs.append(
         IngestionInput(
             document_id=document_id_from_sha256(digest),
@@ -535,12 +591,12 @@ flowchart TD
     D --> E["VectorStoreIndex<br/>Qdrant named vectors"]
     C --> F["PDF page image exports<br/>pypdfium2, optional AES-GCM"]
     D --> G["PropertyGraphIndex<br/>optional"]
-    E --> H["RouterQueryEngine<br/>semantic_search / hybrid_search<br/>knowledge_graph"]
+    E --> H["RouterQueryEngine<br/>semantic / hybrid / keyword<br/>multimodal / graph"]
     G --> H
-    H --> I["MultiAgentCoordinator<br/>LangGraph supervisor - 5 agents"]
+    H --> I["MultiAgentCoordinator<br/>LangGraph supervisor - 4 worker roles"]
     I --> J["Chat page<br/>Responses"]
 
-    K["Snapshot manager<br/>data/storage"] <--> E
+    K["Snapshot activation manifests<br/>data/storage"] -.->|collection identities| E
     K <--> G
     L["Ingestion cache<br/>DuckDB KV"] <--> C
 ```
@@ -560,11 +616,15 @@ flowchart TD
 ### Hybrid Retrieval Architecture
 
 - **Unified Text Embeddings:** BGE-M3 (BAAI/bge-m3) via LlamaIndex for dense vectors (1024D); sparse query vectors via FastEmbed BM42/BM25 when available.
-- **Multimodal:** SigLIP visual scoring uses the shared pinned `src/utils/vision_siglip.py` loader. ColPali reranking is optional through the `multimodal` extra.
+- **Multimodal:** SigLIP visual scoring uses the shared pinned `src/utils/vision_siglip.py` loader.
 - **Multimodal retrieval (PDF images):** `multimodal_search` fuses text hybrid with SigLIP text→image retrieval over a dedicated Qdrant image collection and returns image-bearing sources for rendering.
 - **Fusion:** Server-side RRF via Qdrant Query API when `DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=true` (DBSF optional).
 - **Deduplication:** Configurable key via `DOCMIND_RETRIEVAL__DEDUP_KEY` (page_id|doc_id); default = `page_id`.
-- **Router composition:** See `src/retrieval/router_factory.py` (tools: `semantic_search`, `hybrid_search`, `knowledge_graph`). Selector preference: `PydanticSingleSelector` (preferred) → `LLMSingleSelector` fallback. The `knowledge_graph` tool is activated only when a PropertyGraphIndex is present and healthy; otherwise the router uses vector/hybrid only.
+- **Router composition:** `src/retrieval/router_factory.py` always registers
+  `semantic_search` and conditionally adds `hybrid_search`, `keyword_search`,
+  `multimodal_search`, and `knowledge_graph`. LlamaIndex's native
+  `RouterQueryEngine` owns selection. Graph search requires a supplied, healthy
+  `PropertyGraphIndex`; the GraphRAG setting controls the ingestion default.
 
 - **Storage:** Qdrant vector database with metadata filtering and concurrent access
 
@@ -572,28 +632,30 @@ flowchart TD
 
 - **Supervisor Pattern:** LangGraph `StateGraph` supervisor (repo-local implementation in `src/agents/supervisor_graph.py`) with checkpoint/store support
 
-- **5 Specialized Agents:**
+- **Four worker roles:**
 
-  - **Query Router:** Analyzes query complexity and determines optimal retrieval strategy
   - **Query Planner:** Decomposes complex queries into manageable sub-tasks for better processing
-  - **Retrieval Expert:** Executes optimized retrieval with server-side hybrid (Qdrant) and optional GraphRAG; supports optional DSPy query optimization when enabled
+  - **Retrieval Expert:** Delegates strategy selection to LlamaIndex's native `RouterQueryEngine`, including server-side hybrid and optional GraphRAG
   - **Result Synthesizer:** Combines and reconciles results from multiple retrieval passes with deduplication
   - **Response Validator:** Validates response quality, accuracy, and completeness before final output
 
-- **Enhanced Capabilities:** Optional GraphRAG for multi-hop reasoning and optional DSPy query optimization for query rewriting
+- **Enhanced Capabilities:** Optional GraphRAG for multi-hop reasoning
 
-- **Workflow Coordination:** The supervisor routes between agents and records coordination timing.
-- **Session State:** Streamlit session state holds chat history; snapshots persist retrieval artifacts to disk.
+- **Workflow Coordination:** `src/agents/supervisor_graph.py` coordinates the
+  workers, `src/agents/tools/retrieval.py` owns the retrieval tool boundary, and
+  `src/retrieval/router_factory.py` constructs the native retrieval router.
+- **Session State:** Streamlit session state holds chat history; snapshots persist
+  activation metadata and optional graph artifacts.
 
-- **Async Execution:** Concurrent agent operations with automatic resource management and fallback mechanisms
+- **Async Execution:** Concurrent agent operations with bounded timeouts and explicit error responses
 
 ### Performance Optimizations
 
 - **GPU Acceleration:** The optional NVIDIA profile accelerates PyTorch-based
   dense/image embeddings and reranking; sparse FastEmbed remains CPU-based.
   vLLM runs as an external OpenAI-compatible server.
-- **Async processing:** Asynchronous ingestion is supported; retrieval/rerank stages use bounded timeouts and fail open.
-- **Reranking:** Text cross-encoder + SigLIP visual stage with rank-level RRF merge; ColPali optional.
+- **Async processing:** Asynchronous ingestion is supported. The router owns the total request deadline; reranking stages are bounded and fail open, while storage clients own retrieval timeouts.
+- **Reranking:** A text cross-encoder and SigLIP visual stage merge results with rank-level RRF.
 - **Memory Management:** Device selection and VRAM checks are centralized in `src/utils/core.py`.
 
 ## Configuration
@@ -631,14 +693,14 @@ DOCMIND_OLLAMA_BASE_URL=http://localhost:11434
 # Optional (Ollama Cloud / web search)
 # DOCMIND_OLLAMA_API_KEY=
 # DOCMIND_OLLAMA_ENABLE_WEB_SEARCH=false
-# DOCMIND_OLLAMA_EMBED_DIMENSIONS=
 # DOCMIND_OLLAMA_ENABLE_LOGPROBS=false
 # DOCMIND_OLLAMA_TOP_LOGPROBS=0
 # DOCMIND_LLM_BACKEND=vllm
-# DOCMIND_MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8  # top-level override
-# DOCMIND_VLLM__VLLM_BASE_URL=http://localhost:8000
-# DOCMIND_VLLM__MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8
-# DOCMIND_VLLM__CONTEXT_WINDOW=131072
+# DOCMIND_LLM_REQUEST__MODEL=Qwen/Qwen3-4B-Instruct-2507-FP8
+# DOCMIND_LLM_REQUEST__CONTEXT_WINDOW=131072
+# DOCMIND_LLM_REQUEST__MAX_OUTPUT_TOKENS=2048
+# DOCMIND_LLM_REQUEST__TEMPERATURE=0.1
+# DOCMIND_VLLM_BASE_URL=http://localhost:8000/v1
 
 # Embeddings
 DOCMIND_EMBEDDING__MODEL_NAME=BAAI/bge-m3
@@ -656,10 +718,8 @@ DOCMIND_RETRIEVAL__RERANKING_TOP_K=5
 # Cache
 DOCMIND_CACHE__DIR=./cache
 DOCMIND_CACHE__FILENAME=docmind.duckdb
-DOCMIND_CACHE__MAX_SIZE_MB=1000
 
-# GraphRAG (requires both flags)
-DOCMIND_ENABLE_GRAPHRAG=false
+# GraphRAG ingestion default
 DOCMIND_GRAPHRAG_CFG__ENABLED=false
 
 # GPU and security toggles
@@ -668,34 +728,6 @@ DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=false
 ```
 
 See the complete [.env.example](.env.example) file for all available configuration options.
-
-### Enable DSPy Optimization (optional)
-
-To turn on query optimization via DSPy, enable the feature flag in your `.env`:
-
-```bash
-DOCMIND_ENABLE_DSPY_OPTIMIZATION=true
-```
-
-Optional tuning (defaults are sensible):
-
-```bash
-DOCMIND_DSPY_OPTIMIZATION_ITERATIONS=10
-DOCMIND_DSPY_OPTIMIZATION_SAMPLES=20
-DOCMIND_DSPY_MAX_RETRIES=3
-DOCMIND_DSPY_TEMPERATURE=0.1
-DOCMIND_DSPY_METRIC_THRESHOLD=0.8
-DOCMIND_ENABLE_DSPY_BOOTSTRAPPING=true
-```
-
-Notes:
-
-- DSPy runs in the agents layer and augments retrieval by refining the query; retrieval remains library-first (server-side hybrid via Qdrant + reranking).
-- `DOCMIND_ENABLE_DSPY_OPTIMIZATION=true` only takes effect when DSPy is
-  installed. DSPy is not installed by default while its dependency chain
-  conflicts with the project security floors, so on the supported baseline the
-  flag falls back gracefully to standard retrieval unless you install DSPy
-  separately.
 
 ### Additional Configuration
 
@@ -720,30 +752,37 @@ maxUploadSize = 200
 - PDF page images: rendered under `./cache/page_images/` and stored durably as content-addressed artifacts under `./data/artifacts/` by default.
 - Model weights: cached via Hugging Face defaults (`~/.cache/huggingface`).
 
-## Performance Defaults and Monitoring
+## Performance Defaults and Measurement
 
 > **Note**: Performance depends on hardware, model size, and corpus size. Use the scripts below to measure on your machine.
 
 ### Configured Defaults
 
-- Rerank timeouts: text 250ms, SigLIP 150ms, ColPali 400ms, total budget 800ms (`DOCMIND_RETRIEVAL__*`).
+- Rerank timeouts: text 250 ms, SigLIP 150 ms, total budget 400 ms (`DOCMIND_RETRIEVAL__*`).
 - Coordination overhead target: 200ms (`COORDINATION_OVERHEAD_THRESHOLD` in `src/agents/coordinator.py`).
-- Context cap: 131072 by default, max 200000 (`DOCMIND_LLM_CONTEXT_WINDOW_MAX`).
-- Monitoring thresholds: `DOCMIND_MONITORING__MAX_QUERY_LATENCY_MS`, `DOCMIND_MONITORING__MAX_MEMORY_GB`, `DOCMIND_MONITORING__MAX_VRAM_GB`.
+- Context cap: 131072 by default, max 200000
+  (`DOCMIND_LLM_REQUEST__CONTEXT_WINDOW`).
+- Hardware capacity is measured by `scripts/test_gpu.py`; it is not represented
+  by application configuration thresholds.
 
 ### Measure Locally
 
-- `uv run python scripts/performance_monitor.py --run-tests --check-regressions --report`
-- `uv run python scripts/test_gpu.py --quick`
+- `uv run python scripts/benchmark_parsing.py --generate-minimal-fixtures --output cache/benchmarks/parsing/results.json`
+- `uv run --no-sync python scripts/test_gpu.py --quick`
+
+Compare parser benchmark JSON only across equivalent hardware, model caches,
+fixtures, and clean commits. Missing samples or baselines are not a passing
+performance result.
 
 ### Retrieval & Reranking Defaults
 
 - Hybrid retrieval uses Qdrant named vectors `text-dense` (1024D COSINE; BGE-M3) and `text-sparse` (FastEmbed BM42/BM25 + IDF) when `DOCMIND_RETRIEVAL__ENABLE_SERVER_HYBRID=true`.
 - Default fusion is RRF; DBSF is available with `DOCMIND_RETRIEVAL__FUSION_MODE=dbsf`.
 - Prefetch defaults: dense 200, sparse 400; `fused_top_k=60`; `page_id` de-dup.
-- Reranking is enabled by default: BGE v2-m3 (text) + SigLIP (visual), with optional ColPali; timeouts are enforced and fail open.
+- Reranking is enabled by default: BGE v2-m3 for text and SigLIP for visual nodes. Timeouts fail open.
 - Feature flags (hybrid, reranking) are env-only; RRF K and timeouts are adjustable in the Settings page.
-- Router parity: RouterQueryEngine tools (vector/hybrid/KG) apply the same reranking policy via `node_postprocessors` behind `DOCMIND_RETRIEVAL__USE_RERANKING`.
+- Router parity: semantic, hybrid, multimodal, and graph query engines apply the
+  configured reranking policy through native LlamaIndex `node_postprocessors`.
 
 #### Operational Flags (local-first)
 
@@ -776,7 +815,7 @@ DocMind can run offline after you install dependencies and prefetch every requir
 
    ```bash
    nvidia-smi  # Check GPU availability
-   uv run python scripts/test_gpu.py --quick  # Validate CUDA setup
+   uv run --no-sync python scripts/test_gpu.py --quick  # Validate CUDA setup
    ```
 
 ### Prefetch Model Weights
@@ -785,19 +824,29 @@ Run once (online) to predownload required models for offline use:
 
 ```bash
 uv run python tools/models/pull.py \
-  --bge-m3 \
+  --all \
   --cache_dir ./models_cache \
   --parser-defaults \
-  --rapidocr-cache-dir ./cache/models
+  --parser-cache-dir ./cache/models
 ```
+
+`--all` stores four pinned snapshots in one Hugging Face cache: BGE-M3, BM42, the BGE reranker, and SigLIP.
 
 ### Snapshots & Staleness
 
-DocMind snapshots persist indices atomically for reproducible retrieval.
+DocMind snapshots atomically activate immutable physical Qdrant collections and
+optional property-graph artifacts. Qdrant backups own point-in-time vectors.
 
-- `manifest.meta.json` fields include `schema_version`, `persist_format_version`, `complete`, `created_at`, `index_id`, `graph_store_type`, `vector_store_type`, `corpus_hash`, `config_hash`, `versions`, and `graph_exports` when present.
+- `manifest.meta.json` includes `collections.text`, `collections.image`, optional
+  immutable collection metadata, schema/persist versions, corpus/config hashes,
+  component versions, graph type, and optional graph exports.
 - Hashing: `corpus_hash` computed with POSIX relpaths relative to a stable base dir (the Documents UI uses `uploads/`) for OS-agnostic stability.
-- Chat autoload: the Chat page loads the latest non-stale snapshot when available; otherwise it shows a staleness badge and offers to rebuild.
+- Chat autoload: the Chat page loads only the non-stale snapshot referenced by
+  `CURRENT`; invalid or missing pointers fail closed and require a rebuild.
+- Retention deletes only old, complete snapshot manifest directories and always
+  preserves `CURRENT`. It never deletes Qdrant collections. After stopping every
+  reader and writer, inspect deployment-owned orphan generations with
+  `scripts/cleanup_collections.py` and add `--delete` only after reviewing the dry run.
 
 ### GraphRAG Exports & Seeds
 
@@ -836,7 +885,7 @@ uv sync --frozen --no-group cpu --extra gpu
 
 # Verify CUDA installation
 nvidia-smi
-uv run python -c "import torch; print(torch.cuda.is_available())"
+uv run --no-sync python -c "import torch; print(torch.cuda.is_available())"
 ```
 
 The CPU group and GPU extra are mutually exclusive; uv selects their official
@@ -889,12 +938,12 @@ Notes:
 
 #### 7. PyTorch Compatibility Issues
 
-This repo pins **PyTorch 2.8.0** for reproducibility. The default sync installs
+This repo pins **PyTorch 2.11.0** for reproducibility. The default sync installs
 official CPU wheels. For the locked CUDA 12.8 wheel set:
 
 ```bash
 uv sync --frozen --no-group cpu --extra gpu
-uv run python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
+uv run --no-sync python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
 ```
 
 #### 8. GPU memory issues
@@ -906,14 +955,16 @@ uv run python -c "import torch; print(torch.__version__); print(torch.cuda.is_av
 nvidia-smi --query-gpu=memory.used,memory.total --format=csv --loop=1
 
 # Clear GPU memory cache
-uv run python -c "import torch; torch.cuda.empty_cache()"
+uv run --no-sync python -c "import torch; torch.cuda.empty_cache()"
 ```
 
 #### 9. Performance Validation
 
 ```bash
-# Run performance validation script
-uv run python scripts/performance_monitor.py --run-tests --check-regressions --report
+# Run the reproducible parser benchmark
+uv run python scripts/benchmark_parsing.py \
+  --generate-minimal-fixtures \
+  --output cache/benchmarks/parsing/results.json
 ```
 
 ### Performance Optimization
@@ -942,12 +993,12 @@ uv run python scripts/performance_monitor.py --run-tests --check-regressions --r
 If you use DocMind AI in your research or work, please cite it as follows:
 
 ```bibtex
-@software{melin_docmind_ai_2025,
+@software{melin_docmind_ai_2026,
   author = {Melin, Bjorn},
   title = {DocMind AI: Local LLM for AI-Powered Document Analysis},
   url = {https://github.com/BjornMelin/docmind-ai-llm},
-  version = {0.1.0},
-  year = {2025}
+  version = {1.0.0},
+  year = {2026}
 }
 ```
 
@@ -973,14 +1024,24 @@ Contributions are welcome! Please follow these steps:
    uv run ruff check . --fix
    uv run pyright --threads 4
 
-   # Fast tiered validation (unit + integration)
-   uv run python scripts/run_tests.py --fast
+   # Fast validation (unit + integration)
+   uv run pytest tests/unit tests/integration -q --no-cov
 
    # Coverage gate
-   uv run python scripts/run_tests.py --coverage
+   uv run pytest tests/unit tests/integration -q \
+     --cov=src \
+     --cov-branch \
+     --cov-report=term-missing \
+     --cov-report=html:htmlcov \
+     --cov-report=xml:coverage.xml \
+     --cov-report=json:coverage.json \
+     --cov-fail-under=80 \
+     --junitxml=junit.xml
 
-   # Quality gates (CI-style report)
-   uv run python scripts/run_quality_gates.py --ci --report
+   # Documentation and schema contracts
+   uv run python scripts/check_links.py
+   uv run python scripts/verify_structural_parity.py
+   uv run python scripts/validate_schemas.py
    ```
 
 5. **Submit a pull request** with clear description of changes
@@ -1009,25 +1070,31 @@ local fixtures. These gates do not claim a process-level zero-egress proof:
 - System (required in CI): direct-text parsing plus a real Qdrant
   ingest-index-query roundtrip.
 
-Quick local commands:
+Local test commands:
 
 ```bash
-# Fast unit + integration sweep (offline)
-uv run python scripts/run_tests.py --fast
+# Unit and integration sweep (offline)
+uv run pytest tests/unit tests/integration -q --no-cov
 
-# Full coverage gate (unit + integration)
-uv run python scripts/run_tests.py --coverage
+# Unit and integration coverage gate
+uv run pytest tests/unit tests/integration -q \
+  --cov=src \
+  --cov-branch \
+  --cov-report=term-missing \
+  --cov-report=html:htmlcov \
+  --cov-report=xml:coverage.xml \
+  --cov-report=json:coverage.json \
+  --cov-fail-under=80 \
+  --junitxml=junit.xml
 
 # Targeted module or pattern
-uv run python scripts/run_tests.py tests/unit/persistence/test_snapshot_manager.py
+uv run pytest tests/unit/persistence/test_snapshot_manager.py -vv --no-cov
 ```
 
-Default `pytest` invocations now run without implicit coverage gates. Use the
-scripted `--coverage` workflow (or run `coverage report`) when you need HTML,
-XML, or JSON artifacts for CI or local analysis.
+Default Pytest invocations run without implicit coverage gates. Pass the explicit coverage options when you need terminal, HTML, XML, JSON, or JUnit artifacts.
 
-CI runs Ruff, Pyright, the enabled E2E suite, the Qdrant system smoke, wheel
-validation, and the unit/integration coverage gate. See ADR-014 for quality
+CI runs Ruff, Pyright, the enabled E2E suite, the Qdrant system smoke,
+container validation, and the unit/integration coverage gate. See ADR-014 for quality
 gates and ADR-029 for the boundary-first testing strategy.
 
 See the [Developer Handbook](docs/developers/developer-handbook.md) for detailed guidelines. For an overview of the unit test layout and fixture strategy, see tests/README.md.
@@ -1043,8 +1110,10 @@ DocMind AI configures OpenTelemetry tracing and metrics via `configure_observabi
 - Observability is disabled by default; enable with `DOCMIND_OBSERVABILITY__ENABLED=true`.
 - OTLP exporters are used when enabled; set `DOCMIND_OBSERVABILITY__ENDPOINT` and `DOCMIND_OBSERVABILITY__PROTOCOL` as needed.
 - LlamaIndex instrumentation requires the `observability` extra (`uv sync --frozen --extra observability`).
-- Core spans cover ingestion runs, snapshot promotion, GraphRAG exports, router selection, and UI actions.
-- Telemetry events (`router_selected`, `export_performed`, `snapshot_stale_detected`) are persisted as JSONL for local audits.
+- Core spans cover ingestion runs, snapshot operations, GraphRAG exports, router construction, and UI actions.
+- Local JSONL records retrieval backend/outcome, `export_performed`, and
+  `snapshot_stale_detected`. The `router_selected` signal is an OpenTelemetry
+  router-construction event, not a per-query JSONL event.
 
 For a local metrics smoke test, run:
 

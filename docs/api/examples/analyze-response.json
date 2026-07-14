@@ -57,12 +57,12 @@
   "agent_trace": [
     {
       "sequence": 1,
-      "agent": "query_router",
-      "action": "route_query",
+      "agent": "retrieval_agent",
+      "action": "retrieve_documents",
       "duration": 0.12,
       "status": "completed",
       "output_quality_score": 0.91,
-      "output_summary": "Identified hybrid analytical search strategy with high confidence"
+      "output_summary": "Selected the native hybrid retrieval strategy and returned ranked evidence"
     },
     {
       "sequence": 2,

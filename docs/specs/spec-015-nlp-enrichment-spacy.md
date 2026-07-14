@@ -1,8 +1,8 @@
 ---
 spec: SPEC-015
-title: NLP Enrichment (spaCy 3.8.11) — Runtime Selection + Ingestion Wiring
-version: 1.0.0
-date: 2026-01-16
+title: NLP Enrichment (spaCy 3.8.14) — Runtime Selection + Ingestion Wiring
+version: 1.1.0
+date: 2026-07-13
 owners: ["ai-arch"]
 status: Implemented
 related_requirements:
@@ -14,7 +14,7 @@ related_adrs: ["ADR-024","ADR-013","ADR-030","ADR-058","ADR-061"]
 
 ## Objective
 
-Add a **first-class NLP enrichment stage** to ingestion using **spaCy 3.8.11** with:
+Add a **first-class NLP enrichment stage** to ingestion using **spaCy 3.8.14** with:
 
 - CPU default (offline-first)
 - NVIDIA CUDA acceleration on release-validated Linux x86_64, with WSL2 best effort
@@ -107,7 +107,7 @@ Recommended (repo-supported):
 
 ```bash
 uv sync --frozen --no-group cpu --extra gpu
-uv run python -m spacy download en_core_web_sm
+uv run --no-sync python -m spacy download en_core_web_sm
 ```
 
 Runtime:
@@ -121,7 +121,7 @@ export DOCMIND_SPACY__GPU_ID=0
 
 ```bash
 uv sync --frozen --extra apple
-uv run python -m spacy download en_core_web_sm
+uv run --no-sync python -m spacy download en_core_web_sm
 ```
 
 Runtime:

@@ -2,8 +2,8 @@
 ADR: ADR-061
 Title: Centralized spaCy NLP Subsystem (Runtime Selection + Ingestion Enrichment)
 Status: Accepted
-Version: 1.0
-Date: 2026-01-16
+Version: 1.1
+Date: 2026-07-13
 Supersedes:
 Superseded-by:
 Related: ADR-024, ADR-030, ADR-058, SPEC-015
@@ -97,12 +97,10 @@ flowchart LR
 
 ## Dependency & Packaging Notes (CUDA vs. Apple)
 
-We keep `spacy==3.8.11` pinned in base dependencies for reproducibility.
-
-spaCy 3.8.8+ switches its CLI dependency to `typer-slim`. In practice, some optional
-GPU/server dependencies install `typer` (which shares the same `typer/` import path).
-To avoid environment churn where uninstalling `typer` can remove files needed by
-`typer-slim`, the project pins `typer==0.21.1` as a direct dependency.
+We keep `spacy==3.8.14` pinned in base dependencies for reproducibility. The
+project no longer pins Typer directly. Current Typer releases unify the former
+`typer-slim` distribution, and uv resolves one version compatible with spaCy,
+Docling, and Transformers.
 
 For acceleration:
 
@@ -110,7 +108,7 @@ For acceleration:
   macOS arm64 with CPython 3.12 as a best-effort path.
 - **NVIDIA CUDA (12.x)**: `uv sync --frozen --no-group cpu --extra gpu` installs `cupy-cuda12x>=13` on non-darwin.
 
-Why not use `spacy[cuda12x]==3.8.11`?
+Why not use `spacy[cuda12x]==3.8.14`?
 
 - spaCy’s `cuda12x` extra pins `cupy-cuda12x<13`.
 - This repo’s lock resolves `numpy==2.x` (required by the Apple stack and widely used across
@@ -145,11 +143,12 @@ GPU execution via Thinc.
 
 ### Dependencies
 
-- **Python**: `spacy==3.8.11` (base)
+- **Python**: `spacy==3.8.14` (base)
 - **Apple**: `spacy[apple]` (macOS arm64 extra)
 - **CUDA**: `cupy-cuda12x>=13` (non-darwin extra)
 - **Removed**: `src/core/spacy_manager.py` (replaced by `src/nlp/*`)
 
 ## Changelog
 
+- **1.1 (2026-07-13)**: Upgrade spaCy and remove the obsolete direct Typer pin.
 - **1.0 (2026-01-16)**: Initial accepted version.

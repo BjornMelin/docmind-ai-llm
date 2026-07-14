@@ -1,8 +1,8 @@
 ---
 spec: SPEC-003
 title: Unified embeddings with BGE-M3 text and SigLIP images
-version: 1.4.0
-date: 2026-07-11
+version: 1.6.0
+date: 2026-07-14
 owners: ["ai-arch"]
 status: Completed
 related_requirements:
@@ -31,12 +31,16 @@ Define the one supported embedding stack for text and images:
   - LlamaIndex receives native `max_length`, `normalize`, and
     `embed_batch_size` options plus an offline cache or explicit local snapshot.
   - Direct FastEmbed produces BM42 sparse vectors and falls back to BM25 when BM42 is unavailable.
+  - The logical `Qdrant/bm42-all-minilm-l6-v2-attentions` model resolves source
+    `Qdrant/all_miniLM_L6_v2_with_attentions` at revision
+    `9695632d760ba609397b32f56fb5b1b870cf92a5` from the shared model cache.
   - Qdrant performs server-side fusion through the Query API.
 
 - Images:
   - `SiglipModel` and `SiglipProcessor` provide image and text features.
-  - The default model uses the source-controlled revision in `src/utils/vision_siglip.py`.
+  - The default model uses the source-controlled revision in `src/config/embedding_defaults.py`.
   - `tools/models/pull.py --all` downloads the pinned Transformers snapshot.
+  - The model and processor resolve the same `settings.embedding.cache_folder` used by the prefetch CLI.
   - Configuration exposes the SigLIP model ID, optional custom revision, normalization, and batch size. It exposes no backend selector.
 
 - Hosting note: Hugging Face Text Embeddings Inference (TEI) is dense‑only for BGE‑M3. Do not use TEI when sparse is required.
@@ -92,6 +96,7 @@ Feature: Embedding stack
 ## Implementation status
 
 - BGE-M3 dense and direct FastEmbed sparse paths are implemented.
+- The default BM42 source snapshot is pinned and included in `tools/models/pull.py --all`.
 - BGE-M3 is pinned to an exact revision and its configured dimension is fixed
   at 1024. A failed load leaves LlamaIndex's backing slot empty.
 - SigLIP is the only image backend.

@@ -113,7 +113,7 @@ graph TD
 
 - `src/models/processing.py` owns `docmind_document_id`.
 - `src/processing/ingestion_api.py` attaches the key to every source document.
-- `src/ui/_ingest_adapter_impl.py` owns stable point IDs and stale-point cleanup.
+- `src/ui/ingest_adapter.py` owns stable point IDs and stale-point cleanup.
 - Qdrant owns point upserts; LlamaIndex owns payload serialization.
 - No compatibility key, force-reindex flag, or second cache is introduced.
 

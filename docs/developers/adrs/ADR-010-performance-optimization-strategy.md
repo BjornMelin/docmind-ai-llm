@@ -2,8 +2,8 @@
 ADR: 010
 Title: Performance measurement and optimization strategy
 Status: Implemented (Amended)
-Version: 9.2
-Date: 2026-07-10
+Version: 10.0
+Date: 2026-07-13
 Supersedes:
 Superseded-by:
 Related: 004, 011, 024, 030
@@ -15,7 +15,11 @@ References:
 
 ## Description
 
-Measure the full retrieval-augmented generation path before optimizing it. Keep bounded parallel tool execution enabled. Treat FP8 key-value cache and extended context as optional settings for an external vLLM server. Application-level document cache remains separate (ADR-030).
+Measure the full retrieval-augmented generation path before optimizing it. Use
+LangGraph's native handoff semantics instead of an inert application concurrency
+toggle. Treat FP8 key-value cache and extended context as optional settings for
+an external vLLM server. Application-level document cache remains separate
+(ADR-030).
 
 ## Context
 
@@ -33,7 +37,8 @@ Local multi-agent RAG performance depends on the model, server, hardware, contex
 - A: Server-default cache format. Broad compatibility, but it may use more memory
 - B: Smaller context. Lower memory use, but less room for retrieved evidence
 - C: Sequential tools. Predictable resource use, but independent calls cannot overlap
-- D: Optional FP8 plus bounded parallel tools (Selected). Exposes useful controls without claiming universal gains
+- D: Optional FP8 plus native graph handoffs (Selected). Keeps server controls
+  at their real owner without claiming universal gains
 
 ### Historical decision framework
 
@@ -47,7 +52,11 @@ The 2025 scores were planning judgments. They are not benchmark results.
 
 ## Decision
 
-Enable bounded parallel tool execution in the supervisor. When an operator selects an external vLLM server, expose the FP8 cache and FlashInfer settings as an optional deployment profile. Do not treat either setting as a performance guarantee.
+Use the compiled supervisor graph's native handoff behavior. Do not expose an
+application concurrency setting until a live orchestration boundary can consume
+it. When an operator selects an external vLLM server, expose the FP8 cache and
+FlashInfer settings as an optional deployment profile. Do not treat either
+setting as a performance guarantee.
 
 Measure time to first token, end-to-end latency, prefill and decode throughput, peak host memory, peak accelerator memory, and failure rate. Record the model, backend, hardware, context size, concurrency, and corpus with each result.
 
@@ -68,7 +77,7 @@ graph TD
 - FR‑1: Validate and record external vLLM context, cache, and attention settings
   for operator-managed server launch; inference requests do not forward
   server-only cache or attention controls
-- FR‑2: Execute independent tools with bounded parallelism
+- FR‑2: Execute graph handoffs through LangGraph's native routing primitives
 
 ### Non-Functional Requirements
 
@@ -90,23 +99,22 @@ graph TD
 ### Architecture Overview
 
 - The external vLLM process owns cache and attention settings
-- The supervisor owns bounded parallel tool execution
+- LangGraph owns supervisor handoff scheduling
 
 ### Implementation Details
 
-In `src/config/settings.py`:
+Inspect external vLLM launch configuration independently from DocMind:
 
-```python
-backend = settings.llm_backend
-parallel_tools = settings.agents.enable_parallel_tool_execution
-vllm_cache_dtype = settings.vllm.kv_cache_dtype
+```bash
+vllm serve Qwen/Qwen3-4B-Instruct-2507-FP8 \
+  --max-model-len 131072 \
+  --kv-cache-dtype fp8_e5m2
 ```
 
 Notes:
 
-- Prefer expressing parallelism at the orchestration layer (LangGraph tool execution)
-  using bounded concurrency (e.g., `RunnableConfig.max_concurrency` / supervisor
-  settings). Avoid hiding `asyncio.gather(...)` inside tool implementations.
+- Prefer LangGraph's native orchestration primitives. Avoid hiding
+  `asyncio.gather(...)` inside tool implementations.
 - Keep tools sync-callable (`BaseTool.invoke(...)`) unless the full orchestration is
   migrated end-to-end to async. This preserves compatibility with the current
   `agent.invoke(...)` execution model (ADR-011).
@@ -114,9 +122,8 @@ Notes:
 ### Configuration
 
 ```env
-DOCMIND_VLLM__CONTEXT_WINDOW=131072
-DOCMIND_VLLM__KV_CACHE_DTYPE=fp8_e5m2
-DOCMIND_AGENTS__ENABLE_PARALLEL_TOOL_EXECUTION=true
+DOCMIND_LLM_REQUEST__CONTEXT_WINDOW=131072
+DOCMIND_VLLM_BASE_URL=http://localhost:8000/v1
 ```
 
 ## Testing
@@ -130,16 +137,14 @@ uv run pytest tests/unit/config/test_integrations.py \
 
 ### Positive Outcomes
 
-- Operators can record external vLLM deployment values with
-  `DOCMIND_VLLM__*` and orchestration values with `DOCMIND_AGENTS__*`; the
-  application does not install vLLM or FlashInfer
-- Bounded parallelism is controlled at one orchestration boundary
+- Operators configure vLLM deployment values on the external server; the application does not install or launch vLLM or FlashInfer
+- Handoff scheduling has one owner in the compiled graph
 - Performance claims require reproducible evidence
 
 ### Negative Consequences / Trade-offs
 
 - FP8 requires backend and hardware compatibility
-- Parallel work can increase contention or provider load
+- Native parallel handoffs can increase contention or provider load
 
 ### Ongoing Maintenance & Considerations
 
@@ -149,10 +154,13 @@ uv run pytest tests/unit/config/test_integrations.py \
 ### Dependencies
 
 - Server-side (optional): vLLM with a compatible attention backend and accelerator runtime.
-- Python app: no vLLM or FlashInfer dependencies. The provider factory uses OpenAI-compatible HTTP with the direct OpenAI, LlamaIndex, LangGraph, and LangChain dependencies.
+- Python app: no vLLM or FlashInfer dependencies. The provider factory uses
+  OpenAI-compatible HTTP through LlamaIndex and LangChain; those integrations
+  own the transitive OpenAI SDK dependency.
 
 ## Changelog
 
+- 10.0 (2026-07-13): Remove the no-op parallel-execution setting and keep handoff scheduling at the LangGraph boundary
 - 9.2 (2026-07-10): Replace unverified performance guarantees with environment-specific measurements; clarify that vLLM is an optional external server and parallel-tool gains require comparison
 - 9.0 (2025-08-26): Separated from application cache (ADR‑030); FP8 + parallel tools focus
 - 8.1 (2025-08-20): Verified supervisor parameters for parallelism

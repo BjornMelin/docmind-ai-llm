@@ -37,11 +37,6 @@ def test_encrypt_file_with_key_round_trip(monkeypatch, keylen):
         monkeypatch: Pytest fixture for manipulating environment variables.
         keylen: AES key length in bytes (32).
     """
-    try:
-        from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa: F401
-    except Exception:
-        pytest.skip("cryptography not available")
-
     import base64
     import os as _os
 
@@ -68,11 +63,6 @@ def test_encrypt_file_with_kid_aad(monkeypatch, tmp_path):
     With correct KID, decrypt succeeds; with wrong KID, decrypt_file returns
     the original .enc path (graceful failure).
     """
-    try:
-        from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa: F401
-    except Exception:
-        pytest.skip("cryptography not available")
-
     import base64
 
     key = b"x" * 32
@@ -99,11 +89,6 @@ def test_encrypt_file_with_kid_aad(monkeypatch, tmp_path):
 
 def test_encrypt_file_delete_plaintext(monkeypatch, tmp_path):
     """When DOCMIND_IMG_DELETE_PLAINTEXT=1, original file is removed on success."""
-    try:
-        from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa: F401
-    except Exception:
-        pytest.skip("cryptography not available")
-
     import base64
     import os as _os
 

@@ -12,7 +12,7 @@ def test_openai_like_env_mapping(monkeypatch):
     monkeypatch.setenv("DOCMIND_OPENAI__BASE_URL", "http://127.0.0.1:1234/v1")
     monkeypatch.setenv("DOCMIND_LLM_REQUEST_TIMEOUT_SECONDS", "222")
     monkeypatch.setenv("DOCMIND_LMSTUDIO_BASE_URL", "http://127.0.0.1:1234/v1")
-    monkeypatch.setenv("DOCMIND_VLLM__VLLM_BASE_URL", "http://127.0.0.1:8000")
+    monkeypatch.setenv("DOCMIND_VLLM_BASE_URL", "http://127.0.0.1:8000")
 
     cfg = DocMindSettings()
     assert cfg.openai.api_key is not None
@@ -20,4 +20,4 @@ def test_openai_like_env_mapping(monkeypatch):
     assert str(cfg.openai.base_url).endswith("/v1")
     assert cfg.llm_request_timeout_seconds == 222
     assert str(cfg.lmstudio_base_url).endswith("/v1")
-    assert str(cfg.vllm.vllm_base_url).rstrip("/") == "http://127.0.0.1:8000"
+    assert str(cfg.vllm_base_url).rstrip("/") == "http://127.0.0.1:8000/v1"

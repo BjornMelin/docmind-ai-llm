@@ -1,8 +1,8 @@
 ---
 spec: SPEC-012
 title: Observability: OpenTelemetry Tracing & Metrics
-version: 1.2.0
-date: 2026-01-09
+version: 1.3.0
+date: 2026-07-14
 owners: ["ai-arch"]
 status: Accepted
 related_requirements:
@@ -96,10 +96,9 @@ Spans are present in these code paths (no-op unless tracing is enabled):
 | Component | Span name | Attributes / events |
 | --- | --- | --- |
 | Ingestion (`src/processing/ingestion_pipeline.py`) | `ingest_documents` | `docmind.document_count` |
-| Snapshot (`src/persistence/snapshot.py`) | `snapshot.write_manifest` / `snapshot.finalize` / `snapshot.persist_vector` / `snapshot.persist_graph` | (no attributes currently) |
+| Snapshot (`src/persistence/snapshot.py`) | `snapshot.write_manifest` / `snapshot.finalize` / `snapshot.persist_graph` | (no attributes currently) |
 | Router build (`src/retrieval/router_factory.py`) | `router_factory.build_router_engine` | attrs: `router.adapter_name`, `router.kg_requested`, `router.hybrid_requested`, `router.kg_enabled`; event: `router_selected` (`tool.count`, `tool.names`) |
-| Router tool (`src/agents/tools/router_tool.py`) | `router_tool.query` | attrs: `router.query.length`, `router.engine.available`, `router.selected_strategy`, `router.success`, `router.latency_ms`, … |
-| Coordinator (`src/agents/coordinator.py`) | `coordinator.process_query` | attrs: `coordinator.thread_id`, `query.length`, `coordinator.workflow_timeout`, `coordinator.fallback` |
+| Coordinator (`src/agents/coordinator.py`) | `coordinator.process_query` | attrs: `coordinator.thread_id`, `query.length`, `coordinator.workflow_timeout`, `coordinator.success`, `coordinator.processing_time_ms` |
 | Chat UI (`src/pages/01_chat.py`) | `chat.staleness_check` | attrs: `snapshot.id`, `snapshot.is_stale` |
 | Graph export helper (`src/telemetry/opentelemetry.py`) | `graph_export.<fmt>` | attrs: `graph.export.adapter_name`, `graph.export.format`, `graph.export.depth`, `graph.export.seed_count`; event: `export_performed` (`file.name`, `size.bytes`) |
 
@@ -141,8 +140,11 @@ Canonical event keys used by requirements/tests:
   - `dedup.key`, `dedup.before`, `dedup.after`, `dedup.dropped`
 - Rerank:
   - `rerank.stage`, `rerank.topk`, `rerank.latency_ms`, `rerank.timeout` (+ optional `rerank.batch_size`, `rerank.processed_count`, `rerank.processed_batches`)
-- Routing event:
-  - `router_selected: true`, plus `route`, `timing_ms`, and `traversal_depth` when `route=="knowledge_graph"`
+- Canonical router boundary:
+  - `retrieval.backend=llama_index_router` plus `retrieval.outcome`
+  - Router construction records the OpenTelemetry `router_selected` event with
+    `tool.count` and `tool.names`; local JSONL does not record per-query route or
+    graph traversal depth
 - Snapshot staleness event:
   - `snapshot_stale_detected: true`, plus `snapshot_id`, `reason`
 - Export event:
@@ -163,11 +165,6 @@ Feature: Observability bootstrap
     Then SDK tracer and meter providers SHALL be installed
     And subsequent calls SHALL be idempotent
 
-Feature: Instrumented operations
-  Scenario: Router tool emits traversal depth for KG route
-    Given router_tool selects knowledge_graph
-    Then a JSONL event SHALL include traversal_depth (int)
-
 Feature: Shutdown semantics
   Scenario: Tests can reset providers
     Given observability has been configured
@@ -184,5 +181,6 @@ Feature: Shutdown semantics
   - `tests/unit/telemetry/test_telemetry_schema_assertions.py`
   - `tests/unit/telemetry/test_rotation_sampling.py`
 - Feature telemetry tests:
-  - `tests/unit/agents/test_router_tool_telemetry.py` (traversal depth)
-  - `tests/unit/ui/test_documents_snapshot_utils.py` (export event payloads)
+  - `tests/unit/pages/test_documents_page_helpers.py` (manual export event safety)
+  - `tests/unit/persistence/test_snapshot_service.py` (snapshot export outcomes)
+  - `tests/integration/test_graphrag_exports.py` (native graph export behavior)

@@ -44,7 +44,7 @@ NVIDIA CUDA (Linux x86_64 validated; WSL2 best effort):
 
 ```bash
 uv sync --frozen --no-group cpu --extra gpu
-uv run python -m spacy download en_core_web_sm
+uv run --no-sync python -m spacy download en_core_web_sm
 export DOCMIND_SPACY__DEVICE=auto  # or cuda
 export DOCMIND_SPACY__GPU_ID=0
 ```
@@ -53,7 +53,7 @@ Apple Silicon (macOS arm64):
 
 ```bash
 uv sync --frozen --extra apple
-uv run python -m spacy download en_core_web_sm
+uv run --no-sync python -m spacy download en_core_web_sm
 export DOCMIND_SPACY__DEVICE=auto  # or apple
 ```
 

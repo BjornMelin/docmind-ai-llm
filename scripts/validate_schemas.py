@@ -31,36 +31,15 @@ def _load_schema(name: str) -> dict[str, Any]:
 
 
 BEIR_SCHEMA = Draft202012Validator(_load_schema("leaderboard_beir.schema.json"))
-RAGAS_SCHEMA = Draft202012Validator(_load_schema("leaderboard_ragas.schema.json"))
-
-
-def guess_leaderboard_type(header: list[str]) -> str:
-    """Return leaderboard type based on header fields ("beir" or "ragas")."""
-    if any(h.startswith("ndcg@") for h in header):
-        return "beir"
-    if {
-        "faithfulness",
-        "answer_relevancy",
-        "context_recall",
-        "context_precision",
-    }.issubset(set(header)):
-        return "ragas"
-    return "unknown"
 
 
 def validate_file(path: Path) -> None:
-    """Validate a single leaderboard CSV file against the appropriate schema."""
+    """Validate a single BEIR leaderboard CSV file."""
     with path.open("r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         if reader.fieldnames is None:
             raise ValueError(f"Empty or invalid CSV: {path}")
         header = list(reader.fieldnames)
-        kind = guess_leaderboard_type(header)
-        if kind == "unknown":
-            raise ValueError(
-                f"Cannot determine leaderboard type for {path}; header={header}"
-            )
-        validator = BEIR_SCHEMA if kind == "beir" else RAGAS_SCHEMA
 
         def get_header_k(hdr: list[str]) -> int:
             dyn = [h for h in hdr if re.match(r"^(ndcg|recall|mrr)@\d+$", h)]
@@ -93,29 +72,10 @@ def validate_file(path: Path) -> None:
                         out[key] = 0.0
             return out
 
-        def normalize_ragas(row: dict[str, str]) -> dict[str, object]:
-            out: dict[str, object] = dict(row)
-            for key in (
-                "faithfulness",
-                "answer_relevancy",
-                "context_recall",
-                "context_precision",
-            ):
-                try:
-                    out[key] = float(row.get(key, "nan"))
-                except (TypeError, ValueError):
-                    out[key] = 0.0
-            out["sample_count"] = int(row.get("sample_count", 0) or 0)
-            return out
-
-        header_k = get_header_k(header) if kind == "beir" else None
+        header_k = get_header_k(header)
 
         for row_count, row in enumerate(reader, start=1):
-            data = (
-                normalize_beir(row, int(header_k))  # type: ignore[arg-type]
-                if kind == "beir"
-                else normalize_ragas(row)
-            )
+            data = normalize_beir(row, header_k)
 
             # Validate static fields present
             for field in ("schema_version", "dataset", "ts"):
@@ -123,7 +83,7 @@ def validate_file(path: Path) -> None:
                     raise ValueError(f"Missing {field} in row {row_count} of {path}")
 
             if errors := sorted(
-                validator.iter_errors(cast(Any, data)),
+                BEIR_SCHEMA.iter_errors(cast(Any, data)),
                 key=lambda e: e.path,
             ):
                 msg = "; ".join(

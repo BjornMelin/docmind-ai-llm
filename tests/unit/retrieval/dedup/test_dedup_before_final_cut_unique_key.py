@@ -41,6 +41,10 @@ def test_dedup_unique_by_doc_id(monkeypatch):
     Args:
         monkeypatch: pytest fixture for mocking object attributes.
     """
+    monkeypatch.setattr(
+        "src.retrieval.hybrid.check_hybrid_collection",
+        lambda *_args, **_kwargs: SimpleNamespace(compatible=True),
+    )
     params = HybridParams(
         collection="c", fused_top_k=10, fusion_mode="rrf", dedup_key="doc_id"
     )

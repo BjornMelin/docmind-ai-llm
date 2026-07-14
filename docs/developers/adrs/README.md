@@ -12,8 +12,8 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
   Scope: Supervisor/orchestration patterns and agent tool integration
 - **[ADR-066 — LlamaIndex Workflows Evaluation Without Runtime Replacement](ADR-066-llamaindex-workflows-orchestration-evaluation.md)**\
   Scope: Issue #86 decision to keep LangGraph as default and gate any future LlamaIndex Workflows pilot
-- **[ADR-056 — Agent Deadline Propagation + Router Injection](ADR-056-agent-deadline-propagation-and-router-injection.md)**  
-  Scope: Cooperative time budgets, injected router engines, and retrieval contract correctness
+- **[ADR-056 — Authoritative Agent Deadlines and Canonical Router Retrieval](ADR-056-agent-deadline-propagation-and-router-injection.md)**
+  Scope: Mandatory wall-clock budgets and one native router retrieval boundary
 - **[ADR-027 — Implementation Experience (meta)](ADR-027-implementation-experience.md)**  
   Scope: Cross-ADR integration learnings and validation
 
@@ -23,8 +23,8 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
   Scope: Unified dense/sparse embeddings centered on BGE-M3
 - **[ADR-003 — Adaptive Retrieval Pipeline](ADR-003-adaptive-retrieval-pipeline.md)**  
   Scope: Router/strategy selection and hierarchical retrieval
-- **[ADR-037 — Multimodal Reranking with ColPali (visual) and BGE v2‑m3 (text)](ADR-037-multimodal-reranking-architecture.md)**  
-  Scope: Modality-aware reranking; ColPali for visuals, BGE v2‑m3 for text
+- **[ADR-037 — Multimodal reranking with SigLIP and BGE](ADR-037-multimodal-reranking-architecture.md)**
+  Scope: Modality-aware reranking with SigLIP for visuals and BGE v2‑m3 for text
 - **[ADR-019 — Optional GraphRAG Module](ADR-019-optional-graphrag.md)**  
   Scope: Property graph/graph retrieval integrations
 - **[ADR-038 — GraphRAG Persistence and Router Integration](ADR-038-graphrag-persistence-and-router.md)**  
@@ -58,12 +58,12 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
 
 - **[ADR-030 — Cache Unification via LlamaIndex IngestionCache (DuckDBKVStore)](ADR-030-cache-unification-ingestioncache-duckdbkvstore.md)**  
   Scope: Document-processing cache, single-file DuckDB KV store
-- **[ADR-031 — Local-First Persistence Architecture (Vectors, Cache, Operational Data)](ADR-031-local-first-persistence-architecture.md)**  
-  Scope: Separation of vectors (Qdrant), processing cache (DuckDB), ops data (SQLite)
-- **[ADR-055 — Operational Metadata Store (SQLite WAL)](ADR-055-operational-metadata-sqlite-wal.md)**  
-  Scope: Transactional, local-only ops state for background jobs and snapshot events
-- **[ADR-035 — Application-Level Semantic Cache](ADR-035-semantic-cache-qdrant.md)**  
-  Scope: Optional semantic response caching (backend pluggable; offline-first)
+- **[ADR-031 — Local-First Persistence Architecture (Vectors, Cache, Snapshots)](ADR-031-local-first-persistence-architecture.md)**
+  Scope: Separate owners for vectors, processing cache, snapshots, and chat state
+- **[ADR-055 — Operational Metadata Store (SQLite WAL) (Superseded)](ADR-055-operational-metadata-sqlite-wal.md)**
+  Scope: Rejected shared ops store; historical context only
+- **[ADR-035 — Application-Level Semantic Cache (Superseded)](ADR-035-semantic-cache-qdrant.md)**
+  Scope: Retired v1 response cache and its privacy and purge-correctness rationale
 - **[ADR-058 — Final Multimodal Pipeline + Cognitive Persistence](ADR-058-final-multimodal-pipeline-and-persistence.md)**  
   Scope: End-to-end multimodal (PDF images → retrieval → UI) + durability invariants (no blobs/paths in durable stores)
 
@@ -88,8 +88,6 @@ This page provides a quick, opinionated index of all Architectural Decision Reco
 
 ## Prompt & LLM Optimization
 
-- **[ADR-018 — Automatic Prompt Optimization with DSPy](ADR-018-prompt-optimization-dspy.md)**  
-  Scope: DSPy-based prompt optimization patterns
 - **[ADR-020 — Dynamic Prompt Template & Response Configuration](ADR-020-prompt-template-system.md)**  
   Scope: Template system, response shaping and configuration
 - **[ADR-004 — Local-First LLM Strategy](ADR-004-local-first-llm-strategy.md)**  
@@ -123,6 +121,7 @@ These ADRs are kept for historical context only and MUST NOT be implemented. See
 - **[ADR-036 — Reranker UI Controls (Superseded)](superseded/ADR-036-reranker-ui-controls-normalize-topn.md)**
 - **[ADR-054 — Config Surface Pruning (Unused Knobs) (Superseded)](superseded/ADR-054-config-surface-pruning-unused-knobs.md)**
 - **[ADR-057 — Chat Persistence + Hybrid Agentic Memory (LangGraph SQLite) (Superseded by ADR-058)](superseded/ADR-057-chat-persistence-langgraph-sqlite-hybrid-memory.md)**
+- **[ADR-018 — Automatic Prompt Optimization with DSPy (Superseded)](ADR-018-prompt-optimization-dspy.md)**
 - **[ADR-013.1 — User Interface Architecture (Full) (Superseded by ADR-013)](superseded/ADR-013.1-user-interface-architecture-full.md)**
 
 ---
@@ -132,7 +131,7 @@ Latest additions:
 - **ADR-039 (Accepted)** — Offline evaluation CLIs
 - **ADR-040 (Accepted)** — Model predownload CLI
 - **ADR-041–ADR-053 (Proposed)** — Release Readiness work packages
-- **ADR-055–ADR-056 (Proposed)** — Ops metadata + agent deadline propagation work packages
+- **ADR-055 (Superseded), ADR-056 (Implemented)** — Ops metadata proposal; authoritative deadlines and canonical router retrieval
 - **ADR-059 (Accepted)** — Ollama native capabilities + cloud gating
 - **ADR-060 (Accepted)** — Dotenv override modes and env overlay
 - **ADR-061 (Accepted)** — Centralized spaCy NLP subsystem
@@ -156,5 +155,5 @@ Latest additions:
 - **[ADR-051 — Documents Snapshot Service Boundary](ADR-051-documents-snapshot-service-boundary.md)**
 - **[ADR-052 — Background Ingestion Jobs (Threads + Fragments)](ADR-052-background-ingestion-jobs.md)**
 - **[ADR-053 — Analytics Page Hardening](ADR-053-analytics-page-hardening.md)**
-- **[ADR-055 — Operational Metadata Store (SQLite WAL)](ADR-055-operational-metadata-sqlite-wal.md)**
-- **[ADR-056 — Agent Deadline Propagation + Router Injection](ADR-056-agent-deadline-propagation-and-router-injection.md)**
+- **[ADR-055 — Operational Metadata Store (SQLite WAL) (Superseded)](ADR-055-operational-metadata-sqlite-wal.md)**
+- **[ADR-056 — Authoritative Agent Deadlines and Canonical Router Retrieval](ADR-056-agent-deadline-propagation-and-router-injection.md)**

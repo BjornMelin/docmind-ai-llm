@@ -29,9 +29,6 @@ def test_reranking_timeouts_and_final_telemetry(monkeypatch):  # type: ignore[no
         rmod.settings.retrieval, "siglip_timeout_ms", 210, raising=False
     )
     monkeypatch.setattr(
-        rmod.settings.retrieval, "colpali_timeout_ms", 432, raising=False
-    )
-    monkeypatch.setattr(
         rmod.settings.retrieval, "total_rerank_budget_ms", 999, raising=False
     )
     monkeypatch.setattr(rmod.settings.retrieval, "reranking_top_k", 3, raising=False)
