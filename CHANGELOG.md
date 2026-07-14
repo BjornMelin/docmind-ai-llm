@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [2.0.0](https://github.com/BjornMelin/docmind-ai-llm/compare/v1.0.0...v2.0.0) (2026-07-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* complete DocMind v2 modernization
+
+### Features
+
+* complete DocMind v2 modernization ([c2d5fc3](https://github.com/BjornMelin/docmind-ai-llm/commit/c2d5fc381b4b9e835bd8d1c57e4bdcd2c3e4315b))
+
 ## [Unreleased]
 
 ## [1.0.0](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.9.0...v1.0.0) (2026-07-11)
