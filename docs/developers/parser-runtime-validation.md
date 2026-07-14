@@ -57,25 +57,22 @@ Latency covers isolated parser-worker execution. It does not include application
 
 `network_egress` is recorded as `NOT_MEASURED`. The harness does not instrument the host network, so the artifact is not evidence of network isolation. Parser model preflight and application endpoint policy are separate controls.
 
-### v1.0.0 release baseline
+### v2 release-candidate baseline
 
-The checked-in schema 3 artifact records the v1.0.0 baseline. It was generated
-from clean commit
-`90e20793afe882976712b617197af7d8cf4ac1aa` on Linux under WSL2 with
-CPython 3.12.13. It records Docling 2.92.0, pypdfium2 5.7.1, RapidOCR
-3.8.1, and ONNX Runtime 1.23.2.
+The checked-in schema 3 artifact records the v2 release-candidate baseline. It
+was generated from clean commit
+`77c8a62370712cca172392d64c055e30535266c0` on Linux under WSL2 with
+CPython 3.12.13. It records Docling 2.112.0, pypdfium2 5.11.0, RapidOCR
+3.9.1, and ONNX Runtime 1.27.0.
 
 - 8 of 8 fixtures passed their content assertions.
 - All 8 fixtures produced identical output hashes across three isolated runs.
 - No parser errors occurred.
-- `summary.latency_ms_median` is 4225.272 ms and
-  `summary.latency_ms_max` is 4857.878 ms.
-- `summary.rss_mb_max` is 1242.629 MiB.
+- `summary.latency_ms_median` is 4976.170 ms and
+  `summary.latency_ms_max` is 5719.963 ms.
+- `summary.rss_mb_max` is 1304.359 MiB.
 
 These values are a workstation-specific regression baseline, not a
 cross-platform performance promise. The fixture hashes, individual results,
 runtime identity, and unrounded values live in
 `docs/benchmarks/parser-runtime-validation.json`.
-
-The v2 baseline is pending regeneration from a clean v2 commit. Do not cite the
-checked-in v1.0.0 artifact as v2 release evidence.
