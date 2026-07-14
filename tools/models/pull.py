@@ -34,15 +34,6 @@ _SIGLIP_TRANSFORMERS_FILES = (
     "tokenizer_config.json",
 )
 
-_BGE_RERANKER_TRANSFORMERS_FILES = (
-    "config.json",
-    "model.safetensors",
-    "sentencepiece.bpe.model",
-    "special_tokens_map.json",
-    "tokenizer.json",
-    "tokenizer_config.json",
-)
-
 
 def pull(pairs: Iterable[tuple[str, str]], cache_dir: Path) -> None:
     """Download a list of (repo_id, filename) pairs into the cache directory.
@@ -116,7 +107,7 @@ def pull_bm42_snapshot(cache_dir: Path) -> None:
 
 
 def pull_bge_reranker_snapshot(cache_dir: Path) -> None:
-    """Download the pinned CrossEncoder BGE reranker snapshot."""
+    """Download the complete pinned CrossEncoder snapshot for offline reuse."""
     from src.config.embedding_defaults import (
         DEFAULT_BGE_RERANKER_MODEL_ID,
         DEFAULT_BGE_RERANKER_MODEL_REVISION,
@@ -125,7 +116,6 @@ def pull_bge_reranker_snapshot(cache_dir: Path) -> None:
     path = snapshot_download(
         repo_id=DEFAULT_BGE_RERANKER_MODEL_ID,
         revision=DEFAULT_BGE_RERANKER_MODEL_REVISION,
-        allow_patterns=list(_BGE_RERANKER_TRANSFORMERS_FILES),
         cache_dir=str(cache_dir),
         local_files_only=False,
     )

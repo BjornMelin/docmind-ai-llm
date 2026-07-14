@@ -17,7 +17,6 @@ from src.config.embedding_defaults import (
 )
 from tools.models.pull import (
     _BGE_M3_IGNORE_PATTERNS,
-    _BGE_RERANKER_TRANSFORMERS_FILES,
     _SIGLIP_TRANSFORMERS_FILES,
     main,
     pull,
@@ -140,7 +139,7 @@ def test_pull_bge_m3_snapshot_excludes_duplicate_onnx_weights(tmp_path: Path) ->
     assert set(call["ignore_patterns"]) == set(_BGE_M3_IGNORE_PATTERNS)  # type: ignore[arg-type]
 
 
-def test_pull_bge_reranker_uses_complete_pinned_transformers_files(
+def test_pull_bge_reranker_fetches_the_complete_pinned_snapshot(
     tmp_path: Path,
 ) -> None:
     """Fetch the runtime CrossEncoder snapshot at its immutable revision."""
@@ -156,9 +155,8 @@ def test_pull_bge_reranker_uses_complete_pinned_transformers_files(
     call = calls[0]
     assert call["repo_id"] == DEFAULT_BGE_RERANKER_MODEL_ID
     assert call["revision"] == DEFAULT_BGE_RERANKER_MODEL_REVISION
-    assert set(call["allow_patterns"]) == set(  # type: ignore[arg-type]
-        _BGE_RERANKER_TRANSFORMERS_FILES
-    )
+    assert "allow_patterns" not in call
+    assert call["local_files_only"] is False
 
 
 def test_pull_bm42_uses_complete_pinned_fastembed_files(tmp_path: Path) -> None:
