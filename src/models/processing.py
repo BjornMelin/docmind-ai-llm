@@ -60,6 +60,14 @@ class IngestionConfig(BaseModel):
         le=64,
         description="Batch size used when embedding and indexing page images",
     )
+    image_collection_name: str | None = Field(
+        default=None,
+        description="Physical image collection owned by this ingestion build",
+    )
+    strict_image_indexing: bool = Field(
+        default=False,
+        description="Fail the build unless every page image is indexed and verified",
+    )
     cache_dir: Path | None = Field(
         default=None, description="Optional directory for LlamaIndex cache"
     )

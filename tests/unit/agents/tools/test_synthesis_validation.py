@@ -8,15 +8,42 @@ no external I/O, deterministic assertions.
 from __future__ import annotations
 
 import json
+from typing import Any, cast
 
 import pytest
+from langchain_core.messages import HumanMessage
+from langgraph.types import Command
 
 from src.agents.tools.synthesis import synthesize_results
 from src.agents.tools.validation import validate_response
 
 
+def _synthesis_payload(sub_results: object, query: str) -> dict[str, Any]:
+    turn_id = "validation-turn"
+    if isinstance(sub_results, list):
+        retrieval_results = [
+            {"turn_id": turn_id, "retrieval_id": f"batch-{index}", **result}
+            if isinstance(result, dict)
+            else result
+            for index, result in enumerate(sub_results)
+        ]
+    else:
+        retrieval_results = sub_results
+    command = synthesize_results.func(  # type: ignore[attr-defined]
+        state={
+            "messages": [HumanMessage(content=query)],
+            "retrieval_results": retrieval_results,
+            "turn_id": turn_id,
+        },
+        tool_call_id="synthesis-call",
+    )
+    assert isinstance(command, Command)
+    assert isinstance(command.update, dict)
+    return cast(dict[str, Any], command.update["synthesis_result"])
+
+
 @pytest.mark.unit
-def test_synthesize_results_deduplicates_and_ranks() -> None:
+def test_synthesize_results_preserves_each_batch_order_and_fairness() -> None:
     sub_results = [
         {
             "strategy_used": "vector",
@@ -34,12 +61,9 @@ def test_synthesize_results_deduplicates_and_ranks() -> None:
     ]
 
     # Call underlying function to avoid tool run-manager plumbing
-    result = json.loads(
-        synthesize_results.func(json.dumps(sub_results), "pytest python")  # type: ignore[attr-defined]
-    )
+    result = _synthesis_payload(sub_results, "pytest python")
 
-    # At least one of the first two documents should be deduped due to high overlap
-    assert len(result["documents"]) in {2, 3}
+    assert [document["id"] for document in result["documents"]] == [1, 3, 2]
     # Metadata present and consistent
     meta = result["synthesis_metadata"]
     assert meta["original_count"] == 3
@@ -48,10 +72,38 @@ def test_synthesize_results_deduplicates_and_ranks() -> None:
 
 
 @pytest.mark.unit
-def test_synthesize_results_invalid_json_returns_error() -> None:
-    out = json.loads(synthesize_results.func("not-json", "query"))  # type: ignore[attr-defined]
+def test_synthesize_results_invalid_state_returns_error() -> None:
+    out = _synthesis_payload("not-a-list", "query")
     assert out["documents"] == []
     assert out["error"] == "Invalid input format"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "decoded",
+    [
+        {"documents": []},
+        [{"documents": {}}],
+        [{"documents": ["not-a-document"]}],
+        [{"documents": [], "processing_time_ms": "fast"}],
+    ],
+)
+def test_synthesize_results_rejects_wrong_decoded_shapes(decoded: object) -> None:
+    out = _synthesis_payload(decoded, "query")
+    assert out == {
+        "documents": [],
+        "error": "Invalid input format",
+        "synthesis_metadata": {},
+        "turn_id": "validation-turn",
+    }
+
+
+@pytest.mark.unit
+def test_synthesize_results_ignores_unattributed_historical_entries() -> None:
+    out = _synthesis_payload(["not-a-retrieval-batch"], "query")
+
+    assert out["documents"] == []
+    assert "error" not in out
 
 
 @pytest.mark.unit

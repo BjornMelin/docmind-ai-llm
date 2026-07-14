@@ -25,4 +25,3 @@ def test_post_model_hook_attaches_metrics_without_structured_mode():
     assert isinstance(om, dict)
     assert om.get("optimization_enabled") is True
     assert "context_used_tokens" in om
-    assert "kv_cache_usage_gb" in om

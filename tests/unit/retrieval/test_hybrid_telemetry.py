@@ -17,7 +17,7 @@ def test_hybrid_retrieval_telemetry_emits_backend_and_timeout(monkeypatch):  # t
     hmod = importlib.import_module("src.retrieval.hybrid")
     monkeypatch.setattr(
         hmod,
-        "ensure_hybrid_collection",
+        "check_hybrid_collection",
         lambda *_args, **_kwargs: type("_Compatibility", (), {"compatible": True})(),
     )
 
@@ -81,6 +81,7 @@ def test_hybrid_retrieval_telemetry_emits_backend_and_timeout(monkeypatch):  # t
         dedup_key="page_id",
     )
     retr = hmod.ServerHybridRetriever(params, client=_Client())
+    monkeypatch.setattr(retr, "_encode_sparse", lambda _text: None)
     out = retr.retrieve("q")
     assert isinstance(out, list)
 
@@ -105,7 +106,7 @@ def test_hybrid_dbsf_telemetry_omits_rrf_k(monkeypatch) -> None:  # type: ignore
     hmod = importlib.import_module("src.retrieval.hybrid")
     monkeypatch.setattr(
         hmod,
-        "ensure_hybrid_collection",
+        "check_hybrid_collection",
         lambda *_args, **_kwargs: SimpleNamespace(compatible=True),
     )
     events: list[dict[str, Any]] = []
@@ -130,13 +131,19 @@ def test_hybrid_dbsf_telemetry_omits_rrf_k(monkeypatch) -> None:  # type: ignore
 def test_hybrid_schema_check_uses_current_embedding_dimension(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """Pass the live settings dimension instead of the storage default."""
     hmod = importlib.import_module("src.retrieval.hybrid")
-    dimensions: list[int] = []
+    checks: list[tuple[int, bool]] = []
 
-    def _ensure(_client: object, _collection: str, *, dense_dim: int) -> object:
-        dimensions.append(dense_dim)
+    def _check(
+        _client: object,
+        _collection: str,
+        *,
+        dense_dim: int,
+        sparse_enabled: bool,
+    ) -> object:
+        checks.append((dense_dim, sparse_enabled))
         return SimpleNamespace(compatible=True)
 
-    monkeypatch.setattr(hmod, "ensure_hybrid_collection", _ensure)
+    monkeypatch.setattr(hmod, "check_hybrid_collection", _check)
     monkeypatch.setattr(
         hmod,
         "settings",
@@ -148,4 +155,4 @@ def test_hybrid_schema_check_uses_current_embedding_dimension(monkeypatch) -> No
         client=SimpleNamespace(close=lambda: None),
     )
 
-    assert dimensions == [1536]
+    assert checks == [(1536, True)]

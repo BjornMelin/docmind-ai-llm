@@ -27,25 +27,29 @@ def test_chat_router_override_flag_roundtrip() -> None:
 
     # Insert a dummy router engine and expect a mapping
     dummy = object()
-    st.session_state["router_engine"] = dummy
+    mod.replace_session_router(
+        st.session_state,
+        dummy,
+        runtime_generation=mod.settings.cache_version,
+    )
     override = get_override()
     assert isinstance(override, dict)
     assert override.get("router_engine") is dummy
 
 
-def test_chat_override_forwards_optional_retrieval_components() -> None:
-    """When retrieval components exist in session, they are forwarded."""
+def test_chat_override_ignores_raw_retrieval_components() -> None:
+    """The v2 coordinator boundary forwards only the prebuilt router."""
     st.session_state.clear()
     mod = importlib.import_module("src.pages.01_chat")
 
     st.session_state["vector_index"] = object()
-    st.session_state["hybrid_retriever"] = object()
     st.session_state["graphrag_index"] = object()
-    override = mod._get_settings_override()
-    assert isinstance(override, dict)
-    assert "vector" in override
-    assert override["vector"] is st.session_state["vector_index"]
-    assert "retriever" in override
-    assert override["retriever"] is st.session_state["hybrid_retriever"]
-    assert "kg" in override
-    assert override["kg"] is st.session_state["graphrag_index"]
+    assert mod._get_settings_override() is None
+
+    router = object()
+    mod.replace_session_router(
+        st.session_state,
+        router,
+        runtime_generation=mod.settings.cache_version,
+    )
+    assert mod._get_settings_override() == {"router_engine": router}

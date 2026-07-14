@@ -14,7 +14,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import asdict
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from loguru import logger
 
@@ -36,7 +39,11 @@ def _build_parser() -> argparse.ArgumentParser:
             "`settings.data_dir/backups`."
         ),
     )
-    create.add_argument("--include-uploads", action="store_true")
+    create.add_argument(
+        "--diagnostic-no-uploads",
+        action="store_true",
+        help="Omit uploads and create an incomplete diagnostic backup.",
+    )
     create.add_argument("--include-analytics", action="store_true")
     create.add_argument("--include-logs", action="store_true")
     create.add_argument(
@@ -53,7 +60,9 @@ def _build_parser() -> argparse.ArgumentParser:
     create.add_argument(
         "--no-qdrant-snapshot",
         action="store_true",
-        help="Disable best-effort Qdrant collection snapshots.",
+        help=(
+            "Omit required Qdrant snapshots and create an incomplete diagnostic backup."
+        ),
     )
     create.add_argument(
         "--json",
@@ -84,7 +93,7 @@ def _cmd_create(args: argparse.Namespace) -> int:
     dest_root = Path(args.dest).expanduser() if args.dest else None
     result = create_backup(
         dest_root=dest_root,
-        include_uploads=bool(args.include_uploads),
+        include_uploads=not bool(args.diagnostic_no_uploads),
         include_analytics=bool(args.include_analytics),
         include_logs=bool(args.include_logs),
         include_env=bool(args.include_env),
@@ -98,8 +107,10 @@ def _cmd_create(args: argparse.Namespace) -> int:
         "included": result.included,
         "bytes_written": result.bytes_written,
         "duration_ms": round(result.duration_ms, 2),
+        "complete": not bool(result.warnings),
         "warnings": result.warnings,
-        "qdrant_snapshots": [s.__dict__ for s in result.qdrant_snapshots],
+        "maintenance_warnings": result.maintenance_warnings,
+        "qdrant_snapshots": [asdict(snapshot) for snapshot in result.qdrant_snapshots],
     }
 
     if args.json:
@@ -108,11 +119,19 @@ def _cmd_create(args: argparse.Namespace) -> int:
         )
         return 0
 
-    logger.info("Backup created: {}", result.backup_dir)
+    if result.warnings:
+        logger.warning("Incomplete diagnostic backup created: {}", result.backup_dir)
+    else:
+        logger.info("Complete backup created: {}", result.backup_dir)
     logger.info("Included: {}", ", ".join(result.included) if result.included else "-")
     logger.info("Bytes written: {}", result.bytes_written)
     if result.warnings:
-        logger.warning("Warnings: {}", "; ".join(result.warnings))
+        logger.warning("Recoverability warnings: {}", "; ".join(result.warnings))
+    if result.maintenance_warnings:
+        logger.warning(
+            "Maintenance warnings: {}",
+            "; ".join(result.maintenance_warnings),
+        )
     return 0
 
 

@@ -1,9 +1,9 @@
 ---
 ADR: 018
 Title: Automatic Prompt Optimization with DSPy
-Status: Implemented
-Version: 2.0
-Date: 2025-08-19
+Status: Superseded
+Version: 3.0
+Date: 2026-07-13
 Supersedes:
 Superseded-by:
 Related: 001, 003, 004, 012
@@ -15,6 +15,15 @@ References:
 ## Description
 
 Adopt DSPy for automatic prompt optimization and query rewriting, starting zero‑shot and evolving to few‑shot with collected examples. Keep integration thin and local‑first.
+
+## Supersession
+
+The v2 architecture removes DSPy, its query-rewrite fan-out, and its runtime
+configuration. The supported retrieval path now sends the canonical user query
+directly to the selected retriever. The integration was optional, unavailable
+in the supported dependency set, and added custom fallback behavior without a
+validated retrieval-quality benefit. The original decision is retained below
+for historical context and must not be implemented.
 
 ## Context
 
@@ -162,6 +171,7 @@ def test_rewrite_smoke():
 
 ## Changelog
 
+- 3.0 (2026-07-13): Superseded by the v2 canonical-query retrieval hard cut
 - 2.1 (2025-08-22): Implementation complete
 - 2.0 (2025-08-19): FP8 model optimization for DSPy
 - 1.0 (2025-08-17): Initial design

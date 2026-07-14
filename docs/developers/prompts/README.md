@@ -1,19 +1,17 @@
-# DocMind — Implementation Prompts
+# DocMind implementation prompt archive
 
-This directory contains **fully-atomic, copy/paste implementation prompts** intended for a coding agent to execute work packages end-to-end (code + tests + docs + RTM).
+This directory preserves the implementation prompts used to ship DocMind v1.
+They record historical scope and commands; they are not the current execution
+contract after the v2 hard cut.
 
-Each prompt is self-contained and embeds DocMind’s “Implementation Executor Template” filled with feature-specific details and quality gates.
+Use `AGENTS.md`, `docs/PRD.md`, and current ADRs and specifications for new
+work. Use the canonical commands in `scripts/README.md` for verification.
 
-## How to use
+## Read the archive
 
-1. Pick the next work package prompt below.
-2. Paste the entire prompt into your coding agent.
-3. Run the required quality gates in the prompt before marking the package complete.
-4. Repeat until the release readiness prompt is satisfied.
-
-## Prompts (recommended order)
-
-1. `docs/developers/prompts/prompt-021-release-readiness-v1.md`
+`prompt-021-release-readiness-v1.md` is the completed v1 orchestration record.
+Files under `implemented/` show the atomic work packages that produced v1.
+Files under `superseded/` document proposals that current architecture replaced.
 
 ## Implemented prompts
 
@@ -32,7 +30,6 @@ Each prompt is self-contained and embeds DocMind’s “Implementation Executor 
 - `docs/developers/prompts/implemented/prompt-034-analytics-page-hardening.md`
 - `docs/developers/prompts/implemented/prompt-036-document-analysis-modes.md`
 - `docs/developers/prompts/implemented/prompt-037-local-backup-and-retention.md`
-- `docs/developers/prompts/implemented/prompt-038-semantic-cache-qdrant.md`
 - `docs/developers/prompts/implemented/prompt-040-agent-deadline-propagation-and-router-injection.md`
 - `docs/developers/prompts/implemented/prompt-041-chat-persistence-langgraph-sqlite-hybrid-memory.md`
 - `docs/developers/prompts/implemented/prompt-042-multimodal-ingestion.md`
@@ -46,6 +43,7 @@ Each prompt is self-contained and embeds DocMind’s “Implementation Executor 
 
 ## Superseded prompts (do not implement)
 
+- `docs/developers/prompts/implemented/prompt-038-semantic-cache-qdrant.md`
 - `docs/developers/prompts/superseded/prompt-024-chat-persistence-simplechatstore.md`
 - `docs/developers/prompts/superseded/prompt-035-config-surface-pruning-unused-knobs.md`
 

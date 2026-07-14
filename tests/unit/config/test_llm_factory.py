@@ -5,43 +5,57 @@ from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import SecretStr
 
 from src.config.llm_factory import build_llm
 from src.config.settings import DocMindSettings
 
 
-@pytest.mark.unit
-@pytest.mark.parametrize("backend", ["ollama", "openai_compatible", "vllm", "lmstudio"])
-def test_build_llm_openai_like_and_ollama(
-    backend: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Test LLM building for OpenAI-like backends and Ollama."""
+class _CaptureOpenAILike:
+    last_kwargs: dict[str, object] | None = None
+
+    def __init__(self, **kwargs: object) -> None:
+        type(self).last_kwargs = dict(kwargs)
+
+
+class _CaptureOllama:
+    last_kwargs: dict[str, object] | None = None
+
+    def __init__(self, **kwargs: object) -> None:
+        type(self).last_kwargs = dict(kwargs)
+
+
+def _install_capture_modules(monkeypatch: pytest.MonkeyPatch) -> None:
     openai_like_mod = ModuleType("llama_index.llms.openai_like")
     ollama_mod = ModuleType("llama_index.llms.ollama")
-
-    class _CaptureOpenAILike:
-        last_kwargs: dict[str, object] | None = None
-
-        def __init__(self, **kwargs: object) -> None:
-            type(self).last_kwargs = dict(kwargs)
-
-    class _CaptureOllama:
-        last_kwargs: dict[str, object] | None = None
-
-        def __init__(self, **kwargs: object) -> None:
-            type(self).last_kwargs = dict(kwargs)
-
     openai_like_mod.OpenAILike = _CaptureOpenAILike  # type: ignore[attr-defined]
     ollama_mod.Ollama = _CaptureOllama  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "llama_index.llms.openai_like", openai_like_mod)
     monkeypatch.setitem(sys.modules, "llama_index.llms.ollama", ollama_mod)
 
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "backend",
+    ["ollama", "openai_compatible", "vllm", "lmstudio", "llamacpp"],
+)
+def test_build_llm_openai_like_and_ollama(
+    backend: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test LLM building for OpenAI-like backends and Ollama."""
+    _install_capture_modules(monkeypatch)
+
     cfg = DocMindSettings()
     cfg.llm_backend = backend
-    cfg.vllm.model = "qwen2.5-7b-instruct"
-    cfg.vllm.context_window = 8192
+    cfg.llm_request.model = "qwen2.5-7b-instruct"
+    cfg.llm_request.context_window = 8192
+    cfg.llm_request.max_output_tokens = 512
+    cfg.llm_request.temperature = 0.2
     cfg.llm_request_timeout_seconds = 123
     cfg.openai.api_key = "abc"
+    cfg.openai.default_headers = {"X-OpenAI": "must-not-leak"}
+    if backend == "llamacpp":
+        cfg.llamacpp_base_url = "http://localhost:8080/v1"
 
     if backend == "ollama":
         out = build_llm(cfg)
@@ -52,35 +66,43 @@ def test_build_llm_openai_like_and_ollama(
         assert float(kwargs["request_timeout"]) == float(
             cfg.llm_request_timeout_seconds
         )
+        assert kwargs["headers"] is None
+        assert kwargs["additional_kwargs"] == {"num_predict": 512}
+        assert kwargs["temperature"] == pytest.approx(0.2)
 
-    elif backend in {"openai_compatible", "vllm"}:
+    elif backend == "openai_compatible":
         out = build_llm(cfg)
         kwargs = _CaptureOpenAILike.last_kwargs or {}
         assert isinstance(out, _CaptureOpenAILike)
         # Always normalized to include /v1
         assert str(kwargs["api_base"]).endswith("/v1")
-        assert kwargs["model"] == cfg.vllm.model
+        assert kwargs["model"] == cfg.llm_request.model
         assert kwargs["api_key"] == cfg.openai.api_key.get_secret_value()
         assert kwargs["is_chat_model"] is True
         assert kwargs["is_function_calling_model"] is False
-        assert kwargs["context_window"] == cfg.vllm.context_window
+        assert kwargs["context_window"] == cfg.llm_request.context_window
+        assert kwargs["max_tokens"] == cfg.llm_request.max_output_tokens
+        assert kwargs["temperature"] == pytest.approx(cfg.llm_request.temperature)
         assert float(kwargs["timeout"]) == float(cfg.llm_request_timeout_seconds)
+        assert kwargs["max_retries"] == cfg.agents.max_retries
 
-    elif backend == "lmstudio":
+    elif backend in {"vllm", "lmstudio", "llamacpp"}:
         out = build_llm(cfg)
         kwargs = _CaptureOpenAILike.last_kwargs or {}
         assert isinstance(out, _CaptureOpenAILike)
         assert str(kwargs["api_base"]).endswith("/v1")
         assert kwargs["is_chat_model"] is True
         assert kwargs["is_function_calling_model"] is False
-        assert kwargs["context_window"] == cfg.vllm.context_window
+        assert kwargs["context_window"] == cfg.llm_request.context_window
+        assert kwargs["api_key"] == "not-needed"
+        assert kwargs["default_headers"] is None
 
 
 @pytest.mark.unit
-def test_build_llm_uses_effective_context_window_cap(
+def test_build_llm_uses_request_context_window(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The shared settings cap owns the context sent to backend adapters."""
+    """The provider-neutral request owner supplies adapter context."""
     ollama_mod = ModuleType("llama_index.llms.ollama")
 
     class _CaptureOllama:
@@ -94,8 +116,7 @@ def test_build_llm_uses_effective_context_window_cap(
 
     cfg = DocMindSettings(
         llm_backend="ollama",
-        context_window=16_384,
-        llm_context_window_max=8_192,
+        llm_request={"context_window": 8_192},
     )
 
     build_llm(cfg)
@@ -104,12 +125,47 @@ def test_build_llm_uses_effective_context_window_cap(
 
 
 @pytest.mark.unit
+def test_build_llm_ollama_cloud_uses_host_aware_auth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ollama_mod = ModuleType("llama_index.llms.ollama")
+
+    class _CaptureOllama:
+        last_kwargs: dict[str, object] | None = None
+
+        def __init__(self, **kwargs: object) -> None:
+            type(self).last_kwargs = dict(kwargs)
+
+    ollama_mod.Ollama = _CaptureOllama  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "llama_index.llms.ollama", ollama_mod)
+
+    cfg = DocMindSettings(
+        llm_backend="ollama",
+        ollama_base_url="https://ollama.com",
+        ollama_api_key=SecretStr("ollama-key"),
+        openai={
+            "api_key": "openai-key",
+            "default_headers": {"X-OpenAI": "must-not-leak"},
+        },
+        security={"allow_remote_endpoints": True},
+    )
+
+    build_llm(cfg)
+
+    assert (_CaptureOllama.last_kwargs or {})["headers"] == {
+        "authorization": "Bearer ollama-key"
+    }
+
+
+@pytest.mark.unit
 def test_build_llm_openai_compatible_responses_uses_openai_responses() -> None:
     """OpenAI-compatible backend uses OpenAIResponses when api_mode=responses."""
     cfg = DocMindSettings()
     cfg.llm_backend = "openai_compatible"
-    cfg.vllm.model = "qwen2.5-7b-instruct"
-    cfg.vllm.context_window = 8192
+    cfg.llm_request.model = "qwen2.5-7b-instruct"
+    cfg.llm_request.context_window = 8192
+    cfg.llm_request.max_output_tokens = 1024
+    cfg.llm_request.temperature = 0.4
     cfg.llm_request_timeout_seconds = 123
     cfg.openai.base_url = "http://localhost:8000"
     cfg.openai.api_key = "abc"
@@ -123,11 +179,14 @@ def test_build_llm_openai_compatible_responses_uses_openai_responses() -> None:
         assert out is inst
         _, kwargs = p.call_args
         assert str(kwargs["api_base"]).endswith("/v1")
-        assert kwargs["model"] == cfg.vllm.model
+        assert kwargs["model"] == cfg.llm_request.model
         assert kwargs["api_key"] == cfg.openai.api_key.get_secret_value()
         assert kwargs["default_headers"] == {"X-Test": "1"}
-        assert kwargs["context_window"] == cfg.vllm.context_window
+        assert kwargs["context_window"] == cfg.llm_request.context_window
+        assert kwargs["max_output_tokens"] == cfg.llm_request.max_output_tokens
+        assert kwargs["temperature"] == pytest.approx(cfg.llm_request.temperature)
         assert float(kwargs["timeout"]) == float(cfg.llm_request_timeout_seconds)
+        assert kwargs["max_retries"] == cfg.agents.max_retries
 
 
 @pytest.mark.unit
@@ -167,10 +226,10 @@ def test_build_llm_llamacpp_requires_server_url() -> None:
         build_llm(cfg)
 
 
-def test_vllm_top_level_overrides_and_api_base_precedence(
+def test_vllm_request_config_and_api_base(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Top-level model/context take priority; api_base uses top-level vllm_base_url."""
+    """Canonical request settings and vLLM URL reach the adapter."""
 
     # Stub OpenAILike to capture constructor args
     class _OpenAILike:
@@ -198,8 +257,7 @@ def test_vllm_top_level_overrides_and_api_base_precedence(
 
     cfg = DocMindSettings(
         llm_backend="vllm",
-        model="Override-Model",
-        context_window=4096,
+        llm_request={"model": "Override-Model", "context_window": 8192},
         vllm_base_url="http://localhost:8000",
         llm_request_timeout_seconds=42,
     )
@@ -207,7 +265,7 @@ def test_vllm_top_level_overrides_and_api_base_precedence(
     llm = build_llm(cfg)
     assert str(getattr(llm, "api_base", None)).endswith("/v1")
     assert getattr(llm, "model", None) == "Override-Model"
-    assert getattr(llm, "context_window", None) == 4096
+    assert getattr(llm, "context_window", None) == 8192
     assert getattr(llm, "timeout", None) == 42.0
 
 
@@ -258,22 +316,18 @@ def test_llamacpp_server_uses_context_and_timeout(
     cfg = DocMindSettings(
         llm_backend="llamacpp",
         llamacpp_base_url="http://localhost:8080",
-        context_window=2048,
+        llm_request={"context_window": 8192},
         llm_request_timeout_seconds=17,
     )
     llm = build_llm(cfg)
     assert getattr(llm, "api_base", None) == "http://localhost:8080/v1"
-    assert getattr(llm, "context_window", None) == 2048
+    assert getattr(llm, "context_window", None) == 8192
     assert getattr(llm, "timeout", None) == 17.0
 
 
 def test_invalid_context_window_raises_value_error() -> None:
     """Invalid context_window raises ValueError via validation."""
-    with pytest.raises(
-        ValueError, match=r"(must be > 0|greater than or equal to 1024)"
-    ):
-        DocMindSettings(context_window=0)  # type: ignore[call-arg]
-    with pytest.raises(
-        ValueError, match=r"(must be > 0|greater than or equal to 1024)"
-    ):
-        DocMindSettings(context_window=-1024)  # type: ignore[call-arg]
+    with pytest.raises(ValueError, match=r"greater than or equal to 8192"):
+        DocMindSettings(llm_request={"context_window": 0})
+    with pytest.raises(ValueError, match=r"greater than or equal to 8192"):
+        DocMindSettings(llm_request={"context_window": -1024})

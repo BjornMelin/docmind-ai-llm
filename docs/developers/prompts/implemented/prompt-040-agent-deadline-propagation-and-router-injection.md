@@ -10,6 +10,11 @@ related_specs: ["SPEC-040"]
 
 Implements `ADR-056` + `SPEC-040`.
 
+> Historical execution record. DocMind v2 removed `DefaultToolRegistry` and the
+> separate routing worker. The direct worker tool-set builder and LlamaIndex
+> `RouterQueryEngine` are the current architecture; this file preserves the v1
+> implementation brief only.
+
 **Read first (repo truth):**
 
 - ADR: `docs/developers/adrs/ADR-056-agent-deadline-propagation-and-router-injection.md`

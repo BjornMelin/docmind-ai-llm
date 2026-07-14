@@ -12,6 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from rapidocr.utils.output import RapidOCROutput
 
 from src.config.settings import DocMindSettings
 from src.processing.parsing import service
@@ -20,7 +21,6 @@ from src.processing.parsing.backends.docling_backend import (
     docling_layout_model_files,
     missing_docling_layout_models,
 )
-from src.processing.parsing.backends.rapidocr_backend import rapidocr_model_files
 from src.processing.parsing.canonical_types import (
     DocumentParseResult,
     PageParseResult,
@@ -39,11 +39,6 @@ def _trust_pdf_models(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         service,
         "verify_docling_layout_models",
-        lambda model_cache_dir: model_cache_dir,
-    )
-    monkeypatch.setattr(
-        service,
-        "verify_rapidocr_models",
         lambda model_cache_dir: model_cache_dir,
     )
 
@@ -83,15 +78,93 @@ def test_rapidocr_bounds_native_onnxruntime_threads(
         return object()
 
     monkeypatch.setitem(sys.modules, "rapidocr", SimpleNamespace(RapidOCR=_rapidocr))
-    monkeypatch.setattr(rapidocr_backend, "verify_rapidocr_models", lambda _path: _path)
     rapidocr_backend._rapidocr_engine.cache_clear()
     try:
-        rapidocr_backend._rapidocr_engine(str(tmp_path))
+        rapidocr_backend._rapidocr_engine()
     finally:
         rapidocr_backend._rapidocr_engine.cache_clear()
 
     assert captured["EngineConfig.onnxruntime.intra_op_num_threads"] == 4
     assert captured["EngineConfig.onnxruntime.inter_op_num_threads"] == 1
+    assert not any(key.endswith(".model_path") for key in captured)
+
+
+@pytest.mark.parametrize(
+    ("result", "expected"),
+    [
+        (SimpleNamespace(txts=("first", "", "second")), "first\nsecond"),
+        (RapidOCROutput(), ""),
+    ],
+)
+def test_rapidocr_normalizes_supported_result_shapes(
+    result: object,
+    expected: str,
+) -> None:
+    assert rapidocr_backend._rapidocr_text(result) == expected
+
+
+def test_rapidocr_serializes_engine_calls(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[str] = []
+
+    class _RecordingLock:
+        active = False
+
+        def __enter__(self) -> _RecordingLock:
+            self.active = True
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            self.active = False
+
+    lock = _RecordingLock()
+
+    def _engine(image_path: str) -> SimpleNamespace:
+        assert lock.active is True
+        calls.append(image_path)
+        return SimpleNamespace(txts=("recognized",))
+
+    monkeypatch.setattr(rapidocr_backend, "_ENGINE_LOCK", lock)
+    monkeypatch.setattr(rapidocr_backend, "_rapidocr_engine", lambda: _engine)
+
+    image = tmp_path / "page.png"
+    assert rapidocr_backend.run_rapidocr(image) == "recognized"
+    assert calls == [str(image)]
+
+
+def test_rapidocr_packaged_defaults_run_offline(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import cv2
+    import numpy as np
+    import requests
+
+    def _reject_network(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("RapidOCR attempted a runtime model download")
+
+    monkeypatch.setattr(requests, "get", _reject_network)
+    image = np.full((220, 900, 3), 255, dtype=np.uint8)
+    cv2.putText(
+        image,
+        "DOCMIND OCR",
+        (35, 145),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        2.6,
+        (0, 0, 0),
+        6,
+        cv2.LINE_AA,
+    )
+    image_path = tmp_path / "rapidocr-offline.png"
+    assert cv2.imwrite(str(image_path), image)
+
+    rapidocr_backend._rapidocr_engine.cache_clear()
+    try:
+        assert "DOCMIND OCR" in rapidocr_backend.run_rapidocr(image_path)
+    finally:
+        rapidocr_backend._rapidocr_engine.cache_clear()
 
 
 def test_docling_offline_readiness_requires_weights_and_configs(
@@ -899,12 +972,12 @@ def test_provenance_is_manifest_safe() -> None:
     assert "file.pdf" not in str(provenance)
 
 
-def test_pdf_model_preflight_verifies_both_manifests(
+def test_pdf_model_preflight_verifies_docling_manifest(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     model_cache = tmp_path / "models"
-    cfg = DocMindSettings.model_validate({"ocr": {"model_cache_dir": model_cache}})
+    cfg = DocMindSettings.model_validate({"parsing": {"model_cache_dir": model_cache}})
     calls: list[tuple[str, Path]] = []
 
     monkeypatch.setattr(
@@ -912,25 +985,14 @@ def test_pdf_model_preflight_verifies_both_manifests(
         "verify_docling_layout_models",
         lambda cache: calls.append(("docling", cache)),
     )
-    monkeypatch.setattr(
-        service,
-        "verify_rapidocr_models",
-        lambda cache: calls.append(("rapidocr", cache)),
-    )
-
     service._require_pdf_models(tmp_path / "source.pdf", settings=cfg)
 
-    assert calls == [("docling", model_cache), ("rapidocr", model_cache)]
+    assert calls == [("docling", model_cache)]
 
 
-@pytest.mark.parametrize(
-    "failing_verifier",
-    ["verify_docling_layout_models", "verify_rapidocr_models"],
-)
 def test_pdf_model_integrity_failure_uses_safe_readiness_error(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    failing_verifier: str,
 ) -> None:
     pdf = tmp_path / "scan.pdf"
     pdf.write_bytes(b"%PDF-1.4\n%%EOF\n")
@@ -942,7 +1004,7 @@ def test_pdf_model_integrity_failure_uses_safe_readiness_error(
 
     monkeypatch.setattr(
         service,
-        failing_verifier,
+        "verify_docling_layout_models",
         _reject,
     )
 
@@ -990,6 +1052,68 @@ def test_docling_pdf_failure_raises_typed_parse_error(
     assert raised.value.stage == "docling_conversion"
     assert raised.value.reason == "conversion_failed"
     assert raised.value.source_suffix == ".pdf"
+
+
+def test_docling_success_exports_sorted_canonical_pages(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from docling.datamodel.base_models import ConversionStatus
+
+    source = tmp_path / "document.pdf"
+    source.write_bytes(b"%PDF-1.4\n%%EOF\n")
+    exported_pages: list[int] = []
+
+    class _Document:
+        def __init__(self) -> None:
+            self.pages = {2: object(), 1: object()}
+
+        def export_to_markdown(self, *, page_no: int) -> str:
+            exported_pages.append(page_no)
+            return f"page {page_no}"
+
+    class _Converter:
+        def convert(
+            self,
+            path: Path,
+            *,
+            max_file_size: int,
+            max_num_pages: int,
+        ) -> SimpleNamespace:
+            assert path == source
+            assert max_file_size == 1024
+            assert max_num_pages == 10
+            return SimpleNamespace(
+                status=ConversionStatus.SUCCESS,
+                document=_Document(),
+            )
+
+    monkeypatch.setattr(
+        docling_backend,
+        "_docling_converter",
+        lambda **_kwargs: _Converter(),
+    )
+    versions = ParserVersions(packages={"docling": "test"})
+
+    result = docling_backend.convert_with_docling(
+        source,
+        document_id="doc-success",
+        source_hash="abc",
+        model_cache_dir=tmp_path / "models",
+        max_pages=10,
+        max_file_size=1024,
+        versions=versions,
+    )
+
+    assert result.page_count == 2
+    assert result.versions == versions
+    assert exported_pages == [1, 2]
+    assert [page.page_id for page in result.pages] == [
+        "doc-success::page::1",
+        "doc-success::page::2",
+    ]
+    assert [page.text_markdown for page in result.pages] == ["page 1", "page 2"]
+    assert {page.routing_reason for page in result.pages} == {"docling_native_page"}
 
 
 def test_docling_partial_success_is_not_publishable(
@@ -1105,16 +1229,12 @@ def test_mixed_pdf_routes_ocr_only_for_low_text_pages(
     assert result.provenance()["ocr_applied_pages"] == [1]
 
 
-def test_local_rapidocr_cache_allows_page_ocr(
+def test_packaged_rapidocr_allows_offline_page_ocr(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     pdf = tmp_path / "warm.pdf"
     pdf.write_bytes(b"%PDF-1.4\n%%EOF\n")
-    model_cache = tmp_path / "models"
-    for model_path in rapidocr_model_files(model_cache).values():
-        model_path.parent.mkdir(parents=True, exist_ok=True)
-        model_path.write_bytes(b"placeholder")
-    cfg = DocMindSettings.model_validate({"ocr": {"model_cache_dir": model_cache}})
+    cfg = DocMindSettings(_env_file=None)  # type: ignore[arg-type]
 
     monkeypatch.setattr(
         service,

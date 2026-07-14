@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 
 from src.config.settings import DocMindSettings
 
@@ -13,7 +13,7 @@ def _mk(**overrides):
     base = {
         "ollama_base_url": "http://localhost:11434",
         "lmstudio_base_url": "http://localhost:1234/v1",
-        "vllm_base_url": None,
+        "vllm_base_url": "http://localhost:8000/v1",
         "llamacpp_base_url": None,
         "security": {
             "allow_remote_endpoints": False,
@@ -83,6 +83,21 @@ def test_disallow_similar_but_unlisted_host():
         )
 
 
+def test_disallow_remote_qdrant_before_client_construction() -> None:
+    """Qdrant obeys the same local-first endpoint policy as model services."""
+    with pytest.raises(ValidationError, match="localhost Qdrant URL"):
+        _mk(database={"qdrant_url": "https://qdrant.example.com"})
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["", "   ", ".", "..", "nested/collection", r"nested\collection"],
+)
+def test_reject_unsafe_qdrant_collection_names(name: str) -> None:
+    with pytest.raises(ValidationError, match="safe non-empty names"):
+        _mk(database={"qdrant_collection": name})
+
+
 def test_malformed_url_rejected():
     """Malformed URLs should be rejected."""
     with pytest.raises(ValidationError):
@@ -101,3 +116,36 @@ def test_remote_endpoints_allowed_when_policy_true():
         vllm_base_url="https://unlisted.remote.example",
     )
     s._validate_endpoints_security()
+
+
+def test_web_search_accepts_least_privilege_ollama_allowlist(monkeypatch) -> None:
+    """Ollama Cloud can be enabled without opening every remote endpoint."""
+    import socket
+
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, *_args, **_kwargs: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("104.18.32.47", 0))
+        ],
+    )
+
+    config = _mk(
+        ollama_enable_web_search=True,
+        ollama_api_key=SecretStr("test-key"),
+        security={
+            "allow_remote_endpoints": False,
+            "endpoint_allowlist": ["https://ollama.com"],
+        },
+    )
+
+    assert config.ollama_enable_web_search is True
+    assert config.security.allow_remote_endpoints is False
+
+
+def test_web_search_rejects_missing_ollama_allowlist() -> None:
+    with pytest.raises(ValidationError, match=r"https://ollama\.com"):
+        _mk(
+            ollama_enable_web_search=True,
+            ollama_api_key=SecretStr("test-key"),
+        )

@@ -8,11 +8,15 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-__all__ = ["compute_config_hash", "compute_corpus_hash"]
+__all__ = [
+    "compute_config_hash",
+    "compute_corpus_hash",
+    "compute_corpus_hash_entries",
+]
 
 
 def compute_corpus_hash(paths: Sequence[Path], *, base_dir: Path | None = None) -> str:
-    """Return a stable SHA-256 hash for the provided corpus paths.
+    """Return a stable SHA-256 hash for corpus paths and file contents.
 
     Args:
         paths: Files that make up the persisted corpus snapshot.
@@ -21,30 +25,61 @@ def compute_corpus_hash(paths: Sequence[Path], *, base_dir: Path | None = None) 
     Returns:
         str: Hex-encoded SHA-256 digest representing the corpus.
     """
-    digest = hashlib.sha256()
-    normalised: list[tuple[str, int, int]] = []
+    entries: list[tuple[str, Path]] = []
     resolved_base = Path(base_dir).resolve() if base_dir is not None else None
     for candidate in paths:
-        path_obj = Path(candidate).resolve()
+        candidate_path = Path(candidate)
+        if candidate_path.is_symlink():
+            raise ValueError("Corpus paths must not be symlinks")
+        try:
+            path_obj = candidate_path.resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise ValueError("Corpus path is unavailable") from exc
+        if not path_obj.is_file():
+            raise ValueError("Corpus path must be a regular file")
         rel = path_obj.as_posix()
         if resolved_base is not None:
             try:
                 rel = path_obj.relative_to(resolved_base).as_posix()
-            except ValueError:
-                rel = path_obj.as_posix()
+            except ValueError as exc:
+                raise ValueError("Corpus path escapes its canonical root") from exc
+        entries.append((rel, path_obj))
+    return compute_corpus_hash_entries(entries)
+
+
+def compute_corpus_hash_entries(entries: Sequence[tuple[str, Path]]) -> str:
+    """Hash content under explicit canonical logical paths.
+
+    This supports prospective activation: bytes may remain in a staging path while
+    their durable upload-relative destination participates in the corpus identity.
+    """
+    digest = hashlib.sha256()
+    normalised: list[tuple[str, str | None]] = []
+    logical_paths: set[str] = set()
+    for logical_path, source_path in entries:
+        if not logical_path or logical_path in logical_paths:
+            raise ValueError("Corpus logical paths must be unique and non-empty")
+        logical_paths.add(logical_path)
+        candidate = Path(source_path)
+        if candidate.is_symlink():
+            raise ValueError("Corpus sources must not be symlinks")
         try:
-            stat = path_obj.stat()
-        except FileNotFoundError:
-            size = -1
-            mtime_ns = -1
-        else:
-            size = stat.st_size
-            mtime_ns = getattr(stat, "st_mtime_ns", int(stat.st_mtime * 1e9))
-        normalised.append((rel, size, mtime_ns))
-    for rel, size, mtime_ns in sorted(normalised):
-        digest.update(rel.encode("utf-8"))
-        digest.update(str(size).encode("utf-8"))
-        digest.update(str(mtime_ns).encode("utf-8"))
+            path_obj = candidate.resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise ValueError("Corpus source is unavailable") from exc
+        if not path_obj.is_file():
+            raise ValueError("Corpus source must be a regular file")
+        with path_obj.open("rb") as source:
+            content_hash = hashlib.file_digest(source, "sha256").hexdigest()
+        normalised.append((logical_path, content_hash))
+    for rel, content_hash in sorted(normalised):
+        digest.update(
+            json.dumps(
+                [rel, content_hash],
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        )
     return digest.hexdigest()
 
 

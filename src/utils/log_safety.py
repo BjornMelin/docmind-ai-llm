@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Literal, overload
+from typing import Any, Literal, overload
 from urllib.parse import urlsplit
+
+from loguru import logger
 
 from src.config import settings
 from src.utils.canonicalization import CanonicalizationConfig, compute_hashes
+from src.utils.telemetry import log_jsonl
 
 
 @dataclass(frozen=True)
@@ -103,6 +106,39 @@ def build_pii_log_entry(value: str, key_id: str | None = None) -> RedactionResul
     )
 
 
+def log_error_with_context(
+    error: Exception,
+    operation: str,
+    context: dict[str, Any] | None = None,
+    **kwargs: Any,
+) -> None:
+    """Emit a metadata-only error event and structured log entry."""
+    redaction = build_pii_log_entry(str(error), key_id=operation or "exception")
+    error_context: dict[str, Any] = {
+        "operation": operation,
+        "error_type": type(error).__name__,
+        "error_redacted": redaction.redacted,
+        "error_fingerprint": redaction.fingerprint,
+    }
+    if context:
+        error_context.update(context)
+    if kwargs:
+        error_context.update(kwargs)
+
+    safe_keys = {"operation", "error_type", "error_redacted", "error_fingerprint"}
+    op_key = operation or "exception"
+    safe_context: dict[str, Any] = {}
+    for key, value in error_context.items():
+        if key in safe_keys or not isinstance(value, str):
+            safe_context[key] = value
+        else:
+            safe_context[key] = build_pii_log_entry(
+                value, key_id=f"{op_key}:{key}"
+            ).redacted
+    log_jsonl({"error_logged": True, **safe_context})
+    logger.error("Operation failed {}", safe_context)
+
+
 def fingerprint_text(value: str, key_id: str | None = None) -> dict[str, str | int]:
     """Return fingerprint metadata for logging without emitting raw content.
 
@@ -185,6 +221,7 @@ __all__ = [
     "RedactionResult",
     "build_pii_log_entry",
     "fingerprint_text",
+    "log_error_with_context",
     "redact_pii",
     "redact_text_backstop",
     "safe_url_for_log",

@@ -1,35 +1,20 @@
 """Unit tests for helper functions in src.retrieval.reranking.
 
-Targets fast, deterministic paths: timeouts, parsing, modality split,
-and ColPali enable heuristic with explicit overrides.
+Targets fast, deterministic paths: timeouts, parsing, and modality split.
 """
 
 from __future__ import annotations
 
-import importlib
-import time
 from types import SimpleNamespace
 
 import pytest
 from llama_index.core.schema import NodeWithScore, TextNode
 
+from src.config.embedding_defaults import (
+    DEFAULT_BGE_RERANKER_MODEL_ID,
+    DEFAULT_BGE_RERANKER_MODEL_REVISION,
+)
 from src.retrieval import reranking as rr
-
-
-def test_run_with_timeout_returns_value_and_none():
-    """_run_with_timeout returns value when fast, None when exceeding budget."""
-
-    def _fast():
-        return 42
-
-    def _slow():
-        start = time.perf_counter()
-        while (time.perf_counter() - start) < 0.05:
-            pass
-        return 1
-
-    assert rr._run_with_timeout(_fast, timeout_ms=10_000) == 42
-    assert rr._run_with_timeout(_slow, timeout_ms=1) is None
 
 
 def test_parse_top_k_invalid_raises():
@@ -52,73 +37,9 @@ def test_split_by_modality_separates_text_and_visual():
     assert len(v) == 1
 
 
-def test_should_enable_colpali_policy_and_override(monkeypatch):
-    """Enable when visual fraction high and VRAM ok; ops override forces True."""
-    # Monkeypatch module-local settings to a lightweight stub
-    rr.settings = SimpleNamespace(
-        retrieval=SimpleNamespace(reranking_top_k=10, rrf_k=60, enable_colpali=False)
-    )
-
-    # Ensure VRAM check returns True
-    monkeypatch.setattr(rr, "has_cuda_vram", lambda *_, **__: True)
-
-    # Build lists with visual fraction >= 0.4
-    text_nodes = [
-        NodeWithScore(node=TextNode(text="t", id_="t"), score=0.1) for _ in range(3)
-    ]
-    visual_nodes = [
-        NodeWithScore(node=TextNode(text="i", id_="i"), score=0.1) for _ in range(2)
-    ]
-    # Mark visual modality
-    for n in visual_nodes:
-        n.node.metadata["modality"] = "pdf_page_image"
-
-    lists = [text_nodes + visual_nodes]
-    assert rr.MultimodalReranker._should_enable_colpali(visual_nodes, lists) is True
-
-    # Ops override forces True even if VRAM returns False and fraction is low
-    rr.settings.retrieval.enable_colpali = True
-    monkeypatch.setattr(rr, "has_cuda_vram", lambda *_, **__: False)
-    assert rr.MultimodalReranker._should_enable_colpali([], [text_nodes]) is True
-
-
 def test_get_siglip_prune_m_falls_back_on_bad_setting(monkeypatch):
     monkeypatch.setattr(rr.settings.retrieval, "siglip_prune_m", "nope", raising=False)
     assert rr._get_siglip_prune_m() == rr.SIGLIP_PRUNE_M
-
-
-def test_run_with_timeout_process_executor_path(monkeypatch):
-    monkeypatch.setattr(
-        rr.settings.retrieval, "rerank_executor", "process", raising=False
-    )
-
-    created: list[str] = []
-
-    class _Future:
-        def __init__(self, value: int) -> None:
-            self._value = value
-
-        def result(self, timeout: float | None = None):  # type: ignore[no-untyped-def]
-            del timeout
-            return self._value
-
-        def cancel(self) -> bool:
-            return True
-
-    class _Exec:
-        def __init__(self, max_workers: int = 1):  # type: ignore[no-untyped-def]
-            created.append("process")
-
-        def submit(self, fn):  # type: ignore[no-untyped-def]
-            return _Future(int(fn()))
-
-        def shutdown(self, **_k):  # type: ignore[no-untyped-def]
-            return None
-
-    monkeypatch.setattr(rr, "ProcessPoolExecutor", _Exec, raising=True)
-
-    assert rr._run_with_timeout(lambda: 41, timeout_ms=10_000) == 41
-    assert created == ["process"]
 
 
 def test_build_text_reranker_falls_back_to_noop(monkeypatch):
@@ -136,15 +57,45 @@ def test_build_text_reranker_falls_back_to_noop(monkeypatch):
     assert len(out) == 2
 
 
-def test_build_visual_reranker_cached_raises_value_error_when_missing(monkeypatch):
-    rr._build_visual_reranker_cached.cache_clear()
-    monkeypatch.setattr(
-        importlib,
-        "import_module",
-        lambda *_a, **_k: (_ for _ in ()).throw(ImportError("nope")),
+def test_build_text_reranker_uses_pinned_local_snapshot(monkeypatch, tmp_path):
+    """Resolve the canonical CrossEncoder from the configured cache only."""
+    snapshot_path = tmp_path / "snapshot"
+    snapshot_calls: list[dict[str, object]] = []
+    constructor_calls: list[dict[str, object]] = []
+
+    def _snapshot_download(**kwargs):  # type: ignore[no-untyped-def]
+        snapshot_calls.append(kwargs)
+        return str(snapshot_path)
+
+    def _constructor(**kwargs):  # type: ignore[no-untyped-def]
+        constructor_calls.append(kwargs)
+        return SimpleNamespace()
+
+    rr._build_text_reranker_cached.cache_clear()
+    monkeypatch.setattr(rr, "snapshot_download", _snapshot_download)
+    monkeypatch.setattr(rr, "SentenceTransformerRerank", _constructor)
+
+    rr._build_text_reranker_cached(
+        3,
+        DEFAULT_BGE_RERANKER_MODEL_ID,
+        str(tmp_path),
     )
-    with pytest.raises(ValueError, match="ColPaliRerank not available"):
-        rr._build_visual_reranker_cached(1)
+
+    assert snapshot_calls == [
+        {
+            "repo_id": DEFAULT_BGE_RERANKER_MODEL_ID,
+            "revision": DEFAULT_BGE_RERANKER_MODEL_REVISION,
+            "cache_dir": str(tmp_path),
+            "local_files_only": True,
+        }
+    ]
+    assert constructor_calls == [
+        {
+            "model": str(snapshot_path),
+            "top_n": 3,
+            "trust_remote_code": False,
+        }
+    ]
 
 
 def test_postprocess_nodes_returns_input_when_query_missing():

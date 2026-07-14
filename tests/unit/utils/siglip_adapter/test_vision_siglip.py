@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import types
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -12,7 +13,7 @@ from src.utils import vision_siglip
 
 
 @pytest.mark.unit
-def test_load_siglip_uses_cached_loader(monkeypatch):
+def test_load_siglip_uses_cached_loader(monkeypatch, tmp_path: Path):
     """Verify load_siglip caches model/processor instances per model id."""
     call_count = {"model": 0, "processor": 0}
 
@@ -21,13 +22,27 @@ def test_load_siglip_uses_cached_loader(monkeypatch):
 
     monkeypatch.setattr(vision_siglip, "select_device", _select)
 
-    def _model_loader(model_id: str, revision: str):
+    def _model_loader(
+        model_id: str,
+        revision: str,
+        cache_dir: str,
+        local_files_only: bool,
+    ):
         assert revision == vision_siglip.DEFAULT_SIGLIP_MODEL_REVISION
+        assert cache_dir == str(tmp_path.resolve())
+        assert local_files_only is True
         call_count["model"] += 1
         return types.SimpleNamespace(to=lambda device: None)
 
-    def _proc_loader(model_id: str, revision: str):
+    def _proc_loader(
+        model_id: str,
+        revision: str,
+        cache_dir: str,
+        local_files_only: bool,
+    ):
         assert revision == vision_siglip.DEFAULT_SIGLIP_MODEL_REVISION
+        assert cache_dir == str(tmp_path.resolve())
+        assert local_files_only is True
         call_count["processor"] += 1
         return object()
 
@@ -39,10 +54,14 @@ def test_load_siglip_uses_cached_loader(monkeypatch):
     vision_siglip._cached.cache_clear()
 
     model1, proc1, device1 = vision_siglip.load_siglip(
-        vision_siglip.DEFAULT_SIGLIP_MODEL_ID, "cpu"
+        vision_siglip.DEFAULT_SIGLIP_MODEL_ID,
+        "cpu",
+        cache_folder=tmp_path,
     )
     model2, proc2, device2 = vision_siglip.load_siglip(
-        vision_siglip.DEFAULT_SIGLIP_MODEL_ID, "cpu"
+        vision_siglip.DEFAULT_SIGLIP_MODEL_ID,
+        "cpu",
+        cache_folder=tmp_path,
     )
 
     assert call_count == {"model": 1, "processor": 1}
@@ -59,7 +78,11 @@ def test_load_siglip_does_not_apply_default_revision_to_custom_model(monkeypatch
     def _select(device: str) -> str:
         return device
 
-    def _record_revision(_model_id: str, revision: str | None = None):
+    def _record_revision(
+        _model_id: str,
+        revision: str | None = None,
+        **_kwargs: str,
+    ):
         revisions.append(revision)
         return object()
 
@@ -87,7 +110,11 @@ def test_load_siglip_preserves_explicit_custom_revision(monkeypatch):
 
     monkeypatch.setattr(vision_siglip, "select_device", lambda device: device)
 
-    def _record_revision(_model_id: str, revision: str | None = None):
+    def _record_revision(
+        _model_id: str,
+        revision: str | None = None,
+        **_kwargs: str,
+    ):
         revisions.append(revision)
         return object()
 
@@ -117,7 +144,11 @@ def test_load_siglip_normalizes_blank_custom_revision(monkeypatch):
 
     monkeypatch.setattr(vision_siglip, "select_device", lambda device: device)
 
-    def _record_revision(_model_id: str, revision: str | None = None):
+    def _record_revision(
+        _model_id: str,
+        revision: str | None = None,
+        **_kwargs: str,
+    ):
         revisions.append(revision)
         return object()
 
@@ -150,10 +181,10 @@ def test_load_siglip_moves_model_to_mps(monkeypatch):
 
     transformers = types.SimpleNamespace(
         SiglipModel=types.SimpleNamespace(
-            from_pretrained=lambda _model_id, revision=None: _Model()
+            from_pretrained=lambda _model_id, revision=None, **_kwargs: _Model()
         ),
         SiglipProcessor=types.SimpleNamespace(
-            from_pretrained=lambda _model_id, revision=None: object()
+            from_pretrained=lambda _model_id, revision=None, **_kwargs: object()
         ),
     )
     monkeypatch.setitem(sys.modules, "transformers", transformers)
@@ -163,6 +194,54 @@ def test_load_siglip_moves_model_to_mps(monkeypatch):
 
     assert device == "mps"
     assert moved_to == ["mps"]
+
+
+@pytest.mark.unit
+def test_load_siglip_uses_fast_tokenizer_without_sentencepiece(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Build the native processor from pinned fast-tokenizer artifacts."""
+    constructor_calls: list[tuple[object, object]] = []
+    loader_calls: list[dict[str, object]] = []
+
+    class _Processor:
+        @staticmethod
+        def from_pretrained(*_args: object, **_kwargs: object) -> object:
+            raise ImportError("SentencePiece is unavailable")
+
+        def __init__(self, *, image_processor: object, tokenizer: object) -> None:
+            constructor_calls.append((image_processor, tokenizer))
+
+    def _load_component(*_args: object, **kwargs: object) -> object:
+        loader_calls.append(kwargs)
+        return object()
+
+    transformers = types.SimpleNamespace(
+        PreTrainedTokenizerFast=types.SimpleNamespace(from_pretrained=_load_component),
+        SiglipImageProcessor=types.SimpleNamespace(from_pretrained=_load_component),
+        SiglipModel=types.SimpleNamespace(from_pretrained=_load_component),
+        SiglipProcessor=_Processor,
+    )
+    monkeypatch.setitem(sys.modules, "transformers", transformers)
+    monkeypatch.setattr(vision_siglip, "select_device", lambda _device: "cpu")
+    vision_siglip._cached.cache_clear()
+
+    _model, processor, device = vision_siglip.load_siglip(
+        device="cpu",
+        cache_folder=tmp_path,
+    )
+
+    assert isinstance(processor, _Processor)
+    assert device == "cpu"
+    assert len(loader_calls) == 3
+    assert constructor_calls
+    assert all(
+        call["cache_dir"] == str(tmp_path.resolve())
+        and call["local_files_only"] is True
+        and call["revision"] == vision_siglip.DEFAULT_SIGLIP_MODEL_REVISION
+        for call in loader_calls
+    )
 
 
 @pytest.mark.unit

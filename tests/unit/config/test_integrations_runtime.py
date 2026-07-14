@@ -22,11 +22,7 @@ def test_initialize_integrations_rebinds_settings_llm(
         "src.config.integrations.build_llm", lambda _settings=None: sentinel_llm
     )
     monkeypatch.setattr("src.config.integrations.settings", global_settings)
-    monkeypatch.setattr("src.config.integrations.setup_vllm_env", lambda: None)
     monkeypatch.setattr("src.config.integrations._configure_embeddings", lambda: None)
-    monkeypatch.setattr(
-        "src.config.integrations._configure_structured_outputs", lambda: None
-    )
     monkeypatch.setattr(
         "src.config.integrations._configure_context_settings", lambda: None
     )
@@ -39,11 +35,13 @@ def test_initialize_integrations_rebinds_settings_llm(
 
     original_backend = global_settings.llm_backend
     original_base_url = getattr(global_settings, "lmstudio_base_url", None)
-    original_model = global_settings.model
+    original_request = global_settings.llm_request
 
     global_settings.llm_backend = "lmstudio"  # type: ignore[assignment]
     global_settings.lmstudio_base_url = "http://localhost:1234/v1"  # type: ignore[assignment]
-    global_settings.model = "Hermes-2-Pro-Llama-3-8B"  # type: ignore[assignment]
+    global_settings.llm_request = global_settings.llm_request.model_copy(
+        update={"model": "Hermes-2-Pro-Llama-3-8B"}
+    )
 
     try:
         Settings._llm = None
@@ -54,4 +52,4 @@ def test_initialize_integrations_rebinds_settings_llm(
         global_settings.llm_backend = original_backend  # type: ignore[assignment]
         if original_base_url is not None:
             global_settings.lmstudio_base_url = original_base_url  # type: ignore[assignment]
-        global_settings.model = original_model  # type: ignore[assignment]
+        global_settings.llm_request = original_request

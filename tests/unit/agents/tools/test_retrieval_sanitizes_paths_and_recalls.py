@@ -6,9 +6,8 @@ contextual queries can recall the most recent sources from persisted state.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
+from llama_index.core.base.response.schema import Response
 from llama_index.core.schema import NodeWithScore, TextNode
 
 from src.agents.tools import retrieval as retrieval_tool
@@ -29,7 +28,9 @@ def test_parse_tool_result_strips_runtime_paths_from_metadata() -> None:
             "source_path": "/abs/source.pdf",
         }
     )
-    resp = SimpleNamespace(source_nodes=[NodeWithScore(node=node, score=1.0)])
+    resp = Response(
+        response="answer", source_nodes=[NodeWithScore(node=node, score=1.0)]
+    )
     docs = retrieval_tool._parse_tool_result(resp)
     assert docs
     assert isinstance(docs[0], dict)
@@ -101,6 +102,11 @@ def test_looks_contextual_matches_simple_pronoun_question() -> None:
 
 def test_looks_contextual_returns_false_for_standalone_query() -> None:
     assert retrieval_tool._looks_contextual("What is machine learning?") is False
+
+
+@pytest.mark.parametrize("query", ["Generate an image", "Compare table formats"])
+def test_looks_contextual_rejects_bare_visual_nouns(query: str) -> None:
+    assert retrieval_tool._looks_contextual(query) is False
 
 
 def test_looks_contextual_returns_false_for_empty_query() -> None:

@@ -43,9 +43,11 @@ from src.retrieval.router_factory import build_router_engine
 
 ### CREATE
 
-- `src/agents/supervisor_graph.py`: repo-local supervisor graph builder and handoff tools.
+- `src/agents/supervisor_graph.py`: repo-local supervisor graph builder with one
+  atomic multi-worker dispatch tool.
 - `src/agents/coordinator.py`: coordinator wiring + compilation with checkpointer/store + streaming.
-- Agent tools live under `src/agents/tools/` and are registered via the tool registry/factory.
+- Agent tools live under `src/agents/tools/` and are registered through
+  `src/agents/registry/tool_registry.py`.
 
 ### UPDATE
 
@@ -72,7 +74,6 @@ MUST prove:
 - streaming event shape compatibility
 - handoff and backflow semantics
 - timeout and deadline propagation
-- semantic cache policy preservation
 - metadata-only telemetry and log safety
 - offline-first behavior with local/degraded LLM backends
 - deterministic failure and retry behavior

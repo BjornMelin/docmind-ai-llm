@@ -8,7 +8,7 @@ services:
       - "8501:8501"
     environment:
       DOCMIND_LLM_BACKEND: ollama
-      DOCMIND_MODEL: "${DOCMIND_MODEL:-qwen3:4b-instruct}"
+      DOCMIND_LLM_REQUEST__MODEL: "${DOCMIND_LLM_REQUEST__MODEL:-qwen3:4b-instruct}"
       DOCMIND_OLLAMA_BASE_URL: http://ollama:11434
       # Compose service hostnames resolve to private RFC1918 addresses; allow explicitly.
       DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS: "true"

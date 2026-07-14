@@ -9,9 +9,19 @@ directly is not a supported entrypoint.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import streamlit as st
 
 from src.config import bootstrap_settings, settings
+from src.persistence.snapshot import recover_snapshot_transactions
+
+
+@st.cache_resource(show_spinner=False)
+def _recover_persistence_once(data_dir: str, cache_version: int) -> None:
+    """Recover interrupted persistence transactions once per runtime generation."""
+    del cache_version
+    recover_snapshot_transactions(Path(data_dir) / "storage")
 
 
 def main() -> None:  # pragma: no cover - Streamlit entrypoint
@@ -27,6 +37,16 @@ def main() -> None:  # pragma: no cover - Streamlit entrypoint
     bootstrap_settings()
     app_title = getattr(settings, "app_name", "DocMind AI")
     st.set_page_config(page_title=app_title, page_icon="🧠", layout="wide")
+    try:
+        _recover_persistence_once(
+            str(settings.data_dir.resolve()), settings.cache_version
+        )
+    except (OSError, RuntimeError, ValueError):
+        st.error(
+            "DocMind could not safely recover local persistence. "
+            "Stop other writers and restart the app."
+        )
+        st.stop()
 
     chat = st.Page(
         "src/pages/01_chat.py",

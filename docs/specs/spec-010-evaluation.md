@@ -1,13 +1,12 @@
 ---
 spec: SPEC-010
-title: Evaluation: BEIR/M-BEIR for IR; RAGAS for End-to-End
-version: 1.0.0
-date: 2025-09-05
+title: Evaluation: BEIR/M-BEIR for Offline Retrieval Quality
+version: 1.1.0
+date: 2026-07-13
 owners: ["ai-arch"]
 status: Final
 related_requirements:
   - FR-EVAL-001: Provide offline scripts to compute recall@k, nDCG, MRR on BEIR/M-BEIR.
-  - FR-EVAL-002: Provide RAGAS pipeline with dataset adapters.
   - NFR-PERF-004: Track latency and memory budgets per profile.
 related_adrs: ["ADR-011"]
 ---
@@ -15,20 +14,20 @@ related_adrs: ["ADR-011"]
 
 ## Objective
 
-Ship offline evaluation scripts for IR and E2E. Record results in a small leaderboard CSV for regressions.
+Ship one offline evaluation path for retrieval quality. Record deterministic
+BEIR metrics in a small leaderboard CSV for regressions.
 
 ## Libraries and Imports
 
 ```python
 from beir.datasets.data_loader import GenericDataLoader  # or datasets from HF
-from ragas import evaluate
 ```
 
 ## File Operations
 
 ### CREATE
 
-- `tools/eval/run_beir.py`, `tools/eval/run_ragas.py`.
+- `tools/eval/run_beir.py`.
 - `data/eval/README.md` with dataset instructions.
 
 ## Acceptance Criteria
@@ -42,13 +41,16 @@ Feature: IR metrics
 
 ## References
 
-- BEIR repo; RAGAS docs.
+- BEIR repository and documentation.
 
 ## CLI Outputs & Offline Requirements
 
 - IR (BEIR) CLI MUST write a `leaderboard.csv` with fields: `schema_version`, `ts`, `dataset`, `k`, and dynamic metric columns `ndcg@{k}`, `recall@{k}`, `mrr@{k}` plus `sample_count`.
-- E2E (RAGAS) CLI MUST write a `leaderboard.csv` with fields: `schema_version`, `ts`, `dataset`, `faithfulness`, `answer_relevancy`, `context_precision`, `context_recall`, and `sample_count`.
 - Determinism: CLIs MUST set seeds and thread caps; support `--sample_count` for deterministic subsets.
 - Tests MUST be deterministic and offline:
   - Heavy network/dataset downloads are NOT allowed in CI; use strict mocks or tiny local datasets.
-  - Coordinator/retriever interactions MUST be stubbed.
+  - Retriever interactions MUST be stubbed.
+
+RAGAS is not a supported DocMind dependency or evaluation path. The previous
+CLI was removed because it could not run from the published `eval` extra and
+its tests skipped when RAGAS was absent.

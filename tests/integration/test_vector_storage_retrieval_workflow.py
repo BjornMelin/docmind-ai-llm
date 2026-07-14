@@ -8,24 +8,10 @@ and basic performance without external services.
 from __future__ import annotations
 
 import time
-from pathlib import Path
 
 import pytest
 from llama_index.core import Document as LIDocument
 from llama_index.core import VectorStoreIndex
-
-
-@pytest.fixture
-def integration_settings():
-    """Placeholder integration settings for consistency with suite."""
-
-    class _S:
-        data_dir = Path("./vector_test_data")
-        cache_dir = Path("./vector_test_cache")
-        enable_gpu_acceleration = False
-        log_level = "INFO"
-
-    return _S()
 
 
 @pytest.fixture
@@ -103,7 +89,14 @@ class TestVectorStorageRetrievalWorkflow:
         results = index.as_retriever(similarity_top_k=5).retrieve(
             "machine learning technology"
         )
-        assert len(results) >= 0
+        assert len(results) == len(multilingual)
+        assert {result.node.metadata["lang"] for result in results} == {
+            "en",
+            "es",
+            "fr",
+            "ja",
+            "zh",
+        }
 
     def test_technical_content_retrieval(self):
         """Index technical snippets and verify relevant retrieval."""
@@ -131,7 +124,11 @@ class TestVectorStorageRetrievalWorkflow:
         results = index.as_retriever(similarity_top_k=3).retrieve(
             "calculate model accuracy in Python"
         )
-        assert len(results) >= 0
+        assert len(results) == 3
+        assert all(
+            result.node.metadata["type"] in {"api", "code", "json", "sql"}
+            for result in results
+        )
 
     def test_basic_performance(self, request):
         """Simple performance guardrail for small in-memory index."""

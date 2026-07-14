@@ -22,7 +22,24 @@ from langgraph.graph import StateGraph
 from streamlit.testing.v1 import AppTest
 
 from src.agents.models import AgentResponse, MultiAgentGraphState
+from src.persistence.checkpoint_identity import checkpoint_thread_id
 from tests.helpers.apptest_utils import apptest_timeout_sec
+
+
+def _checkpoint_config(
+    *,
+    thread_id: str,
+    user_id: str,
+    checkpoint_id: str | None = None,
+) -> dict[str, dict[str, str]]:
+    configurable = {
+        "thread_id": checkpoint_thread_id(thread_id=thread_id, user_id=user_id),
+        "public_thread_id": thread_id,
+        "user_id": user_id,
+    }
+    if checkpoint_id is not None:
+        configurable["checkpoint_id"] = checkpoint_id
+    return {"configurable": configurable}
 
 
 def _build_echo_graph(*, checkpointer: SqliteSaver):
@@ -46,11 +63,31 @@ def _build_echo_graph(*, checkpointer: SqliteSaver):
 class _CoordinatorStub:
     """Minimal coordinator compatible with the Chat page surface area."""
 
-    def __init__(self, *_, checkpointer: Any = None, store: Any = None, **__):
+    def __init__(
+        self,
+        *_,
+        checkpointer: Any = None,
+        checkpointer_path: Path | None = None,
+        store: Any = None,
+        **__,
+    ):
+        self._conn: sqlite3.Connection | None = None
+        if checkpointer is None and checkpointer_path is not None:
+            self._conn = sqlite3.connect(
+                str(checkpointer_path), check_same_thread=False
+            )
+            checkpointer = SqliteSaver(self._conn)
+            checkpointer.setup()
         if checkpointer is None:
             raise RuntimeError("CoordinatorStub requires a SqliteSaver checkpointer")
         self._checkpointer = checkpointer
         self._graph = _build_echo_graph(checkpointer=checkpointer)
+
+    def close(self) -> None:
+        """Close the test-only synchronous SQLite connection."""
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
 
     def fork_from_checkpoint(
         self,
@@ -59,14 +96,12 @@ class _CoordinatorStub:
         user_id: str = "local",
         checkpoint_id: str,
     ) -> str | None:
-        cfg: dict[str, Any] = {
-            "thread_id": str(thread_id),
-            "user_id": str(user_id),
-            "checkpoint_id": str(checkpoint_id),
-        }
-        new_config = self._graph.update_state(
-            {"configurable": cfg}, None, as_node="__copy__"
+        cfg = _checkpoint_config(
+            thread_id=str(thread_id),
+            user_id=str(user_id),
+            checkpoint_id=str(checkpoint_id),
         )
+        new_config = self._graph.update_state(cfg, None, as_node="__copy__")
         conf = new_config.get("configurable") if isinstance(new_config, dict) else None
         conf = conf if isinstance(conf, dict) else {}
         new_checkpoint_id = conf.get("checkpoint_id")
@@ -76,18 +111,19 @@ class _CoordinatorStub:
         self,
         *,
         query: str,
-        context: Any | None = None,
         settings_override: dict[str, Any] | None = None,
         thread_id: str = "default",
         user_id: str = "local",
         checkpoint_id: str | None = None,
     ) -> AgentResponse:
-        cfg: dict[str, Any] = {"thread_id": str(thread_id), "user_id": str(user_id)}
-        if checkpoint_id:
-            cfg["checkpoint_id"] = str(checkpoint_id)
+        cfg = _checkpoint_config(
+            thread_id=str(thread_id),
+            user_id=str(user_id),
+            checkpoint_id=str(checkpoint_id) if checkpoint_id else None,
+        )
         out = self._graph.invoke(
             {"messages": [HumanMessage(content=str(query))]},
-            config={"configurable": cfg},
+            config=cfg,
         )
         msgs = out.get("messages", []) if isinstance(out, dict) else []
         last = msgs[-1] if msgs else None
@@ -108,21 +144,21 @@ class _CoordinatorStub:
         user_id: str = "local",
         checkpoint_id: str | None = None,
     ) -> dict[str, Any]:
-        cfg: dict[str, Any] = {"thread_id": str(thread_id), "user_id": str(user_id)}
-        if checkpoint_id:
-            cfg["checkpoint_id"] = str(checkpoint_id)
-        snap = self._graph.get_state({"configurable": cfg})
+        cfg = _checkpoint_config(
+            thread_id=str(thread_id),
+            user_id=str(user_id),
+            checkpoint_id=str(checkpoint_id) if checkpoint_id else None,
+        )
+        snap = self._graph.get_state(cfg)
         values = getattr(snap, "values", None)
         return values if isinstance(values, dict) else {}
 
     def list_checkpoints(
         self, *, thread_id: str, user_id: str = "local", limit: int = 20
     ) -> list[dict[str, Any]]:
-        cfg: dict[str, Any] = {"thread_id": str(thread_id), "user_id": str(user_id)}
+        cfg = _checkpoint_config(thread_id=str(thread_id), user_id=str(user_id))
         out: list[dict[str, Any]] = []
-        for snap in self._graph.get_state_history(
-            {"configurable": cfg}, limit=int(limit)
-        ):
+        for snap in self._graph.get_state_history(cfg, limit=int(limit)):
             config = getattr(snap, "config", None)
             conf = config.get("configurable") if isinstance(config, dict) else None
             conf = conf if isinstance(conf, dict) else {}
@@ -142,12 +178,10 @@ def chat_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[AppTes
 
     original_data_dir = _settings.data_dir
     original_chat_path = _settings.chat.sqlite_path
-    original_ops_path = _settings.database.sqlite_db_path
     original_autoload = _settings.graphrag_cfg.autoload_policy
 
     _settings.data_dir = tmp_path
     _settings.chat.sqlite_path = tmp_path / "chat.db"
-    _settings.database.sqlite_db_path = tmp_path / "docmind.db"
     _settings.graphrag_cfg.autoload_policy = "ignore"
 
     st.cache_resource.clear()
@@ -165,7 +199,6 @@ def chat_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[AppTes
     finally:
         _settings.data_dir = original_data_dir
         _settings.chat.sqlite_path = original_chat_path
-        _settings.database.sqlite_db_path = original_ops_path
         _settings.graphrag_cfg.autoload_policy = original_autoload
         st.cache_resource.clear()
         st.cache_data.clear()
@@ -261,7 +294,11 @@ def test_chat_time_travel_fork_drops_future_messages(
         fork_checkpoint: str | None = None
         for candidate in candidate_ids:
             snap = graph.get_state(
-                {"configurable": {"thread_id": thread_id, "checkpoint_id": candidate}}
+                _checkpoint_config(
+                    thread_id=thread_id,
+                    user_id="local",
+                    checkpoint_id=candidate,
+                )
             )
             values = getattr(snap, "values", None)
             if not isinstance(values, dict):

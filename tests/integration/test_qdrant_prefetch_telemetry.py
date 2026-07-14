@@ -22,7 +22,7 @@ def test_qdrant_prefetch_fusionquery_telemetry(
     hmod = importlib.import_module("src.retrieval.hybrid")
     monkeypatch.setattr(
         hmod,
-        "ensure_hybrid_collection",
+        "check_hybrid_collection",
         lambda *_args, **_kwargs: type("_Compatibility", (), {"compatible": True})(),
     )
 
@@ -74,6 +74,7 @@ def test_qdrant_prefetch_fusionquery_telemetry(
         dedup_key="page_id",
     )
     retr = hmod.ServerHybridRetriever(params, client=_Client())
+    monkeypatch.setattr(retr, "_encode_sparse", lambda _text: None)
     out = retr.retrieve("query")
     assert out is not None
     assert len(out) <= 5

@@ -1,15 +1,16 @@
-"""Snapshot rebuild service boundary (library-first, Streamlit-free).
+"""Snapshot payload builder for a caller-owned transaction.
 
 Extracted from the Documents page to keep Streamlit pages lightweight and
-importable in tests while providing a reusable, typed snapshot rebuild entrypoint.
+importable in tests. The caller owns lock, workspace, and failure cleanup; this
+module writes the payload and commits it through ``SnapshotManager``.
 """
 
 from __future__ import annotations
 
 import contextlib
-import errno
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
@@ -18,13 +19,14 @@ from typing import Any, Protocol
 from loguru import logger
 
 from src.persistence.hashing import compute_config_hash, compute_corpus_hash
-from src.persistence.snapshot import SnapshotManager
-from src.persistence.snapshot_utils import current_config_dict, timestamped_export_path
+from src.persistence.snapshot import SnapshotManager, SnapshotPersistenceError
+from src.persistence.snapshot_utils import (
+    collect_corpus_paths,
+    timestamped_export_path,
+)
 from src.utils.hashing import sha256_file
 from src.utils.log_safety import build_pii_log_entry
 from src.version import get_version
-
-MAX_CORPUS_FILES = 10_000
 
 
 class VectorIndexProtocol(Protocol):
@@ -47,38 +49,28 @@ class PgIndexProtocol(Protocol):
         """Get the storage context."""
 
 
+@dataclass(frozen=True, slots=True)
+class SnapshotActivation:
+    """Caller-owned transaction inputs required for one atomic activation."""
+
+    manager: SnapshotManager
+    workspace: Path
+    text_collection: str
+    image_collection: str
+    expected_corpus_hash: str
+    expected_config_hash: str
+    activation_config: dict[str, Any]
+    activation_config_hash: str
+    collection_metadata: dict[str, Any]
+    graph_requested: bool
+
+
 def _noop_log_export_event(_payload: dict[str, Any]) -> None:
     """No-op callback for export events."""
 
 
 def _noop_record_graph_export_metric(*_args: Any, **_kwargs: Any) -> None:
     """No-op callback for graph export metrics."""
-
-
-def _resolve_corpus_path(path: Path, uploads_root: Path) -> Path | None:
-    """Return a resolved corpus path if it is safe and contained."""
-    try:
-        if path.is_symlink():
-            return None
-        resolved = path.resolve()
-        if not resolved.is_relative_to(uploads_root):
-            return None
-        return resolved
-    except OSError:
-        return None
-
-
-def _resolve_cached_paths(
-    cached_paths: list[Path], uploads_root: Path
-) -> list[Path] | None:
-    """Return resolved cached paths or None if any path is unsafe."""
-    resolved_paths: list[Path] = []
-    for p in cached_paths:
-        resolved = _resolve_corpus_path(p, uploads_root)
-        if resolved is None:
-            return None
-        resolved_paths.append(resolved)
-    return resolved_paths
 
 
 def _init_callbacks(
@@ -99,12 +91,12 @@ def _persist_indices(
     vector_index: VectorIndexProtocol | None,
     pg_index: PgIndexProtocol | None,
 ) -> tuple[Any | None, Any | None, PgIndexProtocol | None]:
-    """Persist vector/graph indexes and return graph handles.
+    """Persist graph artifacts and return graph handles.
 
     Args:
         mgr: SnapshotManager instance for persistence.
         workspace: Workspace path for snapshot.
-        vector_index: Vector index with embed model (required).
+        vector_index: Live Qdrant-backed index used for graph export seeds.
         pg_index: PropertyGraphIndex-like instance (optional).
 
     Returns:
@@ -112,11 +104,14 @@ def _persist_indices(
     """
     if vector_index is None:
         raise TypeError("vector_index is required")
-    mgr.persist_vector_index(vector_index, workspace)
+    storage_context = getattr(pg_index, "storage_context", None) if pg_index else None
     graph_store = getattr(pg_index, "property_graph_store", None) if pg_index else None
     if graph_store is not None:
-        mgr.persist_graph_store(graph_store, workspace)
-    storage_context = getattr(pg_index, "storage_context", None) if pg_index else None
+        if storage_context is None:
+            raise SnapshotPersistenceError(
+                "Property graph index has no persistable storage context"
+            )
+        mgr.persist_graph_storage_context(storage_context, workspace)
     return graph_store, storage_context, pg_index
 
 
@@ -253,165 +248,10 @@ def _export_graphs(
     return exports_meta
 
 
-def _is_corpus_cache_valid(
-    cached_paths: list[Path],
-    uploads_dir: Path,
-    manifest_mtime: float,
-) -> bool:
-    """Return True if cached corpus manifest is still valid."""
-    uploads_root = uploads_dir.resolve()
-    resolved_cached = _resolve_cached_paths(cached_paths, uploads_root)
-    if resolved_cached is None:
-        return False
-
-    missing = [p for p in resolved_cached if not p.exists()]
-    if missing:
-        logger.debug(
-            "Corpus manifest cache invalidated; {} missing files detected",
-            len(missing),
-        )
-        return False
-
-    file_count = 0
-    resolved_current: list[Path] = []
-    for p in uploads_dir.rglob("*"):
-        if p.is_file():
-            resolved = _resolve_corpus_path(p, uploads_root)
-            if resolved is None:
-                continue
-            file_count += 1
-            resolved_current.append(resolved)
-            # Break early if count already differs
-            if file_count > len(resolved_cached):
-                break
-            if file_count > MAX_CORPUS_FILES:
-                logger.warning(
-                    "Corpus file scan capped at {}; snapshot hash may be partial.",
-                    MAX_CORPUS_FILES,
-                )
-                break
-    if file_count != len(resolved_cached):
-        logger.debug(
-            "Corpus manifest cache invalidated; cached_count={} current_count={}",
-            len(resolved_cached),
-            file_count,
-        )
-        return False
-
-    # Compare path sets to detect renames or moved files
-    cached_path_set = {str(p) for p in resolved_cached}
-    current_path_set = {str(p) for p in resolved_current}
-    if cached_path_set != current_path_set:
-        logger.debug(
-            "Corpus manifest cache invalidated; path set differs "
-            "(cached: {}, current: {})",
-            len(cached_path_set),
-            len(current_path_set),
-        )
-        return False
-
-    sample_size = min(50, len(resolved_cached))
-    for p in resolved_cached[:sample_size]:
-        try:
-            if p.stat().st_mtime > manifest_mtime:
-                logger.debug("Corpus manifest cache invalidated; newer files found")
-                return False
-        except OSError:
-            continue
-
-    return True
-
-
 def _collect_corpus_paths(settings_obj: Any) -> tuple[list[Path], Path]:
-    """Collect uploaded corpus paths and base directory.
-
-    Uses a cached manifest if available, falling back to bounded globbing
-    to avoid expensive recursive directory traversal on large corpora.
-
-    Note: The manifest cache is best-effort and not invalidated when files change.
-    If corpus files are added/removed after caching, the cache may be stale.
-    Delete .corpus_manifest.json in the data directory to force a refresh.
-    """
-    import json
-
+    """Collect the complete authoritative upload corpus without a second cache."""
     uploads_dir = settings_obj.data_dir / "uploads"
-    uploads_root = uploads_dir.resolve()
-    manifest_file = settings_obj.data_dir / ".corpus_manifest.json"
-
-    # Try to use cached manifest first
-    if manifest_file.exists():
-        manifest_data = None
-        with (
-            contextlib.suppress(json.JSONDecodeError, OSError),
-            manifest_file.open("r") as f,
-        ):
-            manifest_data = json.load(f)
-
-        if manifest_data is not None:
-            cached_paths = [Path(p) for p in manifest_data.get("files", [])]
-            if not uploads_dir.exists():
-                logger.debug("Uploads directory missing; returning empty corpus paths")
-                return [], uploads_dir
-            try:
-                manifest_mtime = manifest_file.stat().st_mtime
-                uploads_mtime = uploads_dir.stat().st_mtime
-            except OSError:
-                manifest_mtime = 0.0
-                uploads_mtime = 0.0
-            if uploads_mtime <= manifest_mtime and _is_corpus_cache_valid(
-                cached_paths, uploads_dir, manifest_mtime
-            ):
-                return cached_paths, uploads_dir
-
-    # Glob for corpus files (bounded to immediate children if corpus is large)
-    corpus_paths: list[Path] = []
-    file_count = 0
-    if uploads_dir.exists():
-        for p in uploads_dir.rglob("*"):
-            if p.is_file():
-                if _resolve_corpus_path(p, uploads_root) is None:
-                    continue
-                corpus_paths.append(p)
-                file_count += 1
-                if file_count >= MAX_CORPUS_FILES:
-                    logger.warning(
-                        "Corpus file scan capped at {}; snapshot hash may be partial.",
-                        MAX_CORPUS_FILES,
-                    )
-                    break
-
-    # Cache the result for next time
-    try:
-        with manifest_file.open("w") as f:
-            json.dump({"files": [str(p) for p in corpus_paths]}, f)
-    except OSError as e:
-        redaction = build_pii_log_entry(str(e), key_id="snapshot.corpus_manifest_cache")
-        path_name = manifest_file.name
-        if e.errno in (errno.EACCES, errno.EPERM):
-            logger.warning(
-                "Permission denied writing corpus manifest at {} "
-                "(error_type={} error={})",
-                path_name,
-                type(e).__name__,
-                redaction.redacted,
-            )
-        else:
-            logger.debug(
-                "Failed to cache corpus manifest at {} (error_type={} error={})",
-                path_name,
-                type(e).__name__,
-                redaction.redacted,
-            )
-    except Exception as e:
-        redaction = build_pii_log_entry(str(e), key_id="snapshot.corpus_manifest_cache")
-        logger.debug(
-            "Failed to cache corpus manifest at {} (error_type={} error={})",
-            manifest_file.name,
-            type(e).__name__,
-            redaction.redacted,
-        )
-
-    return corpus_paths, uploads_dir
+    return collect_corpus_paths(uploads_dir), uploads_dir
 
 
 def _build_versions(
@@ -482,7 +322,9 @@ def rebuild_snapshot(
     vector_index: VectorIndexProtocol,
     pg_index: PgIndexProtocol | None,
     settings_obj: Any,
+    activation: SnapshotActivation,
     *,
+    commit_source_changes: Callable[[], None] | None = None,
     embed_model: Any | None = None,
     log_export_event: Callable[[dict[str, Any]], None] | None = None,
     record_graph_export_metric: Callable[..., None] | None = None,
@@ -493,6 +335,10 @@ def rebuild_snapshot(
         vector_index: Vector index instance (required).
         pg_index: Optional PropertyGraphIndex-like instance (may be None).
         settings_obj: Settings object with `data_dir`, `database`, and `app_version`.
+        activation: Caller-owned manager, workspace, physical collection identities,
+            corpus identity, collection metadata, and GraphRAG requirement.
+        commit_source_changes: Late source promotion/quarantine callback invoked after
+            expensive payload preparation and immediately before verification.
         embed_model: Optional embed model instance for version reporting.
             Pass explicitly for reliable version tracking; otherwise we fall back
             to Settings.embed_model and (last-resort) vector_index._embed_model.
@@ -506,51 +352,74 @@ def rebuild_snapshot(
         log_export_event, record_graph_export_metric
     )
 
-    storage_dir = settings_obj.data_dir / "storage"
     if settings_obj.database is None:
         raise ValueError(
             "settings_obj.database must be configured for snapshot rebuild"
         )
-    mgr = SnapshotManager(storage_dir)
-    workspace = mgr.begin_snapshot()
-    try:
-        graph_store, storage_context, pg_index = _persist_indices(
-            mgr, workspace, vector_index, pg_index
+    if activation.graph_requested and pg_index is None:
+        raise SnapshotPersistenceError(
+            "GraphRAG was requested but no property graph was produced"
         )
-        exports_meta = _export_graphs(
-            workspace=workspace,
-            pg_index=pg_index,
-            vector_index=vector_index,
-            graph_store=graph_store,
-            storage_context=storage_context,
-            settings_obj=settings_obj,
-            log_export_event=log_export_event,
-            record_graph_export_metric=record_graph_export_metric,
+    graph_store, storage_context, pg_index = _persist_indices(
+        activation.manager, activation.workspace, vector_index, pg_index
+    )
+    if activation.graph_requested:
+        if graph_store is None:
+            raise SnapshotPersistenceError(
+                "GraphRAG was requested but no persistable graph store was produced"
+            )
+        graph_dir = activation.workspace / "graph"
+        if not graph_dir.is_dir() or not any(
+            path.is_file() and not path.is_symlink() for path in graph_dir.rglob("*")
+        ):
+            raise SnapshotPersistenceError(
+                "GraphRAG was requested but graph persistence produced no payload"
+            )
+    exports_meta = _export_graphs(
+        workspace=activation.workspace,
+        pg_index=pg_index,
+        vector_index=vector_index,
+        graph_store=graph_store,
+        storage_context=storage_context,
+        settings_obj=settings_obj,
+        log_export_event=log_export_event,
+        record_graph_export_metric=record_graph_export_metric,
+    )
+
+    if (
+        compute_config_hash(activation.activation_config)
+        != activation.activation_config_hash
+    ):
+        raise SnapshotPersistenceError("Activation configuration identity is invalid")
+    versions = _build_versions(settings_obj, vector_index, embed_model)
+
+    exports_meta.sort(
+        key=lambda item: str(item.get("filename") or item.get("sha256") or "")
+    )
+    activation.manager.write_manifest(
+        activation.workspace,
+        index_id="docmind",
+        graph_store_type="property_graph" if pg_index is not None else "none",
+        vector_store_type=settings_obj.database.vector_store_type,
+        text_collection=activation.text_collection,
+        image_collection=activation.image_collection,
+        corpus_hash=activation.expected_corpus_hash,
+        config_hash=activation.expected_config_hash,
+        versions=versions,
+        graph_exports=exports_meta,
+        collection_metadata=activation.collection_metadata,
+        activation_config=activation.activation_config,
+        activation_config_hash=activation.activation_config_hash,
+    )
+    if commit_source_changes is not None:
+        commit_source_changes()
+    corpus_paths, uploads_dir = _collect_corpus_paths(settings_obj)
+    chash = compute_corpus_hash(corpus_paths, base_dir=uploads_dir)
+    if chash != activation.expected_corpus_hash:
+        raise SnapshotPersistenceError(
+            "Authoritative corpus changed at the activation boundary"
         )
-
-        corpus_paths, uploads_dir = _collect_corpus_paths(settings_obj)
-        chash = compute_corpus_hash(corpus_paths, base_dir=uploads_dir)
-        cfg = current_config_dict(settings_obj)
-        cfg_hash = compute_config_hash(cfg)
-        versions = _build_versions(settings_obj, vector_index, embed_model)
-
-        exports_meta.sort(
-            key=lambda item: str(item.get("filename") or item.get("sha256") or "")
-        )
-        mgr.write_manifest(
-            workspace,
-            index_id="docmind",
-            graph_store_type="property_graph",
-            vector_store_type=settings_obj.database.vector_store_type,
-            corpus_hash=chash,
-            config_hash=cfg_hash,
-            versions=versions,
-            graph_exports=exports_meta,
-        )
-        return mgr.finalize_snapshot(workspace)
-    except Exception:
-        mgr.cleanup_tmp(workspace)
-        raise
+    return activation.manager.finalize_snapshot(activation.workspace)
 
 
-__all__ = ["rebuild_snapshot"]
+__all__ = ["SnapshotActivation", "rebuild_snapshot"]

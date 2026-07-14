@@ -1,80 +1,45 @@
-"""Integration tests for MultiAgentCoordinator with supervisor shim.
+"""Integration tests for deterministic coordinator response extraction.
 
-These tests validate coordinator initialization and a basic query path using a
-deterministic supervisor compile().stream shim to avoid external dependencies.
-They use LlamaIndex Settings mocks configured in tests/conftest.py.
+These tests validate real coordinator initialization and response metrics without
+external model or retrieval dependencies.
 """
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
-from tests.integration.coordinator_helpers import patch_supervisor_and_react
+from src.agents.coordinator import MultiAgentCoordinator
 
 
 @pytest.mark.integration
-class TestAgentCoordinatorShimIntegration:
-    """Coordinator integration with deterministic supervisor shim."""
+class TestAgentCoordinatorIntegration:
+    """Coordinator integration with deterministic terminal state."""
 
-    def test_initialization_and_basic_query(self, supervisor_stream_shim):
-        """Coordinator initializes and processes a simple query via shim."""
-        try:
-            from unittest.mock import patch as _patch
+    def test_initialization_and_basic_query(self):
+        """Coordinator initializes and extracts a deterministic response."""
+        coord = MultiAgentCoordinator()
+        final_state = {
+            "messages": [SimpleNamespace(content="Shim: processed successfully")],
+            "validation_result": {"confidence": 0.9},
+        }
 
-            from src.agents.coordinator import MultiAgentCoordinator
+        resp = coord._extract_response(final_state, "hello world", 0.0, 0.01)
 
-            with patch_supervisor_and_react(supervisor_stream_shim):
-                with _patch.object(
-                    MultiAgentCoordinator, "__init__", return_value=None
-                ):
-                    coord = MultiAgentCoordinator()  # type: ignore[call-arg]
-                    coord.model_path = "test-model"
-                # Directly test response extraction to avoid setup complexity
-                final_state = {
-                    "messages": [
-                        __import__("types").SimpleNamespace(
-                            content="Shim: processed successfully"
-                        )
-                    ],
-                    "validation_result": {"confidence": 0.9},
-                }
-                resp = coord._extract_response(final_state, "hello world", 0.0, 0.01)
-                assert hasattr(resp, "content")
-                assert isinstance(resp.content, str)
-                assert resp.content
-        except (RuntimeError, ImportError, AttributeError) as e:  # pragma: no cover
-            pytest.skip(f"Coordinator integration unavailable: {e}")
+        assert isinstance(resp.content, str)
+        assert resp.content
 
-    def test_metadata_and_metrics_present(self, supervisor_stream_shim):
+    def test_metadata_and_metrics_present(self):
         """Response includes metadata and populated optimization metrics."""
-        try:
-            from unittest.mock import patch as _patch
+        coord = MultiAgentCoordinator()
+        final_state = {
+            "messages": [SimpleNamespace(content="Shim result")],
+            "validation_result": {"confidence": 0.75},
+            "agent_timings": {"retrieval_agent": 0.01},
+        }
 
-            from src.agents.coordinator import MultiAgentCoordinator
+        resp = coord._extract_response(final_state, "test routing", 0.0, 0.02)
 
-            with patch_supervisor_and_react(supervisor_stream_shim):
-                with _patch.object(
-                    MultiAgentCoordinator, "__init__", return_value=None
-                ):
-                    coord = MultiAgentCoordinator()  # type: ignore[call-arg]
-                    coord.model_path = "test-model"
-                final_state = {
-                    "messages": [
-                        __import__("types").SimpleNamespace(content="Shim result")
-                    ],
-                    "validation_result": {"confidence": 0.75},
-                    "agent_timings": {"router_agent": 0.01},
-                }
-                resp = coord._extract_response(final_state, "test routing", 0.0, 0.02)
-
-                # Basic metadata presence
-                assert isinstance(resp.metadata, dict)
-
-                # Optimization metrics
-                assert isinstance(resp.optimization_metrics, dict)
-                assert (
-                    "coordination_overhead_ms" in resp.optimization_metrics
-                    or resp.optimization_metrics.get("error") is True
-                )
-        except (RuntimeError, ImportError, AttributeError) as e:  # pragma: no cover
-            pytest.skip(f"Coordinator integration unavailable: {e}")
+        assert isinstance(resp.metadata, dict)
+        assert "coordination_overhead_ms" in resp.optimization_metrics

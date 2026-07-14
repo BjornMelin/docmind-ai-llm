@@ -59,10 +59,8 @@ def snapshot_storage_root(tmp_path: Path) -> Path:
     """Provide an isolated snapshot storage root for each test."""
     original_dir = app_settings.data_dir
     original_chat_db = app_settings.chat.sqlite_path
-    original_ops_db = app_settings.database.sqlite_db_path
     app_settings.data_dir = tmp_path
     app_settings.chat.sqlite_path = tmp_path / "chat.db"
-    app_settings.database.sqlite_db_path = tmp_path / "docmind.db"
     storage = tmp_path / "storage"
     storage.mkdir(parents=True, exist_ok=True)
     try:
@@ -70,7 +68,6 @@ def snapshot_storage_root(tmp_path: Path) -> Path:
     finally:
         app_settings.data_dir = original_dir
         app_settings.chat.sqlite_path = original_chat_db
-        app_settings.database.sqlite_db_path = original_ops_db
 
 
 @pytest.fixture
@@ -571,7 +568,7 @@ def supervisor_stream_shim() -> Mock:
             messages.append(SimpleNamespace(content="Shim: processed successfully"))
             final = dict(initial_state)
             final["messages"] = messages
-            final["agent_timings"] = {"router_agent": 0.01}
+            final["agent_timings"] = {"retrieval_agent": 0.01}
             yield final
 
     class _Graph:
@@ -754,12 +751,12 @@ def ensure_settings_dirs(s) -> None:  # pragma: no cover
         data_dir = Path(s.data_dir)
         cache_dir = Path(s.cache.dir)
         log_parent = Path(s.log_file).parent
-        db_parent = Path(s.sqlite_db_path).parent
+        chat_db_parent = Path(s.chat.sqlite_path).parent
 
         data_dir.mkdir(parents=True, exist_ok=True)
         cache_dir.mkdir(parents=True, exist_ok=True)
         log_parent.mkdir(parents=True, exist_ok=True)
-        db_parent.mkdir(parents=True, exist_ok=True)
+        chat_db_parent.mkdir(parents=True, exist_ok=True)
     except Exception:  # noqa: S110
         # Tests should fail on their own assertions; avoid raising
         # here to keep helper minimal.

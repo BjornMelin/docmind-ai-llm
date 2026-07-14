@@ -19,22 +19,11 @@ from pydantic import ValidationError
 from src.config.env_persistence import persist_env
 from src.config.llm_runtime_probe import probe_openai_compatible_runtime
 from src.config.settings import DocMindSettings, settings
-from src.config.settings_utils import DEFAULT_OPENAI_BASE_URL, ensure_v1
+from src.config.settings_utils import ensure_v1
 from src.retrieval.llama_index_adapter import get_graphrag_health
 from src.ui.components.provider_badge import provider_badge
 from src.utils.telemetry import log_jsonl
 
-_LLAMACPP_DISALLOWED_SHARED_URLS = frozenset(
-    filter(
-        None,
-        {
-            str(DEFAULT_OPENAI_BASE_URL).rstrip("/"),
-            ensure_v1(DEFAULT_OPENAI_BASE_URL),
-            "https://api.openai.com",
-            "https://api.openai.com/v1",
-        },
-    )
-)
 _LLAMACPP_DISALLOWED_EXPLICIT_URLS = frozenset(
     {"https://api.openai.com", "https://api.openai.com/v1"}
 )
@@ -106,18 +95,20 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
     Args:
         validated: The validated settings object to apply.
     """
+    from llama_index.core import Settings as LISettings
+
+    previous_settings = settings.model_copy(deep=True)
+    previous_llm = getattr(LISettings, "_llm", None)
     updated = settings.model_copy(
         update={
             "llm_backend": validated.llm_backend,
-            "model": validated.model,
-            "context_window": validated.context_window,
+            "llm_request": validated.llm_request,
             "llm_request_timeout_seconds": (validated.llm_request_timeout_seconds),
             "enable_gpu_acceleration": validated.enable_gpu_acceleration,
             "openai": validated.openai,
             "ollama_base_url": validated.ollama_base_url,
             "ollama_api_key": validated.ollama_api_key,
             "ollama_enable_web_search": validated.ollama_enable_web_search,
-            "ollama_embed_dimensions": validated.ollama_embed_dimensions,
             "ollama_enable_logprobs": validated.ollama_enable_logprobs,
             "ollama_top_logprobs": validated.ollama_top_logprobs,
             "vllm_base_url": validated.vllm_base_url,
@@ -137,7 +128,6 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
                         validated.retrieval.text_rerank_timeout_ms
                     ),
                     "siglip_timeout_ms": (validated.retrieval.siglip_timeout_ms),
-                    "colpali_timeout_ms": (validated.retrieval.colpali_timeout_ms),
                     "total_rerank_budget_ms": (
                         validated.retrieval.total_rerank_budget_ms
                     ),
@@ -148,20 +138,16 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
             "ocr": validated.ocr,
         }
     )
-    # Apply updated settings in-place so existing imports keep the same
-    # instance.
-    # NOTE: For our singleton Pydantic settings object, re-calling
-    # __init__ with new data is the canonical pattern for in-place
-    # reload after removing apply_settings_in_place(), and is
-    # intentional here.
-    settings.__init__(**updated.model_dump(mode="python"))
-
     model_label = validated.effective_model
     try:
         from src.config.integrations import initialize_integrations
 
+        # Reinitialize the singleton in place so existing imports keep the same
+        # object. The previous validated snapshot is restored on any bind error.
+        settings.__init__(**updated.model_dump(mode="python"))
         initialize_integrations(force_llm=True, force_embed=False)
     except (
+        ImportError,
         OSError,
         RuntimeError,
         TypeError,
@@ -169,6 +155,8 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
     ) as exc:  # pragma: no cover - defensive UI feedback
         from src.utils.log_safety import build_pii_log_entry
 
+        settings.__init__(**previous_settings.model_dump(mode="python"))
+        LISettings._llm = previous_llm
         redaction = build_pii_log_entry(str(exc), key_id="settings.apply")
         st.error(f"Runtime apply failed: {exc.__class__.__name__}")
         log_jsonl(
@@ -184,11 +172,9 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
         )
         return
 
-    from llama_index.core import (
-        Settings as LISettings,
-    )  # local import (tests patch)
-
-    if getattr(LISettings, "llm", None) is None:
+    if getattr(LISettings, "_llm", None) is None:
+        settings.__init__(**previous_settings.model_dump(mode="python"))
+        LISettings._llm = previous_llm
         st.error("Runtime apply failed: Settings.llm is not bound.")
         log_jsonl(
             {
@@ -201,7 +187,17 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
         )
         return
 
-    st.success("Runtime applied. Settings.llm bound.")
+    from src.ui.chat_runtime import invalidate_coordinator
+    from src.ui.vector_session import replace_session_vector_resource
+
+    settings.cache_version += 1
+    replace_session_vector_resource(
+        st.session_state,
+        None,
+        runtime_generation=settings.cache_version,
+    )
+    invalidate_coordinator()
+    st.success("Runtime applied. Settings.llm bound; Chat runtime refreshed.")
     log_jsonl(
         {
             "settings.apply": True,
@@ -220,7 +216,14 @@ def main() -> None:
     graphrag_health = get_graphrag_health()
     provider_badge(settings, graphrag_health=graphrag_health)
     provider = _render_provider_section()
-    model, context_window, timeout_s, use_gpu = _render_model_section()
+    (
+        model,
+        context_window,
+        max_output_tokens,
+        temperature,
+        timeout_s,
+        use_gpu,
+    ) = _render_model_section()
     if provider == "openai_compatible":
         (
             openai_base_url,
@@ -249,13 +252,12 @@ def main() -> None:
     (
         ollama_api_key,
         ollama_enable_web_search,
-        ollama_embed_dimensions,
         ollama_enable_logprobs,
         ollama_top_logprobs,
     ) = _render_ollama_advanced_section(provider)
     allow_remote = _render_security_section()
     parsing_values, parsing_ui_errors = _render_document_parsing_section()
-    rrf_k, t_text, t_siglip, t_colpali, t_total = _render_retrieval_section()
+    rrf_k, t_text, t_siglip, t_total = _render_retrieval_section()
     _render_graphrag_section(graphrag_health)
     if provider == "ollama":
         _render_ollama_web_search_warning(
@@ -264,13 +266,15 @@ def main() -> None:
             allowlist=settings.security.endpoint_allowlist,
         )
 
-    ui_errors = _validate_llamacpp_inputs(provider, llamacpp_url, openai_base_url)
+    ui_errors = _validate_llamacpp_inputs(provider, llamacpp_url)
     ui_errors.extend(openai_ui_errors)
     ui_errors.extend(parsing_ui_errors)
     values: SettingsFormValues = {
         "provider": provider,
         "model": model,
         "context_window": context_window,
+        "max_output_tokens": max_output_tokens,
+        "temperature": temperature,
         "openai_base_url": openai_base_url,
         "openai_api_key": openai_api_key,
         "openai_require_v1": openai_require_v1,
@@ -279,7 +283,6 @@ def main() -> None:
         "ollama_url": ollama_url,
         "ollama_api_key": ollama_api_key,
         "ollama_enable_web_search": ollama_enable_web_search,
-        "ollama_embed_dimensions": ollama_embed_dimensions,
         "ollama_enable_logprobs": ollama_enable_logprobs,
         "ollama_top_logprobs": ollama_top_logprobs,
         "vllm_url": vllm_url,
@@ -292,7 +295,6 @@ def main() -> None:
         "rrf_k": rrf_k,
         "t_text": t_text,
         "t_siglip": t_siglip,
-        "t_colpali": t_colpali,
         "t_total": t_total,
     }
     candidate = _build_candidate_settings(values)
@@ -321,7 +323,7 @@ def _render_document_parsing_section() -> tuple[dict[str, object], list[str]]:
         )
         model_cache_dir = st.text_input(
             "Parser model cache",
-            value=str(settings.ocr.model_cache_dir),
+            value=str(settings.parsing.model_cache_dir),
         )
 
     _render_parsing_health()
@@ -364,26 +366,45 @@ def _render_provider_section() -> str:
     )
 
 
-def _render_model_section() -> tuple[str, int, int, bool]:
+def _render_model_section() -> tuple[str, int, int, float, int, bool]:
     """Render model/context inputs and return values.
 
     Returns:
-        tuple[str, int, int, bool]: Selected (model_name, context_window,
-            timeout_sec, use_gpu).
+        Selected model, context window, maximum output tokens, temperature,
+        timeout, and GPU preference.
     """
     st.subheader("Model & Context")
     model = st.text_input(
         "Model ID",
-        value=settings.effective_model,
-        help="Model identifier exposed by the selected provider.",
+        value=settings.llm_request.model or "",
+        placeholder=settings.effective_model,
+        help="Optional model override. Leave blank to use the provider default.",
     )
     context_window = int(
         st.number_input(
             "Context window",
-            min_value=1024,
+            min_value=8192,
             max_value=200_000,
-            value=int(settings.context_window or settings.vllm.context_window),
+            value=int(settings.llm_request.context_window),
             step=1024,
+        )
+    )
+    max_output_tokens = int(
+        st.number_input(
+            "Maximum output tokens",
+            min_value=100,
+            max_value=8192,
+            value=int(settings.llm_request.max_output_tokens),
+            step=100,
+        )
+    )
+    temperature = float(
+        st.number_input(
+            "Temperature",
+            min_value=0.0,
+            max_value=2.0,
+            value=float(settings.llm_request.temperature),
+            step=0.1,
         )
     )
     timeout_s = int(
@@ -398,7 +419,7 @@ def _render_model_section() -> tuple[str, int, int, bool]:
         "Enable GPU acceleration",
         value=bool(settings.enable_gpu_acceleration),
     )
-    return model, context_window, timeout_s, use_gpu
+    return model, context_window, max_output_tokens, temperature, timeout_s, use_gpu
 
 
 _OPENAI_COMPAT_PRESETS: dict[str, dict[str, object]] = {
@@ -612,7 +633,7 @@ def _render_provider_urls(provider: str) -> tuple[str, str, str, str]:
     if provider == "openai_compatible":
         return (
             str(settings.ollama_base_url).rstrip("/"),
-            str(settings.vllm_base_url or settings.vllm.vllm_base_url),
+            str(settings.vllm_base_url),
             str(settings.lmstudio_base_url),
             str(settings.llamacpp_base_url) if settings.llamacpp_base_url else "",
         )
@@ -625,8 +646,8 @@ def _render_provider_urls(provider: str) -> tuple[str, str, str, str]:
         )
         vllm_url = st.text_input(
             "vLLM base URL",
-            value=str(settings.vllm_base_url or settings.vllm.vllm_base_url),
-            help="OpenAI-compatible server or native. /v1 optional",
+            value=str(settings.vllm_base_url),
+            help="External OpenAI-compatible HTTP server; /v1 is normalized.",
         )
     with col2:
         lmstudio_url = st.text_input(
@@ -644,15 +665,14 @@ def _render_provider_urls(provider: str) -> tuple[str, str, str, str]:
 
 def _render_ollama_advanced_section(
     provider: str,
-) -> tuple[str, bool, int | None, bool, int]:
+) -> tuple[str, bool, bool, int]:
     """Render Ollama advanced settings and return values.
 
     Args:
         provider: The currently selected LLM provider.
 
     Returns:
-        Tuple of (api_key, enable_web_search, embed_dimensions, enable_logprobs,
-        top_logprobs).
+        Tuple of (api_key, enable_web_search, enable_logprobs, top_logprobs).
     """
     if provider != "ollama":
         api_key_value = (
@@ -660,15 +680,9 @@ def _render_ollama_advanced_section(
             if settings.ollama_api_key is not None
             else ""
         )
-        embed_dimensions = (
-            int(settings.ollama_embed_dimensions)
-            if settings.ollama_embed_dimensions is not None
-            else None
-        )
         return (
             api_key_value,
             bool(settings.ollama_enable_web_search),
-            embed_dimensions,
             bool(settings.ollama_enable_logprobs),
             int(settings.ollama_top_logprobs),
         )
@@ -686,22 +700,13 @@ def _render_ollama_advanced_section(
         value=api_key_value,
         help="Required for Ollama Cloud web_search/web_fetch tools.",
     )
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     with col1:
         enable_web_search = st.checkbox(
             "Enable Ollama web search tools",
             value=bool(settings.ollama_enable_web_search),
         )
     with col2:
-        embed_dim_raw = int(
-            st.number_input(
-                "Embed dimensions (0 = default)",
-                min_value=0,
-                max_value=8192,
-                value=int(settings.ollama_embed_dimensions or 0),
-            )
-        )
-    with col3:
         enable_logprobs = st.checkbox(
             "Enable Ollama logprobs",
             value=bool(settings.ollama_enable_logprobs),
@@ -715,11 +720,9 @@ def _render_ollama_advanced_section(
             disabled=not enable_logprobs,
         )
     )
-    embed_dimensions = int(embed_dim_raw) if embed_dim_raw > 0 else None
     return (
         api_key,
         enable_web_search,
-        embed_dimensions,
         enable_logprobs,
         top_logprobs,
     )
@@ -767,12 +770,11 @@ def _render_security_section() -> bool:
     return allow_remote
 
 
-def _render_retrieval_section() -> tuple[int, int, int, int, int]:
+def _render_retrieval_section() -> tuple[int, int, int, int]:
     """Render retrieval policy inputs and return values.
 
     Returns:
-        tuple[int, int, int, int, int]: Selected (rrf_k, text_rerank_timeout_ms,
-            siglip_timeout_ms, colpali_timeout_ms, total_rerank_budget_ms).
+        Selected ``rrf_k``, text and SigLIP timeouts, and total rerank budget.
     """
     st.subheader("Retrieval (Policy)")
     st.caption("Server-side hybrid and fusion are managed by environment policy")
@@ -796,7 +798,7 @@ def _render_retrieval_section() -> tuple[int, int, int, int, int]:
             value=int(getattr(settings.retrieval, "rrf_k", 60)),
         )
     )
-    col1t, col2t, col3t, col4t = st.columns(4)
+    col1t, col2t, col3t = st.columns(3)
     with col1t:
         t_text = int(
             st.number_input(
@@ -816,24 +818,15 @@ def _render_retrieval_section() -> tuple[int, int, int, int, int]:
             )
         )
     with col3t:
-        t_colpali = int(
-            st.number_input(
-                "ColPali timeout (ms)",
-                min_value=25,
-                max_value=10000,
-                value=int(getattr(settings.retrieval, "colpali_timeout_ms", 400)),
-            )
-        )
-    with col4t:
         t_total = int(
             st.number_input(
                 "Total rerank budget (ms)",
                 min_value=100,
                 max_value=20000,
-                value=int(getattr(settings.retrieval, "total_rerank_budget_ms", 800)),
+                value=int(getattr(settings.retrieval, "total_rerank_budget_ms", 400)),
             )
         )
-    return rrf_k, t_text, t_siglip, t_colpali, t_total
+    return rrf_k, t_text, t_siglip, t_total
 
 
 def _render_graphrag_section(
@@ -852,7 +845,7 @@ def _render_graphrag_section(
     st.text_input("Adapter", value=adapter_name, disabled=True)
     st.text_input(
         "GraphRAG status",
-        value="enabled" if supports else "disabled",
+        value="available" if supports else "unavailable",
         disabled=True,
     )
     if not supports:
@@ -862,28 +855,22 @@ def _render_graphrag_section(
 def _validate_llamacpp_inputs(
     provider: str,
     llamacpp_url: str,
-    openai_base_url: str = "",
 ) -> list[str]:
     """Validate llama.cpp server settings.
 
     Args:
         provider: Current provider name.
         llamacpp_url: The llama.cpp server URL.
-        openai_base_url: Shared OpenAI-compatible server URL fallback.
 
     Returns:
         list[str]: Human-readable validation messages.
     """
     ui_errors: list[str] = []
     clean_llamacpp_url = (llamacpp_url or "").strip()
-    clean_openai_base_url = (openai_base_url or "").strip()
     is_llamacpp = provider == "llamacpp"
     if not is_llamacpp:
         return ui_errors
 
-    normalized_openai_base_url = (
-        ensure_v1(clean_openai_base_url) if clean_openai_base_url else None
-    )
     normalized_llamacpp_url = (
         ensure_v1(clean_llamacpp_url) if clean_llamacpp_url else None
     )
@@ -891,12 +878,7 @@ def _validate_llamacpp_inputs(
         ui_errors.append("Provide a llama.cpp OpenAI-compatible server URL.")
         return ui_errors
 
-    has_llamacpp_url = bool(normalized_llamacpp_url)
-    has_custom_shared_url = (
-        bool(normalized_openai_base_url)
-        and normalized_openai_base_url not in _LLAMACPP_DISALLOWED_SHARED_URLS
-    )
-    if has_llamacpp_url or has_custom_shared_url:
+    if normalized_llamacpp_url:
         return ui_errors
 
     ui_errors.append("Provide a llama.cpp OpenAI-compatible server URL.")
@@ -948,6 +930,8 @@ class SettingsFormValues(TypedDict):
     provider: str
     model: str
     context_window: int
+    max_output_tokens: int
+    temperature: float
     openai_base_url: str
     openai_api_key: str
     openai_require_v1: bool
@@ -956,7 +940,6 @@ class SettingsFormValues(TypedDict):
     ollama_url: str
     ollama_api_key: str
     ollama_enable_web_search: bool
-    ollama_embed_dimensions: int | None
     ollama_enable_logprobs: bool
     ollama_top_logprobs: int
     vllm_url: str
@@ -969,7 +952,6 @@ class SettingsFormValues(TypedDict):
     rrf_k: int
     t_text: int
     t_siglip: int
-    t_colpali: int
     t_total: int
 
 
@@ -980,8 +962,12 @@ def _build_candidate_settings(values: SettingsFormValues) -> dict[str, Any]:
     parsing_values = values["parsing"]
     return {
         "llm_backend": provider,
-        "model": str(values["model"]).strip() or None,
-        "context_window": int(values["context_window"]),
+        "llm_request": {
+            "model": str(values["model"]).strip() or None,
+            "context_window": int(values["context_window"]),
+            "max_output_tokens": int(values["max_output_tokens"]),
+            "temperature": float(values["temperature"]),
+        },
         "openai": {
             "base_url": str(values["openai_base_url"]).strip(),
             "api_key": str(values["openai_api_key"]).strip() or None,
@@ -992,10 +978,9 @@ def _build_candidate_settings(values: SettingsFormValues) -> dict[str, Any]:
         "ollama_base_url": str(values["ollama_url"]).strip(),
         "ollama_api_key": str(values["ollama_api_key"]).strip() or None,
         "ollama_enable_web_search": bool(values["ollama_enable_web_search"]),
-        "ollama_embed_dimensions": values["ollama_embed_dimensions"],
         "ollama_enable_logprobs": bool(values["ollama_enable_logprobs"]),
         "ollama_top_logprobs": int(values["ollama_top_logprobs"]),
-        "vllm_base_url": str(values["vllm_url"]).strip() or None,
+        "vllm_base_url": str(values["vllm_url"]).strip(),
         "lmstudio_base_url": str(values["lmstudio_url"]).strip(),
         "llamacpp_base_url": str(values["llamacpp_url"]).strip() or None,
         "llm_request_timeout_seconds": int(values["timeout_s"]),
@@ -1005,19 +990,20 @@ def _build_candidate_settings(values: SettingsFormValues) -> dict[str, Any]:
             "endpoint_allowlist": list(settings.security.endpoint_allowlist),
             "trust_remote_code": bool(settings.security.trust_remote_code),
         },
-        "parsing": settings.parsing.model_dump(mode="python"),
+        "parsing": {
+            **settings.parsing.model_dump(mode="python"),
+            "model_cache_dir": str(parsing_values["model_cache_dir"]).strip(),
+        },
         "pdf_backend": settings.pdf_backend.model_dump(mode="python"),
         "ocr": {
             **settings.ocr.model_dump(mode="python"),
             "force_ocr": bool(parsing_values["force_ocr"]),
-            "model_cache_dir": str(parsing_values["model_cache_dir"]).strip(),
             "searchable_pdf_enabled": bool(parsing_values["searchable_pdf"]),
         },
         "retrieval": {
             "rrf_k": int(values["rrf_k"]),
             "text_rerank_timeout_ms": int(values["t_text"]),
             "siglip_timeout_ms": int(values["t_siglip"]),
-            "colpali_timeout_ms": int(values["t_colpali"]),
             "total_rerank_budget_ms": int(values["t_total"]),
         },
     }
@@ -1146,35 +1132,15 @@ def _render_ollama_web_search_warning(
         allow_remote: Whether remote endpoints are allowed.
         allowlist: Current endpoint allowlist.
     """
-    from src.config.settings_utils import (
-        normalize_endpoint_host,
-        parse_any_http_url,
-    )
+    from src.config.settings_utils import parse_endpoint_allowlist_hosts
 
     if not enabled:
         return
-    if not allow_remote:
-        st.warning(
-            "Ollama web tools require remote endpoints. Enable "
-            "`DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS`."
-        )
+    if allow_remote:
         return
 
-    def _is_ollama_host(entry: str) -> bool:
-        """Check if entry references ollama.com or a subdomain."""
-        raw = entry.strip()
-        if not raw:
-            return False
-        candidate = raw if "://" in raw else f"https://{raw}"
-        try:
-            parsed = parse_any_http_url(candidate)
-            host = normalize_endpoint_host(str(parsed.host))
-        except Exception:
-            host = normalize_endpoint_host(raw.split("/")[0].split(":")[0])
-        return host == "ollama.com" or host.endswith(".ollama.com")
-
-    has_ollama_host = any(_is_ollama_host(str(entry)) for entry in allowlist if entry)
-    if not has_ollama_host:
+    allowed_hosts = parse_endpoint_allowlist_hosts([str(entry) for entry in allowlist])
+    if "ollama.com" not in allowed_hosts:
         st.warning(
             "Ollama web tools require `https://ollama.com` in "
             "`DOCMIND_SECURITY__ENDPOINT_ALLOWLIST`."
@@ -1211,15 +1177,18 @@ def _persist_env_from_validated(validated: DocMindSettings) -> None:
         validated: Validated settings instance to serialize.
     """
     default_headers = getattr(validated.openai, "default_headers", None)
-    context_window_value = (
-        validated.context_window
-        if validated.context_window is not None
-        else validated.vllm.context_window
-    )
     env_map = {
         "DOCMIND_LLM_BACKEND": validated.llm_backend,
-        "DOCMIND_MODEL": (validated.model or ""),
-        "DOCMIND_CONTEXT_WINDOW": str(int(context_window_value)),
+        "DOCMIND_LLM_REQUEST__MODEL": (validated.llm_request.model or ""),
+        "DOCMIND_LLM_REQUEST__CONTEXT_WINDOW": str(
+            int(validated.llm_request.context_window)
+        ),
+        "DOCMIND_LLM_REQUEST__MAX_OUTPUT_TOKENS": str(
+            int(validated.llm_request.max_output_tokens)
+        ),
+        "DOCMIND_LLM_REQUEST__TEMPERATURE": str(
+            float(validated.llm_request.temperature)
+        ),
         "DOCMIND_LLM_REQUEST_TIMEOUT_SECONDS": str(
             int(validated.llm_request_timeout_seconds)
         ),
@@ -1250,18 +1219,11 @@ def _persist_env_from_validated(validated: DocMindSettings) -> None:
         "DOCMIND_OLLAMA_ENABLE_WEB_SEARCH": (
             "true" if validated.ollama_enable_web_search else "false"
         ),
-        "DOCMIND_OLLAMA_EMBED_DIMENSIONS": (
-            str(validated.ollama_embed_dimensions)
-            if validated.ollama_embed_dimensions is not None
-            else ""
-        ),
         "DOCMIND_OLLAMA_ENABLE_LOGPROBS": (
             "true" if validated.ollama_enable_logprobs else "false"
         ),
         "DOCMIND_OLLAMA_TOP_LOGPROBS": str(int(validated.ollama_top_logprobs)),
-        "DOCMIND_VLLM_BASE_URL": (
-            str(validated.vllm_base_url) if validated.vllm_base_url else ""
-        ),
+        "DOCMIND_VLLM_BASE_URL": str(validated.vllm_base_url),
         "DOCMIND_LMSTUDIO_BASE_URL": str(validated.lmstudio_base_url),
         "DOCMIND_LLAMACPP_BASE_URL": (
             str(validated.llamacpp_base_url) if validated.llamacpp_base_url else ""
@@ -1271,6 +1233,7 @@ def _persist_env_from_validated(validated: DocMindSettings) -> None:
         ),
         "DOCMIND_PARSING__FRAMEWORK": validated.parsing.framework,
         "DOCMIND_PARSING__PROFILE": validated.parsing.profile,
+        "DOCMIND_PARSING__MODEL_CACHE_DIR": str(validated.parsing.model_cache_dir),
         "DOCMIND_PARSING__MAX_PAGES": str(validated.parsing.max_pages),
         "DOCMIND_PARSING__MAX_RENDER_PIXELS": str(validated.parsing.max_render_pixels),
         "DOCMIND_PARSING__MAX_TOTAL_TEXT_CHARS": str(
@@ -1288,7 +1251,6 @@ def _persist_env_from_validated(validated: DocMindSettings) -> None:
         ),
         "DOCMIND_OCR__ENGINE": validated.ocr.engine,
         "DOCMIND_OCR__FORCE_OCR": "true" if validated.ocr.force_ocr else "false",
-        "DOCMIND_OCR__MODEL_CACHE_DIR": str(validated.ocr.model_cache_dir),
         "DOCMIND_OCR__OCRMYPDF_JOBS": str(int(validated.ocr.ocrmypdf_jobs)),
         "DOCMIND_OCR__SEARCHABLE_PDF_ENABLED": (
             "true" if validated.ocr.searchable_pdf_enabled else "false"
@@ -1299,9 +1261,6 @@ def _persist_env_from_validated(validated: DocMindSettings) -> None:
         ),
         "DOCMIND_RETRIEVAL__SIGLIP_TIMEOUT_MS": str(
             int(validated.retrieval.siglip_timeout_ms)
-        ),
-        "DOCMIND_RETRIEVAL__COLPALI_TIMEOUT_MS": str(
-            int(validated.retrieval.colpali_timeout_ms)
         ),
         "DOCMIND_RETRIEVAL__TOTAL_RERANK_BUDGET_MS": str(
             int(validated.retrieval.total_rerank_budget_ms)

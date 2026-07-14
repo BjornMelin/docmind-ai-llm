@@ -1,254 +1,92 @@
-# DocMind AI Quality Gates Infrastructure
+# Repository scripts
 
-This directory contains comprehensive test quality gates and monitoring infrastructure to maintain code quality and prevent regression.
+DocMind keeps a small set of fail-closed utilities around the standard Python
+toolchain. Pytest, Coverage.py, Ruff, and Pyright own quality enforcement; the
+repository does not maintain a parallel quality-orchestration framework.
 
-## Quality Gate Scripts
+## Canonical verification
 
-### 1. Coverage Threshold Checker (`check_coverage.py`)
-
-Enforced gate: 80% line coverage with detailed reporting; branch coverage is tracked but not enforced (`min_branch_coverage_percent = 0.0`). Override thresholds on-demand with `--threshold`.
-
-```bash
-# Basic usage
-uv run python scripts/check_coverage.py --threshold 80 --fail-under
-
-# Generate detailed report with HTML output
-uv run python scripts/check_coverage.py --collect --report --html
-
-# Check only new/modified code
-uv run python scripts/check_coverage.py --new-code-only --diff-from main
-```
-
-**Features:**
-
-- Line coverage validation (80% enforced); branch coverage tracking (not enforced; `min_branch_coverage_percent = 0.0`)  
-- New code coverage tracking
-- Detailed HTML reports
-- CI/CD integration support
-- File-by-file analysis
-
-### 2. Performance Regression Detector (`performance_monitor.py`)
-
-Monitors test execution times and detects >20% performance degradations.
+Run the complete local gate before shipping:
 
 ```bash
-# Run performance monitoring with regression detection
-uv run python scripts/performance_monitor.py --run-tests --check-regressions
-
-# Establish performance baseline
-uv run python scripts/performance_monitor.py --run-tests --baseline
-
-# Quick collection time check
-uv run python scripts/performance_monitor.py --collection-only
+uv run ruff format --check .
+uv run ruff check .
+uv run ruff check src --config ruff-core.toml
+uv run pyright --threads 4
+uv run pytest tests/unit tests/integration -q \
+  --cov=src \
+  --cov-branch \
+  --cov-report=term-missing \
+  --cov-report=html:htmlcov \
+  --cov-report=xml:coverage.xml \
+  --cov-report=json:coverage.json \
+  --cov-fail-under=80 \
+  --junitxml=junit.xml
+uv run python scripts/check_links.py
+uv run python scripts/verify_structural_parity.py
+uv run python scripts/validate_schemas.py
 ```
 
-**Features:**
+Pytest owns test selection, coverage enforcement, and report generation. The coverage command writes `coverage.xml`, `coverage.json`, `htmlcov/`, and `junit.xml`, then fails below 80 percent.
 
-- Test execution time monitoring
-- Performance baseline tracking  
-- Regression alerts (>20% degradation)
-- Trend analysis and reporting
-- Integration with existing performance tests
-
-Regression checks compare durations and memory (CPU peak, GPU VRAM peak when available) against the recorded baseline.
-
-#### Key Measurement Flows
-
-The following flows represent the critical path and are automatically measured during regression checks:
-
-1. **Document Upload & Ingestion**: Processing PDF/Text files into the pipeline.
-   - Target (P95): <=500ms for a 10-page PDF
-2. **Embedding Generation**: Performance of BGE-M3/SigLIP models (latency/throughput).
-   - Target (P95): <100ms/page (SigLIP), <50ms/chunk (BGE-M3)
-3. **Retrieval Latency**: Hybrid search (dense + sparse) query execution time.
-   - Target (P95): <200ms per query
-4. **Chat Inference**: Token generation speed (tok/s) and time-to-first-token.
-   - Target (P95): TTFT <500ms, >=30 tok/s sustained
-5. **UI Load & Routing**: Streamlit page transition and initial component render times.
-   - Target (P95): initial render <800ms, route switch <300ms
-6. **Ingestion Pipeline**: End-to-end processing from document to vector store.
-   - Target (P95): <5s for a 10-page PDF
-
-Targets are illustrative and hardware-dependent; adjust as needed. Regression checks
-still gate on >20% change vs the recorded baseline.
-
-#### Measurement Procedure
-
-1. **Prepare Environment**: Ensure no background processes are consuming significant resources.
-2. **Execute Monitor**: Run the script with the `--run-tests` flag to execute performance-marked tests.
-
-   ```bash
-   uv run python scripts/performance_monitor.py --run-tests --check-regressions
-   ```
-
-3. **Analyze Results**: Review the generated report in `tests/performance/reports/`. Any regression >20% will trigger a failure (exit code 1).
-
-#### Baseline Management
-
-Baselines establish the "ground truth" for performance.
-
-1. **Create Baseline**: Capture metrics from a known-good state (e.g., `main` branch or a release tag).
-
-   ```bash
-   uv run python scripts/performance_monitor.py --run-tests --baseline
-   ```
-
-2. **Store Baseline**: Baseline artifacts are stored in `tests/performance/baselines/`. Commit these files to the repository to share the baseline across environments.
-3. **Update Frequency**: Re-establish baselines only after significant architectural changes or environment migrations (e.g., new hardware).
-
-### 3. Test Suite Health Monitor (`test_health.py`)
-
-Monitors flaky test patterns, anti-patterns, and test execution stability.
+Use these native lanes:
 
 ```bash
-# Comprehensive health analysis
-uv run python scripts/test_health.py --analyze --runs 10
-
-# Check for code anti-patterns
-uv run python scripts/test_health.py --patterns --test-dirs tests/
-
-# Monitor test stability
-uv run python scripts/test_health.py --stability --days 7
+uv run pytest tests/unit -q --no-cov
+uv run pytest tests/integration -q --no-cov
+uv run pytest tests/unit tests/integration -q --no-cov
+uv run --no-sync pytest -m requires_gpu --no-cov
+uv run pytest tests/unit/processing/test_parser_contract.py -vv --no-cov
 ```
 
-**Features:**
+`check_coverage.py` is an optional report helper. CI passes the 80 percent floor and each output format directly to Pytest.
 
-- Flaky test detection (80% pass rate threshold)
-- Anti-pattern identification (sleep usage, hardcoded paths, etc.)
-- Test execution stability tracking
-- Health reports with recommendations
-- CI/CD pipeline integration
+## Runtime and release proof
 
-### 4. Unified Quality Gates Runner (`run_quality_gates.py`)
+- `benchmark_parsing.py` runs the schema-3 parser benchmark in isolated worker
+  processes. Benchmark a clean commit and retain the JSON alongside the exact
+  hardware, model cache, corpus, and command used:
 
-Orchestrates all quality gates with comprehensive reporting.
+  ```bash
+  uv run python scripts/benchmark_parsing.py \
+    --generate-minimal-fixtures \
+    --output cache/benchmarks/parsing/results.json
+  ```
 
-```bash
-# Run all quality gates
-uv run python scripts/run_quality_gates.py --all
+- `parser_health.py --check` verifies parser imports and the app-owned Docling
+  layout bundle. Offline fixture tests own RapidOCR inference validation.
+- `test_gpu.py --quick` validates an explicitly installed GPU profile.
+- `container_health.py` is the Docker health-check owner.
+- `check_release_contract.py` verifies release version parity across the root
+  project metadata, root package lock entry, Release Please manifest, and newest
+  released changelog heading. Run `uv lock --check` beside it.
 
-# Quick validation (coverage only)
-uv run python scripts/run_quality_gates.py --quick
+## Data and service utilities
 
-# CI/CD pipeline (coverage + performance)
-uv run python scripts/run_quality_gates.py --ci
+- `backup.py`: create a complete local recovery point with uploads and exact
+  Qdrant snapshots by default, or prune verified recovery points. Diagnostic
+  omission flags create incomplete captures that never enter retention. The
+  manifest's `databases.cache_db` and `databases.chat_db` entries record each
+  native copy's backup-relative `path`, `size_bytes`, and `sha256`. Both complete
+  and incomplete creates exit 0, so automation must require `complete=true` and
+  an empty `warnings` list. Follow the operations guide for restore.
+- `cleanup_collections.py`: inspect deployment-owned orphan Qdrant generations
+  after stopping every DocMind reader and writer. It is dry-run by default;
+  `--delete` is an explicit second step.
+- `qdrant_schema.py`: inspect or rebuild an empty canonical Qdrant collection.
+- `qdrant_fusion_smoke.py`: prove client support for native RRF and DBSF.
+- `start_qdrant_local.sh`: start the supported local Qdrant service.
+- `run_ingestion_demo.py`: exercise the ingestion boundary with local inputs.
+- `demo_metrics_console.py`: render local metrics for development diagnostics.
 
-# Individual gates
-uv run python scripts/run_quality_gates.py --coverage --performance --health
+## Documentation and repository checks
 
-# Include pre-commit hooks
-uv run python scripts/run_quality_gates.py --all --pre-commit
-```
+- `check_links.py`: validate internal documentation links.
+- `verify_structural_parity.py`: compare documented and implemented structure.
+- `validate_schemas.py`: validate the supported BEIR leaderboard schema.
+- `analyze_github_reviews.py`: summarize exported review JSON without requiring
+  repository write access.
 
-## Configuration Files
-
-### pytest.ini
-
-Updated with three-tier testing strategy and quality gate markers:
-
-```ini
-# Three-Tier Testing Strategy
-unit: Fast unit tests with mocked dependencies (<5s each)
-integration: Component interaction tests (<30s each)  
-system: Full system tests with real models and GPU (<5min each)
-
-# Quality Gate Markers
-performance: Performance benchmarks and regression tests
-benchmark: Benchmark tests for performance tracking
-flaky: Tests known to be flaky (for health monitoring)
-slow: Tests taking longer than expected
-quality_gate: Tests that enforce quality standards
-coverage_critical: Tests critical for coverage thresholds
-```
-
-### pyproject.toml
-
-Enhanced with comprehensive coverage configuration and quality dependencies:
-
-```toml
-[tool.coverage.run]
-source = ["src"]
-branch = true
-fail_under = 80
-
-[tool.coverage.report]
-show_missing = true
-skip_covered = false
-sort = "Cover"
-
-[dependency-groups.quality]
-pre-commit = ">=4.0.1"
-coverage = ">=7.6.0" 
-pytest-xdist = ">=3.6.0"  # Parallel execution
-pytest-timeout = ">=2.3.1"  # Timeout enforcement
-```
-
-### .pre-commit-config.yaml  
-
-Comprehensive pre-commit hooks including custom quality gates:
-
-- **Code Quality**: ruff, black, isort, mypy
-- **Security**: bandit scanning  
-- **Documentation**: docstring validation
-- **Custom Gates**: coverage checks, performance monitoring, test health
-- **Integration**: test discovery validation
-
-## Usage Examples
-
-### Development Workflow
-
-```bash
-# Before committing
-uv run python scripts/run_quality_gates.py --quick
-pre-commit run --all-files
-
-# Before pushing  
-uv run python scripts/run_quality_gates.py --ci --report
-
-# Full validation
-uv run python scripts/run_quality_gates.py --all --pre-commit --report
-```
-
-### CI/CD Integration
-
-```bash
-# Fast CI validation
-uv run python scripts/run_quality_gates.py --ci --continue-on-failure
-
-# Staging validation
-uv run python scripts/run_quality_gates.py --all --report
-
-# Performance baseline update
-uv run python scripts/performance_monitor.py --run-tests --baseline --save
-```
-
-### Troubleshooting
-
-```bash
-# Identify flaky tests
-uv run python scripts/test_health.py --flakiness --runs 10 --report
-
-# Debug coverage issues  
-uv run python scripts/check_coverage.py --collect --report --new-code-only
-
-# Monitor performance trends
-uv run python scripts/performance_monitor.py --report --days 30
-```
-
-## Success Criteria
-
-✅ **Coverage**: >80% line coverage (aspirational target; overrideable with `--threshold`)
-✅ **Performance**: <20% regression in test execution  
-✅ **Health**: <5 flaky tests, minimal anti-patterns  
-✅ **Integration**: All pre-commit hooks pass  
-✅ **Stability**: >95% test pass rate consistently  
-
-## Integration Points
-
-- **Pre-commit hooks**: Automatic quality validation on commit
-- **CI/CD pipelines**: Enforces quality gates before merge
-- **Performance tracking**: Continuous monitoring and alerting  
-- **Health monitoring**: Proactive test suite maintenance
-- **Coverage reporting**: Detailed HTML reports with trend analysis
-
-This infrastructure ensures ongoing test quality maintenance and prevents future regression in the modernized test suite.
+Use `uv run python <script> --help` for script-specific options. Never treat a
+missing artifact, baseline, dependency, or subprocess result as a successful
+quality signal.

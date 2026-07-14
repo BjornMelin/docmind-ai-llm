@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from datetime import UTC, datetime, timedelta
 
@@ -125,6 +126,76 @@ def test_job_manager_cancel_sets_status(default_timeout: float) -> None:
         timeout=default_timeout,
     )
     assert status == "canceled"
+
+
+def test_job_manager_success_wins_over_late_cancel(default_timeout: float) -> None:
+    """Keep a committed return value when cancellation arrives after its checkpoint."""
+    manager = JobManager(max_workers=1, max_progress_queue_size=1, job_ttl_sec=0)
+    entered_commit = threading.Event()
+    finish_commit = threading.Event()
+
+    def _work(_cancel_event, _report):  # type: ignore[no-untyped-def]
+        entered_commit.set()
+        assert finish_commit.wait(default_timeout)
+        return {"snapshot_id": "committed"}
+
+    owner_id = "owner"
+    job_id = manager.start_job(owner_id=owner_id, fn=_work)
+    assert entered_commit.wait(default_timeout)
+    assert manager.cancel(job_id, owner_id=owner_id) is True
+    state = manager.get(job_id, owner_id=owner_id)
+    assert state is not None
+    assert state.status == "running"
+
+    finish_commit.set()
+    assert (
+        manager.wait_for_completion(
+            job_id,
+            owner_id=owner_id,
+            timeout_sec=default_timeout,
+        )
+        == "succeeded"
+    )
+    state = manager.get(job_id, owner_id=owner_id)
+    assert state is not None
+    assert state.result == {"snapshot_id": "committed"}
+
+
+def test_queued_cancellation_still_runs_worker_cleanup(
+    default_timeout: float,
+) -> None:
+    """Queued jobs enter their cooperative boundary instead of leaking staged data."""
+    manager = JobManager(max_workers=1, max_progress_queue_size=1, job_ttl_sec=0)
+    blocker_started = threading.Event()
+    release_blocker = threading.Event()
+    cleanup_ran = threading.Event()
+
+    def _blocker(_cancel_event, _report):  # type: ignore[no-untyped-def]
+        blocker_started.set()
+        assert release_blocker.wait(default_timeout)
+
+    def _queued(cancel_event, _report):  # type: ignore[no-untyped-def]
+        if cancel_event.is_set():
+            cleanup_ran.set()
+            raise JobCanceledError()
+        raise AssertionError("queued worker did not receive cancellation")
+
+    owner_id = "owner"
+    manager.start_job(owner_id=owner_id, fn=_blocker)
+    assert blocker_started.wait(default_timeout)
+    queued_id = manager.start_job(owner_id=owner_id, fn=_queued)
+    assert manager.cancel(queued_id, owner_id=owner_id) is True
+
+    release_blocker.set()
+    assert (
+        manager.wait_for_completion(
+            queued_id,
+            owner_id=owner_id,
+            timeout_sec=default_timeout,
+        )
+        == "canceled"
+    )
+    assert cleanup_ran.is_set()
 
 
 def test_job_manager_cleanup_expires_done_jobs(default_timeout: float) -> None:

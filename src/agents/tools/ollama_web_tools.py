@@ -1,22 +1,21 @@
-"""Optional Ollama Cloud web search tools and example loop.
+"""Optional Ollama Cloud web search tools for LangGraph agents.
 
-This module is feature-flagged via settings. It is not used by default in
-DocMind flows, but keeps the codebase ready to adopt Ollama-native tool
-calling and web search in a controlled way.
+This module is feature-flagged via settings and disabled by default.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
-import time
-from collections.abc import Callable
-from typing import Any
+from typing import Annotated, Any
 
 from langchain_core.tools import tool
+from langgraph.prebuilt import InjectedState
 from loguru import logger
-from ollama import Message, RequestError, ResponseError
+from ollama import RequestError, ResponseError
 
-from src.config.ollama_client import get_ollama_web_tools, ollama_chat
+from src.agents.deadlines import remaining_deadline_seconds
+from src.config.ollama_client import build_ollama_async_web_client
 from src.config.settings import DocMindSettings, settings
 from src.utils.log_safety import build_pii_log_entry
 
@@ -202,23 +201,6 @@ def _json_with_limit(value: Any, *, max_chars: int) -> str:
     return _json_dumps({"truncated": True, "preview": best_preview})
 
 
-def _resolve_web_tool(name: str, *, cfg: DocMindSettings) -> Callable[..., Any] | None:
-    """Return the bound Ollama web tool implementation by name.
-
-    Args:
-        name: Tool name to resolve ("web_search" or "web_fetch").
-        cfg: DocMind settings instance to bind tool clients/policy.
-
-    Returns:
-        Callable tool function when available; otherwise None.
-    """
-    tools = get_ollama_web_tools(cfg)
-    for tool_fn in tools:
-        if getattr(tool_fn, "__name__", "") == name:
-            return tool_fn
-    return None
-
-
 def _error_payload(*, msg: str, exc: Exception | None = None) -> str:
     """Create a standardized JSON error payload for tool responses.
 
@@ -248,14 +230,19 @@ def _error_payload(*, msg: str, exc: Exception | None = None) -> str:
     return _json_with_limit(payload, max_chars=_MAX_TOOL_RESULT_CHARS)
 
 
-def _ollama_web_search_impl(
-    *, query: str, max_results: int, cfg: DocMindSettings
+async def _ollama_web_search_impl(
+    *,
+    query: str,
+    max_results: int,
+    state: dict[str, Any],
+    cfg: DocMindSettings,
 ) -> str:
     """Implementation of the Ollama web search tool.
 
     Args:
         query: The search query string.
         max_results: Maximum number of results to return.
+        state: Injected graph state containing the absolute deadline.
         cfg: The DocMind settings configuration to bind tool policies.
 
     Returns:
@@ -268,12 +255,20 @@ def _ollama_web_search_impl(
         return _error_payload(msg="Query too long")
 
     try:
-        fn = _resolve_web_tool("web_search", cfg=cfg)
-        if fn is None:
-            return _error_payload(msg="Ollama web_search tool unavailable")
+        remaining = remaining_deadline_seconds(
+            state,
+            operation="Ollama web search",
+        )
         max_results_int = max(1, min(int(max_results), 10))
-        result = fn(query=clean_query, max_results=max_results_int)
+        client = build_ollama_async_web_client(cfg, timeout_s=remaining)
+        async with client, asyncio.timeout(remaining):
+            result = await client.web_search(
+                query=clean_query,
+                max_results=max_results_int,
+            )
         return _json_with_limit(result, max_chars=_MAX_TOOL_RESULT_CHARS)
+    except TimeoutError as exc:
+        return _error_payload(msg="Ollama web_search deadline exceeded", exc=exc)
     except (
         ValueError,
         ConnectionError,
@@ -294,11 +289,17 @@ def _ollama_web_search_impl(
         return _error_payload(msg="Ollama web_search failed", exc=exc)
 
 
-def _ollama_web_fetch_impl(*, url: str, cfg: DocMindSettings) -> str:
+async def _ollama_web_fetch_impl(
+    *,
+    url: str,
+    state: dict[str, Any],
+    cfg: DocMindSettings,
+) -> str:
     """Implementation of the Ollama web fetch tool.
 
     Args:
         url: The URL to fetch content from.
+        state: Injected graph state containing the absolute deadline.
         cfg: The DocMind settings configuration to bind tool policies.
 
     Returns:
@@ -318,11 +319,16 @@ def _ollama_web_fetch_impl(*, url: str, cfg: DocMindSettings) -> str:
         return _error_payload(msg=validation_error)
 
     try:
-        fn = _resolve_web_tool("web_fetch", cfg=cfg)
-        if fn is None:
-            return _error_payload(msg="Ollama web_fetch tool unavailable")
-        result = fn(url=clean_url)
+        remaining = remaining_deadline_seconds(
+            state,
+            operation="Ollama web fetch",
+        )
+        client = build_ollama_async_web_client(cfg, timeout_s=remaining)
+        async with client, asyncio.timeout(remaining):
+            result = await client.web_fetch(url=clean_url)
         return _json_with_limit(result, max_chars=_MAX_TOOL_RESULT_CHARS)
+    except TimeoutError as exc:
+        return _error_payload(msg="Ollama web_fetch deadline exceeded", exc=exc)
     except (
         ValueError,
         ConnectionError,
@@ -354,43 +360,28 @@ def _make_langchain_web_tools(cfg: DocMindSettings) -> list[Any]:
     """
 
     @tool("ollama_web_search")
-    def _ollama_web_search(query: str, max_results: int = 3) -> str:
+    async def _ollama_web_search(
+        query: str,
+        state: Annotated[dict[str, Any], InjectedState],
+        max_results: int = 3,
+    ) -> str:
         """Run Ollama Cloud web_search (gated by settings)."""
-        return _ollama_web_search_impl(query=query, max_results=max_results, cfg=cfg)
+        return await _ollama_web_search_impl(
+            query=query,
+            max_results=max_results,
+            state=state,
+            cfg=cfg,
+        )
 
     @tool("ollama_web_fetch")
-    def _ollama_web_fetch(url: str) -> str:
+    async def _ollama_web_fetch(
+        url: str,
+        state: Annotated[dict[str, Any], InjectedState],
+    ) -> str:
         """Run Ollama Cloud web_fetch (gated by settings)."""
-        return _ollama_web_fetch_impl(url=url, cfg=cfg)
+        return await _ollama_web_fetch_impl(url=url, state=state, cfg=cfg)
 
     return [_ollama_web_search, _ollama_web_fetch]
-
-
-@tool("ollama_web_search")
-def ollama_web_search(query: str, max_results: int = 3) -> str:
-    """Run Ollama Cloud web_search (gated by settings).
-
-    Args:
-        query: Search query string.
-        max_results: Maximum number of results to return.
-
-    Returns:
-        JSON string with search results or an error payload.
-    """
-    return _ollama_web_search_impl(query=query, max_results=max_results, cfg=settings)
-
-
-@tool("ollama_web_fetch")
-def ollama_web_fetch(url: str) -> str:
-    """Run Ollama Cloud web_fetch (gated by settings).
-
-    Args:
-        url: URL to fetch.
-
-    Returns:
-        JSON string with fetched content or an error payload.
-    """
-    return _ollama_web_fetch_impl(url=url, cfg=settings)
 
 
 def get_langchain_web_tools(
@@ -410,179 +401,7 @@ def get_langchain_web_tools(
         return []
     if not cfg.ollama_api_key.get_secret_value().strip():
         return []
-    try:
-        _ = get_ollama_web_tools(cfg)
-    except Exception as e:
-        redaction = build_pii_log_entry(
-            str(e), key_id="ollama_web_tools.get_langchain_web_tools"
-        )
-        logger.debug(
-            "Failed to initialize Ollama web tools (error_type={}, error={})",
-            type(e).__name__,
-            redaction.redacted,
-        )
-        return []
     return _make_langchain_web_tools(cfg)
 
 
-def run_web_search_agent(
-    *,
-    model: str,
-    prompt: str,
-    max_steps: int = 5,
-    think: bool = True,
-    deadline_s: float = 0.0,
-    cfg: DocMindSettings = settings,
-) -> str:
-    """Run a minimal Ollama-native web search agent loop.
-
-    This demonstrates the official Ollama tool-calling message contract:
-    - the model emits tool_calls
-    - the app executes each tool and replies with role='tool' + tool_name
-
-    Args:
-        model: Ollama model name (typically a tool-capable model).
-        prompt: User question.
-        max_steps: Safety cap to avoid infinite loops.
-        think: Enable thinking mode for thinking-capable models.
-        deadline_s: Absolute deadline timestamp (seconds since epoch). When 0,
-            defaults to settings.agents.decision_timeout from "now".
-        cfg: DocMind settings.
-
-    Returns:
-        Final assistant content (may be empty if the model never returns content).
-    """
-    tools = get_ollama_web_tools(cfg)
-    available: dict[str, Callable[..., Any]] = {}
-    for tool_fn in tools:
-        name = getattr(tool_fn, "__name__", None)
-        if isinstance(name, str) and name:
-            available[name] = tool_fn
-
-    messages: list[dict[str, Any] | Message] = [{"role": "user", "content": prompt}]
-    effective_deadline = float(deadline_s)
-    if effective_deadline == 0.0:
-        effective_deadline = time.time() + float(cfg.agents.decision_timeout)
-
-    for _ in range(max_steps):
-        remaining_time = max(0.0, effective_deadline - time.time())
-        per_call_timeout = min(
-            float(cfg.llm_request_timeout_seconds),
-            remaining_time,
-        )
-        per_call_timeout = max(0.1, per_call_timeout)
-        timeout_cfg = cfg.model_copy(
-            update={"llm_request_timeout_seconds": per_call_timeout}
-        )
-        response = ollama_chat(
-            model=model,
-            messages=messages,
-            tools=tools,
-            stream=False,
-            think=think,
-            cfg=timeout_cfg,
-        )
-        messages.append(response.message)
-
-        tool_calls = getattr(response.message, "tool_calls", None)
-        if not tool_calls:
-            return str(response.message.content or "")
-
-        for call in tool_calls:
-            tool_name = str(call.function.name)
-            fn = available.get(tool_name)
-            if fn is None:
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_name": tool_name,
-                        "content": f"Tool {tool_name} not found",
-                    }
-                )
-                continue
-
-            # Parse arguments - Ollama may return dict or JSON string
-            raw_args = call.function.arguments
-            if isinstance(raw_args, str):
-                try:
-                    parsed_args = json.loads(raw_args)
-                except json.JSONDecodeError as exc:
-                    redaction = build_pii_log_entry(
-                        str(exc), key_id="ollama_web_tools.tool_args"
-                    )
-                    logger.debug(
-                        "Failed to parse tool arguments (error_type={}, error={})",
-                        type(exc).__name__,
-                        redaction.redacted,
-                    )
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_name": tool_name,
-                            "content": _error_payload(
-                                msg=f"Tool {tool_name} arguments invalid JSON",
-                                exc=exc,
-                            ),
-                        }
-                    )
-                    continue
-                if not isinstance(parsed_args, dict):
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_name": tool_name,
-                            "content": _error_payload(
-                                msg=f"Tool {tool_name} arguments must be object",
-                            ),
-                        }
-                    )
-                    continue
-                args = parsed_args
-            elif isinstance(raw_args, dict):
-                args = raw_args
-            else:
-                # Fallback for other mapping types
-                args = dict(raw_args) if raw_args else {}
-
-            try:
-                result = fn(**args)
-            except Exception as exc:  # pragma: no cover - defensive example loop
-                redaction = build_pii_log_entry(
-                    str(exc), key_id="ollama_web_tools.tool_call"
-                )
-                logger.debug(
-                    "Ollama tool call failed (error_type={}, error={})",
-                    type(exc).__name__,
-                    redaction.redacted,
-                )
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_name": tool_name,
-                        "content": _error_payload(
-                            msg=f"Tool {tool_name} failed",
-                            exc=exc,
-                        ),
-                    }
-                )
-                continue
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_name": tool_name,
-                    "content": _json_with_limit(
-                        result, max_chars=_MAX_TOOL_RESULT_CHARS
-                    ),
-                }
-            )
-
-    logger.warning("Ollama web search agent hit max_steps={}", max_steps)
-    return ""
-
-
-__all__ = [
-    "get_langchain_web_tools",
-    "ollama_web_fetch",
-    "ollama_web_search",
-    "run_web_search_agent",
-]
+__all__ = ["get_langchain_web_tools"]

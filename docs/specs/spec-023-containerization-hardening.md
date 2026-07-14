@@ -1,8 +1,8 @@
 ---
 spec: SPEC-023
 title: Harden the Python 3.12 container and Compose deployment
-version: 1.5.0
-date: 2026-07-11
+version: 1.7.0
+date: 2026-07-14
 owners: ["ai-arch"]
 status: Implemented
 related_requirements:
@@ -43,12 +43,15 @@ Use a multi-stage Dockerfile:
    - set `UV_PYTHON_DOWNLOADS=never` to keep uv from downloading a separate Python
    - run `uv sync --frozen`; the default `cpu` dependency group and uv source
      rules select official CPU-only Torch and Torchvision wheels
-   - prefetch and verify the Docling and RapidOCR model manifests so local PDF
-     parsing is ready in the immutable image; store them under
+   - prefetch and verify the Docling layout manifest so local PDF parsing is
+     ready in the immutable image; store it under
      `/app/parser-models`, outside the mutable `/app/cache` volume
-   - prefetch the pinned BGE-M3 PyTorch snapshot under `/app/hf-models`, exclude
-     its duplicate ONNX export, and prove offline construction plus a
-     1024-dimensional embedding during the build
+   - initialize RapidOCR with networking disabled so its locked wheel proves
+     packaged-model integrity and offline readiness
+   - prefetch the pinned BGE-M3, BM42, BGE reranker, and SigLIP snapshots under
+     `/app/hf-models`, exclude the BGE-M3 duplicate ONNX export, and prove dense,
+     sparse document/query, text-rerank, and image-model inference with
+     networking disabled
 
 2. Runtime stage:
 
@@ -60,12 +63,13 @@ Use a multi-stage Dockerfile:
    - create non-root user (`docmind`, uid 1000)
    - run `scripts/parser_health.py --check` once in the container entrypoint
      before Streamlit starts
-   - set `DOCMIND_OCR__MODEL_CACHE_DIR=/app/parser-models` so a fresh Compose
+   - set `DOCMIND_PARSING__MODEL_CACHE_DIR=/app/parser-models` so a fresh Compose
      cache volume cannot hide the image's verified parser artifacts
-   - set `DOCMIND_EMBEDDING__CACHE_FOLDER=/app/hf-models` so the canonical
-     embedding adapter loads the immutable BGE-M3 snapshot even when the
-     application cache is mounted; retain `LLAMA_INDEX_CACHE_DIR` for
-     LlamaIndex-owned artifacts
+   - set `DOCMIND_EMBEDDING__CACHE_FOLDER=/app/hf-models` and
+     `HF_HUB_CACHE=/app/hf-models` so every default retrieval model loads its
+     immutable snapshot even when the application cache is mounted; retain
+     `LLAMA_INDEX_CACHE_DIR` for LlamaIndex-owned artifacts
+   - set `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` in the runtime image
    - use `scripts/container_health.py` only for the recurring Streamlit TCP
      liveness check
    - set `WORKDIR /app`
@@ -79,9 +83,8 @@ Use a multi-stage Dockerfile:
 
 CI builds this exact production context with Docker Buildx, loads the result
 for the liveness smoke test, and persists reusable layers in the GitHub Actions
-cache. The cache avoids downloading and embedding the pinned BGE-M3 snapshot on
-every unchanged build without weakening the Dockerfile's offline readiness
-assertion.
+cache. The cache avoids downloading the pinned retrieval snapshots on every
+unchanged build without weakening the Dockerfile's offline readiness assertion.
 
 ### Compose configuration
 
@@ -90,7 +93,7 @@ The base Compose file:
 - map `8501:8501`
 - run CPU Ollama and Qdrant on the internal backend network
 - wait for both services to become healthy before starting DocMind
-- default `DOCMIND_MODEL` to `qwen3:4b-instruct`
+- default `DOCMIND_LLM_REQUEST__MODEL` to `qwen3:4b-instruct`
 - pin Ollama to `0.31.2` and Qdrant to `v1.18.2`
 - use canonical env vars:
   - `DOCMIND_LLM_BACKEND`, `DOCMIND_OLLAMA_BASE_URL`, `DOCMIND_OPENAI__BASE_URL`, etc.

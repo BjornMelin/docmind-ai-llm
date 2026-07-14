@@ -2,8 +2,8 @@
 ADR: 001
 Title: Modern agentic RAG architecture
 Status: Implemented (Amended)
-Version: 7.1
-Date: 2026-07-10
+Version: 7.3
+Date: 2026-07-14
 Supersedes:
 Superseded-by:
 Related: 003, 004, 010, 011, 018, 019, 024, 037
@@ -15,7 +15,11 @@ References:
 
 ## Description
 
-Adopt a lightweight supervisor-based retrieval-augmented generation (RAG) architecture. It routes queries, plans subtasks, retrieves evidence, synthesizes answers, and validates results. Keep orchestration local-first and measure performance in each deployment environment.
+Adopt a lightweight supervisor-based retrieval-augmented generation (RAG)
+architecture with four worker roles: planner, retrieval, synthesis, and
+validation. The retrieval worker delegates tool selection to LlamaIndex's native
+`RouterQueryEngine`. Keep orchestration local-first and measure performance in
+each deployment environment.
 
 ## Context
 
@@ -46,11 +50,10 @@ The application defaults to a local Ollama backend. It can also use local or app
 
 ## Decision
 
-Use a five‑agent pattern coordinated by a supervisor:
+Use four worker roles coordinated by a supervisor:
 
-- Query Router → picks retrieval strategy
 - Planner → decomposes complex queries
-- Retrieval Expert → executes adaptive retrieval (ADR‑003)
+- Retrieval Expert → calls the native LlamaIndex router for adaptive retrieval (ADR‑003)
 - Synthesizer → aggregates evidence into answers
 - Validator → checks relevance/faithfulness and triggers corrections
 
@@ -59,11 +62,11 @@ Use a five‑agent pattern coordinated by a supervisor:
 ```mermaid
 graph TD
   U["User Query"] --> S["Supervisor"]
-  S --> R["Router"]
   S --> P["Planner"]
   S --> T["Retrieval"]
   S --> Y["Synthesis"]
   S --> V["Validation"]
+  T --> R["LlamaIndex RouterQueryEngine"]
   T -->|Docs| Y
   V -->|Pass| O["Answer"]
   V -->|Fail| S
@@ -73,7 +76,7 @@ graph TD
 
 ### Functional Requirements
 
-- FR‑1: Route queries to optimal retrieval strategy
+- FR‑1: Delegate retrieval strategy selection to the native LlamaIndex router
 - FR‑2: Fallback on low‑quality retrieval; re‑route as needed
 - FR‑3: Validate answers for relevance and faithfulness
 - FR‑4: Maintain multi‑turn context for chat flows
@@ -98,94 +101,30 @@ graph TD
 
 ### Architecture Overview
 
-- Supervisor orchestrates five small agents via simple tools
-- Router selects strategies; validator enforces quality loops
+- Supervisor orchestrates four small worker roles through one atomic dispatch tool
+- The retrieval tool calls `RouterQueryEngine`; the validator enforces quality loops
 - Retrieval uses adaptive pipeline and modality‑aware reranking
 
 ### Implementation Details
 
-In `src/agents/coordinator.py` (illustrative):
-
-```python
-from typing import Any, Dict
-
-class Router:
-    name = "router"
-    def run(self, query: str, meta: Dict[str, Any]) -> Dict[str, Any]:
-        # decide path: {"strategy": "hybrid|hierarchical|graph", "needs_planning": bool}
-        return {"strategy": "hybrid", "needs_planning": False}
-
-class Planner:
-    name = "planner"
-    def run(self, query: str) -> list[str]:
-        # decompose complex query into sub-queries
-        return [query]
-
-class Retriever:
-    name = "retrieval"
-    def run(self, query: str, strategy: str) -> list[Dict[str, Any]]:
-        # call adaptive retrieval (ADR-003), returns evidence chunks
-        return []
-
-class Synthesizer:
-    name = "synthesis"
-    def run(self, evidence: list[Dict[str, Any]]) -> str:
-        # merge evidence into an answer with citations
-        return ""
-
-class Validator:
-    name = "validation"
-    def run(self, answer: str, evidence: list[Dict[str, Any]]) -> Dict[str, Any]:
-        # check relevance/faithfulness; {"ok": bool, "reason": str}
-        return {"ok": True, "reason": ""}
-
-def build_supervisor(tools):
-    return Supervisor(
-        agents=[Router(), Planner(), Retriever(), Synthesizer(), Validator()],
-        tools=tools,
-    )
-
-# Optional hooks
-def trim_context_hook(state):
-    # enforce 128K window (ADR-004/010); drop oldest messages if needed
-    return state
-
-def collect_metrics_hook(state, output):
-    # record timings, decisions, token counts
-    return output
-
-# Reading guardrails and retrieval config from settings
-from src.config.settings import settings
-
-def build_supervisor_with_guardrails(tools):
-    guard = settings.agents.model_dump()
-    sup = build_supervisor(tools)
-    # Example: attach hooks or config from guardrails
-    sup.pre_model_hook = trim_context_hook
-    sup.post_model_hook = collect_metrics_hook
-    # Parallel tool execution and depth (if your supervisor surface supports these)
-    sup.config = {
-        "parallel_tool_calls": bool(settings.agents.enable_parallel_tool_execution),
-        "max_workflow_depth": int(guard.get("max_workflow_depth", 5)),
-    }
-    return sup
-```
+`src/agents/coordinator.py` builds the four LangChain role agents and compiles the
+repository-owned graph. `src/agents/supervisor_graph.py` owns atomic worker
+dispatch. `src/agents/tools/retrieval.py` calls the router built by
+`src/retrieval/router_factory.py`; there is no separate query-router agent or
+second retrieval strategy implementation.
 
 ### Configuration
 
 ```env
-DOCMIND_AGENTS__ENABLE_MULTI_AGENT=true
 DOCMIND_AGENTS__DECISION_TIMEOUT=200
-DOCMIND_AGENTS__ENABLE_PARALLEL_TOOL_EXECUTION=true
-DOCMIND_AGENTS__MAX_CONCURRENT_AGENTS=3
-DOCMIND_AGENTS__CONTEXT_BUFFER_SIZE=8192
 ```
 
 ## Testing
 
-```python
-def test_router_picks_strategy(router):
-    assert router.route("find table") == "hybrid"
+```bash
+uv run pytest tests/unit/agents/test_supervisor_graph.py \
+  tests/unit/agents/tools/test_retrieval.py \
+  tests/unit/retrieval/test_router_factory_contract.py -q --no-cov
 ```
 
 ## Consequences
@@ -208,10 +147,14 @@ def test_router_picks_strategy(router):
 
 ### Dependencies
 
-- Python: `langgraph`, `llama-index-core`, selected LlamaIndex adapters, and `sentence-transformers`
+- Python: `langgraph`, `langchain`, `llama-index-core`, and selected LlamaIndex adapters
 
 ## Changelog
 
+- 7.3 (2026-07-14): Align the architecture with four worker roles and native
+  LlamaIndex retrieval routing; remove the obsolete illustrative fifth agent.
+- 7.2 (2026-07-13): Remove the obsolete shared-client toggle; provider factories
+  now own native retry behavior without a parallel compatibility path
 - 7.1 (2026-07-10): Mark fixed latency, throughput, and memory figures as unverified historical targets; align provider language with the local-first default and opt-in remote endpoints
 - 7.0 (2025-08-19): Record the FP8 model, extended-context, and parallel-tool planning targets; no reproducible LLM benchmark accompanied these targets
 - 6.0 (2025-08-18): Hardware upgrade; 128K via YaRN; latency targets updated

@@ -19,26 +19,37 @@ def test_create_vector_store_calls_ensure(monkeypatch):
         def close(self):
             return None
 
+    class _AsyncClient:
+        async def close(self) -> None:
+            return None
+
     class _Store:
         def __init__(
             self,
             client,
+            aclient,
             collection_name,
             enable_hybrid,
             batch_size,
             dense_vector_name,
             sparse_vector_name,
+            sparse_doc_fn,
+            sparse_query_fn,
         ):
             self.args = (
                 client,
+                aclient,
                 collection_name,
                 enable_hybrid,
                 batch_size,
                 dense_vector_name,
                 sparse_vector_name,
+                sparse_doc_fn,
+                sparse_query_fn,
             )
 
     monkeypatch.setattr(mod, "QdrantClient", lambda **_: _Client())
+    monkeypatch.setattr(mod, "AsyncQdrantClient", lambda **_: _AsyncClient())
     monkeypatch.setattr(mod, "QdrantVectorStore", _Store)
 
     # Count calls to the canonical schema helper.
@@ -50,7 +61,7 @@ def test_create_vector_store_calls_ensure(monkeypatch):
     out = mod.create_vector_store("col", enable_hybrid=True)
     assert isinstance(out, _Store)
     assert calls["ensure_hybrid"] == 1
-    assert out.args[-2:] == (mod.DENSE_VECTOR_NAME, mod.SPARSE_VECTOR_NAME)
+    assert out.args[5:7] == (mod.DENSE_VECTOR_NAME, mod.SPARSE_VECTOR_NAME)
 
 
 @pytest.mark.unit
@@ -98,7 +109,14 @@ def test_create_vector_store_closes_client_when_construction_fails(
         def close(self):
             self.closed = True
 
+    class _AsyncClient:
+        closed = False
+
+        async def close(self) -> None:
+            self.closed = True
+
     client = _Client()
+    async_client = _AsyncClient()
     calls = 0
     vector_names = []
 
@@ -111,6 +129,7 @@ def test_create_vector_store_closes_client_when_construction_fails(
         raise RuntimeError("dense fallback failed")
 
     monkeypatch.setattr(mod, "QdrantClient", lambda **_: client)
+    monkeypatch.setattr(mod, "AsyncQdrantClient", lambda **_: async_client)
     monkeypatch.setattr(mod, "QdrantVectorStore", _store)
     monkeypatch.setattr(
         mod,
@@ -126,6 +145,7 @@ def test_create_vector_store_closes_client_when_construction_fails(
     with pytest.raises(RuntimeError):
         mod.create_vector_store("col")
 
-    assert calls == (2 if hybrid_error is ImportError else 1)
+    assert calls == 1
     assert vector_names == [(mod.DENSE_VECTOR_NAME, mod.SPARSE_VECTOR_NAME)] * calls
     assert client.closed is True
+    assert async_client.closed is True

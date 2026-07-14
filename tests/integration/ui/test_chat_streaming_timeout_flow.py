@@ -1,4 +1,4 @@
-"""Integration test for Chat page streaming fallback on timeout.
+"""Integration test for Chat page streaming on timeout.
 
 This test patches MultiAgentCoordinator.process_query to simulate a timeout
 response and verifies that st.write_stream is called and the session history
@@ -69,7 +69,7 @@ def test_chat_streaming_timeout_flow(monkeypatch) -> None:  # type: ignore[no-un
             return AgentResponse(
                 content="Request timed out.",
                 sources=[],
-                metadata={"fallback_used": True, "reason": "timeout"},
+                metadata={"reason": "timeout"},
                 validation_score=0.0,
                 processing_time=0.01,
                 optimization_metrics={"timeout": True},
@@ -100,7 +100,10 @@ def test_chat_streaming_timeout_flow(monkeypatch) -> None:  # type: ignore[no-un
         resume_checkpoint_id = None
 
     monkeypatch.setattr(
-        mod, "render_session_sidebar", lambda _conn: _Selection(), raising=False
+        mod,
+        "render_session_sidebar",
+        lambda _conn, **_kwargs: _Selection(),
+        raising=False,
     )
     monkeypatch.setattr(mod, "_get_coordinator", lambda: _DummyCoord(), raising=False)
     monkeypatch.setattr(

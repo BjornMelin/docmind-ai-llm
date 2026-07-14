@@ -15,12 +15,12 @@ def test_siglip_loader_device_and_cache(monkeypatch):
     # Fake transformers with stable class identities
     class _M:
         @staticmethod
-        def from_pretrained(_id, revision=None):
+        def from_pretrained(_id, revision=None, **_kwargs):
             return SimpleNamespace(to=lambda _d: SimpleNamespace())
 
     class _P:
         @staticmethod
-        def from_pretrained(_id, revision=None):
+        def from_pretrained(_id, revision=None, **_kwargs):
             return SimpleNamespace()
 
     fake_tf = SimpleNamespace(SiglipModel=_M, SiglipProcessor=_P)

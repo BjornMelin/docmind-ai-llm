@@ -3,108 +3,322 @@
 Builds a RouterQueryEngine with:
 - semantic_search (vector)
 - optional hybrid_search (server-side hybrid retriever)
+- optional keyword_search (sparse-only exact-term retriever)
 - optional knowledge_graph (GraphRAG)
 
-This module keeps imports dependency-light by routing LlamaIndex access through
-``src.retrieval.llama_index_adapter`` and GraphRAG construction through
-``src.retrieval.graph_config``.
+LlamaIndex core is a required dependency; the factory uses its native query
+engine and tool APIs directly.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+import asyncio
+import threading
+from collections.abc import Sequence
+from concurrent.futures import TimeoutError as FuturesTimeoutError
+from typing import Protocol, cast
 
+from llama_index.core.base.base_query_engine import BaseQueryEngine
+from llama_index.core.base.base_retriever import BaseRetriever
+from llama_index.core.base.base_selector import BaseSelector
+from llama_index.core.base.response.schema import RESPONSE_TYPE
+from llama_index.core.indices.base import BaseIndex
+from llama_index.core.indices.property_graph import PropertyGraphIndex
+from llama_index.core.llms.llm import LLM
+from llama_index.core.query_engine import RetrieverQueryEngine, RouterQueryEngine
+from llama_index.core.response_synthesizers import TreeSummarize
+from llama_index.core.response_synthesizers.type import ResponseMode
+from llama_index.core.schema import NodeWithScore, QueryBundle
+from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from loguru import logger
 
+from src.config.settings import DocMindSettings
 from src.config.settings import settings as default_settings
+from src.retrieval.async_work import AsyncWorkExecutor
 from src.retrieval.graph_config import build_graph_query_engine
-from src.retrieval.llama_index_adapter import (
-    LLAMA_INDEX_INSTALL_HINT,
-    LlamaIndexAdapterProtocol,
-    MissingLlamaIndexError,
-    get_llama_index_adapter,
-)
-from src.retrieval.postprocessor_utils import (
-    build_retriever_query_engine,
-    build_vector_query_engine,
-)
+from src.retrieval.reranking import get_postprocessors
 from src.telemetry.opentelemetry import record_router_selection, router_build_span
 from src.utils.log_safety import build_pii_log_entry
+from src.utils.storage import sparse_retrieval_enabled
 
-if TYPE_CHECKING:  # pragma: no cover - typing aid only
-    from llama_index.core.query_engine import RouterQueryEngine as RouterQueryEngineType
-else:
-    RouterQueryEngineType = Any
-
-_WARNING_FLAGS: dict[str, bool] = {"hybrid": False, "graph": False, "multimodal": False}
+_WARNED_TOOLS: set[str] = set()
+_ROUTER_CLOSE_GRACE_S = 5.0
 
 
-def _reset_warnings() -> None:
-    """Reset warning flags for test isolation."""
-    _WARNING_FLAGS.clear()
-    _WARNING_FLAGS.update({"hybrid": False, "graph": False, "multimodal": False})
+class _ManagedRetriever(Protocol):
+    """Closeable resources created and owned by the router factory."""
+
+    def close(self) -> None: ...
+
+    async def aclose(self) -> None: ...
 
 
-def _coerce_top_k(value: Any) -> int | None:
-    """Coerce a value to int when possible."""
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
+class _AggregateEmbeddingModel(Protocol):
+    """Minimal embedding surface required by the owned retriever."""
+
+    def get_agg_embedding_from_queries(self, queries: list[str]) -> list[float]: ...
+
+
+class _OwnedVectorEmbeddingRetriever(BaseRetriever):
+    """Run synchronous vector embeddings outside asyncio's global executor.
+
+    LlamaIndex's Hugging Face async adapter delegates synchronous model work to
+    ``asyncio.to_thread``. This wrapper keeps that work in one owned,
+    queue-free executor, then hands the populated query bundle back to the
+    native vector retriever and its asynchronous vector-store client.
+    """
+
+    def __init__(
+        self,
+        retriever: BaseRetriever,
+        embed_model: _AggregateEmbeddingModel,
+    ) -> None:
+        """Wrap one native vector retriever and its synchronous embed model."""
+        super().__init__(callback_manager=retriever.callback_manager)
+        self._retriever = retriever
+        self._embed_model = embed_model
+        self._cpu_work = AsyncWorkExecutor(name="docmind-vector-embedding")
+
+    def _retrieve(self, query_bundle: QueryBundle) -> list[NodeWithScore]:
+        """Delegate synchronous retrieval unchanged."""
+        return self._retriever.retrieve(query_bundle)
+
+    async def _aretrieve(self, query_bundle: QueryBundle) -> list[NodeWithScore]:
+        """Populate the embedding before native asynchronous retrieval."""
+        if query_bundle.embedding is None and query_bundle.embedding_strs:
+            embed = self._embed_model.get_agg_embedding_from_queries
+            embedding = await self._cpu_work.run(embed, query_bundle.embedding_strs)
+            query_bundle = QueryBundle(
+                query_str=query_bundle.query_str,
+                embedding=embedding,
+            )
+        return await self._retriever.aretrieve(query_bundle)
+
+    def close(self) -> None:
+        """Reject new embedding work without blocking the caller."""
+        self._cpu_work.close()
+
+    async def aclose(self) -> None:
+        """Wait for admitted embedding work to leave its native thread."""
+        await self._cpu_work.aclose()
+
+
+def _register_postprocessors(
+    managed_resources: list[_ManagedRetriever],
+    postprocessors: Sequence[object] | None,
+) -> None:
+    """Register postprocessors that expose the owned lifecycle contract."""
+    for postprocessor in postprocessors or ():
+        if callable(getattr(postprocessor, "close", None)) and callable(
+            getattr(postprocessor, "aclose", None)
+        ):
+            managed_resources.append(cast(_ManagedRetriever, postprocessor))
+
+
+class DocMindRouterQueryEngine(RouterQueryEngine):
+    """Native router with explicit lifecycle for factory-owned retrievers."""
+
+    def __init__(
+        self,
+        selector: BaseSelector,
+        query_engine_tools: Sequence[QueryEngineTool],
+        llm: LLM | None = None,
+        summarizer: TreeSummarize | None = None,
+        verbose: bool = False,
+    ) -> None:
+        """Create a router and initialize its lifecycle state.
+
+        Args:
+            selector: Tool selector used by the native router.
+            query_engine_tools: Query tools available to the selector.
+            llm: Optional router language model.
+            summarizer: Optional multi-tool response summarizer.
+            verbose: Whether the native router emits selection details.
+        """
+        super().__init__(
+            selector,
+            query_engine_tools,
+            llm=llm,
+            summarizer=summarizer,
+            verbose=verbose,
+        )
+        self._managed_retrievers: tuple[_ManagedRetriever, ...] = ()
+        self._owner_loop: asyncio.AbstractEventLoop | None = None
+        self._lifecycle_lock = threading.Lock()
+        self._closed = False
+
+    def _query(self, query_bundle: QueryBundle) -> RESPONSE_TYPE:
+        with self._lifecycle_lock:
+            if self._closed:
+                raise RuntimeError("Router query engine is closed")
+        return super()._query(query_bundle)
+
+    async def _aquery(self, query_bundle: QueryBundle) -> RESPONSE_TYPE:
+        loop = asyncio.get_running_loop()
+        with self._lifecycle_lock:
+            if self._closed:
+                raise RuntimeError("Router query engine is closed")
+            if self._owner_loop is None:
+                self._owner_loop = loop
+            elif self._owner_loop is not loop:
+                raise RuntimeError(
+                    "Router query engine cannot move between event loops"
+                )
+        return await super()._aquery(query_bundle)
+
+    def _take_retrievers(self) -> tuple[_ManagedRetriever, ...]:
+        with self._lifecycle_lock:
+            if self._closed:
+                return ()
+            self._closed = True
+            retrievers = self._managed_retrievers
+            self._managed_retrievers = ()
+            return retrievers
+
+    async def _close_retrievers(
+        self,
+        retrievers: tuple[_ManagedRetriever, ...],
+    ) -> None:
+        results = await asyncio.gather(
+            *(retriever.aclose() for retriever in reversed(retrievers)),
+            return_exceptions=True,
+        )
+        for result in results:
+            if isinstance(result, Exception):
+                logger.debug(
+                    "Router retriever cleanup failed (error_type={})",
+                    type(result).__name__,
+                )
+
+    @staticmethod
+    def _close_retrievers_sync(
+        retrievers: tuple[_ManagedRetriever, ...],
+    ) -> None:
+        """Reject sync-only resources without waiting on native worker exit."""
+        for retriever in reversed(retrievers):
+            try:
+                retriever.close()
+            except Exception as exc:  # pragma: no cover - defensive cleanup
+                logger.debug(
+                    "Router retriever cleanup failed (error_type={})",
+                    type(exc).__name__,
+                )
+
+    def close(self) -> None:
+        """Close every owned retriever on the router's async owner loop."""
+        retrievers = self._take_retrievers()
+        if not retrievers:
+            return
+
+        owner_loop = self._owner_loop
         try:
-            return int(str(value))
-        except (TypeError, ValueError):
-            return None
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
 
+        if (owner_loop is None and current_loop is None) or (
+            owner_loop is not None and not owner_loop.is_running()
+        ):
+            self._close_retrievers_sync(retrievers)
+            return
 
-def _safe_get_postprocessors() -> Any | None:
-    """Safely import reranking postprocessor factory."""
-    try:
-        from src.retrieval.reranking import get_postprocessors
+        coroutine = self._close_retrievers(retrievers)
+        if owner_loop is not None and owner_loop.is_running():
+            if current_loop is owner_loop:
+                owner_loop.create_task(coroutine)
+                return
+            try:
+                close_future = asyncio.run_coroutine_threadsafe(coroutine, owner_loop)
+            except RuntimeError as exc:  # pragma: no cover - loop shutdown race
+                logger.debug(
+                    "Router cleanup scheduling failed (error_type={})",
+                    type(exc).__name__,
+                )
+            else:
+                try:
+                    close_future.result(timeout=_ROUTER_CLOSE_GRACE_S)
+                except FuturesTimeoutError:
+                    logger.warning("Router cleanup exceeded the close grace period")
+                except Exception as exc:  # pragma: no cover - loop shutdown race
+                    logger.debug(
+                        "Router cleanup failed (error_type={})",
+                        type(exc).__name__,
+                    )
+                return
 
-        return get_postprocessors
-    except ImportError:
-        return None
+        if current_loop is not None:
+            current_loop.create_task(coroutine)
+        else:
+            asyncio.run(coroutine)
+
+    async def aclose(self) -> None:
+        """Close every owned retriever exactly once."""
+        retrievers = self._take_retrievers()
+        if not retrievers:
+            return
+
+        owner_loop = self._owner_loop
+        current_loop = asyncio.get_running_loop()
+        if (
+            owner_loop is not None
+            and owner_loop is not current_loop
+            and not owner_loop.is_running()
+        ):
+            self._close_retrievers_sync(retrievers)
+            return
+        if (
+            owner_loop is not None
+            and owner_loop is not current_loop
+            and owner_loop.is_running()
+        ):
+            coroutine = self._close_retrievers(retrievers)
+            try:
+                close_future = asyncio.run_coroutine_threadsafe(
+                    coroutine,
+                    owner_loop,
+                )
+            except RuntimeError:  # pragma: no cover - loop shutdown race
+                coroutine.close()
+            else:
+                await asyncio.wrap_future(close_future)
+                return
+        await self._close_retrievers(retrievers)
 
 
 def _build_vector_tool(
     *,
-    vector_index: Any,
-    cfg: Any,
-    get_pp: Any | None,
-    use_rerank_flag: bool,
-    normalized_top_k: int | None,
-    query_engine_tool_cls: Any,
-    tool_metadata_cls: Any,
-) -> Any:
+    vector_index: BaseIndex,
+    managed_retrievers: list[_ManagedRetriever],
+    settings: DocMindSettings,
+) -> QueryEngineTool:
     """Build the mandatory semantic vector search tool."""
-    try:
-        vector_post = (
-            get_pp("vector", use_reranking=use_rerank_flag, top_n=normalized_top_k)
-            if get_pp is not None
-            else None
-        )
-        vector_engine = build_vector_query_engine(
-            vector_index,
-            vector_post,
-            similarity_top_k=int(getattr(cfg.retrieval, "top_k", 10)),
-        )
-    except (TypeError, AttributeError, ValueError) as exc:
-        from src.utils.log_safety import build_pii_log_entry
+    vector_post = get_postprocessors(
+        "vector",
+        use_reranking=settings.retrieval.use_reranking,
+        top_n=settings.retrieval.reranking_top_k,
+    )
+    _register_postprocessors(managed_retrievers, vector_post)
+    vector_engine = vector_index.as_query_engine(
+        similarity_top_k=settings.retrieval.top_k,
+        node_postprocessors=vector_post,
+        response_mode=ResponseMode.NO_TEXT,
+    )
+    if isinstance(vector_engine, RetrieverQueryEngine):
+        native_retriever = vector_engine.retriever
+        embed_model = getattr(native_retriever, "_embed_model", None)
+        if embed_model is not None and callable(
+            getattr(embed_model, "get_agg_embedding_from_queries", None)
+        ):
+            owned_retriever = _OwnedVectorEmbeddingRetriever(
+                native_retriever,
+                embed_model,
+            )
+            managed_retrievers.append(owned_retriever)
+            vector_engine = vector_engine.with_retriever(owned_retriever)
 
-        redaction = build_pii_log_entry(str(exc), key_id="router_factory.vector_engine")
-        logger.warning(
-            "Vector query engine fallback: using default configuration "
-            "(error_type={} error={})",
-            type(exc).__name__,
-            redaction.redacted,
-        )
-        vector_engine = vector_index.as_query_engine()
-
-    return query_engine_tool_cls(
+    return QueryEngineTool(
         query_engine=vector_engine,
-        metadata=tool_metadata_cls(
+        metadata=ToolMetadata(
             name="semantic_search",
             description=(
                 "Semantic vector search over the document corpus. Best for general "
@@ -116,46 +330,59 @@ def _build_vector_tool(
 
 def _maybe_add_multimodal_tool(
     *,
-    tools: list[Any],
-    cfg: Any,
-    get_pp: Any | None,
-    use_rerank_flag: bool,
-    normalized_top_k: int | None,
-    retriever_query_engine_cls: Any,
-    query_engine_tool_cls: Any,
-    tool_metadata_cls: Any,
-    the_llm: Any,
+    tools: list[QueryEngineTool],
+    managed_retrievers: list[_ManagedRetriever],
+    vector_index: BaseIndex,
+    text_collection: str,
+    image_collection: str,
+    settings: DocMindSettings,
+    llm: LLM | None,
 ) -> None:
     """Add multimodal search tool when enabled and available."""
-    try:
-        retrieval_cfg = getattr(cfg, "retrieval", cfg)
-        enable_mm = bool(getattr(retrieval_cfg, "enable_image_retrieval", False))
-    except Exception:  # pragma: no cover - defensive
-        enable_mm = False
-
-    if not enable_mm:
+    if not settings.retrieval.enable_image_retrieval:
         return
     try:
         from src.retrieval.multimodal_fusion import MultimodalFusionRetriever
 
-        mm_retriever = MultimodalFusionRetriever()
-        mm_post = (
-            get_pp("hybrid", use_reranking=use_rerank_flag, top_n=normalized_top_k)
-            if get_pp is not None
-            else None
+        text_retriever: BaseRetriever | None = None
+        if not sparse_retrieval_enabled(settings):
+            native_retriever = vector_index.as_retriever(
+                similarity_top_k=settings.retrieval.top_k
+            )
+            embed_model = getattr(native_retriever, "_embed_model", None)
+            if embed_model is not None and callable(
+                getattr(embed_model, "get_agg_embedding_from_queries", None)
+            ):
+                text_retriever = _OwnedVectorEmbeddingRetriever(
+                    native_retriever,
+                    embed_model,
+                )
+                managed_retrievers.append(text_retriever)
+            else:
+                text_retriever = native_retriever
+        mm_retriever = MultimodalFusionRetriever(
+            text_retriever=text_retriever,
+            text_collection=text_collection,
+            image_collection=image_collection,
         )
-        mm_engine = build_retriever_query_engine(
-            mm_retriever,
-            mm_post,
-            llm=the_llm,
-            response_mode="compact",
+        managed_retrievers.append(mm_retriever)
+        mm_post = get_postprocessors(
+            "hybrid",
+            use_reranking=settings.retrieval.use_reranking,
+            top_n=settings.retrieval.reranking_top_k,
+        )
+        _register_postprocessors(managed_retrievers, mm_post)
+        mm_engine = RetrieverQueryEngine.from_args(
+            retriever=mm_retriever,
+            node_postprocessors=mm_post,
+            llm=llm,
+            response_mode=ResponseMode.NO_TEXT,
             verbose=False,
-            engine_cls=retriever_query_engine_cls,
         )
         tools.append(
-            query_engine_tool_cls(
+            QueryEngineTool(
                 query_engine=mm_engine,
-                metadata=tool_metadata_cls(
+                metadata=ToolMetadata(
                     name="multimodal_search",
                     description=(
                         "Multimodal search: fuses text "
@@ -177,47 +404,44 @@ def _maybe_add_multimodal_tool(
 
 def _maybe_add_hybrid_tool(
     *,
-    tools: list[Any],
-    cfg: Any,
-    get_pp: Any | None,
-    use_rerank_flag: bool,
-    normalized_top_k: int | None,
-    retriever_query_engine_cls: Any,
-    query_engine_tool_cls: Any,
-    tool_metadata_cls: Any,
-    the_llm: Any,
+    tools: list[QueryEngineTool],
+    managed_retrievers: list[_ManagedRetriever],
+    text_collection: str,
+    settings: DocMindSettings,
+    llm: LLM | None,
 ) -> None:
     """Add hybrid search tool when enabled."""
     try:
         from src.retrieval.hybrid import HybridParams, ServerHybridRetriever
 
         params = HybridParams(
-            collection=cfg.database.qdrant_collection,
-            fused_top_k=int(getattr(cfg.retrieval, "fused_top_k", 60)),
-            prefetch_sparse=int(getattr(cfg.retrieval, "prefetch_sparse_limit", 400)),
-            prefetch_dense=int(getattr(cfg.retrieval, "prefetch_dense_limit", 200)),
-            fusion_mode=str(getattr(cfg.retrieval, "fusion_mode", "rrf")),
-            rrf_k=int(getattr(cfg.retrieval, "rrf_k", 60)),
-            dedup_key=str(getattr(cfg.retrieval, "dedup_key", "page_id")),
+            collection=text_collection,
+            fused_top_k=settings.retrieval.fused_top_k,
+            prefetch_sparse=settings.retrieval.prefetch_sparse_limit,
+            prefetch_dense=settings.retrieval.prefetch_dense_limit,
+            fusion_mode=settings.retrieval.fusion_mode,
+            rrf_k=settings.retrieval.rrf_k,
+            dedup_key=settings.retrieval.dedup_key,
         )
         retriever = ServerHybridRetriever(params)
-        hybrid_post = (
-            get_pp("hybrid", use_reranking=use_rerank_flag, top_n=normalized_top_k)
-            if get_pp is not None
-            else None
+        managed_retrievers.append(retriever)
+        hybrid_post = get_postprocessors(
+            "hybrid",
+            use_reranking=settings.retrieval.use_reranking,
+            top_n=settings.retrieval.reranking_top_k,
         )
-        hybrid_engine = build_retriever_query_engine(
-            retriever,
-            hybrid_post,
-            llm=the_llm,
-            response_mode="compact",
+        _register_postprocessors(managed_retrievers, hybrid_post)
+        hybrid_engine = RetrieverQueryEngine.from_args(
+            retriever=retriever,
+            node_postprocessors=hybrid_post,
+            llm=llm,
+            response_mode=ResponseMode.NO_TEXT,
             verbose=False,
-            engine_cls=retriever_query_engine_cls,
         )
         tools.append(
-            query_engine_tool_cls(
+            QueryEngineTool(
                 query_engine=hybrid_engine,
-                metadata=tool_metadata_cls(
+                metadata=ToolMetadata(
                     name="hybrid_search",
                     description=(
                         "Hybrid search via Qdrant Query API (dense+sparse fusion)"
@@ -229,65 +453,81 @@ def _maybe_add_hybrid_tool(
         _warn_once("hybrid", "Hybrid tool construction skipped", reason=str(exc))
 
 
-def _maybe_add_graph_tool(
+def _maybe_add_keyword_tool(
     *,
-    tools: list[Any],
-    cfg: Any,
-    pg_index: Any | None,
-    get_pp: Any | None,
-    use_rerank_flag: bool,
-    normalized_top_k: int | None,
-    query_engine_tool_cls: Any,
-    tool_metadata_cls: Any,
-    the_llm: Any,
+    tools: list[QueryEngineTool],
+    managed_retrievers: list[_ManagedRetriever],
+    text_collection: str,
+    settings: DocMindSettings,
+    llm: LLM | None,
 ) -> None:
-    """Add GraphRAG tool when enabled and available."""
-    if pg_index is None or getattr(pg_index, "property_graph_store", None) is None:
+    """Add sparse-only keyword search when enabled."""
+    if not settings.retrieval.enable_keyword_tool:
         return
 
-    graphrag_enabled = (
-        cfg.is_graphrag_enabled()
-        if hasattr(cfg, "is_graphrag_enabled")
-        else getattr(cfg, "enable_graphrag", False)
-    )
-    if not graphrag_enabled:
+    try:
+        from src.retrieval.keyword import KeywordParams, KeywordSparseRetriever
+
+        params = KeywordParams(
+            collection=text_collection,
+            top_k=settings.retrieval.top_k,
+            using="text-sparse",
+        )
+        retriever = KeywordSparseRetriever(params)
+        managed_retrievers.append(retriever)
+        keyword_engine = RetrieverQueryEngine.from_args(
+            retriever=retriever,
+            node_postprocessors=None,
+            llm=llm,
+            response_mode=ResponseMode.NO_TEXT,
+            verbose=False,
+        )
+        tools.append(
+            QueryEngineTool(
+                query_engine=keyword_engine,
+                metadata=ToolMetadata(
+                    name="keyword_search",
+                    description=(
+                        "Exact keyword, identifier, and error-code lookup via "
+                        "sparse matching."
+                    ),
+                ),
+            )
+        )
+    except (ValueError, TypeError, AttributeError, ImportError) as exc:
+        _warn_once("keyword", "Keyword tool construction skipped", reason=str(exc))
+
+
+def _maybe_add_graph_tool(
+    *,
+    tools: list[QueryEngineTool],
+    managed_retrievers: list[_ManagedRetriever],
+    settings: DocMindSettings,
+    pg_index: PropertyGraphIndex | None,
+    llm: LLM | None,
+) -> None:
+    """Add the GraphRAG tool when a healthy index is available."""
+    if pg_index is None or pg_index.property_graph_store is None:
         return
     try:
-        graph_depth = int(
-            getattr(getattr(cfg, "graphrag_cfg", cfg), "default_path_depth", 1)
+        graph_post = get_postprocessors(
+            "kg",
+            use_reranking=settings.retrieval.use_reranking,
+            top_n=settings.retrieval.reranking_top_k,
         )
-        graph_top_k = int(getattr(cfg.retrieval, "top_k", 10))
-        graph_post = (
-            get_pp("kg", use_reranking=use_rerank_flag, top_n=normalized_top_k)
-            if get_pp is not None
-            else None
+        _register_postprocessors(managed_retrievers, graph_post)
+        artifacts = build_graph_query_engine(
+            pg_index,
+            llm=llm,
+            include_text=True,
+            path_depth=settings.graphrag_cfg.default_path_depth,
+            similarity_top_k=settings.retrieval.top_k,
+            node_postprocessors=graph_post,
         )
-        try:
-            artifacts = build_graph_query_engine(
-                pg_index,
-                llm=the_llm,
-                include_text=True,
-                path_depth=graph_depth,
-                similarity_top_k=graph_top_k,
-                node_postprocessors=graph_post,
-            )
-        except TypeError:
-            logger.debug(
-                "Graph query engine does not support node_postprocessors; "
-                "retrying without"
-            )
-            artifacts = build_graph_query_engine(
-                pg_index,
-                llm=the_llm,
-                include_text=True,
-                path_depth=graph_depth,
-                similarity_top_k=graph_top_k,
-                node_postprocessors=None,
-            )
         tools.append(
-            query_engine_tool_cls(
-                query_engine=artifacts.query_engine,
-                metadata=tool_metadata_cls(
+            QueryEngineTool(
+                query_engine=cast(BaseQueryEngine, artifacts.query_engine),
+                metadata=ToolMetadata(
                     name="knowledge_graph",
                     description=(
                         "Knowledge graph traversal for relationship-centric queries"
@@ -295,8 +535,6 @@ def _maybe_add_graph_tool(
                 ),
             )
         )
-    except MissingLlamaIndexError as exc:
-        _warn_once("graph", LLAMA_INDEX_INSTALL_HINT, reason=str(exc))
     except (ValueError, TypeError, AttributeError, ImportError) as exc:
         from src.utils.log_safety import build_pii_log_entry
 
@@ -308,200 +546,110 @@ def _maybe_add_graph_tool(
         )
 
 
-def _select_router(
-    *,
-    adapter: LlamaIndexAdapterProtocol,
-    tools: list[Any],
-    the_llm: Any,
-) -> Any:
-    """Instantiate a router query engine for the assembled tools."""
-    selector = adapter.get_pydantic_selector(the_llm)
-    if selector is None:
-        try:
-            selector = (
-                adapter.LLMSingleSelector.from_defaults(llm=the_llm)
-                if the_llm is not None
-                else adapter.LLMSingleSelector.from_defaults()
-            )
-        except Exception as exc:  # pragma: no cover - defensive
-            raise RuntimeError(
-                "Failed to build router selector via "
-                "LLMSingleSelector.from_defaults(llm=the_llm)."
-            ) from exc
-
-    try:
-        return adapter.RouterQueryEngine(
-            selector=selector,
-            query_engine_tools=tools,
-            verbose=False,
-            llm=the_llm,
-        )
-    except TypeError:
-        return adapter.RouterQueryEngine(
-            selector=selector,
-            query_engine_tools=tools,
-            verbose=False,
-        )
-
-
 def _warn_once(key: str, message: str, *, reason: str) -> None:
     """Emit a warning once, downgrade to debug on subsequent occurrences."""
     reason_redacted = build_pii_log_entry(
         str(reason), key_id=f"router_factory:{key}:reason"
     ).redacted
-    if not _WARNING_FLAGS.get(key):
+    if key not in _WARNED_TOOLS:
         logger.warning("{} (reason={})", message, reason_redacted)
-        _WARNING_FLAGS[key] = True
+        _WARNED_TOOLS.add(key)
     else:
         logger.debug("{} (reason={})", message, reason_redacted)
 
 
-def _resolve_adapter(
-    adapter: LlamaIndexAdapterProtocol | None,
-) -> LlamaIndexAdapterProtocol:
-    """Return an adapter, raising a helpful error when llama_index is absent."""
-    if adapter is not None:
-        return adapter
-    try:
-        return get_llama_index_adapter()
-    except MissingLlamaIndexError as exc:
-        raise MissingLlamaIndexError() from exc
-
-
 def build_router_engine(
-    vector_index: Any,
-    pg_index: Any | None = None,
-    settings: Any | None = None,
-    llm: Any | None = None,
+    vector_index: BaseIndex,
+    pg_index: PropertyGraphIndex | None = None,
+    settings: DocMindSettings = default_settings,
+    llm: LLM | None = None,
     *,
-    enable_hybrid: bool | None = None,
-    adapter: LlamaIndexAdapterProtocol | None = None,
-) -> RouterQueryEngineType:
+    text_collection: str | None = None,
+    image_collection: str | None = None,
+) -> DocMindRouterQueryEngine:
     """Create a router engine with vector and optional KG/hybrid tools."""
-    cfg = settings or default_settings
-    adapter = _resolve_adapter(adapter)
-
-    raw_top_k = getattr(getattr(cfg, "retrieval", cfg), "reranking_top_k", None)
-    normalized_top_k = _coerce_top_k(raw_top_k)
-
-    retriever_query_engine_cls = adapter.RetrieverQueryEngine
-    query_engine_tool_cls = adapter.QueryEngineTool
-    tool_metadata_cls = adapter.ToolMetadata
-
-    try:
-        use_rerank_flag = bool(getattr(cfg.retrieval, "use_reranking", True))
-    except (AttributeError, TypeError, ValueError):  # pragma: no cover - defensive
-        use_rerank_flag = True
-
-    the_llm = llm
-    if the_llm is None:
-        try:
-            from src.config.llm_factory import build_llm
-
-            the_llm = build_llm(cfg)
-        except ImportError:
-            logger.debug("LLM factory import failed; proceeding without LLM")
-        except Exception as exc:  # pragma: no cover - best effort
-            from src.utils.log_safety import build_pii_log_entry
-
-            redaction = build_pii_log_entry(str(exc), key_id="router_factory.build_llm")
-            logger.warning(
-                "LLM factory failed; proceeding without LLM (error_type={} error={})",
-                type(exc).__name__,
-                redaction.redacted,
-            )
-
-    get_pp = _safe_get_postprocessors()
-    tools: list[Any] = [
+    managed_retrievers: list[_ManagedRetriever] = []
+    active_text_collection = text_collection or settings.database.qdrant_collection
+    active_image_collection = (
+        image_collection or settings.database.qdrant_image_collection
+    )
+    tools = [
         _build_vector_tool(
             vector_index=vector_index,
-            cfg=cfg,
-            get_pp=get_pp,
-            use_rerank_flag=use_rerank_flag,
-            normalized_top_k=normalized_top_k,
-            query_engine_tool_cls=query_engine_tool_cls,
-            tool_metadata_cls=tool_metadata_cls,
+            managed_retrievers=managed_retrievers,
+            settings=settings,
         )
     ]
 
-    hybrid_requested = (
-        bool(enable_hybrid)
-        if enable_hybrid is not None
-        else bool(getattr(cfg.retrieval, "enable_server_hybrid", False))
-    )
-
-    if hasattr(cfg, "is_graphrag_enabled"):
-        kg_requested = bool(pg_index is not None and cfg.is_graphrag_enabled())
-    else:
-        kg_requested = bool(
-            pg_index is not None and getattr(cfg, "enable_graphrag", False)
-        )
+    hybrid_requested = settings.retrieval.enable_server_hybrid
+    kg_requested = pg_index is not None
 
     with router_build_span(
-        adapter_name=getattr(adapter, "__class__", type("A", (), {})).__name__,
+        adapter_name="llama_index",
         kg_requested=kg_requested,
         hybrid_requested=hybrid_requested,
     ) as span:
         _maybe_add_multimodal_tool(
             tools=tools,
-            cfg=cfg,
-            get_pp=get_pp,
-            use_rerank_flag=use_rerank_flag,
-            normalized_top_k=normalized_top_k,
-            retriever_query_engine_cls=retriever_query_engine_cls,
-            query_engine_tool_cls=query_engine_tool_cls,
-            tool_metadata_cls=tool_metadata_cls,
-            the_llm=the_llm,
+            managed_retrievers=managed_retrievers,
+            vector_index=vector_index,
+            text_collection=active_text_collection,
+            image_collection=active_image_collection,
+            settings=settings,
+            llm=llm,
         )
 
         if hybrid_requested:
             _maybe_add_hybrid_tool(
                 tools=tools,
-                cfg=cfg,
-                get_pp=get_pp,
-                use_rerank_flag=use_rerank_flag,
-                normalized_top_k=normalized_top_k,
-                retriever_query_engine_cls=retriever_query_engine_cls,
-                query_engine_tool_cls=query_engine_tool_cls,
-                tool_metadata_cls=tool_metadata_cls,
-                the_llm=the_llm,
+                managed_retrievers=managed_retrievers,
+                text_collection=active_text_collection,
+                settings=settings,
+                llm=llm,
             )
+
+        _maybe_add_keyword_tool(
+            tools=tools,
+            managed_retrievers=managed_retrievers,
+            text_collection=active_text_collection,
+            settings=settings,
+            llm=llm,
+        )
 
         _maybe_add_graph_tool(
             tools=tools,
-            cfg=cfg,
+            managed_retrievers=managed_retrievers,
+            settings=settings,
             pg_index=pg_index,
-            get_pp=get_pp,
-            use_rerank_flag=use_rerank_flag,
-            normalized_top_k=normalized_top_k,
-            query_engine_tool_cls=query_engine_tool_cls,
-            tool_metadata_cls=tool_metadata_cls,
-            the_llm=the_llm,
+            llm=llm,
         )
 
-        router = _select_router(adapter=adapter, tools=tools, the_llm=the_llm)
+        try:
+            router = cast(
+                DocMindRouterQueryEngine,
+                DocMindRouterQueryEngine.from_defaults(
+                    query_engine_tools=tools,
+                    llm=llm,
+                    verbose=False,
+                ),
+            )
+        except Exception:
+            for retriever in reversed(managed_retrievers):
+                retriever.close()
+            raise
+        router._managed_retrievers = tuple(managed_retrievers)
 
-        tool_names: list[str] = []
-        for tool in tools:
-            metadata = getattr(tool, "metadata", None)
-            name = getattr(metadata, "name", None)
-            if name:
-                tool_names.append(str(name))
+        tool_names = [
+            tool.metadata.name for tool in tools if tool.metadata.name is not None
+        ]
         kg_present = "knowledge_graph" in tool_names
         record_router_selection(span, tool_names=tool_names, kg_enabled=kg_present)
-
-    try:
-        router.query_engine_tools = tools
-    except (AttributeError, TypeError) as exc:  # pragma: no cover - defensive
-        logger.debug(
-            "Router engine lacks public tool attribute (error_type={})",
-            type(exc).__name__,
-        )
 
     logger.info("Router engine built (kg_present={})", kg_present)
     return router
 
 
 __all__ = [
+    "DocMindRouterQueryEngine",
     "build_router_engine",
 ]

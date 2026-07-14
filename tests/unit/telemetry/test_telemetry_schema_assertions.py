@@ -59,7 +59,7 @@ def test_server_hybrid_canonical_keys_present(
     assert e["dedup.server_group_count"] == 10
     assert e["dedup.server_side"] is True
     # Rerank keys
-    assert e["rerank.stage"] in {"text", "visual", "colpali", "final"}
+    assert e["rerank.stage"] in {"text", "visual", "final"}
     assert isinstance(e["rerank.topk"], int)
     assert isinstance(e["rerank.timeout"], bool)
     # Optional extended keys when present

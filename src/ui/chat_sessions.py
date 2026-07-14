@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import atexit
 import contextlib
 import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -17,17 +17,10 @@ from src.persistence.chat_db import (
     ensure_session_registry,
     list_sessions,
     open_chat_db,
-    purge_session,
     rename_session,
     soft_delete_session,
     touch_session,
 )
-
-# Streamlit runs the UI in a single-threaded model and open_chat_db sets
-# check_same_thread=False, so a single cached connection is acceptable. Revisit
-# if the app ever runs with concurrent threads/processes.
-_chat_db_conn: sqlite3.Connection | None = None
-_chat_db_conn_cleanup_registered: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,46 +46,28 @@ class ForkableCoordinator(Protocol):
         ...
 
 
-@st.cache_resource(show_spinner=False)
-def get_chat_db_conn() -> sqlite3.Connection:
-    """Retrieves or initializes a cached SQLite connection for chat metadata.
-
-    Ensures session registry tables exist and registers a cleanup hook for
-    connection closure.
-
-    Returns:
-        An active SQLite connection instance.
-    """
-    global _chat_db_conn, _chat_db_conn_cleanup_registered
-    if _chat_db_conn is not None:
-        _close_chat_db_conn(_chat_db_conn)
-        _chat_db_conn = None
-    conn = open_chat_db(settings.chat.sqlite_path, cfg=settings)
-    ensure_session_registry(conn)
-    _chat_db_conn = conn
-    if not _chat_db_conn_cleanup_registered:
-        atexit.register(_close_current_chat_db_conn)
-        _chat_db_conn_cleanup_registered = True
-    return conn
-
-
 def _close_chat_db_conn(conn: sqlite3.Connection) -> None:
-    """Safely closes the database connection on application exit.
-
-    Args:
-        conn: The SQLite connection to close.
-    """
+    """Close one session-owned database connection safely."""
     with contextlib.suppress(Exception):
         conn.close()
 
 
-def _close_current_chat_db_conn() -> None:
-    """Close the currently cached chat DB connection on process exit."""
-    global _chat_db_conn
-    if _chat_db_conn is None:
-        return
-    _close_chat_db_conn(_chat_db_conn)
-    _chat_db_conn = None
+@st.cache_resource(
+    show_spinner=False,
+    scope="session",
+    on_release=_close_chat_db_conn,
+)
+def get_chat_db_conn() -> sqlite3.Connection:
+    """Retrieves or initializes a cached SQLite connection for chat metadata.
+
+    Each Streamlit session owns one connection that closes on cache release.
+
+    Returns:
+        An active SQLite connection instance.
+    """
+    conn = open_chat_db(settings.chat.sqlite_path, cfg=settings)
+    ensure_session_registry(conn)
+    return conn
 
 
 def _get_or_init_user_id() -> str:
@@ -158,13 +133,18 @@ def ensure_active_session(conn: sqlite3.Connection) -> ChatSession:
     return chosen
 
 
-def render_session_sidebar(conn: sqlite3.Connection) -> ChatSelection:
+def render_session_sidebar(
+    conn: sqlite3.Connection,
+    *,
+    hard_purge: Callable[[str, str], bool],
+) -> ChatSelection:
     """Renders the session management interface in the Streamlit sidebar.
 
     Provides controls for session selection, creation, and deletion.
 
     Args:
         conn: SQLite connection for metadata persistence.
+        hard_purge: Coordinator-owned atomic hard-delete callback.
 
     Returns:
         The current chat selection identifiers.
@@ -180,7 +160,11 @@ def render_session_sidebar(conn: sqlite3.Connection) -> ChatSelection:
         _handle_rename(conn, active)
         st.divider()
         st.caption("Danger zone")
-        _handle_purge(conn, active)
+        _handle_purge(
+            active,
+            user_id=user_id,
+            hard_purge=hard_purge,
+        )
 
     return ChatSelection(
         thread_id=str(st.session_state.get("chat_thread_id") or active.thread_id),
@@ -285,12 +269,18 @@ def _handle_rename(conn: sqlite3.Connection, active: ChatSession) -> None:
         st.rerun()
 
 
-def _handle_purge(conn: sqlite3.Connection, active: ChatSession) -> None:
+def _handle_purge(
+    active: ChatSession,
+    *,
+    user_id: str,
+    hard_purge: Callable[[str, str], bool],
+) -> None:
     """Handles irreversible session purging with confirmation.
 
     Args:
-        conn: SQLite connection.
         active: The currently active session record.
+        user_id: User namespace owning the persisted checkpoints.
+        hard_purge: Coordinator-owned atomic hard-delete callback.
     """
     confirm_key = f"purge_confirm:{active.thread_id}"
     confirm_purge = st.checkbox("I understand this is irreversible", key=confirm_key)
@@ -299,7 +289,12 @@ def _handle_purge(conn: sqlite3.Connection, active: ChatSession) -> None:
         type="primary",
         disabled=not confirm_purge,
     ):
-        purge_session(conn, thread_id=active.thread_id)
+        if not hard_purge(active.thread_id, user_id):
+            st.error(
+                "Purge deferred because an active request did not stop in time. "
+                "Retry after it finishes."
+            )
+            return
         st.session_state.pop("chat_thread_id", None)
         st.session_state.pop("chat_resume_checkpoint_id", None)
         st.session_state.pop("chat_time_travel_hint_checkpoint_id", None)

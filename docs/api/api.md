@@ -1,6 +1,6 @@
-# API Reference (Overview)
+# Use DocMind's internal Python APIs
 
-DocMind AI exposes a Python API for programmatic use. The core retrieval entrypoint is a Router/Query Engine composed via `router_factory`.
+DocMind exposes repository-local Python interfaces for its application code. It does not publish a stable library package or HTTP API. The core retrieval entrypoint is a router query engine composed through `router_factory`.
 
 ## Retrieval Examples
 
@@ -9,8 +9,11 @@ from src.retrieval.router_factory import build_router_engine
 
 # Assume you have built/persisted indices elsewhere
 router = build_router_engine(vector_index, graph_index, settings)
-response = router.query("What relates X and Y across the corpus?")
-print(response)
+try:
+    response = router.query("What relates X and Y across the corpus?")
+    print(response)
+finally:
+    router.close()
 ```
 
 ## GraphRAG Exports
@@ -28,6 +31,7 @@ export_graph_jsonl(
 
 See also:
 
-- docs/api/examples/python-example.py for end‑to‑end examples
-- README.md (Environment Variables)
+- [Multi-agent coordinator](agent-api.md)
+- [Internal Python examples](examples/python-example.py)
+- [Environment variables](../../README.md#environment-variables)
 - [Configuration Guide](../developers/configuration.md)

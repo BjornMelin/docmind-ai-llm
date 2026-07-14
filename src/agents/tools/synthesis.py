@@ -4,54 +4,174 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Annotated
+from typing import Annotated, Any, TypeGuard, cast
 
-from langchain_core.tools import tool
+from langchain_core.messages import HumanMessage, ToolMessage
+from langchain_core.tools import InjectedToolCallId, tool
 from langgraph.prebuilt import InjectedState
+from langgraph.types import Command
 from loguru import logger
 
 from src.utils.log_safety import build_pii_log_entry
 
-from .constants import MAX_RETRIEVAL_RESULTS, SIMILARITY_THRESHOLD
+from .constants import MAX_RETRIEVAL_RESULTS
+from .retrieval import document_identity
+
+
+def _synthesis_command(payload: dict[str, Any], *, tool_call_id: str) -> Command:
+    """Persist synthesis output while returning its JSON to the model."""
+    content = json.dumps(payload, default=str)
+    return Command(
+        update={
+            "messages": [ToolMessage(content=content, tool_call_id=tool_call_id)],
+            "synthesis_result": payload,
+        }
+    )
+
+
+def _invalid_input_command(*, tool_call_id: str, turn_id: str) -> Command:
+    """Return the stable synthesis input-error contract."""
+    return _synthesis_command(
+        {
+            "documents": [],
+            "error": "Invalid input format",
+            "synthesis_metadata": {},
+            "turn_id": turn_id,
+        },
+        tool_call_id=tool_call_id,
+    )
+
+
+def _is_retrieval_batch(value: object) -> TypeGuard[dict[str, Any]]:
+    """Return whether decoded JSON matches the current retrieval contract."""
+    if not isinstance(value, dict):
+        return False
+    documents = value.get("documents")
+    retrieval_id = value.get("retrieval_id")
+    turn_id = value.get("turn_id")
+    strategy = value.get("strategy_used")
+    retrieval_time = value.get("processing_time_ms")
+    return (
+        isinstance(documents, list)
+        and all(isinstance(document, dict) for document in documents)
+        and isinstance(retrieval_id, str)
+        and bool(retrieval_id.strip())
+        and isinstance(turn_id, str)
+        and bool(turn_id.strip())
+        and (strategy is None or isinstance(strategy, str))
+        and (
+            retrieval_time is None
+            or (
+                not isinstance(retrieval_time, bool)
+                and isinstance(retrieval_time, int | float)
+            )
+        )
+    )
+
+
+def current_retrieval_batches(
+    state: dict[str, Any],
+) -> list[dict[str, Any]] | None:
+    """Return validated retrieval batches belonging to the current run only."""
+    turn_id_value = state.get("turn_id")
+    if not isinstance(turn_id_value, str) or not turn_id_value.strip():
+        logger.error("Missing synthesis turn identifier")
+        return None
+    turn_id = turn_id_value.strip()
+
+    batches = state.get("retrieval_results")
+    if not isinstance(batches, list):
+        logger.error("Invalid retrieval state shape")
+        return None
+    current_batches = [
+        batch
+        for batch in batches
+        if isinstance(batch, dict) and batch.get("turn_id") == turn_id
+    ]
+    if not all(_is_retrieval_batch(batch) for batch in current_batches):
+        logger.error("Invalid current-turn retrieval state shape")
+        return None
+    return [cast(dict[str, Any], batch) for batch in current_batches]
+
+
+def interleave_retrieval_documents(
+    results: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Fairly merge independent ranked batches while preserving batch rank."""
+    document_batches = [
+        cast(list[dict[str, Any]], result["documents"]) for result in results
+    ]
+    unique_documents: list[dict[str, Any]] = []
+    seen_identities: set[str] = set()
+    max_batch_size = max((len(batch) for batch in document_batches), default=0)
+    for rank in range(max_batch_size):
+        for documents in document_batches:
+            if rank >= len(documents):
+                continue
+            document = documents[rank]
+            identity = document_identity(document)
+            if identity is not None:
+                if identity in seen_identities:
+                    continue
+                seen_identities.add(identity)
+            unique_documents.append(document)
+    return unique_documents
+
+
+def retrieval_batch_watermark(results: list[dict[str, Any]]) -> list[list[str]]:
+    """Return the ordered, turn-scoped identities consumed by synthesis."""
+    return [
+        [cast(str, result["turn_id"]), cast(str, result["retrieval_id"])]
+        for result in results
+    ]
+
+
+def _latest_user_query(state: dict[str, Any]) -> str:
+    """Return the latest plain-text user message from trusted graph state."""
+    messages = state.get("messages")
+    if not isinstance(messages, list):
+        return ""
+    for message in reversed(messages):
+        if isinstance(message, HumanMessage) and isinstance(message.content, str):
+            return message.content
+    return ""
 
 
 @tool
 def synthesize_results(
-    sub_results: str,
-    original_query: str,
-    _state: Annotated[dict, InjectedState] | None = None,
-) -> str:
-    """Combine and synthesize results from multiple retrieval operations."""
+    state: Annotated[dict[str, Any], InjectedState],
+    tool_call_id: Annotated[str, InjectedToolCallId],
+) -> Command:
+    """Combine current-turn retrieval results from injected graph state."""
     try:
         start_time = time.perf_counter()
 
-        # Parse sub-results
-        try:
-            results_list = (
-                json.loads(sub_results) if isinstance(sub_results, str) else sub_results
+        turn_id_value = state.get("turn_id")
+        turn_id = turn_id_value.strip() if isinstance(turn_id_value, str) else ""
+        results_list = current_retrieval_batches(state)
+        if results_list is None:
+            return _invalid_input_command(
+                tool_call_id=tool_call_id,
+                turn_id=turn_id,
             )
-        except json.JSONDecodeError:
-            logger.error("Invalid JSON in sub_results")
-            return json.dumps(
-                {
-                    "documents": [],
-                    "error": "Invalid input format",
-                    "synthesis_metadata": {},
-                }
-            )
+        original_query = _latest_user_query(state)
 
-        all_documents = []
-        strategies_used: set[str] = set()
-        total_processing_time = 0
+        all_documents: list[dict[str, Any]] = []
+        strategies_used: list[str] = []
+        total_processing_time = 0.0
 
-        # Collect all documents from sub-results
         for result in results_list:
-            if isinstance(result, dict) and "documents" in result:
-                all_documents.extend(result["documents"])
-                if "strategy_used" in result:
-                    strategies_used.add(result["strategy_used"])
-                if "processing_time_ms" in result:
-                    total_processing_time += result["processing_time_ms"]
+            all_documents.extend(cast(list[dict[str, Any]], result["documents"]))
+
+            strategy = result.get("strategy_used")
+            if strategy is not None:
+                strategy_value = cast(str, strategy)
+                if strategy_value not in strategies_used:
+                    strategies_used.append(strategy_value)
+
+            retrieval_time = result.get("processing_time_ms")
+            if retrieval_time is not None:
+                total_processing_time += float(retrieval_time)
 
         logger.info(
             "Synthesizing {} documents from {} sources",
@@ -59,39 +179,11 @@ def synthesize_results(
             len(results_list),
         )
 
-        # Deduplicate documents by content similarity
-        unique_documents = []
-        seen_content: set[frozenset[str]] = set()
+        # Independent queries have no meaningful global score. Round-robin their
+        # native rankings so one large batch cannot erase another query's evidence.
+        unique_documents = interleave_retrieval_documents(results_list)
 
-        for doc in all_documents:
-            if isinstance(doc, dict):
-                # Create content hash for deduplication
-                content = doc.get("content", doc.get("text", ""))
-                content_words = set(content.lower().split())
-
-                # Check for substantial overlap with existing documents
-                is_duplicate = False
-                for seen_words in seen_content:
-                    if (
-                        len(content_words.intersection(seen_words))
-                        / max(len(content_words), 1)
-                        > SIMILARITY_THRESHOLD
-                    ):
-                        is_duplicate = True
-                        break
-
-                if not is_duplicate:
-                    unique_documents.append(doc)
-                    seen_content.add(frozenset(content_words))
-
-        # Rank documents by relevance to original query
-        ranked_documents = _rank_documents_by_relevance(
-            unique_documents, original_query
-        )
-
-        # Limit to top results
-        max_results = MAX_RETRIEVAL_RESULTS
-        final_documents = ranked_documents[:max_results]
+        final_documents = unique_documents[:MAX_RETRIEVAL_RESULTS]
 
         processing_time = time.perf_counter() - start_time
 
@@ -99,7 +191,7 @@ def synthesize_results(
             "original_count": len(all_documents),
             "after_deduplication": len(unique_documents),
             "final_count": len(final_documents),
-            "strategies_used": list(strategies_used),
+            "strategies_used": strategies_used,
             "deduplication_ratio": round(
                 len(unique_documents) / max(len(all_documents), 1), 2
             ),
@@ -107,14 +199,16 @@ def synthesize_results(
             "total_retrieval_time_ms": total_processing_time,
         }
 
-        result_data = {
+        result_data: dict[str, Any] = {
             "documents": final_documents,
             "synthesis_metadata": synthesis_metadata,
             "original_query": original_query,
+            "retrieval_watermark": retrieval_batch_watermark(results_list),
+            "turn_id": turn_id,
         }
 
         logger.info("Synthesis complete: {} final documents", len(final_documents))
-        return json.dumps(result_data, default=str)
+        return _synthesis_command(result_data, tool_call_id=tool_call_id)
 
     except (RuntimeError, ValueError, AttributeError) as exc:
         redaction = build_pii_log_entry(
@@ -126,41 +220,14 @@ def synthesize_results(
             type(exc).__name__,
             redaction.redacted,
         )
-        return json.dumps(
+        return _synthesis_command(
             {
                 "documents": [],
                 "error": "synthesis failed",
                 "synthesis_metadata": {},
-            }
+                "turn_id": (
+                    state["turn_id"] if isinstance(state.get("turn_id"), str) else ""
+                ),
+            },
+            tool_call_id=tool_call_id,
         )
-
-
-def _rank_documents_by_relevance(documents: list[dict], query: str) -> list[dict]:
-    """Rank documents by relevance to query using simple scoring."""
-    query_words = set(query.lower().split())
-
-    scored_docs = []
-    for doc in documents:
-        content = doc.get("content", doc.get("text", ""))
-        content_words = set(content.lower().split())
-
-        # Simple relevance scoring
-        word_overlap = len(query_words.intersection(content_words))
-        total_words = len(content_words)
-
-        # Calculate relevance score
-        relevance_score = word_overlap / max(len(query_words), 1)
-        if total_words > 0:
-            relevance_score += (word_overlap / total_words) * 0.5
-
-        # Boost score if existing score is available
-        existing_score = doc.get("score", 1.0)
-        final_score = relevance_score * existing_score
-
-        doc_copy = doc.copy()
-        doc_copy["relevance_score"] = final_score
-        scored_docs.append(doc_copy)
-
-    # Sort by relevance score descending
-    scored_docs.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
-    return scored_docs

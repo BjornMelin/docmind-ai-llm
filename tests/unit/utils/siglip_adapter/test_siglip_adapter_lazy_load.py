@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 from src.utils.siglip_adapter import SiglipEmbedding
@@ -31,7 +30,7 @@ def test_ensure_loaded_prefers_unified_loader(monkeypatch):
 
 
 @pytest.mark.unit
-def test_get_image_embedding_fails_open_when_loader_fails(monkeypatch):
+def test_get_image_embedding_fails_closed_when_loader_fails(monkeypatch):
     def _fail_loader(*_args, **_kwargs):
         raise RuntimeError("fail")
 
@@ -42,14 +41,12 @@ def test_get_image_embedding_fails_open_when_loader_fails(monkeypatch):
 
     emb = SiglipEmbedding(model_id="test", device="cpu")
     emb._dim = 384
-    vec = emb.get_image_embedding(object())
-
-    assert vec.shape == (384,)
-    assert np.all(vec == 0.0)
+    with pytest.raises(RuntimeError, match="fail"):
+        emb.get_image_embedding(object())
 
 
 @pytest.mark.unit
-def test_get_image_embedding_returns_zero_vector(monkeypatch):
+def test_get_image_embedding_rejects_uninitialized_loader_state(monkeypatch):
     emb = SiglipEmbedding(model_id="test", device="cpu")
     emb._dim = 256
 
@@ -57,6 +54,5 @@ def test_get_image_embedding_returns_zero_vector(monkeypatch):
     emb._model = None
     emb._proc = None
 
-    vec = emb.get_image_embedding(object())
-    assert vec.shape == (256,)
-    assert np.all(vec == 0.0)
+    with pytest.raises(RuntimeError, match="image model did not initialize"):
+        emb.get_image_embedding(object())

@@ -8,10 +8,8 @@ Provides specialized fixtures for unit-level testing with focus on:
 Follows 2025 pytest patterns with proper typing and async support.
 """
 
-import asyncio as _asyncio
 import base64
 import io
-import time as _time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -107,37 +105,6 @@ def mock_uploaded_file() -> Mock:
     return mock_file
 
 
-# --- Global stabilization fixtures for unit tier ---
-
-
-@pytest.fixture(autouse=True)
-def no_sleep(request):
-    """Avoid real delays: patch sleeps globally, but not for timeout tests.
-
-    Some tests rely on real timeouts (e.g., thread-pool futures with a timeout
-    argument). For those, we must not patch time.sleep or asyncio.sleep, or the
-    timeout logic will not trigger correctly. We detect these by function name
-    containing "timeout" and skip patching in that case.
-    """
-
-    def _sleep_noop(_secs: float = 0.0):
-        return None
-
-    async def _async_sleep_noop(_secs: float = 0.0):
-        return None
-
-    name = getattr(request.node, "name", "").lower()
-    if "timeout" in name:
-        # Do not patch sleeps for timeout-specific tests
-        yield
-    else:
-        with (
-            patch.object(_time, "sleep", _sleep_noop),
-            patch.object(_asyncio, "sleep", _async_sleep_noop),
-        ):
-            yield
-
-
 @pytest.fixture
 def reset_settings_after_test() -> Iterator[None]:
     """Reset global settings before and after test to avoid pollution."""
@@ -210,76 +177,3 @@ def network_guard():
     except ImportError:
         # If libs are not present, do not patch
         yield
-
-
-@pytest.fixture
-def logging_boundary():
-    """Structured logging boundary for src.utils.monitoring logger."""
-    mock_logger = Mock()
-
-    def assert_info_called(message_contains: str | None = None) -> None:
-        mock_logger.info.assert_called()
-        if message_contains is not None:
-            call_msg = mock_logger.info.call_args[0][0]
-            assert message_contains in call_msg
-
-    def assert_error_called(message_contains: str | None = None) -> None:
-        mock_logger.error.assert_called()
-        if message_contains is not None:
-            call_msg = mock_logger.error.call_args[0][0]
-            assert message_contains in call_msg
-
-    def assert_warning_called(message_contains: str | None = None) -> None:
-        mock_logger.warning.assert_called()
-        if message_contains is not None:
-            call_msg = mock_logger.warning.call_args[0][0]
-            assert message_contains in call_msg
-
-    with patch("src.utils.monitoring.logger", mock_logger):
-        yield {
-            "logger": mock_logger,
-            "assert_info_called": assert_info_called,
-            "assert_error_called": assert_error_called,
-            "assert_warning_called": assert_warning_called,
-            "call_count": lambda level: getattr(mock_logger, level).call_count,
-        }
-
-
-@pytest.fixture
-def performance_boundary():
-    """Deterministic timing boundary using a fixed perf_counter sequence."""
-    seq = [0.0, 0.015, 0.030, 0.045, 0.060, 0.075]
-    with patch("time.perf_counter", side_effect=seq):
-        yield {
-            "timing_sequence": seq,
-            "expected_step_ms": 15.0,
-        }
-
-
-@pytest.fixture
-def system_resource_boundary():
-    """Boundary for psutil and OS resource calls with predictable values."""
-    import os as _os  # type: ignore
-    from types import SimpleNamespace
-
-    fake_proc = Mock()
-    fake_proc.memory_info.return_value = SimpleNamespace(
-        rss=100 * 1024 * 1024,
-        vms=150 * 1024 * 1024,
-    )
-    fake_proc.memory_percent.return_value = 42.0
-
-    with (
-        patch("psutil.Process", return_value=fake_proc),
-        patch("psutil.virtual_memory", return_value=SimpleNamespace(percent=65.0)),
-        patch("psutil.cpu_percent", return_value=35.5),
-        patch("psutil.disk_usage", return_value=SimpleNamespace(percent=45.0)),
-        patch.object(_os, "getloadavg", return_value=(1.2, 1.5, 1.1), create=True),
-    ):
-        yield {
-            "rss_mb": 100.0,
-            "vms_mb": 150.0,
-            "cpu_percent": 35.5,
-            "disk_percent": 45.0,
-            "loadavg": (1.2, 1.5, 1.1),
-        }

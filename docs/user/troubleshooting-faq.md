@@ -27,12 +27,12 @@ If port 8501 is busy, inspect the owning process with `lsof -i :8501`. Stop that
 
 ## Fix missing parser models
 
-Prefetch the pinned Docling and RapidOCR bundles, then validate every manifest entry:
+Prefetch the pinned Docling layout bundle, then validate every manifest entry. RapidOCR validates the models packaged in its locked wheel when the engine starts.
 
 ```bash
 uv run python tools/models/pull.py \
   --parser-defaults \
-  --rapidocr-cache-dir cache/models
+  --parser-cache-dir cache/models
 uv run python scripts/parser_health.py --check
 ```
 
@@ -125,16 +125,18 @@ CPU execution is supported. Measure response time on the target machine because 
 
 ## Measure performance
 
-Run the repository monitor instead of relying on hardware-wide estimates:
+Run the parser benchmark against a clean commit instead of relying on
+hardware-wide estimates:
 
 ```bash
-uv run python scripts/performance_monitor.py \
-  --run-tests \
-  --check-regressions \
-  --report
+uv run python scripts/benchmark_parsing.py \
+  --generate-minimal-fixtures \
+  --output cache/benchmarks/parsing/results.json
 ```
 
-Record the model, context, hardware, corpus, command, and generated artifact with any result.
+Record the model cache, hardware, fixtures, command, clean commit, and generated
+artifact with any result. Do not interpret missing or incomparable samples as a
+successful regression check.
 
 ## Find more help
 

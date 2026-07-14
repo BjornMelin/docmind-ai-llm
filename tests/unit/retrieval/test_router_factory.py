@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -11,11 +10,13 @@ pytest.importorskip("llama_index.core", reason="requires llama_index.core")
 
 from src.retrieval.router_factory import build_router_engine
 
+from .conftest import get_router_tool_names
+
 pytestmark = pytest.mark.requires_llama
 
 
 class _VecIndex:
-    def as_query_engine(self):
+    def as_query_engine(self, **_kwargs):  # type: ignore[no-untyped-def]
         return MagicMock(name="vector_qe")
 
 
@@ -25,64 +26,42 @@ class _HealthyStore:
 
 
 class _PgIndex:
-    def __init__(self, healthy=True) -> None:
-        self.property_graph_store = _HealthyStore() if healthy else None
-
-    def as_query_engine(self, include_text=True):
-        del include_text
-        return MagicMock(name="graph_qe")
-
-
-def _tool_count(router) -> int:
-    # Try public then private attributes; fallback to 0 if not found
-    for attr in ("query_engine_tools", "_query_engine_tools"):
-        tools = getattr(router, attr, None)
-        if tools is not None:
-            return len(list(tools))
-    return 0
+    property_graph_store = _HealthyStore()
 
 
 @pytest.mark.unit
-def test_build_router_engine_with_graph(monkeypatch) -> None:
+def test_build_router_engine_with_graph(
+    monkeypatch: pytest.MonkeyPatch, router_settings
+) -> None:  # type: ignore[no-untyped-def]
     vec = _VecIndex()
-    pg = _PgIndex(healthy=True)
+    pg = _PgIndex()
 
     def _fake_build_graph_query_engine(*_args, **_kwargs):
-        return SimpleNamespace(
-            query_engine=MagicMock(name="graph_qe"),
-            retriever=MagicMock(name="graph_retriever"),
-        )
+        return MagicMock(query_engine=MagicMock(name="graph_qe"))
 
     monkeypatch.setattr(
         "src.retrieval.router_factory.build_graph_query_engine",
         _fake_build_graph_query_engine,
     )
     monkeypatch.setattr(
-        "src.retrieval.reranking.get_postprocessors", lambda *_a, **_k: []
+        "src.retrieval.router_factory.get_postprocessors", lambda *_a, **_k: []
     )
-    cfg = SimpleNamespace(
-        enable_graphrag=True,
-        retrieval=SimpleNamespace(
-            top_k=10, use_reranking=False, enable_server_hybrid=False, reranking_top_k=5
-        ),
-        graphrag_cfg=SimpleNamespace(default_path_depth=1),
-        database=SimpleNamespace(qdrant_collection="col"),
-    )
-    router = build_router_engine(vec, pg, settings=cfg)
-    assert _tool_count(router) == 2
+    router = build_router_engine(vec, pg, settings=router_settings)
+    assert get_router_tool_names(router) == ["semantic_search", "knowledge_graph"]
 
 
 @pytest.mark.unit
-def test_build_router_engine_vector_only_fallback() -> None:
+def test_build_router_engine_without_graph(router_settings) -> None:  # type: ignore[no-untyped-def]
     vec = _VecIndex()
-    pg = _PgIndex(healthy=False)
-    cfg = SimpleNamespace(
-        enable_graphrag=True,
-        retrieval=SimpleNamespace(
-            top_k=10, use_reranking=False, enable_server_hybrid=False, reranking_top_k=5
-        ),
-        graphrag_cfg=SimpleNamespace(default_path_depth=1),
-        database=SimpleNamespace(qdrant_collection="col"),
-    )
-    router = build_router_engine(vec, pg, settings=cfg)
-    assert _tool_count(router) == 1
+    router = build_router_engine(vec, settings=router_settings)
+    assert get_router_tool_names(router) == ["semantic_search"]
+
+
+@pytest.mark.unit
+def test_vector_engine_failure_is_not_masked(router_settings) -> None:  # type: ignore[no-untyped-def]
+    class _BrokenVectorIndex:
+        def as_query_engine(self, **_kwargs):  # type: ignore[no-untyped-def]
+            raise RuntimeError("vector engine failed")
+
+    with pytest.raises(RuntimeError, match="vector engine failed"):
+        build_router_engine(_BrokenVectorIndex(), settings=router_settings)

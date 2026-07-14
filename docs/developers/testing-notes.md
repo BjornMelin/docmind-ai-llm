@@ -17,11 +17,6 @@ consumed by the app and pages:
 - Document loading
   - `src.processing.ingestion_api.load_documents`
 
-Telemetry tests that target tools implemented as LangChain `StructuredTool`
-should import the module using `importlib.import_module("src.agents.tools.router_tool")`
-and patch `log_jsonl` on that module object, not on the `StructuredTool`
-proxy.
-
 ## Streamlit AppTest stability
 
 - Where pages depend on persisted state (e.g., the latest snapshot), tests

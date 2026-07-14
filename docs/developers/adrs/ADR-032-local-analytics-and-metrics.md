@@ -105,9 +105,8 @@ def ensure_schema(conn):
 ### Configuration
 
 ```env
-DOCMIND_ANALYTICS__ENABLED=false
-DOCMIND_ANALYTICS__RETENTION_DAYS=60
-DOCMIND_ANALYTICS__DB_PATH=./data/analytics/analytics.duckdb
+DOCMIND_ANALYTICS_ENABLED=false
+DOCMIND_ANALYTICS_DB_PATH=./data/analytics/analytics.duckdb
 ```
 
 ## Testing
@@ -133,7 +132,7 @@ def test_schema_and_insert(tmp_path):
 
 ### Ongoing Maintenance & Considerations
 
-- Monitor DB growth; rely on retention pruning
+- Monitor database growth and rotate or remove the local file operationally
 - Keep schema minimal; extend cautiously
 
 ### Dependencies

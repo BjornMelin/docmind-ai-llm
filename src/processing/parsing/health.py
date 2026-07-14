@@ -1,4 +1,4 @@
-"""Parser dependency and offline-readiness diagnostics."""
+"""Parser dependency and model-availability diagnostics."""
 
 from __future__ import annotations
 
@@ -12,9 +12,8 @@ from src.config.settings import DocMindSettings
 from src.processing.parsing.backends.ocrmypdf_backend import ocrmypdf_health
 from src.processing.parsing.model_artifacts import (
     DOCLING_LAYOUT_BUNDLE,
-    RAPIDOCR_ENGLISH_BUNDLE,
     ModelBundle,
-    model_directory_issues,
+    cached_model_directory_issues,
 )
 
 
@@ -27,15 +26,15 @@ def parser_prefetch_command(model_cache_dir: Path) -> str:
             "python",
             "tools/models/pull.py",
             "--parser-defaults",
-            "--rapidocr-cache-dir",
+            "--parser-cache-dir",
             str(model_cache_dir),
         ]
     )
 
 
 def parser_health(settings: DocMindSettings) -> dict[str, Any]:
-    """Return metadata-only parser health and offline readiness."""
-    model_cache_dir = Path(settings.ocr.model_cache_dir)
+    """Return metadata-only parser dependency and model availability."""
+    model_cache_dir = Path(settings.parsing.model_cache_dir)
     docling = _package_health(
         "docling",
         module="docling.datamodel.layout_model_specs",
@@ -48,36 +47,29 @@ def parser_health(settings: DocMindSettings) -> dict[str, Any]:
         DOCLING_LAYOUT_BUNDLE,
         check=bool(docling["importable"]),
     )
-    rapidocr_model_issues, rapidocr_model_error = _model_issues(
-        model_cache_dir,
-        RAPIDOCR_ENGLISH_BUNDLE,
-        check=bool(rapidocr["importable"]),
-    )
     ocr_pdf = ocrmypdf_health()
     core_packages = (docling, pypdfium2, rapidocr, onnxruntime)
     ready = (
         all(package["available"] and package["importable"] for package in core_packages)
         and docling_model_error is None
-        and rapidocr_model_error is None
         and not docling_model_issues
-        and not rapidocr_model_issues
     )
     return {
-        "pdf_ready": ready,
+        "pdf_dependencies_ready": ready,
         "prefetch_command": parser_prefetch_command(model_cache_dir),
         "docling": {
             **docling,
             "model_issues": docling_model_issues,
             "model_check_error_type": docling_model_error,
-            "offline_ready": docling_model_error is None and not docling_model_issues,
+            "models_ready": docling_model_error is None and not docling_model_issues,
         },
         "pypdfium2": pypdfium2,
         "rapidocr": {
             **rapidocr,
-            "model_cache_dir": _redact_path(model_cache_dir),
-            "model_issues": rapidocr_model_issues,
-            "model_check_error_type": rapidocr_model_error,
-            "offline_ready": rapidocr_model_error is None and not rapidocr_model_issues,
+            "model_source": "package",
+            "dependencies_ready": bool(
+                rapidocr["importable"] and onnxruntime["importable"]
+            ),
         },
         "onnxruntime": onnxruntime,
         "ocrmypdf": ocr_pdf,
@@ -109,7 +101,9 @@ def _model_issues(
     if not check:
         return {}, "DependencyUnavailable"
     try:
-        return model_directory_issues(model_cache_dir / bundle.root, bundle), None
+        return cached_model_directory_issues(
+            model_cache_dir / bundle.root, bundle
+        ), None
     except Exception as exc:
         return {}, type(exc).__name__
 

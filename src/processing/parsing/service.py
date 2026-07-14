@@ -30,10 +30,7 @@ from src.processing.parsing.backends.ocrmypdf_backend import (
     export_searchable_pdf,
     export_searchable_pdf_async,
 )
-from src.processing.parsing.backends.rapidocr_backend import (
-    run_rapidocr,
-    verify_rapidocr_models,
-)
+from src.processing.parsing.backends.rapidocr_backend import run_rapidocr
 from src.processing.parsing.canonical_types import (
     DocumentParseResult,
     OcrEngineName,
@@ -666,7 +663,7 @@ def parse_document_sync(
                 source_path,
                 document_id=doc_id,
                 source_hash=source_hash,
-                model_cache_dir=settings.ocr.model_cache_dir,
+                model_cache_dir=settings.parsing.model_cache_dir,
                 max_pages=settings.parsing.max_pages,
                 max_file_size=_max_document_bytes(settings),
                 versions=versions,
@@ -874,10 +871,7 @@ def _ocr_pdf_pages(
                     bitmap.close()
             finally:
                 page.close()
-            output[page_index] = run_rapidocr(
-                image_path,
-                model_cache_dir=settings.ocr.model_cache_dir,
-            )
+            output[page_index] = run_rapidocr(image_path)
     return output
 
 
@@ -1013,8 +1007,7 @@ def _validate_document_size(path: Path, *, settings: DocMindSettings) -> None:
 
 def _require_pdf_models(path: Path, *, settings: DocMindSettings) -> None:
     try:
-        verify_docling_layout_models(settings.ocr.model_cache_dir)
-        verify_rapidocr_models(settings.ocr.model_cache_dir)
+        verify_docling_layout_models(settings.parsing.model_cache_dir)
     except (ModelIntegrityError, OSError) as exc:
         raise DocumentParseError(
             path,

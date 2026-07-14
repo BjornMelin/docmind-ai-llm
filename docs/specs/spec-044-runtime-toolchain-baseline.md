@@ -1,20 +1,20 @@
 ---
 spec: SPEC-044
 title: Runtime and toolchain baseline
-version: 1.6.0
-date: 2026-07-11
+version: 2.0.0
+date: 2026-07-13
 owners: ["ai-arch"]
 status: Implemented
 related_requirements:
   - NFR-MAINT-002: Ruff and Pyright pass.
-  - NFR-MAINT-003: Package, lock, tests, and active docs agree.
-  - NFR-PORT-003: Docker and wheel artifacts are reproducible.
+  - NFR-MAINT-003: Project metadata, lock, tests, and active docs agree.
+  - NFR-PORT-003: The production container is reproducible.
 related_adrs: ["ADR-065", "ADR-014", "ADR-024", "ADR-042"]
 ---
 
 ## Objective
 
-This specification defines Python support, uv dependency resolution, CPU and GPU profiles, wheel validation, continuous integration (CI), and container baselines.
+This specification defines Python support, uv dependency resolution, CPU and GPU profiles, continuous integration (CI), release metadata, and container baselines.
 
 ## Supported Python versions
 
@@ -33,21 +33,24 @@ uv run python -c "import sys; print(sys.version)"
 
 ## Dependency authority
 
-`pyproject.toml` declares direct dependencies, optional extras, dependency groups, and uv source rules. `uv.lock` records the resolved graph.
+`pyproject.toml` declares direct dependencies, optional extras, dependency groups,
+and uv source rules. `uv.lock` records the resolved graph. `[tool.uv]
+package = false` makes the distribution boundary explicit: this repository is an
+application, not an installable library.
 
-`tool.uv.required-version` pins uv `0.11.21` for local commands and
-`astral-sh/setup-uv`; the Dockerfile uses the same versioned image. CI cache
-suffixes separate the 3.12, 3.13, Qdrant, and documentation dependency payloads.
-The isolated wheel backend is exact-pinned to Setuptools `80.9.0` and Wheel
-`0.47.0`, so a manual rebuild of a release tag uses the same build toolchain.
+`tool.uv.required-version` accepts compatible uv `0.11.x` releases from
+`0.11.8` onward for local commands and GitHub's Dependabot updater. The
+production image independently pins uv `0.11.28` for reproducible builds; CI
+uses `astral-sh/setup-uv` within the same accepted minor line. CI cache suffixes
+separate the 3.12, 3.13, Qdrant, and documentation dependency payloads.
 
-The package requires:
+The application requires:
 
 - `llama-index-core>=0.14.21,<0.15.0`
 - Selected LlamaIndex LLM, Hugging Face, Qdrant, and DuckDB adapters
 - Direct FastEmbed, Sentence Transformers, Transformers, and Torch dependencies
 
-The package does not include:
+The application environment does not include:
 
 - The `llama-index` meta-package
 - A `llama` optional extra
@@ -82,33 +85,25 @@ release-validated GPU host; WSL2 and macOS paths are best effort.
 
 Other supported extras are:
 
-- `multimodal`: ColPali reranking
 - `observability`: LlamaIndex OpenTelemetry integration
 - `eval`: BEIR evaluation
 - `searchable-pdf`: POSIX-only OCRmyPDF integration (Linux, macOS, or WSL2;
   native Windows unsupported; OCRmyPDF and Tesseract executables required)
 
-## Wheel contract
+## Distribution contract
 
-Build and inspect the wheel:
+DocMind has no supported installed-package API or command. Its historical wheel
+installed a top-level package literally named `src`, omitted a product
+entrypoint, and could only be smoke-tested with `--no-deps`; that artifact did
+not represent a usable distribution. Version 2 removes the Setuptools backend,
+wheel job, and package-content tests instead of maintaining a false contract.
 
-```bash
-rm -rf build docmind_ai_llm.egg-info
-uv build --wheel --clear
-uv run python scripts/smoke_built_wheel.py
-```
+Supported paths are:
 
-The smoke script verifies:
+- Clone the repository, run `uv sync --frozen`, then invoke the Streamlit app.
+- Build or run the production container from the versioned Docker recipe.
 
-- Required parser, version, and prompt-template files
-- Deleted files and any other paths absent from the source tree are absent
-- Required `Requires-Dist` metadata
-- Removed dependencies and the `graph` and `llama` extras are absent
-- An isolated import and packaged prompt read after `pip install --no-deps`
-
-This is a package content and metadata test. It does not validate a fresh pip dependency resolution.
-
-uv is the supported local installer, and the repository image is the supported container path. The uv lock and source rules preserve the CPU or GPU profile. The wheel smoke test above validates package contents only; it does not define a supported pip-managed runtime.
+The lock and uv source rules preserve the CPU or GPU dependency profile.
 
 ## Continuous integration
 
@@ -117,23 +112,19 @@ The canonical CPython 3.12.13 lane:
 - Set offline Hugging Face and Transformers flags
 - Require real `llama_index.core`
 - Assert `torch.version.cuda is None`
-- Run Ruff, configured Pyright, wheel smoke, coverage, and schema validation
+- Run Ruff, configured Pyright, coverage, and schema validation
 
-The lean CPython 3.13.12 lane installs the base profile, runs the full unit suite, and runs 21 focused GraphRAG tests. It asserts that `llama_index.core` is installed and Kuzu is absent. Independent jobs validate Docker and Compose policy, build the production image from its real context with reusable BuildKit layers in the GitHub Actions cache, require the canonical liveness command to succeed, and run RRF and DBSF queries against Qdrant `v1.18.2` with the qdrant-client version from `uv.lock`.
+The lean CPython 3.13.12 lane installs the base profile, runs the full unit suite, and runs the focused GraphRAG files listed in `.github/workflows/ci.yml`. It asserts that `llama_index.core` is installed and Kuzu is absent. Independent jobs validate Docker and Compose policy, build the production image from its real context with reusable BuildKit layers in the GitHub Actions cache, require the canonical liveness command to succeed, and run RRF and DBSF queries against Qdrant `v1.18.2` with the qdrant-client version from `uv.lock`.
 
 Workflows use the current supported Action majors: `actions/checkout@v7`, `actions/setup-python@v6`, `astral-sh/setup-uv@v8`, `actions/setup-node@v6`, `docker/setup-buildx-action@v4`, and `docker/build-push-action@v7`.
 
 ## Release workflow
 
-The release workflow:
-
-1. Creates the GitHub release through Release Please
-2. Checks out the created release tag, clears ignored Setuptools staging, and
-   builds its wheel with `uv build --wheel --clear`
-3. Runs `scripts/smoke_built_wheel.py`
-4. Uploads the smoke-tested `dist/*.whl` to the GitHub release
-
-The workflow validates the release artifact’s contents and metadata. It does not publish to PyPI or claim dependency-install portability.
+The release workflow runs after a successful main CI build, creates the release
+PR and GitHub release through Release Please, and validates that published notes
+are nonblank. Releases contain the source tag and GitHub source archives. The
+production container remains reproducible from the tag; no wheel is built or
+published.
 
 ## vLLM policy
 
@@ -174,8 +165,6 @@ uv lock --check --offline
 uv run ruff format --check .
 uv run ruff check .
 uv run pyright --threads 4
-uv run python scripts/run_tests.py --fast
-rm -rf build docmind_ai_llm.egg-info
-uv build --wheel --clear
-uv run python scripts/smoke_built_wheel.py
+uv run pytest tests/unit tests/integration -q --no-cov
+uv run python scripts/check_release_contract.py
 ```

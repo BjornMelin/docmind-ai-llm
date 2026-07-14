@@ -1,109 +1,101 @@
 ---
 spec: SPEC-005
-title: Reranking: BGE Cross-Encoder for Text + SigLIP Visual Re‑score (ColPali Optional)
-version: 1.2.0
-date: 2026-07-11
+title: Reranking with BGE for text and SigLIP for visual nodes
+version: 1.5.0
+date: 2026-07-14
 owners: ["ai-arch"]
 status: Completed
 related_requirements:
   - FR-RER-001: Text rerank SHALL use BAAI/bge-reranker-v2-m3.
-  - FR-RER-002: Visual rerank SHOULD default to SigLIP text–image similarity; ColPali MAY be enabled optionally on capable GPUs.
-  - NFR-QUAL-001: reranking SHALL be always‑on with internal caps/timeouts and fail‑open behavior (no UI toggle).
-related_adrs: ["ADR-037","ADR-024","ADR-036"]
+  - FR-RER-002: Visual rerank SHALL use SigLIP text-image similarity.
+  - NFR-QUAL-001: Reranking SHALL be enabled by default with internal caps, timeouts, and fail-open behavior.
+related_adrs: ["ADR-037", "ADR-024", "ADR-036"]
 ---
-
 
 ## Objective
 
-Improve retrieval quality by applying **BGE Cross-Encoder** for text nodes and **SigLIP** text–image similarity for page‑image nodes by default, with **ColPali** as an optional “pro” reranker on capable GPUs. Modality gating selects the appropriate path.
+Improve retrieval quality with one reranker per modality. BGE scores text nodes, SigLIP scores image and PDF page-image nodes, and reciprocal rank fusion (RRF) merges both lists.
 
-## Implementation Guidance
+## Pipeline contract
 
-- Pipeline
-  - Stage 1: Qdrant server-side hybrid returns fused candidates (text+image nodes).
-  - Stage 2: Apply text rerank (`BAAI/bge-reranker-v2-m3`) to text nodes (top_n ≤ 40, timeout 250 ms); rerank MUST be cancellable or batched with early exit on timeout.
-  - Stage 3: Apply visual rerank: SigLIP text–image cosine to image/page nodes (top_n ≤ 10, timeout 150 ms). Scoring uses normalized cosine similarity; recommended prompt template for zero-shot: "This is a photo of {label}."
-  - Optional Stage 3b: If enabled and thresholds met, apply ColPali visual rerank (top_n ≤ 10, timeout 400 ms).
-  - Stage 4: Rank-level RRF merge of modality-specific results; fail-open to fused order on timeouts.
+The reranking pipeline has four stages:
 
-- Activation policy (visual rerank)
-  - Default SigLIP; auto-enable ColPali when: visual-heavy corpus OR high `visual_fraction`, and rerank `top_n ≤ 10–16`, and GPU VRAM ≥ 8–12 GB, and budget ≥ ~30 ms extra.
-  - Cascade option: SigLIP prune to m (e.g., 64) → ColPali final on m' (e.g., 16).
+1. Qdrant returns the fused candidate set.
+2. `BAAI/bge-reranker-v2-m3` reranks text nodes within a 250 ms stage budget.
+3. SigLIP reranks visual nodes within a 150 ms stage budget.
+4. RRF merges and deduplicates both modality lists within a 400 ms total budget.
 
-- Telemetry
-  - Log per-stage latency, `top_n`, and activation decisions; count timeouts and fail-open events. Keep telemetry minimal: `rerank.stage`, `rerank.topk`, `rerank.latency_ms`, `rerank.timeout`. The final stage MAY include `rerank.delta_changed_count`, `rerank.path`, and `rerank.total_timeout_budget_ms`. Do not include batch size or per-batch counters.
+If a stage times out or its model fails, reranking returns the original retrieval order. It never publishes a partial modality result as a complete answer.
 
-## Development Notes
+## Execution and lifecycle
 
-- Keep UI free of reranker toggles; provide ops env overrides only.
-- Early-exit: if there are no image/page nodes, skip visual rerank stage entirely.
-- Cancellation semantics: batch-wise early-exit only (deterministic subsets), no mid-batch truncation. Text reranking has one owner: LlamaIndex `SentenceTransformerRerank` backed by Sentence Transformers.
+Each `MultimodalReranker` owns one queue-free `AsyncWorkExecutor` for blocking BGE and SigLIP inference. Async postprocessing overrides LlamaIndex's default `asyncio.to_thread` path.
 
-## Libraries and Imports
+A caller timeout returns immediately but keeps executor capacity occupied until the native call exits. Later queries cannot queue unbounded work. The router owns every postprocessor it creates: asynchronous shutdown drains active workers, while synchronous shutdown rejects new work without waiting for native inference.
 
-```python
-from llama_index.core.postprocessor import SentenceTransformerRerank  # BGE text cross-encoder
-# Optional visual reranker (plugin):
-from llama_index.postprocessor.colpali_rerank import ColPaliRerank  # if installed
-# SigLIP similarity uses src/utils/vision_siglip.py for the pinned Transformers loader
+## Model and artifact ownership
+
+The text reranker resolves the pinned `BAAI/bge-reranker-v2-m3` snapshot from `settings.embedding.cache_folder` without a runtime download. SigLIP model and processor loading is centralized in `src/utils/vision_siglip.py`.
+
+Visual nodes persist only content-addressed `ArtifactRef` metadata. SigLIP resolves those references through `ArtifactStore` and uses the encrypted-aware image loader. Durable stores never contain raw host paths.
+
+## Telemetry
+
+Every stage records these fields:
+
+- `rerank.stage`: `text`, `visual`, `final`, or `total`
+- `rerank.topk`
+- `rerank.latency_ms`
+- `rerank.timeout`
+
+The final stage may also record `rerank.delta_changed_count`, `rerank.path`, and `rerank.total_timeout_budget_ms`. Telemetry must not include document text, paths, or secrets.
+
+## Configuration
+
+The canonical operational settings are:
+
+```env
+DOCMIND_RETRIEVAL__USE_RERANKING=true
+DOCMIND_RETRIEVAL__RERANKING_TOP_K=16
+DOCMIND_RETRIEVAL__SIGLIP_PRUNE_M=64
+DOCMIND_RETRIEVAL__TEXT_RERANK_TIMEOUT_MS=250
+DOCMIND_RETRIEVAL__SIGLIP_TIMEOUT_MS=150
+DOCMIND_RETRIEVAL__TOTAL_RERANK_BUDGET_MS=400
 ```
 
-## File Operations
+The Settings page exposes RRF and timeout values. It does not expose a reranking on/off control.
 
-### UPDATE
+## Attachment points
 
-- `src/retrieval/reranking.py`: implement `build_rerankers()` producing:
-  - Text reranker: `SentenceTransformerRerank(model="BAAI/bge-reranker-v2-m3")` with `top_n<=40`, 250 ms timeout.
-  - Visual rerank default: SigLIP text–image cosine re‑score with `top_n<=10`, 150 ms timeout.
-  - Optional: `ColPaliRerank(model="vidore/colpali-v1.2")` with `top_n<=10`, 400 ms timeout.
-  - Merge modality reranks by rank‑level RRF; fail‑open to fused order on timeouts.
-- Remove UI toggles; expose only internal caps/timeouts and ops env overrides.
+Semantic, hybrid, multimodal, and graph query engines receive `MultimodalReranker` through LlamaIndex's native `node_postprocessors` mechanism. Text-only graph results select the BGE path. Mixed vector results select both modality paths.
 
-## Acceptance Criteria
+`DOCMIND_RETRIEVAL__USE_RERANKING=false` is the only supported opt-out. When disabled, `router_factory` omits node postprocessors.
+
+## Acceptance criteria
 
 ```gherkin
-Feature: Reranking modes
+Feature: Modality-aware reranking
   Scenario: Text rerank
-    Given a mixed candidate set
-    Then `BAAI/bge-reranker-v2-m3` SHALL be applied to text nodes with top_n<=40 and 250 ms timeout
+    Given a candidate set with text nodes
+    Then BGE SHALL rerank those nodes within the text stage budget
 
-  Scenario: Visual rerank (default)
-    Given a mixed candidate set
-    Then SigLIP text–image cosine SHALL re‑score image/page nodes with top_n<=10 and 150 ms timeout
+  Scenario: Visual rerank
+    Given a candidate set with image or PDF page-image nodes
+    Then SigLIP SHALL rerank those nodes within the visual stage budget
 
-  Scenario: Visual rerank (optional ColPali)
-    Given ColPali plugin installed and a suitable GPU
-    Then ColPali MAY re‑score image/page nodes with top_n<=10 and 400 ms timeout
+  Scenario: Mixed-modality stage failure
+    Given either modality stage fails or times out
+    Then reranking SHALL return the exact original candidate order
 
-  Scenario: Fail-open on timeouts
-    Given reranking timeouts occur in any stage
-    Then the final ranked list SHALL fall back to the fused retrieval order and record a timeout event
+  Scenario: Router cleanup
+    Given a router owns active reranking work
+    Then asynchronous router shutdown SHALL drain the owned worker
 ```
 
-## References
+## Verification
 
-- BGE reranker; LlamaIndex node postprocessors; ColPali rerank example.
+Run the focused contract suite:
 
-## Always‑On Policy
-
-- Env override (ops only): `DOCMIND_RETRIEVAL__USE_RERANKING` (maps to `settings.retrieval.use_reranking`).
-- Reranking MUST be enabled by default with a modality‑aware policy:
-  - Text reranking via BGE reranker v2‑m3.
-  - Visual reranking via SigLIP scoring when relevant.
-- ColPali MAY be enabled behind a gate only when thresholds are met (image‑heavy corpora, GPU available). It MUST NOT be the default.
-- UI MUST NOT expose reranking toggles; policy is set in configuration.
-
-## Attachment Points (Where Reranking Is Applied)
-
-- Router parity: The RouterQueryEngine constructs the same rerank-enabled engines (vector/hybrid/KG) by passing `node_postprocessors` when `settings.retrieval.use_reranking` is True.
-
-- Tool layer (library‑first): Reranking is attached via `node_postprocessors` on LlamaIndex query engines created by the ToolFactory.
-  - Vector and hybrid tools use a modality‑aware `MultimodalReranker()` that applies text (BGE CrossEncoder) and visual (SigLIP; optional ColPali) reranking and merges results by RRF.
-  - Knowledge graph tools (text‑only) attach the text reranker built via `build_text_reranker(top_n=settings.retrieval.reranking_top_k)`.
-  - This keeps wiring DRY and localized, leveraging LlamaIndex’s documented postprocessor mechanism (index.as_query_engine(..., node_postprocessors=[...]) or RetrieverQueryEngine(..., node_postprocessors=[...])).
-
-## Disabling Reranking (Ops Override Only)
-
-- Environment variable: set `DOCMIND_RETRIEVAL__USE_RERANKING=false` (maps to `settings.retrieval.use_reranking = False`).
-  - When false, ToolFactory omits `node_postprocessors` so no reranking occurs.
-  - There is no UI toggle; disabling is an operational override for constrained environments or diagnostics.
+```bash
+uv run pytest -q tests/unit/retrieval/reranking tests/unit/retrieval/test_router_async_tools.py tests/unit/retrieval/test_async_work.py
+```

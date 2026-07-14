@@ -9,7 +9,7 @@
 
 - `langgraph-checkpoint-sqlite>=3.0.3,<4.0.0` (versions `<3.0.3` have known CVEs affecting checkpoint integrity)
 - `sqlite-vec` (runtime dependency used by LangGraph checkpointing; required for vector-backed SQLite)
-- Core multimodal dependencies: `transformers` + `torch` for the canonical SigLIP path. ColPali remains optional through the `multimodal` extra.
+- Core multimodal dependencies: `transformers` + `torch` for the canonical SigLIP path.
 - PDF page-image rendering uses pypdfium2 in the default path. PyMuPDF is not
   part of the default runtime dependency set.
 
@@ -24,7 +24,7 @@ DocMind must ship a **final-release** multimodal experience that works end-to-en
 3. **UI** renders image sources without freezing and without unsafe HTML, and supports query-by-image.
 4. **Cognitive persistence** stores conversation state durably (sessions + time travel) and supports long-term memory, **without persisting blobs** (no base64 images in DB/Qdrant).
 
-We previously had multimodal primitives (SigLIP, optional ColPali rerank) but the pipeline was disconnected: no image indexing, no fused retrieval, no UI rendering, and no durable persistence.
+The earlier multimodal primitives were disconnected: no image indexing, fused retrieval, UI rendering, or durable persistence.
 
 ## Decision
 
@@ -34,8 +34,8 @@ We implement a **local-first, thin-payload, end-to-end multimodal pipeline** wit
    Durable references are content-addressed `ArtifactRef(sha256, suffix)`.
    - Forbidden: absolute/host-specific paths in Qdrant payloads, LangGraph checkpoints, DocMind store tables, or telemetry JSONL.
    - Allowed: SnapshotManager-controlled snapshot-internal member paths in `manifest.jsonl` required to locate files within a snapshot directory (not used as stable identifiers outside the snapshot boundary).
-2. **All multimodal capabilities fail open.**  
-   If optional dependencies (SigLIP model, sqlite-vec, ColPali) are unavailable, the app continues with reduced capability.
+2. **Generation activation fails closed; query-time visual work fails open.**
+   A generation activates only after strict image indexing and exact text/image point-count verification succeed. Runtime visual retrieval may fall back to text results, and runtime reranking may return the original candidate order.
 
 ### Architecture (final)
 
@@ -70,7 +70,10 @@ We implement a **local-first, thin-payload, end-to-end multimodal pipeline** wit
 
 #### Cognitive persistence (ADR-057 integrated)
 
-- LangGraph `SqliteSaver` persists thread state (`messages` + agent outputs).
+- LangGraph `AsyncSqliteSaver` persists thread state (`messages` + agent
+  outputs) on the coordinator's owned event loop. All public user/thread pairs
+  map to one opaque user-scoped persistence key shared by run, state, history,
+  fork, fencing, and purge operations.
 - A DocMind session registry table provides user-friendly session lists, rename/delete, and hard purge.
 - A DocMind `BaseStore` implementation provides long-term memory with optional semantic search.
 - “Time travel” is implemented by resuming from a prior checkpoint id (forking a new head).
@@ -80,11 +83,12 @@ We implement a **local-first, thin-payload, end-to-end multimodal pipeline** wit
 Weighted decision criteria:
 
 - **Solution leverage (35%)**: 9.2/10  
-  Uses LangGraph `SqliteSaver`, LangGraph `BaseStore`, Qdrant Query API, and SigLIP; minimal bespoke code.
+  Uses LangGraph `AsyncSqliteSaver`, LangGraph `BaseStore`, Qdrant Query API,
+  and SigLIP; minimal bespoke code.
 - **Application value (30%)**: 9.1/10  
   Delivers true multimodal UX (PDF images discoverable + renderable) and durable chat sessions/time travel.
 - **Maintenance & cognitive load (25%)**: 9.0/10  
-  Clear separation: artifacts/indexing/retrieval/UI/persistence; fail-open behavior; strong typing + tests.
+  Clear separation: artifacts/indexing/retrieval/UI/persistence; explicit activation and query failure boundaries; strong typing + tests.
 - **Architectural adaptability (10%)**: 9.1/10  
   ArtifactRef abstraction allows swapping storage backends; retrieval can evolve to server-side late-interaction later.
 
@@ -101,13 +105,9 @@ Weighted decision criteria:
 ### Tradeoffs & Limitations
 
 - **Performance:** RRF (rank-based reciprocal rank fusion) fusion adds latency compared to single-retrieval approaches. Future optimization: implement late-interaction fusion at the Qdrant level for reduced app-side processing.
-- **Storage:** Duplicate artifacts (original images + thumbnails) increase storage requirements. Mitigation: aggressive artifact pruning policies and optional S3 offload.
+- **Storage:** Original images and thumbnails consume local storage. Document deletion retains content-addressed artifacts so historical chat evidence remains renderable.
 - **Complexity:** Content-addressed artifact storage adds cognitive overhead for developers working with images/artifacts. Mitigation: stable `ArtifactRef` API hides complexity; comprehensive examples in docs.
 - **Compatibility:** Existing pre-ArtifactRef snapshots are outside this forward-only contract and require an explicit operator decision.
-
-### Future Extensions (not required for baseline correctness)
-
-- Server-side late-interaction in Qdrant (ColPali multivectors + MaxSim) can be added as an optional optimization path; current design keeps late-interaction local via reranking.
 
 ## Implementation (repo truth)
 
@@ -136,7 +136,7 @@ Key files:
 uv run ruff format .
 uv run ruff check . --fix
 uv run pyright
-uv run python scripts/run_tests.py --fast
+uv run pytest tests/unit tests/integration -q --no-cov
 ```
 
 **Success criteria:** All checks pass, unit tests complete without errors.
@@ -144,14 +144,17 @@ uv run python scripts/run_tests.py --fast
 #### Integration tier
 
 ```bash
-uv run python scripts/run_tests.py --integration
+uv run pytest tests/integration -q --no-cov
 ```
 
 **Validates:**
 
 - `tests/integration/test_ingestion_pipeline_pdf_images.py` — PDF image rendering, artifact creation, SigLIP indexing
 - `tests/unit/retrieval/embeddings/test_embeddings_refactored.py` and `tests/unit/utils/siglip_adapter/` — canonical dense and visual embedding wiring
-- `tests/integration/ui/test_chat_persistence_time_travel.py` — LangGraph SqliteSaver, session persistence
+- `tests/integration/test_async_sqlite_checkpointer.py` — real async LangGraph
+  SQLite persistence, user isolation, sync bridges, and lifecycle closure
+- `tests/integration/ui/test_chat_persistence_time_travel.py` — session and
+  time-travel UI persistence
 - Memory store coverage is in unit tests (`tests/unit/persistence/test_memory_store_*`)
 
 #### System tier (GPU, slow, optional)

@@ -41,11 +41,9 @@ Persist selection to settings. Expose model id, context, streaming, and safe end
   - Embed `dimensions` for truncation
   - Optional cloud web tools (web_search/web_fetch)
 - Central factory: `src/config/llm_factory.py`.
-- `DocMindSettings.effective_model` is the canonical runtime model owner. A
-  non-empty top-level `model` override wins; otherwise Ollama uses the public
-  `qwen3:4b-instruct` tag and other backends use `vllm.model`. Backend-agnostic
-  consumers MUST use this property; vLLM launch helpers remain vLLM-specific.
-- UI wiring: `src/pages/04_settings.py` controls provider, model, base URLs, and advanced knobs.
+- `DocMindSettings.llm_request` owns the model override, context window, maximum output tokens, and temperature. `effective_model` resolves the override or the selected provider's default.
+- `DocMindSettings.vllm_base_url` is the only vLLM endpoint owner. Operators configure and start the external server.
+- UI wiring: `src/pages/04_settings.py` controls the provider, request values, and base URLs.
 - Respect environment via `src/config/settings.py` and surfacing in UI.
 
 ## Libraries and Imports
@@ -61,7 +59,7 @@ from src.config.llm_factory import build_llm
 
 ## Integration Points
 
-- `src/config/integrations.py::setup_llamaindex()` to inject Settings.llm and context caps.
+- `src/config/integrations.py::setup_llamaindex()` injects `Settings.llm` and request limits.
 - UI: `src/pages/04_settings.py` provider select, model text input, server URL fields.
 - Chat page uses `Settings.llm` directly.
 
@@ -137,7 +135,7 @@ Feature: LLM provider selection
 
 - [x] Add UI select for provider with options: ollama, vllm, lmstudio, llamacpp.
 - [x] Add UI select for provider option: openai_compatible (generic OpenAI-compatible endpoint).
-- [x] Validate base URLs: vLLM may be raw server or OpenAI-compatible; LM Studio requires `/v1`.
+- [x] Normalize the vLLM OpenAI-compatible endpoint and require `/v1` for LM Studio.
 - [x] Support opt-in Responses API mode for OpenAI-compatible endpoints.
 - [x] LlamaCPP uses OpenAI-compatible server mode via `OpenAILike`.
 - [x] Hook `Settings.llm` inside `setup_llamaindex()` only if not already set (allow force rebind).
@@ -160,7 +158,7 @@ Feature: LLM provider selection
 
 ## Settings Scope & Validation
 
-- The Settings page MUST include: provider selection (Ollama, vLLM, LM Studio, llama.cpp), model ID (or OpenAI-compatible model identifier), context window, timeout, and GPU toggle.
+- The Settings page MUST include provider selection, model ID, context window, maximum output tokens, temperature, timeout, and GPU toggle.
 - OpenAI-compatible endpoints MUST be configured with a server URL ending in `/v1` plus the provider's model identifier, for example LM Studio `http://localhost:1234/v1` with `local-model` or vLLM `http://localhost:8000/v1` with the served model name.
 - Retrieval/reranking/hybrid toggles MUST NOT appear in Settings; these remain environment‑only.
 - URL validation/allowlist:
@@ -169,6 +167,7 @@ Feature: LLM provider selection
 
 ## Selector Policy
 
-- Preferred selector: `PydanticSingleSelector`.
-- Fallback: `LLMSingleSelector` based on provider/model capability.
-- Selector choice impacts routing only (not answer generation) and MUST be covered by unit tests.
+- LlamaIndex's native `RouterQueryEngine.from_defaults(...)` owns selector
+  construction from the configured LLM.
+- DocMind does not maintain a parallel selector adapter or compatibility retry.
+- Selector choice affects routing only, not answer generation.

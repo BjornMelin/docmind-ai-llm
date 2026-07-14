@@ -6,6 +6,7 @@ import base64
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 pytestmark = pytest.mark.unit
 
@@ -26,11 +27,6 @@ def _set_test_aes_key(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_ensure_thumbnail_plain_and_encrypted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    try:
-        from PIL import Image  # type: ignore
-    except Exception:  # pragma: no cover
-        pytest.skip("Pillow not installed")
-
     from src.utils.images import ensure_thumbnail, open_image_encrypted
 
     img_path = tmp_path / "page.webp"

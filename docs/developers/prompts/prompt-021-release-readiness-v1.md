@@ -31,8 +31,8 @@ package is considered **done** when its prompt has been moved into
 | 13 | Analytics page hardening (DuckDB + telemetry parsing) | ADR-053 | SPEC-034 | ✅ Completed | `docs/developers/prompts/implemented/prompt-034-analytics-page-hardening.md` |
 | 14 | Document analysis modes (auto/separate/combined) | ADR-023 | SPEC-036 | ✅ Completed | `docs/developers/prompts/implemented/prompt-036-document-analysis-modes.md` |
 | 15 | Local backup & retention (snapshots + cache + Qdrant) | ADR-033 | SPEC-037 | ✅ Completed | `docs/developers/prompts/implemented/prompt-037-local-backup-and-retention.md` |
-| 16 | Semantic response cache (Qdrant-backed, guardrailed) | ADR-035 | SPEC-038 | ✅ Completed | `docs/developers/prompts/implemented/prompt-038-semantic-cache-qdrant.md` |
-| 17 | Operational metadata store (SQLite WAL) | ADR-055 | SPEC-039 | Future / deferred from v1 | `docs/developers/prompts/prompt-039-operational-metadata-sqlite-wal.md` |
+| 16 | Semantic response cache (Qdrant-backed, guardrailed) | ADR-035 | SPEC-038 | Completed in v1; retired in v2 | `docs/developers/prompts/implemented/prompt-038-semantic-cache-qdrant.md` |
+| 17 | Operational metadata store (SQLite WAL) | ADR-055 | SPEC-039 | Superseded in v2; no operational metadata store | `docs/developers/prompts/prompt-039-operational-metadata-sqlite-wal.md` |
 | 18 | Agent deadline propagation + router injection | ADR-056 | SPEC-040 | ✅ Completed | `docs/developers/prompts/implemented/prompt-040-agent-deadline-propagation-and-router-injection.md` |
 
 ### Extra completion (non-WP, polish)
@@ -50,7 +50,8 @@ Run only these remaining WPs, in order, until all are completed:
 - [x] WP12 — `docs/developers/prompts/implemented/prompt-033-background-ingestion-jobs.md`
 - [x] WP14 — `docs/developers/prompts/implemented/prompt-036-document-analysis-modes.md`
 - [x] WP15 — `docs/developers/prompts/implemented/prompt-037-local-backup-and-retention.md`
-- [x] WP16 — `docs/developers/prompts/implemented/prompt-038-semantic-cache-qdrant.md`
+- [x] WP16: completed in v1 and retired in v2. See
+  `docs/developers/prompts/implemented/prompt-038-semantic-cache-qdrant.md`.
 - [x] WP18 — `docs/developers/prompts/implemented/prompt-040-agent-deadline-propagation-and-router-injection.md`
 
 WP17 is not a remaining v1 package. Its proposed ADR, draft spec, and deferred
@@ -294,8 +295,9 @@ uv run ruff format .
 uv run ruff check . --fix
 uv run pyright
 uv run python scripts/run_tests.py --fast
-uv run python scripts/run_tests.py
-uv run python scripts/run_quality_gates.py --ci --report
+uv run python scripts/run_tests.py --coverage
+uv run python scripts/check_links.py
+uv run python scripts/verify_structural_parity.py
 ```
 
 ---
@@ -332,16 +334,16 @@ Use these tools as needed:
 
 ### Final Verification Checklist (Must Complete)
 
-| Requirement     | Status | Proof / Notes                                                                                                                                                      |
-| --------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Packaging**   |        | `uv sync` clean                                                                                                                                                    |
-| **Formatting**  |        | `ruff format`                                                                                                                                                      |
-| **Lint**        |        | `ruff check` clean                                                                                                                                                 |
-| **Types**       |        | `pyright` clean                                                                                                                                                    |
-| **Tests**       |        | `pytest` green (scoped + full tiers as required)                                                                                                                   |
-| **Docs**        |        | ADR/SPEC/RTM updated                                                                                                                                               |
-| **Security**    |        | allowlist + path validation + no secret logs                                                                                                                       |
-| **Tech Debt**   |        | zero work-marker placeholders introduced                                                                                                                           |
-| **Performance** |        | no new import-time heavy work; run `scripts/performance_monitor.py` and ensure key UI/ingest flows have no regressions >20% vs. baseline (see `scripts/README.md`) |
+| Requirement | Status | Proof / notes |
+| --- | --- | --- |
+| **Packaging** | | `uv sync` clean |
+| **Formatting** | | `ruff format` |
+| **Lint** | | `ruff check` clean |
+| **Types** | | `pyright` clean |
+| **Tests** | | `pytest` green (scoped + full tiers as required) |
+| **Docs** | | ADR/SPEC/RTM updated |
+| **Security** | | allowlist + path validation + no secret logs |
+| **Tech debt** | | zero work-marker placeholders introduced |
+| **Performance** | | no new import-time heavy work; compare the schema-3 parser benchmark only on equivalent hardware, fixtures, model caches, and clean commits |
 
 **EXECUTE UNTIL COMPLETE.**

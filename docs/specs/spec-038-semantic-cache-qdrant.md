@@ -1,16 +1,23 @@
 ---
 spec: SPEC-038
 title: Semantic Response Cache (Qdrant-backed, Guardrailed)
-version: 1.0.0
-date: 2026-01-09
+version: 2.0.0
+date: 2026-07-13
 owners: ["ai-arch"]
-status: Implemented
+status: Superseded
 related_requirements:
-  - FR-026: Optional semantic response caching for repeated/near-duplicate requests.
+  - FR-026 (superseded): Optional semantic response caching for repeated/near-duplicate requests.
   - NFR-SEC-001: Offline-first; remote endpoints gated.
   - NFR-MAINT-003: No placeholder APIs; docs/specs/RTM match code.
 related_adrs: ["ADR-035", "ADR-024", "ADR-031", "ADR-010", "ADR-004"]
+notes: "DocMind v2 removed application-level response caching because it did not share user/session memory identity or atomic hard-purge ownership."
 ---
+
+## Supersession notice
+
+DocMind v2 removes this response cache, its settings, telemetry events, source module, coordinator integration, and tests. Responses can incorporate user-scoped and session-scoped memory. The v1 cache key and deletion lifecycle did not share those isolation boundaries. A hit could replay a memory-derived response across users or after session purge.
+
+This specification remains a historical design record. It does not authorize restoring the retired configuration or implementation.
 
 ## Goals
 
@@ -75,9 +82,9 @@ Any mismatch prevents hits.
 
 > **corpus_hash contract**: `corpus_hash` is computed over corpus file metadata (file paths, sizes, and modification times) via `SnapshotManager.compute_corpus_hash()`. It is recomputed after ingestion completes or during snapshot finalization. Changes to files, document re-indexing, or embedding model updates will change the hash and invalidate cache entries. See ADR-035 for the broader invalidation strategy.
 
-### Configuration
+### Historical configuration
 
-Update `SemanticCacheConfig` in `src/config/settings.py`:
+V1 used the following retired settings model:
 
 ```python
 class SemanticCacheConfig(BaseModel):

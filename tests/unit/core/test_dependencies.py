@@ -1,11 +1,6 @@
-"""Tests for the canonical application dependency contract.
+"""Tests for the canonical application dependency contract."""
 
-This module validates that dependency cleanup remains effective by:
-1. Verifying all llama-index imports use modular packages
-2. Verifying required and forbidden project distributions
-3. Testing core import resolution
-4. Ensuring the app can start without missing critical dependencies
-"""
+from __future__ import annotations
 
 import ast
 import importlib
@@ -16,314 +11,92 @@ import pytest
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
-from scripts import smoke_built_wheel as wheel_contract
-
 PROJECT_ROOT = Path(__file__).parents[3]
+REQUIRED_PROJECT_DEPENDENCIES = {
+    "docling",
+    "fastembed",
+    "llama-index-core",
+    "llama-index-embeddings-huggingface",
+    "llama-index-llms-ollama",
+    "llama-index-llms-openai",
+    "llama-index-llms-openai-like",
+    "onnxruntime",
+    "pypdfium2",
+    "rapidocr",
+    "torch",
+}
+FORBIDDEN_DIRECT_DEPENDENCIES = {
+    "fastembed-gpu",
+    "kuzu",
+    "llama-index",
+    "llama-index-embeddings-clip",
+    "llama-index-embeddings-fastembed",
+    "llama-index-embeddings-openai",
+    "llama-index-graph-stores-kuzu",
+    "onnxruntime-gpu",
+    "openai",
+    "openai-whisper",
+    "tenacity",
+}
+
+pytestmark = pytest.mark.unit
 
 
-class ImportVisitor(ast.NodeVisitor):
-    """AST visitor to extract import statements from Python files."""
-
-    def __init__(self):
-        """Initialize the import visitor with empty sets."""
-        self.imports = set()
-        self.from_imports = set()
-
-    def visit_Import(self, node: ast.Import) -> None:
-        """Visit import statements (import x)."""
-        for alias in node.names:
-            self.imports.add(alias.name)
-        self.generic_visit(node)
-
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        """Visit from-import statements (from x import y)."""
-        if node.module:
-            self.from_imports.add(node.module)
-        self.generic_visit(node)
+def _project_dependencies() -> set[str]:
+    project = tomllib.loads(
+        (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    )["project"]
+    return {
+        canonicalize_name(Requirement(value).name) for value in project["dependencies"]
+    }
 
 
-def extract_imports_from_file(file_path: Path) -> tuple[set[str], set[str]]:
-    """Extract all import statements from a Python file.
-
-    Args:
-        file_path: Path to the Python file
-
-    Returns:
-        Tuple of (direct imports, from imports)
-    """
-    try:
-        with open(file_path, encoding="utf-8") as f:
-            content = f.read()
-
-        tree = ast.parse(content)
-        visitor = ImportVisitor()
-        visitor.visit(tree)
-
-        return visitor.imports, visitor.from_imports
-
-    except (SyntaxError, UnicodeDecodeError, FileNotFoundError) as e:
-        pytest.skip(f"Could not parse {file_path}: {e}")
-        return set(), set()
+def _source_imports(path: Path) -> tuple[set[str], set[str]]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    direct: set[str] = set()
+    from_modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            direct.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            from_modules.add(node.module)
+    return direct, from_modules
 
 
-def get_main_python_files() -> list[Path]:
-    """Get main Python files in the project (excluding tests)."""
-    python_files = []
+def test_project_dependency_contract() -> None:
+    """Required integrations have one owner and removed paths stay removed."""
+    dependencies = _project_dependencies()
 
-    # Get files from src/ directory
-    src_dir = PROJECT_ROOT / "src"
-    if src_dir.exists():
-        python_files.extend(src_dir.rglob("*.py"))
+    assert dependencies >= REQUIRED_PROJECT_DEPENDENCIES
+    assert FORBIDDEN_DIRECT_DEPENDENCIES.isdisjoint(dependencies)
 
-    # No separate utils/ directory - all utilities are in src/utils
+    project = tomllib.loads(
+        (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    )["project"]
+    assert "llama" not in project["optional-dependencies"]
 
-    return python_files
 
+def test_llama_index_imports_are_modular() -> None:
+    """Production code imports concrete LlamaIndex modules, not the meta-package."""
+    violations: list[Path] = []
+    modular_imports: set[str] = set()
 
-class TestDependencyCleanup:
-    """Test suite for the canonical project dependency contract."""
-
-    def test_project_dependency_contract(self) -> None:
-        """Keep one required LlamaIndex core and only used integrations."""
-        project = tomllib.loads(
-            (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-        )["project"]
-        dependencies = {
-            canonicalize_name(Requirement(value).name)
-            for value in project["dependencies"]
-        }
-
-        assert not wheel_contract._REQUIRED_WHEEL_DEPENDENCIES.difference(dependencies)
-        assert not wheel_contract._FORBIDDEN_WHEEL_DEPENDENCIES.intersection(
-            dependencies
-        )
-        assert "llama" not in project["optional-dependencies"]
-
-    def test_llama_index_uses_modular_imports(self):
-        """Test that all LlamaIndex imports use modular packages."""
-        python_files = get_main_python_files()
-
-        violations = []
-        found_modular_imports = set()
-
-        for file_path in python_files:
-            direct_imports, from_imports = extract_imports_from_file(file_path)
-
-            # Check for old-style llama_index imports (without submodules)
-            if "llama_index" in direct_imports:
-                violations.append(
-                    f"{file_path}: Old-style import 'import llama_index' found. "
-                    "Use modular imports instead."
-                )
-
-            # Collect modular imports found
-            for from_import in from_imports:
-                if from_import.startswith("llama_index."):
-                    found_modular_imports.add(from_import)
-
-        assert not violations, "Found old-style LlamaIndex imports:\n" + "\n".join(
-            violations
+    for path in (PROJECT_ROOT / "src").rglob("*.py"):
+        direct, from_modules = _source_imports(path)
+        if "llama_index" in direct:
+            violations.append(path.relative_to(PROJECT_ROOT))
+        modular_imports.update(
+            module for module in from_modules if module.startswith("llama_index.")
         )
 
-        # Validate found modular imports
-        if found_modular_imports:
-            # Assert that modular imports are properly structured
-            assert all(
-                import_name.startswith("llama_index")
-                for import_name in found_modular_imports
-            ), f"Invalid modular imports found: {found_modular_imports}"
-
-    def test_core_imports_resolve_correctly(self):
-        """Test that essential imports can be resolved correctly."""
-        # Test only the most critical imports that the app needs to start
-        essential_imports = ["streamlit", "pydantic", "loguru"]
-
-        failed_imports = []
-
-        for import_name in essential_imports:
-            if not self._can_import_module(import_name):
-                failed_imports.append(
-                    f"Cannot import essential dependency '{import_name}'"
-                )
-
-        if failed_imports:
-            pytest.skip(
-                f"Essential imports failed (test environment): {failed_imports}"
-            )
-
-    def test_no_duplicate_functionality_conflicts(self):
-        """Test for potential conflicts between similar packages."""
-        python_files = get_main_python_files()
-
-        # Define potential conflicts (packages that provide similar functionality)
-        potential_conflicts = {
-            "vector_stores": {"qdrant_client", "pinecone", "weaviate", "chroma"},
-            "embedding_models": {"fastembed", "sentence_transformers"},
-        }
-
-        conflicts_found = []
-
-        for file_path in python_files:
-            direct_imports, from_imports = extract_imports_from_file(file_path)
-            all_imports = direct_imports.union(from_imports)
-
-            for category, conflict_set in potential_conflicts.items():
-                found_in_file = conflict_set.intersection(all_imports)
-                if len(found_in_file) > 1:
-                    conflicts_found.append(
-                        f"{file_path}: Multiple {category} packages: {found_in_file}"
-                    )
-
-        # Validate no critical conflicts exist (informational assertion)
-        if conflicts_found:
-            # This assertion is informational - conflicts might be intentional
-            # But we assert that the count is reasonable
-            assert len(conflicts_found) < 10, (
-                f"Too many package conflicts detected ({len(conflicts_found)}). "
-                f"First 5: {conflicts_found[:5]}"
-            )
-
-    def _can_import_module(self, module_name: str) -> bool:
-        """Check if a module can be imported.
-
-        Args:
-            module_name: Name of the module to test
-
-        Returns:
-            True if module can be imported, False otherwise
-        """
-        try:
-            # Handle relative imports
-            if module_name.startswith("."):
-                return True  # Skip relative imports
-
-            # Try to import the module
-            importlib.import_module(module_name)
-            return True
-
-        except (ImportError, ModuleNotFoundError, ValueError):
-            return False
+    assert not violations
+    assert modular_imports
 
 
-class TestCorePackages:
-    """Test that core packages are available and working."""
-
-    def test_streamlit_available(self):
-        """Test that Streamlit is available."""
-        try:
-            import streamlit as st
-
-            assert st is not None
-            # Test key components the app uses
-            assert hasattr(st, "set_page_config")
-            assert hasattr(st, "session_state")
-        except ImportError:
-            pytest.skip("Streamlit not available in test environment")
-
-    def test_pydantic_v2_available(self):
-        """Test that Pydantic v2 is available."""
-        try:
-            import pydantic
-
-            # Ensure it's v2
-            version = pydantic.VERSION
-            assert version.startswith("2."), f"Expected Pydantic v2, got {version}"
-        except ImportError:
-            pytest.skip("Pydantic not available in test environment")
-
-    def test_llama_index_core_available(self):
-        """Test that LlamaIndex core is available."""
-        try:
-            from llama_index.core import Document, VectorStoreIndex
-
-            assert Document is not None
-            assert VectorStoreIndex is not None
-        except ImportError:
-            pytest.skip("LlamaIndex core not available in test environment")
-
-    def test_qdrant_client_available(self):
-        """Test that Qdrant client is available."""
-        try:
-            from qdrant_client import QdrantClient
-
-            assert QdrantClient is not None
-        except ImportError:
-            pytest.skip("Qdrant client not available in test environment")
-
-
-class TestOptionalPackages:
-    """Test handling of optional packages."""
-
-    def test_optional_gpu_packages(self):
-        """Test that GPU packages are optional."""
-        gpu_packages = ["fastembed_gpu", "numba"]
-        available_packages = []
-
-        for pkg in gpu_packages:
-            try:
-                importlib.import_module(pkg)
-                available_packages.append(pkg)
-            except ImportError:
-                # This is fine - GPU packages are optional
-                pass
-
-        # Assert that it's valid to have none, some, or all GPU packages
-        assert 0 <= len(available_packages) <= len(gpu_packages), (
-            f"GPU packages availability validation failed. "
-            f"Available: {available_packages}"
-        )
-
-    def test_optional_video_processing(self):
-        """Test that video processing packages are optional."""
-        moviepy_available = False
-
-        try:
-            import importlib.util
-
-            spec = importlib.util.find_spec("moviepy")
-            if spec is not None:
-                moviepy_available = True
-        except ImportError:
-            # This is fine - video processing is optional
-            pass
-
-        # Assert that the video processing status is properly detected
-        assert isinstance(moviepy_available, bool), (
-            "Video processing availability detection failed"
-        )
-
-    def test_app_works_without_optional_packages(self):
-        """Test that the app can import without optional packages."""
-        # This test ensures the app gracefully handles missing optional dependencies
-        import sys
-
-        src_path = str(PROJECT_ROOT / "src")
-        if src_path not in sys.path:
-            sys.path.insert(0, src_path)
-
-        try:
-            # Test importing core components
-            from src.config import settings
-
-            # Assert successful import with proper validation
-            assert settings is not None, "Settings should be importable"
-            assert hasattr(settings, "app_name"), (
-                "Settings should have app_name attribute"
-            )
-
-        except ImportError as e:
-            error_msg = str(e).lower()
-            # Should not fail due to optional dependencies
-            if any(
-                optional in error_msg
-                for optional in ["fastembed_gpu", "moviepy", "numba"]
-            ):
-                pytest.skip(
-                    f"App import failed due to optional dependency (this is a bug): {e}"
-                )
-            else:
-                pytest.skip(f"App import failed (missing core deps): {e}")
-
-        finally:
-            if src_path in sys.path:
-                sys.path.remove(src_path)
+@pytest.mark.parametrize(
+    "module_name",
+    ["cryptography", "llama_index.core", "loguru", "pydantic", "streamlit"],
+)
+def test_required_runtime_imports_resolve(module_name: str) -> None:
+    """The locked base environment contains every required runtime package."""
+    assert importlib.import_module(module_name)

@@ -574,41 +574,78 @@ def _index_page_images_orchestrator(
     from qdrant_client import QdrantClient
 
     from src.retrieval.image_index import (
-        delete_page_images_for_doc_id,
+        collect_page_image_point_ids_for_doc_id,
+        delete_page_image_points_by_id,
         index_page_images_siglip,
     )
     from src.utils.siglip_adapter import SiglipEmbedding
     from src.utils.storage import get_client_config
 
     t0 = time.time()
+    collection_name = (
+        cfg.image_collection_name or app_settings.database.qdrant_image_collection
+    )
     client = QdrantClient(**get_client_config())
     purged_points = 0
     indexed = 0
     try:
         embedder = SiglipEmbedding()
-        if purge_doc_ids:
-            for doc_id in sorted({str(d) for d in purge_doc_ids if d}):
-                with contextlib.suppress(Exception):
-                    purged_points += int(
-                        delete_page_images_for_doc_id(
-                            client,
-                            app_settings.database.qdrant_image_collection,
-                            doc_id=doc_id,
-                        )
-                    )
+        replacement_doc_ids = sorted({str(d) for d in purge_doc_ids or set() if d})
+        old_point_ids: set[str] = set()
+        for doc_id in replacement_doc_ids:
+            old_point_ids.update(
+                collect_page_image_point_ids_for_doc_id(
+                    client,
+                    collection_name,
+                    doc_id=doc_id,
+                )
+            )
         indexed = index_page_images_siglip(
             client,
-            collection_name=app_settings.database.qdrant_image_collection,
+            collection_name=collection_name,
             records=records,
             embedder=embedder,
             batch_size=int(getattr(cfg, "image_index_batch_size", 8)),
         )
+        verification_doc_ids = (
+            replacement_doc_ids
+            if replacement_doc_ids
+            else sorted({record.doc_id for record in records})
+            if cfg.strict_image_indexing
+            else []
+        )
+        if verification_doc_ids:
+            expected_point_ids = {str(record.point_id()) for record in records}
+            if indexed != len(records):
+                raise RuntimeError(
+                    "Page-image replacement did not index every replacement record"
+                )
+            current_point_ids: set[str] = set()
+            for doc_id in verification_doc_ids:
+                current_point_ids.update(
+                    collect_page_image_point_ids_for_doc_id(
+                        client,
+                        collection_name,
+                        doc_id=doc_id,
+                    )
+                )
+            missing_point_ids = expected_point_ids.difference(current_point_ids)
+            if missing_point_ids:
+                raise RuntimeError(
+                    "Page-image replacement verification found missing new points"
+                )
+            if replacement_doc_ids:
+                purged_points = delete_page_image_points_by_id(
+                    client,
+                    collection_name,
+                    point_ids=old_point_ids.difference(expected_point_ids),
+                )
     finally:
         with contextlib.suppress(Exception):
             client.close()
 
     return {
-        "image_index.collection": app_settings.database.qdrant_image_collection,
+        "image_index.collection": collection_name,
         "image_index.indexed": int(indexed),
         "image_index.purged_points": int(purged_points),
         "image_index.latency_ms": int((time.time() - t0) * 1000),
@@ -642,6 +679,9 @@ def _index_page_images(
 
     records, skipped = _build_page_image_records(image_exports, store, app_settings)
 
+    if cfg.strict_image_indexing and skipped:
+        raise RuntimeError("Page-image build skipped records in strict mode")
+
     if not records:
         return {
             "image_index.enabled": True,
@@ -658,7 +698,9 @@ def _index_page_images(
             "image_index.skipped": skipped,
             **orchestration,
         }
-    except Exception as exc:  # pragma: no cover - fail open
+    except Exception as exc:  # pragma: no cover - external model/storage boundary
+        if cfg.strict_image_indexing:
+            raise
         from src.utils.log_safety import build_pii_log_entry
 
         redaction = build_pii_log_entry(str(exc), key_id="ingestion.image_indexing")
@@ -712,29 +754,6 @@ def _collect_parsing_provenance(documents: Sequence[Document]) -> dict[str, Any]
     }
 
 
-def _prune_artifacts_best_effort() -> int:
-    """Prune artifact store to enforce size budget (best-effort)."""
-    try:
-        artifacts_cfg = getattr(app_settings, "artifacts", None)
-        max_mb = int(getattr(artifacts_cfg, "max_total_mb", 0) or 0)
-        if max_mb <= 0:
-            return 0
-        store = ArtifactStore.from_settings(app_settings)
-        return int(
-            store.prune(
-                max_total_bytes=max_mb * 1024 * 1024,
-                min_age_seconds=int(
-                    getattr(artifacts_cfg, "gc_min_age_seconds", 0) or 0
-                ),
-            )
-        )
-    except Exception as exc:
-        logger.debug(
-            "Artifact pruning failed (ArtifactStore.from_settings/prune): {}", exc
-        )
-        return 0
-
-
 async def ingest_documents(
     cfg: IngestionConfig,
     inputs: Sequence[IngestionInput],
@@ -756,6 +775,7 @@ async def ingest_documents(
         metadata, and execution timing.
     """
     require_unique_document_ids(inputs)
+    source_corpus_hash = _ingestion_corpus_hash(inputs)
     resolved_embedding = _resolve_embedding(embedding)
     if resolved_embedding is None:
         logger.warning(
@@ -777,10 +797,11 @@ async def ingest_documents(
         raise RuntimeError("Ingestion produced no nodes for a non-empty input batch")
 
     img_index_meta = _index_page_images(exports, cfg)
-    artifact_gc_deleted = _prune_artifacts_best_effort()
+    if _ingestion_corpus_hash(inputs) != source_corpus_hash:
+        raise RuntimeError("Authoritative corpus changed during ingestion")
 
     manifest = ManifestSummary(
-        corpus_hash=_ingestion_corpus_hash(inputs),
+        corpus_hash=source_corpus_hash,
         config_hash=compute_config_hash(
             {
                 "ingestion": cfg.model_dump(mode="json"),
@@ -798,7 +819,6 @@ async def ingest_documents(
         "cache_db": cache_path.name,
         **img_index_meta,
         **_collect_parsing_provenance(documents),
-        "artifact_gc_deleted": int(artifact_gc_deleted),
     }
 
     nlp_enabled = bool(getattr(getattr(app_settings, "spacy", None), "enabled", False))
@@ -863,45 +883,8 @@ def ingest_documents_sync(
     )
 
 
-def reindex_page_images_sync(
-    cfg: IngestionConfig,
-    inputs: Sequence[IngestionInput],
-) -> dict[str, Any]:
-    """Rebuild page-image exports and reindex them into Qdrant (best-effort).
-
-    This is an operational helper for artifact repair and lifecycle maintenance.
-    It does **not** ingest text or rebuild vector/graph indices.
-
-    Returns:
-        dict[str, Any]: Mapping containing updated exports and PII-safe metadata.
-    """
-    exports: list[ExportArtifact] = []
-    purge_doc_ids: set[str] = set()
-    for item in inputs:
-        if item.source_path is None:
-            continue
-        purge_doc_ids.add(str(item.document_id))
-        exports.extend(
-            _page_image_exports(
-                Path(item.source_path),
-                cfg,
-                item.encrypt_images,
-                document_id=item.document_id,
-            )
-        )
-    meta = _index_page_images(exports, cfg, purge_doc_ids=purge_doc_ids)
-    meta["artifact_gc_deleted"] = int(_prune_artifacts_best_effort())
-    return {
-        "document_count": len([i for i in inputs if i.source_path is not None]),
-        "export_count": len(exports),
-        "metadata": meta,
-        "exports": exports,
-    }
-
-
 __all__ = [
     "build_ingestion_pipeline",
     "ingest_documents",
     "ingest_documents_sync",
-    "reindex_page_images_sync",
 ]

@@ -23,7 +23,7 @@ def test_rrf_prefetch_and_limit(monkeypatch):
     # Patch QdrantClient used inside retriever
     monkeypatch.setattr("src.retrieval.hybrid.QdrantClient", _FakeClient)
     monkeypatch.setattr(
-        "src.retrieval.hybrid.ensure_hybrid_collection",
+        "src.retrieval.hybrid.check_hybrid_collection",
         lambda *_args, **_kwargs: type("_Compatibility", (), {"compatible": True})(),
     )
 

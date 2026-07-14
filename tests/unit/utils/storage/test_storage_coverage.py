@@ -14,23 +14,30 @@ def test_create_vector_store_returns_store(monkeypatch):
     """Test vector store creation returns proper store instance."""
     # Avoid real network: stub QdrantClient and QdrantVectorStore
     monkeypatch.setattr(storage_mod, "QdrantClient", MagicMock())
+    monkeypatch.setattr(storage_mod, "AsyncQdrantClient", MagicMock())
 
     class _DummyStore:
         def __init__(
             self,
             client,
+            aclient,
             collection_name,
             enable_hybrid,
             batch_size,
             dense_vector_name,
             sparse_vector_name,
+            sparse_doc_fn,
+            sparse_query_fn,
         ):
             self.client = client
+            self.aclient = aclient
             self.collection_name = collection_name
             self.enable_hybrid = enable_hybrid
             self.batch_size = batch_size
             self.dense_vector_name = dense_vector_name
             self.sparse_vector_name = sparse_vector_name
+            self.sparse_doc_fn = sparse_doc_fn
+            self.sparse_query_fn = sparse_query_fn
 
     monkeypatch.setattr(storage_mod, "QdrantVectorStore", _DummyStore)
     monkeypatch.setattr(

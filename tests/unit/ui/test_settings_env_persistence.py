@@ -15,7 +15,7 @@ def test_persist_env_round_trip(tmp_path, monkeypatch) -> None:
 
     persist_env(
         {
-            "DOCMIND_MODEL": "Hermes-2-Pro-Llama-3-8B",
+            "DOCMIND_LLM_REQUEST__MODEL": "Hermes-2-Pro-Llama-3-8B",
             "DOCMIND_LLM_BACKEND": "",
         },
         env_path=env_path,
@@ -23,7 +23,7 @@ def test_persist_env_round_trip(tmp_path, monkeypatch) -> None:
 
     values = dotenv_values(env_path)
     assert values.get("EXISTING") == "1"
-    assert values.get("DOCMIND_MODEL") == "Hermes-2-Pro-Llama-3-8B"
+    assert values.get("DOCMIND_LLM_REQUEST__MODEL") == "Hermes-2-Pro-Llama-3-8B"
     assert "DOCMIND_LLM_BACKEND" not in values
     assert "# keep" in env_path.read_text(encoding="utf-8")
 
@@ -47,4 +47,4 @@ def test_persist_env_rejects_control_characters(tmp_path, monkeypatch) -> None:
     env_path = tmp_path / ".env"
 
     with pytest.raises(EnvPersistError, match=r"control characters"):
-        persist_env({"DOCMIND_MODEL": "line1\nline2"}, env_path=env_path)
+        persist_env({"DOCMIND_LLM_REQUEST__MODEL": "line1\nline2"}, env_path=env_path)

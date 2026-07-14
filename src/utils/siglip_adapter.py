@@ -110,12 +110,9 @@ class SiglipEmbedding:
             self._dim = None
 
     def _try_ensure_loaded(self) -> bool:
-        """Load SigLIP dependencies, preserving optional-dependency fail-open."""
-        try:
-            self._ensure_loaded()
-            return self._model is not None and self._proc is not None
-        except Exception:
-            return False
+        """Load SigLIP dependencies and report the resulting invariant."""
+        self._ensure_loaded()
+        return self._model is not None and self._proc is not None
 
     def _move_to_device(self, tensor: Any | None) -> Any | None:
         if tensor is None:
@@ -135,9 +132,8 @@ class SiglipEmbedding:
         Returns:
             numpy.ndarray: 1-D vector of visual features.
         """
-        if not self._try_ensure_loaded():
-            dim = int(self._dim or 768)
-            return np.zeros(dim, dtype=np.float32)
+        if not self._try_ensure_loaded():  # pragma: no cover - loader invariant
+            raise RuntimeError("SigLIP image model did not initialize")
         try:
             import torch  # type: ignore
 
@@ -152,18 +148,22 @@ class SiglipEmbedding:
                 )
                 vec = feats[0].detach().cpu().numpy().astype(np.float32)
             return vec
-        except (ImportError, AttributeError, RuntimeError, ValueError, TypeError):
-            dim = int(self._dim or 768)
-            return np.zeros(dim, dtype=np.float32)
+        except (
+            ImportError,
+            AttributeError,
+            RuntimeError,
+            ValueError,
+            TypeError,
+        ) as exc:
+            raise RuntimeError("SigLIP image embedding failed") from exc
 
     def get_text_embedding(self, text: str) -> np.ndarray:
         """Return L2-normalized SigLIP text features for a single text query.
 
         This enables cross-modal text->image retrieval in the same SigLIP space.
         """
-        if not self._try_ensure_loaded():
-            dim = int(self._dim or 768)
-            return np.zeros(dim, dtype=np.float32)
+        if not self._try_ensure_loaded():  # pragma: no cover - loader invariant
+            raise RuntimeError("SigLIP text model did not initialize")
         try:
             import torch  # type: ignore
 
@@ -186,9 +186,14 @@ class SiglipEmbedding:
                 )
                 vec = feats[0].detach().cpu().numpy().astype(np.float32)
             return vec
-        except (ImportError, AttributeError, RuntimeError, ValueError, TypeError):
-            dim = int(self._dim or 768)
-            return np.zeros(dim, dtype=np.float32)
+        except (
+            ImportError,
+            AttributeError,
+            RuntimeError,
+            ValueError,
+            TypeError,
+        ) as exc:
+            raise RuntimeError("SigLIP text embedding failed") from exc
 
     def get_image_embeddings(
         self, images: list[Any], *, batch_size: int = 8
@@ -197,15 +202,10 @@ class SiglipEmbedding:
         if not images:
             dim = int(self._dim or 768)
             return np.empty((0, dim), dtype=np.float32)
-        if not self._try_ensure_loaded():
-            dim = int(self._dim or 768)
-            return np.zeros((len(images), dim), dtype=np.float32)
+        if not self._try_ensure_loaded():  # pragma: no cover - loader invariant
+            raise RuntimeError("SigLIP image model did not initialize")
 
-        try:
-            import torch  # type: ignore
-        except (ImportError, ModuleNotFoundError):  # pragma: no cover
-            dim = int(self._dim or 768)
-            return np.zeros((len(images), dim), dtype=np.float32)
+        import torch  # type: ignore
 
         bs = max(1, int(batch_size))
         out: list[np.ndarray] = []
@@ -234,8 +234,7 @@ class SiglipEmbedding:
                 type(exc).__name__,
                 redaction.redacted,
             )
-            dim = int(self._dim or 768)
-            return np.zeros((len(images), dim), dtype=np.float32)
+            raise RuntimeError("SigLIP image batch embedding failed") from exc
         return (
             np.concatenate(out, axis=0)
             if out
@@ -249,15 +248,10 @@ class SiglipEmbedding:
         if not texts:
             dim = int(self._dim or 768)
             return np.empty((0, dim), dtype=np.float32)
-        if not self._try_ensure_loaded():
-            dim = int(self._dim or 768)
-            return np.zeros((len(texts), dim), dtype=np.float32)
+        if not self._try_ensure_loaded():  # pragma: no cover - loader invariant
+            raise RuntimeError("SigLIP text model did not initialize")
 
-        try:
-            import torch  # type: ignore
-        except (ImportError, ModuleNotFoundError):  # pragma: no cover
-            dim = int(self._dim or 768)
-            return np.zeros((len(texts), dim), dtype=np.float32)
+        import torch  # type: ignore
 
         bs = max(1, int(batch_size))
         out: list[np.ndarray] = []
@@ -293,8 +287,7 @@ class SiglipEmbedding:
                 type(exc).__name__,
                 redaction.redacted,
             )
-            dim = int(self._dim or 768)
-            return np.zeros((len(texts), dim), dtype=np.float32)
+            raise RuntimeError("SigLIP text batch embedding failed") from exc
         return (
             np.concatenate(out, axis=0)
             if out

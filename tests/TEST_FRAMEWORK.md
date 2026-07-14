@@ -1,360 +1,118 @@
-# DocMind AI Test Framework
+# Test DocMind changes
 
-## Overview
+This reference maps each test boundary to its supported command. Use the smallest boundary that proves your change, then run the required continuous integration (CI) gates.
 
-This test framework implements ML testing best practices with a tiered strategy based on AI research recommendations. It uses proper LlamaIndex mocking components and lightweight models for efficient, reliable testing.
+## Choose the owning tier
 
-## Testing Strategy (Two-Tier + Optional GPU Smoke Tests)
+Each tier owns a distinct runtime boundary:
 
-### 🔹 Unit Tests (Fast, Mocked)
+| Tier | Path | Contract |
+| --- | --- | --- |
+| Unit | `tests/unit` | Domain behavior with controlled dependencies |
+| Integration | `tests/integration` | Cross-component wiring and Streamlit AppTest behavior |
+| End to end | `tests/e2e` | Application workflows through public surfaces |
+| System | `tests/system` | Explicit local-service and runtime behavior |
 
-- **Speed**: <5 seconds each
-- **Dependencies**: None (CPU-only)
-- **Components**: `MockEmbedding`, `MockLLM` from LlamaIndex
-- **Purpose**: Test business logic, algorithms, validation
-- **Run with**: `uv run pytest -q tests/unit` (note: `-q` for clean CI/readable runs; use `-v` or omit `-q` for verbose debugging)
+The end-to-end and system collections are opt-in. Set their collection variables before Pytest starts.
 
-```python
-@pytest.mark.unit
-def test_embedding_logic(mock_settings):
-    # Uses MockEmbedding (1024-dim) for deterministic testing
-    Settings.embed_model = MockEmbedding(embed_dim=1024)
-    embeddings = Settings.embed_model.get_text_embedding("test")
-    assert len(embeddings) == 1024
-```
+## Run focused tests
 
-### 🔸 Integration Tests (Moderate Speed, Lightweight)
-
-- **Speed**: 10-30 seconds each
-- **Dependencies**: Lightweight models (all-MiniLM-L6-v2: 80MB)
-- **Components**: Real model integration, mocked external services
-- **Purpose**: Test component interaction, data flow
-- **Run with**: `uv run pytest -q tests/integration` (note: `-q` for clean CI/readable runs; use `-v` or omit `-q` for verbose debugging)
-
-```python
-@pytest.mark.integration
-def test_real_embedding_pipeline(integration_settings, lightweight_embedding_model):
-    # Uses all-MiniLM-L6-v2 (80MB) instead of BGE-M3 (1GB)
-    if lightweight_embedding_model:
-        embeddings = lightweight_embedding_model.encode(["test document"])
-        assert embeddings.shape[1] == 384  # MiniLM dimensions
-```
-
-### 🔶 GPU Smoke Tests (Optional Manual Validation)
-
-- **Speed**: Manual execution outside CI
-- **Dependencies**: Production models, GPU, external services  
-- **Components**: Real hardware validation scripts
-- **Purpose**: Pre-release validation on target hardware
-- **Run with**: Manual scripts or `pytest -m requires_gpu`
+Start with the file that owns the changed behavior:
 
 ```bash
-# Manual GPU smoke test (outside CI)
-uv run python scripts/test_gpu.py --quick
-
-# Optional GPU tests via pytest
-pytest -m "requires_gpu" --timeout=600
+uv run pytest tests/unit/processing/test_parser_contract.py -vv
 ```
 
-## Test Configuration Framework
-
-### Settings Fixtures
-
-The framework provides three settings fixtures for different test levels:
-
-#### `mock_settings` (Unit Tests)
-
-```python
-@pytest.fixture(scope="session")
-def mock_settings() -> AppSettings:
-    """Configure MockLLM and MockEmbedding for unit tests."""
-    Settings.llm = MockLLM(max_tokens=256, temperature=0.0)
-    Settings.embed_model = MockEmbedding(embed_dim=1024)  # Match BGE-M3
-    return AppSettings(backend="mock", ...)
-```
-
-#### `integration_settings` (Integration Tests)
-
-```python
-@pytest.fixture(scope="session") 
-def integration_settings() -> AppSettings:
-    """Use lightweight models for integration tests."""
-    return AppSettings(
-        dense_embedding_model="sentence-transformers/all-MiniLM-L6-v2",  # 80MB
-        enable_reranking=False,  # Disable expensive operations
-        ...
-    )
-```
-
-#### `gpu_smoke_config` (Optional GPU Validation)
-
-```python
-# For manual GPU smoke tests (outside CI)
-def gpu_smoke_config() -> dict:
-    """Configuration for manual GPU validation."""
-    return {
-        "bge_m3_model_name": "BAAI/bge-m3",  # ADR-002 compliant
-        "enable_reranking": True,  # Full feature testing
-        "gpu_memory_limit": 14.0,  # RTX 4090 target
-        ...
-    }
-```
-
-### Core Test Fixtures
-
-#### Document Fixtures
-
-- `test_documents`: Small, consistent set (5 docs) for unit/integration
-- `large_document_set`: Performance testing (100 docs)
-
-#### Model Fixtures  
-
-- `lightweight_embedding_model`: all-MiniLM-L6-v2 (80MB) for integration
-- `in_memory_graph_store`: SimplePropertyGraphStore for testing
-- `mock_qdrant_client`: Comprehensive async/sync Qdrant mock
-
-#### Infrastructure
-
-- `cleanup_test_artifacts`: Session cleanup for test isolation
-- `temp_vector_store`: Temporary directories for testing
-
-## Test Markers
-
-### Core Categories
-
-- `@pytest.mark.unit`: Fast unit tests with mocks
-- `@pytest.mark.integration`: Integration tests with lightweight models
-- `@pytest.mark.requires_gpu`: Optional GPU tests (manual execution)
-
-### Resource Requirements
-
-- `@pytest.mark.requires_gpu`: Tests requiring GPU acceleration
-- `@pytest.mark.requires_network`: Tests requiring network access
-- `@pytest.mark.requires_ollama`: Tests requiring Ollama server
-
-### Feature Areas
-
-- `@pytest.mark.agents`: Multi-agent coordination tests
-- `@pytest.mark.retrieval`: Retrieval and search system tests
-- `@pytest.mark.embeddings`: Embedding model tests
-- `@pytest.mark.multimodal`: CLIP and multimodal tests
-
-### Performance
-
-- `@pytest.mark.performance`: Performance benchmarks
-- `@pytest.mark.slow`: Long-running tests
-
-## Usage Examples
-
-### Running Test Categories
+Run native Pytest lanes when a change crosses several owners:
 
 ```bash
-# Fast unit tests only (CI/local development)
-uv run pytest -q tests/unit           # -q for clean CI; use -v for verbose debugging
-
-# Integration tests with lightweight models  
-uv run pytest -q tests/integration    # -q for clean CI; use -v for verbose debugging
-
-# Optional GPU tests (manual execution)
-pytest -m "requires_gpu" --timeout=600
-
-# Skip GPU tests on CPU-only machines
-pytest -m "not requires_gpu"
-
-# Test specific features
-pytest -m "retrieval and unit"
-pytest -m "multimodal and not slow"
+uv run pytest tests/unit -q --no-cov
+uv run pytest tests/integration -q --no-cov
+uv run pytest tests/unit tests/integration -q --no-cov
+uv run --no-sync pytest -m requires_gpu --no-cov
 ```
 
-### Test Development Patterns
+Run opt-in collections explicitly:
 
-#### Unit Test Pattern
-
-```python
-@pytest.mark.unit
-@pytest.mark.embeddings
-def test_embedding_dimension_validation(mock_settings):
-    """Test embedding dimension validation logic."""
-    # Use MockEmbedding for deterministic testing
-    embedding_model = MockEmbedding(embed_dim=1024)
-    text_embedding = embedding_model.get_text_embedding("test")
-    
-    # Test validation logic
-    assert len(text_embedding) == 1024
-    assert all(isinstance(x, float) for x in text_embedding)
+```bash
+DOCMIND_RUN_E2E=1 uv run pytest tests/e2e -vv
+DOCMIND_RUN_SYSTEM=1 uv run pytest tests/system -vv
 ```
 
-#### Integration Test Pattern  
+Required CI jobs establish release readiness. Tests must fail through assertions or uncaught exceptions, not a separate result collector.
 
-```python
-@pytest.mark.integration
-@pytest.mark.embeddings  
-async def test_embedding_pipeline_with_lightweight_model(
-    integration_settings, lightweight_embedding_model
-):
-    """Test embedding pipeline with real lightweight model."""
-    if not lightweight_embedding_model:
-        pytest.skip("Lightweight model not available")
-    
-    # Use real model but lightweight (80MB vs 1GB)
-    documents = ["AI system design", "Machine learning pipeline"]
-    embeddings = lightweight_embedding_model.encode(documents)
-    
-    # Validate real model behavior
-    assert embeddings.shape == (2, 384)  # all-MiniLM-L6-v2 dims
-    assert embeddings.dtype == np.float32
+## Validate a GPU host
+
+Install the GPU dependency profile before testing real compute hardware:
+
+```bash
+uv sync --frozen --no-group cpu --extra gpu
 ```
 
-#### GPU Smoke Test Pattern
+Run every test that owns a real GPU boundary:
 
-```python
-@pytest.mark.requires_gpu
-@pytest.mark.timeout(300)
-def test_gpu_smoke_validation():
-    """Manual GPU smoke test for pre-release validation."""
-    # Run outside CI - manual hardware validation
-    if not torch.cuda.is_available():
-        pytest.skip("GPU not available for smoke tests")
-    
-    # Basic GPU functionality check
-    # ... hardware validation with timeout
+```bash
+uv run --no-sync pytest \
+  tests/unit/nlp/test_spacy_service.py \
+  tests/integration/core/test_gpu_memory_cleanup_integration.py \
+  -m requires_gpu \
+  --no-cov \
+  -vv
 ```
 
-## Benefits of This Approach
+Use the hardware wrapper when you also need NVIDIA metadata or video random-access memory (VRAM) sampling:
 
-### 1. **Speed & Efficiency**
+| Command | Behavior |
+| --- | --- |
+| `uv run --no-sync python scripts/test_gpu.py --compatibility` | Check NVIDIA and CUDA availability |
+| `uv run --no-sync python scripts/test_gpu.py --quick` | Run the focused spaCy CUDA activation test |
+| `uv run --no-sync python scripts/test_gpu.py` | Run both GPU test owners |
+| `uv run --no-sync python scripts/test_gpu.py --memory-check` | Run both owners, then sample VRAM stability |
 
-- Unit tests run in <5s each using MockEmbedding
-- Integration tests use 80MB models vs 1GB production models
-- GPU smoke tests run manually outside CI for targeted validation
+`--no-sync` preserves the explicitly installed GPU profile; plain `uv run`
+would reconcile the environment back to the default CPU profile. The wrapper
+invokes supported Pytest paths through the active Python interpreter. It has no
+generic performance mode.
 
-### 2. **Reliability**
+## Mark hardware requirements
 
-- MockEmbedding provides deterministic results
-- No flaky tests due to model loading failures
-- Proper test isolation with cleanup fixtures
+Use `requires_gpu` only when a test allocates real GPU resources. Stub device selection in CPU-safe unit tests.
 
-### 3. **Developer Experience**
+Use the tier markers that match the test path:
 
-- Fast feedback loop during development
-- Clear test categories for different purposes
-- Easy to run subset of tests based on need
+- `unit` for isolated domain behavior
+- `integration` for cross-component behavior
+- `e2e` for application workflows
+- `system` for explicit runtime checks
 
-### 4. **CI/CD Friendly**
+Register any new marker in `pyproject.toml` before using it.
 
-- Unit tests run on any machine (CPU-only)
-- Integration tests work without GPU
-- GPU smoke tests run manually outside CI pipeline
+## Keep tests deterministic
 
-### 5. **Maintainability**
+Tests should assert observable outcomes at the closest public boundary:
 
-- Uses LlamaIndex built-in mocks (no custom mocking)
-- Library-first approach reduces maintenance burden
-- Clear separation of concerns by test level
+1. Patch network, model, filesystem, clock, and randomness boundaries
+2. Use `tmp_path` for files, caches, databases, and persisted state
+3. Avoid real sleeps outside explicit hardware or benchmark checks
+4. Restore global settings, Streamlit state, and LlamaIndex state through fixtures
+5. Assert rendered output, returned values, emitted metadata, or persisted state
 
-## Migration from Old Tests
-
-### Before (Over-mocking)
-
-```python
-@patch("src.utils.embedding.create_embedding_model")
-@patch("src.core.llm.LLMManager")
-def test_with_excessive_patching(mock_llm, mock_embedding):
-    # Too much manual mocking
-    mock_embedding.return_value.embed.return_value = [0.1] * 1024
-    # ... complex mock setup
-```
-
-### After (Proper Boundaries)
+Do not leave path fields as `Mock` values. Code can stringify them and create directories named after the mock.
 
 ```python
-@pytest.mark.unit
-def test_with_proper_mocking(mock_settings):
-    # Use LlamaIndex MockEmbedding
-    embedding_model = Settings.embed_model  # Already configured as Mock
-    result = embedding_model.get_text_embedding("test")
-    # Clean, maintainable test
-```
-
-## Performance Targets
-
-- **Unit Tests**: <5 seconds each, 90%+ should be <1s
-- **Integration Tests**: <30 seconds each, use <200MB memory
-- **GPU Smoke Tests**: Manual execution, hardware-specific validation
-
-## Best Practices
-
-1. **Start with Unit Tests**: Test logic before integration
-2. **Mock at Boundaries**: External services, not internal logic  
-3. **Use Proper Fixtures**: Leverage session-scoped fixtures for expensive setup
-4. **Clear Markers**: Always mark tests appropriately
-5. **Cleanup**: Use cleanup fixtures for test isolation
-6. **Document Edge Cases**: Test boundary conditions explicitly
-7. **Performance Awareness**: Use lightweight models for speed
-
-This framework ensures fast, reliable, maintainable tests that provide confidence in the DocMind AI system while minimizing development friction.
-
-## CRITICAL: Prevent Mock Directory Creation Bug
-
-### Problem
-
-Mock objects in test fixtures can be converted to strings and used as actual file paths, creating directories with names like `<Mock name='mock.cache.dir' id='123456789'>` in the project root.
-
-### Root Cause
-
-When code calls `Path(mock_object).mkdir()` or similar filesystem operations, Mock objects get stringified instead of returning proper path values.
-
-### Prevention Strategy
-
-#### ✅ GOOD: Proper Mock Settings Fixture Pattern
-
-```python
-@pytest.fixture
-def mock_settings(tmp_path):
-    """Mock settings with proper temporary paths."""
+def test_writes_cache(tmp_path):
     settings = Mock()
-    settings.model_name = "test-model"
-    settings.embedding_dimension = 1024
-    # CRITICAL: Provide real paths for filesystem operations
     settings.cache.dir = tmp_path / "cache"
-    settings.data_dir = str(tmp_path / "data") 
-    settings.log_file = str(tmp_path / "logs" / "test.log")
-    return settings
+
+    write_cache(settings)
+
+    assert settings.cache.dir.is_dir()
 ```
 
-#### ❌ BAD: Mock Without Proper Paths
+## Read the canonical testing docs
 
-```python
-@pytest.fixture  
-def bad_mock_settings():
-    """BROKEN: Creates mock directories in project root!"""
-    settings = Mock()
-    settings.cache.dir = Mock()  # This becomes "<Mock ...>" string!
-    return settings
-```
+Use these pages for the full contract:
 
-### Mandatory Checklist
-
-Before creating any new test fixtures:
-
-1. **✅ Use `tmp_path` parameter** for any fixture that might create directories
-2. **✅ Provide real paths** for `cache.dir`, `data_dir`, `log_file`, etc.
-3. **✅ Never leave path fields as Mock objects** if they'll be used in filesystem operations
-4. **✅ Follow existing patterns** in `conftest.py` (e.g., `centralized_settings_with_temp_dirs`)
-
-### Detection
-
-If you see directories like these in project root, you have a mock path bug:
-
-- `<Mock name='mock.cache.dir' id='133725091402384'>`
-- `<MagicMock name='app_settings.cache.dir' id='133725128381264'>`
-
-### Implementation Examples
-
-See these working patterns in the codebase:
-
-- `tests/conftest.py::centralized_settings_with_temp_dirs`
-- `tests/conftest.py::temp_settings_dirs`
-- `tests/unit/config/test_settings.py::test_cache_directory_creation`
-
-**Remember**: Always use pytest's `tmp_path` fixture for temporary directories in tests!
+- `docs/testing/testing-guide.md`: tiers, commands, contribution rules, and release gates
+- `docs/testing/test-configuration.md`: profiles, toggles, markers, and hardware setup
+- `tests/README.md`: directory ownership map

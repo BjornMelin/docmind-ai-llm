@@ -2,34 +2,57 @@
 
 Changes in this patch:
 - Default visual rerank uses SigLIP text-image cosine.
-- Optional ColPali auto-enables via policy thresholds (VRAM/budget/K/visual fraction).
 - Rank-level RRF merge across modalities; fail-open on timeout.
 """
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import time
 from collections.abc import Callable
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FTimeoutError
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from functools import cache
-from typing import Any
+from pathlib import Path
+from typing import Any, TypeVar
 
+from huggingface_hub import snapshot_download
 from llama_index.core.postprocessor import SentenceTransformerRerank
 from llama_index.core.postprocessor.types import BaseNodePostprocessor
 from llama_index.core.schema import NodeWithScore, QueryBundle
-
-# ColPali import is optional; import inside builder to avoid hard dependency
 from loguru import logger
+from pydantic import Field, PrivateAttr
 
 from src.config import settings
+from src.config.embedding_defaults import (
+    DEFAULT_BGE_RERANKER_MODEL_ID,
+    DEFAULT_BGE_RERANKER_MODEL_REVISION,
+)
 from src.persistence.artifacts import ArtifactRef, ArtifactStore
+from src.retrieval.async_work import (
+    AsyncWorkCapacityError,
+    AsyncWorkClosedError,
+    AsyncWorkExecutor,
+)
 from src.retrieval.rrf import rrf_merge
-from src.utils.core import has_cuda_vram, resolve_device
 from src.utils.log_safety import build_pii_log_entry
 from src.utils.telemetry import log_jsonl
 from src.utils.vision_siglip import siglip_features
+
+_StageResult = TypeVar("_StageResult")
+
+
+def _emit_rerank_telemetry(event: dict[str, Any]) -> None:
+    """Record best-effort telemetry without changing reranking behavior."""
+    try:
+        log_jsonl(event)
+    except (RuntimeError, ValueError, OSError, TypeError) as exc:
+        redaction = build_pii_log_entry(str(exc), key_id="reranking.telemetry")
+        logger.warning(
+            "Rerank telemetry failed; continuing (error_type={}, error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
 
 
 # Time budgets (ms)
@@ -55,15 +78,35 @@ def _siglip_timeout_ms() -> int:
         return 150
 
 
-def _colpali_timeout_ms() -> int:
+def _total_rerank_budget_ms() -> int:
     try:
-        return int(settings.retrieval.colpali_timeout_ms)
-    except (
-        AttributeError,
-        TypeError,
-        ValueError,
-    ):  # pragma: no cover - defensive default
-        return 400
+        configured = int(settings.retrieval.total_rerank_budget_ms)
+    except (AttributeError, TypeError, ValueError):
+        configured = 0
+    return configured or (_text_timeout_ms() + _siglip_timeout_ms())
+
+
+def _remaining_rerank_budget_ms(deadline: float) -> float:
+    """Return the remaining monotonic rerank budget in milliseconds."""
+    return max(0.0, (deadline - time.monotonic()) * 1000.0)
+
+
+def _capped_stage_budget_ms(deadline: float, stage_budget_ms: int) -> float:
+    """Cap one stage timeout by the remaining total rerank budget."""
+    return min(float(stage_budget_ms), _remaining_rerank_budget_ms(deadline))
+
+
+def _isolate_rerank_nodes(
+    nodes: list[NodeWithScore],
+) -> list[NodeWithScore]:
+    """Copy mutable score and metadata owners before native worker execution."""
+    isolated: list[NodeWithScore] = []
+    for node_with_score in nodes:
+        node = node_with_score.node.model_copy(
+            update={"metadata": dict(node_with_score.node.metadata)}
+        )
+        isolated.append(node_with_score.model_copy(update={"node": node}))
+    return isolated
 
 
 def _get_siglip_prune_m() -> int:
@@ -74,87 +117,12 @@ def _get_siglip_prune_m() -> int:
         return SIGLIP_PRUNE_M
 
 
-# Policy thresholds
-COLPALI_MIN_VRAM_GB = 8.0  # enable when >= 8-12 GB
-COLPALI_TOPK_MAX = 16  # small-K scenarios
-SIGLIP_PRUNE_M = 64  # cascade: SigLIP prune to m → ColPali m'
-COLPALI_FINAL_M = 16
+SIGLIP_PRUNE_M = 64
 
 
 def _now_ms() -> float:
     """Get current time in milliseconds."""
     return time.perf_counter() * 1000.0
-
-
-def _run_with_timeout(fn: Callable[[], Any], timeout_ms: int) -> Any | None:
-    """Execute a callable with a hard timeout (best effort, non-blocking).
-
-    Returns None when the timeout elapses; otherwise returns the callable's
-    result. Ensures the worker future is cancelled and the executor is shut
-    down without waiting so the caller does not block on long-running tasks.
-    """
-    # Choose executor based on settings (default: thread). Process executors
-    # require picklable callables; fall back to thread if submission fails.
-    executor = None
-    executors: list[ThreadPoolExecutor | ProcessPoolExecutor] = []
-    try:
-        exec_type = getattr(
-            getattr(settings, "retrieval", object()), "rerank_executor", "thread"
-        )
-        if exec_type == "process":
-            try:
-                executor = ProcessPoolExecutor(max_workers=1)
-                executors.append(executor)
-                fut = executor.submit(fn)
-            except (
-                OSError,
-                RuntimeError,
-                ValueError,
-            ) as exc:  # pragma: no cover - pickling/env edge cases
-                redaction = build_pii_log_entry(
-                    str(exc), key_id="reranking.executor.process"
-                )
-                logger.warning(
-                    "Process executor unsupported; falling back to thread "
-                    "(error_type={}, error={})",
-                    type(exc).__name__,
-                    redaction.redacted,
-                )
-                executor = ThreadPoolExecutor(max_workers=1)
-                executors.append(executor)
-                fut = executor.submit(fn)
-        else:
-            executor = ThreadPoolExecutor(max_workers=1)
-            executors.append(executor)
-            fut = executor.submit(fn)
-    except (
-        OSError,
-        RuntimeError,
-        ValueError,
-    ) as exc:  # defensive: ensure we have an executor
-        redaction = build_pii_log_entry(str(exc), key_id="reranking.executor.init")
-        logger.warning(
-            "Executor initialization failed; using thread fallback "
-            "(error_type={}, error={})",
-            type(exc).__name__,
-            redaction.redacted,
-        )
-        executor = ThreadPoolExecutor(max_workers=1)
-        executors.append(executor)
-        fut = executor.submit(fn)
-    try:
-        return fut.result(timeout=max(0.0, timeout_ms) / 1000.0)
-    except FTimeoutError:
-        with contextlib.suppress(RuntimeError):
-            fut.cancel()
-        return None
-    finally:
-        for ex in executors:
-            with contextlib.suppress(RuntimeError, OSError):
-                ex.shutdown(wait=False, cancel_futures=True)
-
-
-# removed local _has_cuda_vram wrapper; use core.has_cuda_vram directly
 
 
 def _compute_siglip_scores(
@@ -225,20 +193,28 @@ def _compute_siglip_scores(
 def _load_siglip() -> tuple[Any, Any, str]:  # (model, processor, device)
     """Load SigLIP via shared utility to keep behavior consistent."""
     try:
+        embedding_settings = settings.embedding
         model_id = getattr(
-            settings.embedding, "siglip_model_id", "google/siglip-base-patch16-224"
+            embedding_settings, "siglip_model_id", "google/siglip-base-patch16-224"
         )
         revision = getattr(
-            settings.embedding,
+            embedding_settings,
             "siglip_model_revision",
             None,
         )
+        cache_folder = getattr(embedding_settings, "cache_folder", None)
     except AttributeError:
         model_id = "google/siglip-base-patch16-224"
         revision = None
+        cache_folder = None
     from src.utils.vision_siglip import load_siglip
 
-    return load_siglip(model_id=model_id, device=None, revision=revision)
+    return load_siglip(
+        model_id=model_id,
+        device=None,
+        revision=revision,
+        cache_folder=cache_folder,
+    )
 
 
 def _extract_image_paths(ns: list[NodeWithScore]) -> list[str]:
@@ -378,11 +354,8 @@ def _siglip_rescore(
             nodes,
             key=lambda x: (-float(x.score or 0.0), str(getattr(x.node, "node_id", ""))),
         )
-        # Pre-fusion prune M for visual stage
-        try:
-            prune_m = int(getattr(settings.retrieval, "siglip_prune_m", SIGLIP_PRUNE_M))
-        except (AttributeError, ValueError, TypeError):
-            prune_m = SIGLIP_PRUNE_M
+        # Bound the visual list before rank fusion.
+        prune_m = _get_siglip_prune_m()
         return nodes_sorted[: max(1, prune_m)]
     except (RuntimeError, ValueError, OSError, TypeError) as exc:
         redaction = build_pii_log_entry(str(exc), key_id="reranking.siglip.fail_open")
@@ -421,11 +394,24 @@ def _parse_top_k(value: int | str | None) -> int:
 
 
 @cache
-def _build_text_reranker_cached(top_n: int) -> SentenceTransformerRerank:
+def _build_text_reranker_cached(
+    top_n: int,
+    model: str,
+    cache_folder: str,
+) -> SentenceTransformerRerank:
     """Create cached SentenceTransformer reranker for text."""
+    model_source = model
+    if model == DEFAULT_BGE_RERANKER_MODEL_ID:
+        model_source = snapshot_download(
+            repo_id=model,
+            revision=DEFAULT_BGE_RERANKER_MODEL_REVISION,
+            cache_dir=cache_folder,
+            local_files_only=True,
+        )
     return SentenceTransformerRerank(
-        model=getattr(settings.retrieval, "reranker_model", "BAAI/bge-reranker-v2-m3"),
+        model=model_source,
         top_n=top_n,
+        trust_remote_code=False,
     )
 
 
@@ -436,8 +422,14 @@ def build_text_reranker(top_n: int | str | None = None) -> SentenceTransformerRe
         SentenceTransformerRerank implementing postprocess_nodes.
     """
     k = _parse_top_k(top_n)
+    model = str(
+        getattr(settings.retrieval, "reranker_model", DEFAULT_BGE_RERANKER_MODEL_ID)
+    )
+    embedding_settings = getattr(settings, "embedding", None)
+    configured_cache = getattr(embedding_settings, "cache_folder", "./models_cache")
+    cache_folder = str(Path(configured_cache).expanduser().resolve())
     try:
-        return _build_text_reranker_cached(k)
+        return _build_text_reranker_cached(k, model, cache_folder)
     except OSError as exc:  # offline HF hub in CI or local
         redaction = build_pii_log_entry(str(exc), key_id="reranking.text.offline")
         logger.warning(
@@ -470,109 +462,135 @@ def build_text_reranker(top_n: int | str | None = None) -> SentenceTransformerRe
     return NoOpTextReranker(k)  # type: ignore[return-value]
 
 
-@cache
-def _build_visual_reranker_cached(top_n: int) -> Any:
-    """Create cached ColPali reranker for visual content.
-
-    Args:
-        top_n: Number of top results to return.
-
-    Returns:
-        ColPaliRerank: Configured visual reranker instance.
-    """
-    try:
-        import importlib
-
-        mod = importlib.import_module("llama_index.postprocessor.colpali_rerank")
-        colpali_rerank_cls = mod.ColPaliRerank
-    except (ImportError, AttributeError, RuntimeError) as exc:
-        raise ValueError("ColPaliRerank not available") from exc
-    return colpali_rerank_cls(model="vidore/colpali-v1.2", top_n=top_n)
-
-
-def build_visual_reranker(top_n: int | str | None = None) -> Any:
-    """Create visual reranker (ColPali).
-
-    Args:
-        top_n: Number of top results to return. Defaults to settings value.
-
-    Returns:
-        ColPaliRerank: Configured visual reranker instance.
-
-    Raises:
-        ValueError: If ColPaliRerank initialization fails.
-    """
-    k = _parse_top_k(top_n)
-    try:
-        return _build_visual_reranker_cached(k)
-    except (ImportError, RuntimeError) as exc:  # pragma: no cover - library quirk
-        raise ValueError(f"ColPaliRerank initialization failed: {exc}") from exc
-
-
 class MultimodalReranker(BaseNodePostprocessor):
     """Postprocessor that applies text and visual rerankers per node modality.
 
     This reranker uses modality-aware processing with:
     - Text reranking via BGE CrossEncoder
-    - Visual reranking via SigLIP (default) or ColPali (optional)
+    - Visual reranking via SigLIP
     - RRF fusion for multi-modality results
     - Time budgets and fail-open behavior
     """
 
+    top_n: int = Field(
+        default_factory=lambda: int(settings.retrieval.reranking_top_k),
+        ge=1,
+    )
+    _work: AsyncWorkExecutor = PrivateAttr(
+        default_factory=lambda: AsyncWorkExecutor(name="docmind-rerank-cpu")
+    )
+
+    def close(self) -> None:
+        """Reject new reranking work without waiting for an active stage."""
+        self._work.close()
+
+    async def aclose(self) -> None:
+        """Reject new work and drain an active reranking stage."""
+        await self._work.aclose()
+
     def _run_stage(
-        self, name: str, fn: Callable[[], list[NodeWithScore]], timeout_ms: int
-    ) -> list[NodeWithScore] | None:
+        self,
+        name: str,
+        fn: Callable[[], _StageResult],
+        timeout_ms: float,
+    ) -> _StageResult | None:
         """Run a rerank stage with timeout telemetry."""
         started = _now_ms()
-        res = _run_with_timeout(fn, timeout_ms)
-        log_jsonl(
+        try:
+            result = self._work.run_sync(
+                fn,
+                timeout=max(0.0, timeout_ms) / 1000.0,
+            )
+        except (
+            FutureTimeoutError,
+            AsyncWorkCapacityError,
+            AsyncWorkClosedError,
+        ):
+            result = None
+        _emit_rerank_telemetry(
             {
                 "rerank.stage": name,
-                "rerank.topk": int(settings.retrieval.reranking_top_k),
+                "rerank.topk": self.top_n,
                 "rerank.latency_ms": int(_now_ms() - started),
-                "rerank.timeout": res is None,
+                "rerank.timeout": result is None,
             }
         )
-        return res
+        return result
+
+    async def _arun_stage(
+        self,
+        name: str,
+        fn: Callable[[], _StageResult],
+        timeout_ms: int,
+    ) -> _StageResult | None:
+        """Run one async stage without using asyncio's default executor."""
+        started = _now_ms()
+        try:
+            async with asyncio.timeout(max(0.0, timeout_ms) / 1000.0):
+                result = await self._work.run(fn)
+        except (TimeoutError, AsyncWorkCapacityError, AsyncWorkClosedError):
+            result = None
+        _emit_rerank_telemetry(
+            {
+                "rerank.stage": name,
+                "rerank.topk": self.top_n,
+                "rerank.latency_ms": int(_now_ms() - started),
+                "rerank.timeout": result is None,
+            }
+        )
+        return result
+
+    def _text_result(
+        self, text_nodes: list[NodeWithScore], query_bundle: QueryBundle
+    ) -> list[NodeWithScore]:
+        """Compute text reranking without owning execution policy."""
+        reranker = build_text_reranker(top_n=self.top_n)
+        return reranker.postprocess_nodes(
+            text_nodes,
+            query_str=query_bundle.query_str,
+        )
 
     def _run_text_stage(
-        self, text_nodes: list[NodeWithScore], query_bundle: QueryBundle
+        self,
+        text_nodes: list[NodeWithScore],
+        query_bundle: QueryBundle,
+        *,
+        timeout_ms: float,
     ) -> list[NodeWithScore] | None:
         """Execute text reranking stage."""
         if not text_nodes:
             return []
-        reranker = build_text_reranker(top_n=settings.retrieval.reranking_top_k)
+        return self._run_stage(
+            "text",
+            lambda: self._text_result(text_nodes, query_bundle),
+            timeout_ms,
+        )
 
-        def _do_text() -> list[NodeWithScore]:
-            return reranker.postprocess_nodes(
-                text_nodes, query_str=query_bundle.query_str
-            )
+    async def _arun_text_stage(
+        self, text_nodes: list[NodeWithScore], query_bundle: QueryBundle
+    ) -> list[NodeWithScore] | None:
+        """Execute text reranking on the owned async worker."""
+        if not text_nodes:
+            return []
+        return await self._arun_stage(
+            "text",
+            lambda: self._text_result(text_nodes, query_bundle),
+            _text_timeout_ms() + 50,
+        )
 
-        return self._run_stage("text", _do_text, _text_timeout_ms() + 50)
-
-    def _run_visual_stage(
+    def _visual_result(
         self,
         visual_nodes: list[NodeWithScore],
         query_bundle: QueryBundle,
         lists: list[list[NodeWithScore]],
-    ) -> tuple[list[list[NodeWithScore]], bool]:
-        """Execute visual reranking stages and return timeout flag."""
-        if not visual_nodes:
-            return lists, False
-        v_start = _now_ms()
+    ) -> list[list[NodeWithScore]]:
+        """Compute visual reranking without owning execution policy."""
+        results = list(lists)
         try:
             sr = _siglip_rescore(
                 query_bundle.query_str, visual_nodes, _siglip_timeout_ms()
             )
-            lists.append(sr)
-            log_jsonl(
-                {
-                    "rerank.stage": "visual",
-                    "rerank.topk": int(settings.retrieval.reranking_top_k),
-                    "rerank.latency_ms": int(_now_ms() - v_start),
-                    "rerank.timeout": False,
-                }
-            )
+            results.append(sr)
         except (RuntimeError, ValueError, OSError, TypeError, ImportError) as exc:
             redaction = build_pii_log_entry(
                 str(exc), key_id="reranking.siglip.continue"
@@ -583,53 +601,69 @@ class MultimodalReranker(BaseNodePostprocessor):
                 redaction.redacted,
             )
 
+        return results
+
+    def _run_visual_stage(
+        self,
+        visual_nodes: list[NodeWithScore],
+        query_bundle: QueryBundle,
+        lists: list[list[NodeWithScore]],
+        *,
+        timeout_ms: float,
+    ) -> tuple[list[list[NodeWithScore]], bool]:
+        """Execute visual reranking stages and return timeout status."""
+        if not visual_nodes:
+            return lists, False
         try:
-            if self._should_enable_colpali(visual_nodes, lists):
-                base = lists[-1] if lists else visual_nodes
-                prune_m = _get_siglip_prune_m()
-                pruned = base[: max(1, prune_m)]
-
-                def _do_colpali() -> list[NodeWithScore]:
-                    return build_visual_reranker(
-                        top_n=min(COLPALI_FINAL_M, settings.retrieval.reranking_top_k)
-                    ).postprocess_nodes(pruned, query_str=query_bundle.query_str)
-
-                remaining = max(
-                    0,
-                    _siglip_timeout_ms()
-                    + _colpali_timeout_ms()
-                    - int(_now_ms() - v_start),
-                )
-                cr = self._run_stage("colpali", _do_colpali, remaining)
-                if cr is None:
-                    logger.warning("ColPali rerank timeout; continue without")
-                else:
-                    lists.append(cr)
-        except (RuntimeError, ValueError) as exc:
+            result = self._run_stage(
+                "visual",
+                lambda: self._visual_result(visual_nodes, query_bundle, lists),
+                timeout_ms,
+            )
+        except Exception as exc:
             redaction = build_pii_log_entry(
-                str(exc), key_id="reranking.colpali.continue"
+                str(exc), key_id="reranking.visual.fail_open"
             )
             logger.warning(
-                "ColPali rerank error; continuing without (error_type={}, error={})",
+                "Visual rerank error; fail-open (error_type={}, error={})",
                 type(exc).__name__,
                 redaction.redacted,
             )
-
-        if _now_ms() - v_start > (_siglip_timeout_ms() + _colpali_timeout_ms()):
+            return lists, True
+        if result is None:
             logger.warning("Visual rerank timeout; fail-open")
-            log_jsonl(
-                {
-                    "rerank.stage": "visual",
-                    "rerank.topk": int(settings.retrieval.reranking_top_k),
-                    "rerank.latency_ms": int(_now_ms() - v_start),
-                    "rerank.timeout": True,
-                    "rerank.executor": getattr(
-                        settings.retrieval, "rerank_executor", "thread"
-                    ),
-                }
+            return lists, True
+        return result, False
+
+    async def _arun_visual_stage(
+        self,
+        visual_nodes: list[NodeWithScore],
+        query_bundle: QueryBundle,
+        lists: list[list[NodeWithScore]],
+    ) -> tuple[list[list[NodeWithScore]], bool]:
+        """Execute visual reranking on the owned async worker."""
+        if not visual_nodes:
+            return lists, False
+        try:
+            result = await self._arun_stage(
+                "visual",
+                lambda: self._visual_result(visual_nodes, query_bundle, lists),
+                _siglip_timeout_ms(),
+            )
+        except Exception as exc:
+            redaction = build_pii_log_entry(
+                str(exc), key_id="reranking.visual.fail_open"
+            )
+            logger.warning(
+                "Visual rerank error; fail-open (error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
             )
             return lists, True
-        return lists, False
+        if result is None:
+            logger.warning("Visual rerank timeout; fail-open")
+            return lists, True
+        return result, False
 
     def _fuse_and_dedup(self, lists: list[list[NodeWithScore]]) -> list[NodeWithScore]:
         """Fuse rerank results and deduplicate nodes."""
@@ -643,7 +677,7 @@ class MultimodalReranker(BaseNodePostprocessor):
                 continue
             seen.add(key)
             out.append(n)
-            if len(out) >= settings.retrieval.reranking_top_k:
+            if len(out) >= self.top_n:
                 break
         return out
 
@@ -657,7 +691,7 @@ class MultimodalReranker(BaseNodePostprocessor):
     ) -> None:
         """Emit final rerank telemetry metrics."""
         try:
-            configured_k = settings.retrieval.reranking_top_k
+            configured_k = self.top_n
             effective_k = min(10, configured_k)
             before_ids = [n.node.node_id for n in nodes[:effective_k]]
             after_ids = [n.node.node_id for n in out[:effective_k]]
@@ -685,7 +719,7 @@ class MultimodalReranker(BaseNodePostprocessor):
                 scores = []
             score_mean = float(sum(scores) / len(scores)) if scores else 0.0
             score_max = float(max(scores)) if scores else 0.0
-            log_jsonl(
+            _emit_rerank_telemetry(
                 {
                     "rerank.stage": "final",
                     "rerank.topk": int(configured_k),
@@ -693,17 +727,8 @@ class MultimodalReranker(BaseNodePostprocessor):
                     "rerank.timeout": False,
                     "rerank.delta_mrr_at_10": delta_mrr,
                     "rerank.path": path,
-                    "rerank.total_timeout_budget_ms": int(
-                        getattr(settings.retrieval, "total_rerank_budget_ms", 0)
-                        or (
-                            _text_timeout_ms()
-                            + _siglip_timeout_ms()
-                            + _colpali_timeout_ms()
-                        )
-                    ),
-                    "rerank.executor": getattr(
-                        settings.retrieval, "rerank_executor", "thread"
-                    ),
+                    "rerank.total_timeout_budget_ms": _total_rerank_budget_ms(),
+                    "rerank.executor": "owned_thread",
                     "rerank.input_count": len(nodes),
                     "rerank.output_count": len(out),
                     "rerank.score.mean": score_mean,
@@ -719,6 +744,18 @@ class MultimodalReranker(BaseNodePostprocessor):
                 redaction.redacted,
             )
 
+    def _emit_total_timeout(self, budget_ms: int) -> None:
+        """Record exhaustion of the caller-visible total rerank budget."""
+        logger.warning("Total rerank budget exhausted; fail-open")
+        _emit_rerank_telemetry(
+            {
+                "rerank.stage": "total",
+                "rerank.topk": self.top_n,
+                "rerank.latency_ms": budget_ms,
+                "rerank.timeout": True,
+            }
+        )
+
     def _postprocess_nodes(
         self, nodes: list[NodeWithScore], query_bundle: QueryBundle | None = None
     ) -> list[NodeWithScore]:
@@ -733,38 +770,138 @@ class MultimodalReranker(BaseNodePostprocessor):
         """
         if not nodes or not query_bundle:
             return nodes
+        total_budget_ms = _total_rerank_budget_ms()
+        deadline = time.monotonic() + (total_budget_ms / 1000.0)
         text_nodes, visual_nodes = self._split_by_modality(nodes)
         lists: list[list[NodeWithScore]] = []
 
         try:
-            tr = self._run_text_stage(text_nodes, query_bundle)
+            isolated_text_nodes = _isolate_rerank_nodes(text_nodes)
+            text_budget_ms = _capped_stage_budget_ms(
+                deadline,
+                _text_timeout_ms() + 50,
+            )
+            if text_nodes and text_budget_ms <= 0:
+                self._emit_total_timeout(total_budget_ms)
+                return nodes
+            tr = self._run_text_stage(
+                isolated_text_nodes,
+                query_bundle,
+                timeout_ms=text_budget_ms,
+            )
             if tr is None:
+                if _remaining_rerank_budget_ms(deadline) <= 0:
+                    self._emit_total_timeout(total_budget_ms)
                 logger.warning("Text rerank timeout; fail-open")
                 return nodes
             if tr:
                 lists.append(tr)
-        except (RuntimeError, ValueError, OSError, TypeError) as exc:
+        except Exception as exc:
             redaction = build_pii_log_entry(str(exc), key_id="reranking.text.fail_open")
             logger.warning(
                 "Text rerank error; fail-open (error_type={}, error={})",
                 type(exc).__name__,
                 redaction.redacted,
             )
+            lists.append(list(text_nodes))
 
-        lists, timed_out = self._run_visual_stage(visual_nodes, query_bundle, lists)
-        if timed_out:
-            return nodes
-        if not lists:
-            return nodes[: settings.retrieval.reranking_top_k]
-
-        out = self._fuse_and_dedup(lists)
-        self._emit_final_metrics(
-            nodes,
-            out,
-            text_nodes=text_nodes,
-            visual_nodes=visual_nodes,
+        isolated_visual_nodes = _isolate_rerank_nodes(visual_nodes)
+        visual_budget_ms = _capped_stage_budget_ms(
+            deadline,
+            _siglip_timeout_ms(),
         )
+        if visual_nodes and visual_budget_ms <= 0:
+            self._emit_total_timeout(total_budget_ms)
+            return nodes
+        lists, timed_out = self._run_visual_stage(
+            isolated_visual_nodes,
+            query_bundle,
+            lists,
+            timeout_ms=visual_budget_ms,
+        )
+        if timed_out:
+            if _remaining_rerank_budget_ms(deadline) <= 0:
+                self._emit_total_timeout(total_budget_ms)
+            return nodes
+        if _remaining_rerank_budget_ms(deadline) <= 0:
+            self._emit_total_timeout(total_budget_ms)
+            out = nodes
+        elif not lists:
+            out = nodes[: self.top_n]
+        else:
+            out = self._fuse_and_dedup(lists)
+            if _remaining_rerank_budget_ms(deadline) <= 0:
+                self._emit_total_timeout(total_budget_ms)
+                out = nodes
+            else:
+                self._emit_final_metrics(
+                    nodes,
+                    out,
+                    text_nodes=text_nodes,
+                    visual_nodes=visual_nodes,
+                )
         return out
+
+    async def _apostprocess_nodes(
+        self,
+        nodes: list[NodeWithScore],
+        query_bundle: QueryBundle | None = None,
+    ) -> list[NodeWithScore]:
+        """Rerank asynchronously without LlamaIndex's default thread pool."""
+        if not nodes or not query_bundle:
+            return nodes
+
+        total_budget_ms = _total_rerank_budget_ms()
+        try:
+            async with asyncio.timeout(total_budget_ms / 1000.0):
+                text_nodes, visual_nodes = self._split_by_modality(nodes)
+                lists: list[list[NodeWithScore]] = []
+
+                try:
+                    isolated_text_nodes = _isolate_rerank_nodes(text_nodes)
+                    text_result = await self._arun_text_stage(
+                        isolated_text_nodes,
+                        query_bundle,
+                    )
+                    if text_result is None:
+                        logger.warning("Text rerank timeout; fail-open")
+                        return nodes
+                    if text_result:
+                        lists.append(text_result)
+                except Exception as exc:
+                    redaction = build_pii_log_entry(
+                        str(exc),
+                        key_id="reranking.text.fail_open",
+                    )
+                    logger.warning(
+                        "Text rerank error; fail-open (error_type={}, error={})",
+                        type(exc).__name__,
+                        redaction.redacted,
+                    )
+                    lists.append(list(text_nodes))
+
+                isolated_visual_nodes = _isolate_rerank_nodes(visual_nodes)
+                lists, timed_out = await self._arun_visual_stage(
+                    isolated_visual_nodes,
+                    query_bundle,
+                    lists,
+                )
+                if timed_out:
+                    return nodes
+                if not lists:
+                    return nodes[: self.top_n]
+
+                out = self._fuse_and_dedup(lists)
+                self._emit_final_metrics(
+                    nodes,
+                    out,
+                    text_nodes=text_nodes,
+                    visual_nodes=visual_nodes,
+                )
+                return out
+        except TimeoutError:
+            self._emit_total_timeout(total_budget_ms)
+            return nodes
 
     @staticmethod
     def _split_by_modality(
@@ -791,72 +928,35 @@ class MultimodalReranker(BaseNodePostprocessor):
         ]
         return text, visual
 
-    @staticmethod
-    def _should_enable_colpali(
-        visual_nodes: list[NodeWithScore],
-        lists: list[list[NodeWithScore]],
-    ) -> bool:
-        """Activation heuristic for ColPali (policy thresholds).
-
-        Enables when ALL apply:
-        - visual_fraction high OR corpus flagged visual-heavy,
-        - reranking_top_k ≤ 10-16,
-        - GPU VRAM ≥ 8-12 GB,
-        - extra latency budget available (~30ms).
-
-        Args:
-            visual_nodes: List of visual nodes being processed.
-            lists: Current list of reranked result lists.
-
-        Returns:
-            bool: True if ColPali should be enabled, False otherwise.
-        """
-        # Visual fraction proxy from candidate set
-        total = max(1, sum(len(lst) for lst in lists) if lists else len(visual_nodes))
-        visual_frac = (len(visual_nodes) / total) if total else 0.0
-        topk_ok = settings.retrieval.reranking_top_k <= COLPALI_TOPK_MAX
-        dev_str, dev_idx = resolve_device("auto")
-        _ = dev_str  # reserved for future routing
-        vram_ok = has_cuda_vram(COLPALI_MIN_VRAM_GB, device_index=int(dev_idx or 0))
-        # Allow ops override via env/setting (optional); default False
-        ops_force = bool(getattr(settings.retrieval, "enable_colpali", False))
-        return ops_force or (visual_frac >= 0.4 and topk_ok and vram_ok)
-
 
 __all__ = [
     "MultimodalReranker",
     "build_text_reranker",
-    "build_visual_reranker",
 ]
 
 
 # ---- Helpers for factories (DRY) ----
 def get_postprocessors(
-    mode: str, *, use_reranking: bool, top_n: int | None = None
-) -> list | None:
+    mode: str,
+    *,
+    use_reranking: bool,
+    top_n: int | None = None,
+) -> list[BaseNodePostprocessor] | None:
     """Return node_postprocessors list for the given mode or None.
 
     Args:
         mode: One of "vector", "hybrid", or "kg".
         use_reranking: Global toggle; when False returns None.
-        top_n: Optional top_n for text reranker (KG).
+        top_n: Typed output cap from the router's settings instance.
 
     Returns:
-        list | None: List of postprocessors or None when disabled/unavailable.
+        List of postprocessors or None when disabled or unavailable.
     """
     if not use_reranking:
         return None
     try:
-        if mode in ("vector", "hybrid"):
-            return [MultimodalReranker()]
-        if mode == "kg":
-            return [
-                build_text_reranker(
-                    top_n=top_n
-                    if top_n is not None
-                    else settings.retrieval.reranking_top_k
-                )
-            ]
+        if mode in ("vector", "hybrid", "kg"):
+            return [MultimodalReranker(top_n=_parse_top_k(top_n))]
     except (ValueError, TypeError):  # defensive: score cast
         return None
     return None

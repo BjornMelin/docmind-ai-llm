@@ -49,9 +49,10 @@ multimodal behavior and persistence invariants, see:
 5. **Bound parser resources**: validate source bytes, page count, render pixels,
    and total extracted text. Async ingestion runs parsing in a killable worker
    process and terminates it when `parse_timeout_seconds` expires.
-6. **Use prefetched parser models**: PDF parsing validates each cached file
-   against the canonical model manifests. Health output reports relative paths
-   and integrity reasons without exposing cache roots.
+6. **Use locally owned parser models**: PDF parsing validates each app-owned
+   Docling cache file against the canonical manifest. RapidOCR uses the model
+   files and checksums from its locked wheel. Health output reports relative
+   Docling paths and integrity reasons without exposing cache roots.
 7. **Preserve canonical document ownership**: every text node carries the base
    document ID under `docmind_document_id`. LlamaIndex owns and may rewrite its
    generic `document_id`, `doc_id`, and `ref_doc_id` payload fields.
@@ -81,7 +82,7 @@ multimodal behavior and persistence invariants, see:
 The current implementation lives in these modules:
 
 - `src/processing/ingestion_pipeline.py`
-- `src/ui/_ingest_adapter_impl.py`
+- `src/ui/ingest_adapter.py`
 - `src/processing/pdf_pages.py`
 - `src/persistence/artifacts.py`
 - `src/retrieval/image_index.py`
@@ -105,8 +106,10 @@ The current implementation lives in these modules:
 - Optional post-parse failure: searchable-PDF export and the best-effort
   enrichment and indexing stages follow the fail-open contract above; they are
   not reclassified as `DocumentParseError` after canonical text parsing succeeds.
-- Model readiness: `scripts/parser_health.py --check` verifies dependency imports
-  and every file in the source-controlled Docling and RapidOCR manifests.
+- Dependency readiness: `scripts/parser_health.py --check` verifies dependency
+  imports and every file in the source-controlled Docling layout manifest.
+  Offline fixture tests and the image-build gate initialize RapidOCR and run
+  inference with the defaults packaged in its locked wheel.
 - Metadata hygiene:
   - drop path-like metadata keys (`source_path`, `file_path`, `path`)
   - normalize `metadata["source"]` to a basename when it is path-like.
@@ -132,7 +135,7 @@ Pipeline transforms (in order):
   duplicate filtering omits unchanged nodes from replacement batches, whereas
   the cache replays a repeated batch's full transformed node set without
   recomputing it.
-- Text indexing: `src/ui/_ingest_adapter_impl.py` assigns deterministic UUIDv5
+- Text indexing: `src/ui/ingest_adapter.py` assigns deterministic UUIDv5
   point IDs from canonical document ID, page ID, and chunk position. It captures
   existing point IDs only for successfully loaded canonical documents, inserts
   through `VectorStoreIndex`, and deletes the stale subset only after insertion
@@ -220,15 +223,13 @@ DOCMIND_PARSING__PARSE_TIMEOUT_SECONDS=300
 DOCMIND_PARSING__OCRMYPDF_TIMEOUT_SECONDS=300
 DOCMIND_PDF_BACKEND__RENDER_DPI=200
 DOCMIND_PDF_BACKEND__MIN_TEXT_CHARS_PER_PAGE=24
+DOCMIND_PARSING__MODEL_CACHE_DIR=cache/models
 DOCMIND_OCR__ENGINE=rapidocr
-DOCMIND_OCR__MODEL_CACHE_DIR=cache/models
 DOCMIND_OCR__OCRMYPDF_JOBS=1
 DOCMIND_OCR__SEARCHABLE_PDF_ENABLED=false
 
 # Artifact store (content-addressed)
 # DOCMIND_ARTIFACTS__DIR=./data/artifacts
-DOCMIND_ARTIFACTS__MAX_TOTAL_MB=4096
-DOCMIND_ARTIFACTS__GC_MIN_AGE_SECONDS=3600
 
 # Qdrant collections
 DOCMIND_DATABASE__QDRANT_URL=http://localhost:6333
@@ -294,7 +295,7 @@ Feature: Ingestion pipeline
 
 - `src/processing/ingestion_pipeline.py`
 - `src/processing/ingestion_api.py`
-- `src/ui/_ingest_adapter_impl.py`
+- `src/ui/ingest_adapter.py`
 - `src/processing/pdf_pages.py`
 - `src/persistence/artifacts.py`
 - `src/retrieval/image_index.py`
@@ -320,5 +321,5 @@ Feature: Ingestion pipeline
 uv run ruff format .
 uv run ruff check . --fix
 uv run pyright
-uv run python scripts/run_tests.py --fast
+uv run pytest tests/unit tests/integration -q --no-cov
 ```

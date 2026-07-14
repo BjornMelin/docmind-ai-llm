@@ -14,14 +14,13 @@ This guide explains how DocMind’s **end-to-end multimodal** path works in prod
 ## What “multimodal” means in DocMind (today)
 
 - **Implemented:** text → relevant PDF page images (SigLIP) + text hybrid fusion (RRF) + UI rendering + durable chat persistence.
-- **Optional:** ColPali late-interaction rerank (local postprocessor) when installed/enabled.
-- **Not implemented (by design):** server-side late-interaction (ColPali multivectors + MaxSim) inside Qdrant.
 
 ## Final-release invariants (non-negotiable)
 
 1. **No base64 blobs in durable stores** (Qdrant payloads, LangGraph SQLite checkpoints/store, telemetry JSONL).
 2. **No raw filesystem paths in durable stores.** Durable references are `ArtifactRef(sha256, suffix)`.
-3. **Fail open**: missing optional deps (SigLIP, sqlite-vec, ColPali) must not break the app.
+3. **Fail closed during generation**: a new generation activates only after image indexing and exact point-count verification succeed.
+4. **Fail open during queries**: visual retrieval falls back to text results, and reranking falls back to the original candidate order.
 
 ## Key configuration
 
@@ -41,8 +40,6 @@ DocMind will create the image collection automatically (if missing) when indexin
 ```bash
 # Optional override; default is ${DOCMIND_DATA_DIR}/artifacts
 # DOCMIND_ARTIFACTS__DIR=./data/artifacts
-DOCMIND_ARTIFACTS__MAX_TOTAL_MB=4096
-DOCMIND_ARTIFACTS__GC_MIN_AGE_SECONDS=3600
 ```
 
 ### PDF page images (optional encryption)
@@ -61,32 +58,30 @@ DOCMIND_IMG_DELETE_PLAINTEXT=false
 - **Chat page:** “Sources” renders image thumbnails via artifact refs (safe + cached via fragments).
 - **Chat sidebar:** “Visual search” supports query-by-image (SigLIP image→image) for quick inspection.
 - **Documents page:**
-  - “Reindex page images” maintenance (recreates SigLIP vectors for all PDFs).
-  - “Delete uploaded document” can optionally purge local artifacts (may break old chats).
+  - “Rebuild search index” reparses the corpus and rebuilds text, image, and optional graph indexes as one generation.
+  - “Delete uploaded document” retains content-addressed artifacts so historical chat evidence remains renderable.
 
 ## Operations / troubleshooting
 
-### Reindex page images
+### Rebuild image and text indexes
 
-Use the Documents page “Reindex page images” tool. This is safe and idempotent:
+Use **Documents > Maintenance > Rebuild search index**. The rebuild has these guarantees:
 
-- Existing image points for each `doc_id` are purged before upserting to avoid stale points.
-- If SigLIP/Qdrant is unavailable, ingestion remains functional (images will be missing until reindexed).
+- It reparses every retained upload and builds isolated text, image, and optional graph indexes.
+- It requires exact text and image point counts before activation.
+- If SigLIP or Qdrant fails, the rebuild fails and the active generation remains unchanged.
 
 ### Recover missing thumbnails/images in chat
 
 If the UI shows “Image artifact unavailable”:
 
 1. Confirm the artifact store directory exists under `DOCMIND_DATA_DIR`.
-2. Re-run “Reindex page images” (Documents page).
-3. If artifacts were purged, re-ingest the PDF (or reindex after restoring artifacts).
+2. Confirm the original upload still exists under `DOCMIND_DATA_DIR/uploads`.
+3. Run **Documents > Maintenance > Rebuild search index** to render and index the corpus again.
 
-### Artifact purging (GC)
+### Artifact retention
 
-Artifacts are locally GC’d by disk budget and age. If you enable manual artifact purging on delete:
-
-- It only checks refcounts in the **Qdrant image collection** (not LangGraph SQLite).
-- Old chats can lose images. Keep the “purge artifacts” checkbox off unless you want aggressive cleanup.
+Document deletion retains content-addressed artifacts for historical chat evidence. The current application has no automatic garbage collection policy or artifact-purge UI action.
 
 ## Code map
 
@@ -104,5 +99,5 @@ Artifacts are locally GC’d by disk budget and age. If you enable manual artifa
 uv run ruff format .
 uv run ruff check . --fix
 uv run pyright
-uv run python scripts/run_tests.py
+uv run pytest tests/unit tests/integration -q --no-cov
 ```

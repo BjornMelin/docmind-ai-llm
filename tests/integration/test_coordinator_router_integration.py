@@ -1,8 +1,7 @@
-"""Integration test: coordinator + router_tool + InjectedState overrides.
+"""Integration test for coordinator runtime-context overrides.
 
 Uses the deterministic supervisor_stream_shim fixture (repo-local supervisor graph shim)
-to validate that tools_data overrides are present in the final state seen by
-the coordinator's _extract_response seam.
+to validate that transient objects reach workflow execution without entering state.
 """
 
 from __future__ import annotations
@@ -12,38 +11,27 @@ from unittest.mock import patch as _patch
 import pytest
 
 from src.agents.coordinator import MultiAgentCoordinator
-from src.agents.registry import DefaultToolRegistry
 from tests.integration.coordinator_helpers import patch_supervisor_and_react
 
 # Rationale: tests set minimal coordinator internals to avoid heavy setup.
 
 
 @pytest.mark.integration
-def test_coordinator_injected_state_router_engine_visible(supervisor_stream_shim):
-    """InjectedState/tools_data overrides are visible to the compiled graph.
+def test_coordinator_runtime_router_engine_visible(supervisor_stream_shim):
+    """Runtime overrides reach workflow execution without entering state.
 
-    We patch _extract_response to inspect the final_state argument that flowed
-    through compiled_graph.stream(...), which the shim forwards from the
-    initial_state provided to process_query().
+    We patch workflow execution to inspect both initial state and runtime context.
     """
     with patch_supervisor_and_react(supervisor_stream_shim):
-        # Bypass full __init__ setup; only set required attrs for the test
-        with _patch.object(MultiAgentCoordinator, "__init__", return_value=None):
-            coord = MultiAgentCoordinator()  # type: ignore[call-arg]
-            # Minimal required attributes consumed by process_query()
-            coord.total_queries = 0
-            coord.enable_fallback = False
-            coord.max_agent_timeout = 5
-            coord._setup_complete = True
-            coord.tool_registry = DefaultToolRegistry()
-            compiled = supervisor_stream_shim.compile()  # type: ignore[attr-defined]
-            coord.compiled_graph = compiled
+        coord = MultiAgentCoordinator(max_agent_timeout=5)
+        coord._setup_complete = True
+        compiled = supervisor_stream_shim.compile()  # type: ignore[attr-defined]
+        coord.compiled_graph = compiled
 
-        observed_final_state = {}
+        observed_runtime_context = {}
 
         def _capture(final_state, *_args, **_kwargs):
-            nonlocal observed_final_state
-            observed_final_state = dict(final_state)
+            assert "tools_data" not in final_state
             # Return a minimal AgentResponse-like object
             from src.agents.models import AgentResponse
 
@@ -57,11 +45,10 @@ def test_coordinator_injected_state_router_engine_visible(supervisor_stream_shim
             )
 
         def _workflow_passthrough(initial_state, *_a, **_k):
-            # In final-release persistence, injected objects flow via runtime
-            # context (not serialized into tools_data).
-            runtime_context = _k.get("runtime_context") or {}
-            tools_data = {"router_engine": runtime_context.get("router_engine")}
-            return {"messages": [], "tools_data": tools_data}
+            nonlocal observed_runtime_context
+            observed_runtime_context = dict(_k.get("runtime_context") or {})
+            assert "tools_data" not in initial_state
+            return {"messages": []}
 
         with (
             _patch.object(
@@ -83,6 +70,5 @@ def test_coordinator_injected_state_router_engine_visible(supervisor_stream_shim
             coord.process_query("hello world", settings_override=overrides)
 
         assert (
-            observed_final_state.get("tools_data", {}).get("router_engine")
-            is overrides["router_engine"]
+            observed_runtime_context.get("router_engine") is overrides["router_engine"]
         )

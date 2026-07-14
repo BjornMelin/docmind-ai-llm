@@ -52,6 +52,13 @@ def test_get_or_init_user_id_defaults_to_local() -> None:
     assert cs._get_or_init_user_id() == "u1"  # type: ignore[attr-defined]
 
 
+def test_chat_db_connection_cache_is_session_scoped_with_release_close() -> None:
+    info = cs.get_chat_db_conn._info  # type: ignore[attr-defined]
+
+    assert info.scope == "session"
+    assert info.on_release is cs._close_chat_db_conn  # type: ignore[attr-defined]
+
+
 def test_seed_from_query_params_sets_session_state() -> None:
     import streamlit as st  # type: ignore
 
@@ -96,11 +103,23 @@ def test_render_session_sidebar_returns_selection(monkeypatch) -> None:
     monkeypatch.setattr(cs, "_render_session_selector", lambda *_a, **_k: "t1")
     monkeypatch.setattr(cs, "_render_new_delete_controls", lambda *_a, **_k: None)
     monkeypatch.setattr(cs, "_handle_rename", lambda *_a, **_k: None)
-    monkeypatch.setattr(cs, "_handle_purge", lambda *_a, **_k: None)
+    purge_kwargs: dict[str, object] = {}
+    monkeypatch.setattr(
+        cs,
+        "_handle_purge",
+        lambda *_a, **kwargs: purge_kwargs.update(kwargs),
+    )
 
-    sel = cs.render_session_sidebar(conn=object())  # type: ignore[arg-type]
+    def hard_purge(_thread_id: str, _user_id: str) -> bool:
+        return True
+
+    sel = cs.render_session_sidebar(
+        conn=object(),  # pyright: ignore[reportArgumentType]
+        hard_purge=hard_purge,
+    )
     assert sel.thread_id == "t1"
     assert sel.user_id == "local"
+    assert purge_kwargs["hard_purge"] is hard_purge
 
 
 def test_ensure_active_session_creates_when_none(monkeypatch) -> None:
@@ -246,10 +265,7 @@ def test_new_delete_controls_and_rename_and_purge(monkeypatch) -> None:
     assert renamed == [("t1", "New")]
 
     # Purge path
-    purged: list[str] = []
-    monkeypatch.setattr(
-        cs, "purge_session", lambda _c, thread_id: purged.append(thread_id)
-    )
+    purge_order: list[object] = []
     st.session_state["chat_thread_id"] = active.thread_id
     st.session_state["chat_time_travel_hint_checkpoint_id"] = "c1"
     monkeypatch.setattr(st, "checkbox", lambda *_a, **_k: True, raising=False)
@@ -259,7 +275,33 @@ def test_new_delete_controls_and_rename_and_purge(monkeypatch) -> None:
         lambda label, **_k: str(label).startswith("Purge session"),
         raising=False,
     )
-    cs._handle_purge(conn=object(), active=active)  # type: ignore[arg-type]
-    assert purged == ["t1"]
+    cs._handle_purge(
+        active=active,  # type: ignore[arg-type]
+        user_id="u1",
+        hard_purge=lambda thread_id, user_id: (
+            purge_order.append(("hard-purge", thread_id, user_id)) or True
+        ),
+    )
+    assert purge_order == [
+        ("hard-purge", "t1", "u1"),
+    ]
     assert "chat_thread_id" not in st.session_state
     assert "chat_time_travel_hint_checkpoint_id" not in st.session_state
+
+
+def test_hard_purge_aborts_when_active_run_does_not_drain(monkeypatch) -> None:
+    import streamlit as st  # type: ignore
+
+    active = SimpleNamespace(thread_id="t1")
+    errors: list[str] = []
+    monkeypatch.setattr(st, "checkbox", lambda *_a, **_k: True, raising=False)
+    monkeypatch.setattr(st, "button", lambda *_a, **_k: True, raising=False)
+    monkeypatch.setattr(st, "error", errors.append, raising=False)
+    cs._handle_purge(
+        active=active,  # type: ignore[arg-type]
+        user_id="u1",
+        hard_purge=lambda _thread_id, _user_id: False,
+    )
+
+    assert errors
+    assert "deferred" in errors[0].lower()

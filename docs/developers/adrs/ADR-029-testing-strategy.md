@@ -11,7 +11,6 @@ Tags: testing, boundary, pytest
 References:
 - [pytest — Official Docs](https://docs.pytest.org/)
 - [responses — Requests Mocking](https://github.com/getsentry/responses)
-- [testcontainers — Python](https://testcontainers-python.readthedocs.io/)
 ---
 
 ## Description
@@ -22,7 +21,8 @@ Keep tests simple, fast, and realistic by focusing at system boundaries (API/DB/
 
 - Use pytest as the single test runner.
 - Prefer boundary tests; minimize internal mocks.
-- Use `responses` for HTTP and `testcontainers` for services as needed.
+- Use `responses` for HTTP. Exercise services through explicit CI service
+  containers or the repository Compose topology.
 - Keep suites lean; aim for deterministic, local runs.
 
 ## Related Requirements
@@ -86,7 +86,7 @@ def test_streamlit_page_boot(app_runner):
 
 ### Dependencies
 
-- Python: `pytest>=8`, `responses`, `testcontainers`.
+- Python: `pytest>=9`, `pytest-cov`, `responses`.
 
 ## Changelog
 

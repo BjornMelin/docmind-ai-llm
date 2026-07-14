@@ -1,25 +1,25 @@
 ---
 ADR: 039
-Title: Offline Evaluation CLIs (BEIR + RAGAS) for Retrieval Quality
+Title: Offline Retrieval Evaluation CLI with BEIR
 Status: Accepted
-Version: 1.0
-Date: 2026-01-09
+Version: 1.1
+Date: 2026-07-13
 Supersedes: 012
 Superseded-by:
 Related: 012, 014, SPEC-010
 Tags: evaluation, offline, tooling, retrieval
 References:
-  - https://pypi.org/project/ragas/
   - https://github.com/beir-cellar/beir
-  - Implementation: tools/eval/run_beir.py, tools/eval/run_ragas.py
-  - Spec/ADR: docs/specs/SPEC-010 (Evaluation & Quality Gates)
+  - Implementation: tools/eval/run_beir.py
+  - Spec: docs/specs/spec-010-evaluation.md
   - Spec/ADR: docs/developers/adrs/ADR-012-evaluation-strategy.md
   - Spec/ADR: docs/developers/adrs/ADR-014-llm-eval-telemetry.md
 ---
 
 ## Description
 
-Provide **offline evaluation CLIs** to measure retrieval and RAG quality locally using BEIR-style IR metrics and RAGAS-style faithfulness/relevance metrics.
+Provide one supported **offline evaluation CLI** to measure retrieval quality
+locally using BEIR-style information-retrieval metrics.
 
 ## Context
 
@@ -35,14 +35,14 @@ This ADR documents an existing decision already reflected in SPEC-010 and implem
 
 - Offline-first operation (no network required for evaluation)
 - Deterministic outputs for regressions and CI checks
-- Reuse maintained libraries (BEIR, RAGAS) over bespoke metrics code
+- Reuse maintained BEIR metrics over bespoke metric code
 
 ## Alternatives
 
 - A: No evaluation harness — regressions undetected
 - B: Cloud evaluation services — violates offline-first defaults
 - C: Custom metric suite — high maintenance cost
-- D: Offline CLIs with BEIR + RAGAS (Selected)
+- D: One offline BEIR CLI (Selected)
 
 ### Decision Framework
 
@@ -50,17 +50,16 @@ Weights reflect stakeholder consensus to prioritize leverage/maintenance (offlin
 
 | Model / Option | Leverage (35%) | Value (25%) | Risk Reduction (25%) | Maint (15%) | Total | Decision |
 | --- | --- | --- | --- | --- | --- | --- |
-| D: Offline CLIs (BEIR+RAGAS) | 9 | 8 | 9 | 8 | **8.65** | Selected |
+| D: Offline BEIR CLI | 9 | 8 | 9 | 9 | **8.80** | Selected |
 | A: None | 2 | 2 | 1 | 10 | 2.65 | Rejected |
 | B: Cloud | 6 | 7 | 3 | 6 | 5.35 | Rejected |
 | C: Custom | 4 | 6 | 6 | 3 | 4.95 | Rejected |
 
 ## Decision
 
-Implement and maintain **offline evaluation CLIs**:
+Implement and maintain one **offline evaluation CLI**:
 
 - `tools/eval/run_beir.py` for IR metrics (e.g., NDCG@k, Recall@k, MRR@k)
-- `tools/eval/run_ragas.py` for RAG metrics (e.g., faithfulness, answer relevancy)
 
 Outputs MUST be schema-validated and reproducible (seeded).
 
@@ -69,7 +68,8 @@ Outputs MUST be schema-validated and reproducible (seeded).
 - Retrieval quality gates (example defaults; tune per corpus):
   - **NDCG@10 < 0.60** → fail CI
   - **Recall@50 < 0.75** → fail CI
-- Hook into the evaluation job in CI (e.g., quality gates stage / `scripts/run_quality_gates.py --ci`) and block merges on regressions.
+- Run the BEIR evaluator as a dedicated CI job when a representative corpus is
+  available, and block merges when its explicit thresholds fail.
 
 ### BEIR Dataset Selection Strategy
 
@@ -80,7 +80,6 @@ Outputs MUST be schema-validated and reproducible (seeded).
 ### Version Pinning (Reproducibility)
 
 - Pin evaluation tooling in `pyproject.toml`:
-  - `ragas>=0.2.10,<0.4.0`
   - `beir>=2.0.0,<3.0.0`
 - Rationale: keep compatible minor ranges in the spec while `uv.lock` pins exact versions for reproducible runs.
 
@@ -91,8 +90,7 @@ flowchart TD
   A[Snapshot / Corpus] --> B[Retriever + Reranker]
   B --> C[Eval Harness]
   C --> D[BEIR metrics JSONL/CSV]
-  C --> E[RAGAS metrics JSONL/CSV]
-  C --> F[Schema validation]
+  C --> E[Schema validation]
 ```
 
 ## Security & Privacy
@@ -110,9 +108,11 @@ flowchart TD
 
 ### Trade-offs
 
-- Adds maintenance for evaluation schemas and fixtures
+- Adds maintenance for one evaluation schema and its fixtures
 - Requires clear offline test strategy to avoid network in CI
 
 ## Changelog
 
+- 1.1 (2026-07-13): Hard-cut the unsupported RAGAS CLI, schema, and
+  always-skipped tests; keep BEIR as the single runnable offline evaluation path.
 - 1.0 (2026-01-09): Backfilled ADR to match SPEC-010 and existing tooling implementation.

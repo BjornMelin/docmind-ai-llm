@@ -24,8 +24,12 @@ def test_siglip_loader_cached(monkeypatch):
 
     class _FakeModel:
         @staticmethod
-        def from_pretrained(_id, revision=None):  # type: ignore[no-untyped-def]
+        def from_pretrained(  # type: ignore[no-untyped-def]
+            _id, revision=None, cache_dir=None, local_files_only=None
+        ):
             assert revision is not None
+            assert cache_dir == "/tmp/docmind-models"
+            assert local_files_only is True
             calls["model"] += 1
             return SimpleNamespace(
                 get_text_features=lambda **_: 0,
@@ -34,8 +38,12 @@ def test_siglip_loader_cached(monkeypatch):
 
     class _FakeProcessor:
         @staticmethod
-        def from_pretrained(_id, revision=None):  # type: ignore[no-untyped-def]
+        def from_pretrained(  # type: ignore[no-untyped-def]
+            _id, revision=None, cache_dir=None, local_files_only=None
+        ):
             assert revision is not None
+            assert cache_dir == "/tmp/docmind-models"
+            assert local_files_only is True
             calls["proc"] += 1
             return SimpleNamespace()
 
@@ -46,9 +54,11 @@ def test_siglip_loader_cached(monkeypatch):
             embedding=SimpleNamespace(
                 siglip_model_id="google/siglip-base-patch16-224",
                 siglip_model_revision="test-revision",
+                cache_folder="/tmp/docmind-models",
             ),
             retrieval=SimpleNamespace(
-                text_rerank_timeout_ms=10, siglip_timeout_ms=10, colpali_timeout_ms=10
+                text_rerank_timeout_ms=10,
+                siglip_timeout_ms=10,
             ),
         ),
         raising=False,

@@ -201,10 +201,6 @@ def test_settings_save_persists_env(
     if logprobs:
         logprobs[0].set_value(True).run()
 
-    embed_dims = [w for w in app.number_input if "Embed dimensions" in str(w)]
-    assert embed_dims, "Embed dimensions input not found"
-    embed_dims[0].set_value(384).run()
-
     top_logprobs = [w for w in app.number_input if "Top logprobs" in str(w)]
     assert top_logprobs, "Top logprobs input not found"
     top_logprobs[0].set_value(2).run()
@@ -220,18 +216,20 @@ def test_settings_save_persists_env(
     from dotenv import dotenv_values
 
     values = dotenv_values(env_file)
-    assert values.get("DOCMIND_MODEL") == "Hermes-2-Pro-Llama-3-8B"
+    assert values.get("DOCMIND_LLM_REQUEST__MODEL") == "Hermes-2-Pro-Llama-3-8B"
+    assert values.get("DOCMIND_LLM_REQUEST__CONTEXT_WINDOW") == "131072"
+    assert values.get("DOCMIND_LLM_REQUEST__MAX_OUTPUT_TOKENS") == "2048"
+    assert values.get("DOCMIND_LLM_REQUEST__TEMPERATURE") == "0.1"
     assert values.get("DOCMIND_LMSTUDIO_BASE_URL") == "http://localhost:1234/v1"
     assert values.get("DOCMIND_OLLAMA_API_KEY") == "key-123"
     assert values.get("DOCMIND_OLLAMA_ENABLE_WEB_SEARCH") == "true"
-    assert values.get("DOCMIND_OLLAMA_EMBED_DIMENSIONS") == "384"
     assert values.get("DOCMIND_OLLAMA_ENABLE_LOGPROBS") == "true"
     assert values.get("DOCMIND_OLLAMA_TOP_LOGPROBS") == "2"
     assert values.get("DOCMIND_PARSING__PROFILE") == "cpu_safe"
     assert values.get("DOCMIND_PDF_BACKEND__RENDER_DPI") == "200"
     assert values.get("DOCMIND_PDF_BACKEND__MIN_TEXT_CHARS_PER_PAGE") == "24"
     assert values.get("DOCMIND_OCR__FORCE_OCR") == "false"
-    assert values.get("DOCMIND_OCR__MODEL_CACHE_DIR") is not None
+    assert values.get("DOCMIND_PARSING__MODEL_CACHE_DIR") is not None
 
 
 def test_settings_save_persists_openai_compatible_env(
@@ -558,11 +556,11 @@ def test_settings_allow_remote_allows_remote_urls(
     assert not list(app.error)
 
 
-def test_settings_warns_when_ollama_allowlist_missing(
+def test_settings_does_not_require_allowlist_when_remote_endpoints_are_allowed(
     settings_app_test: AppTest,
     reset_settings_after_test: None,
 ) -> None:
-    """Enabling Ollama web tools should warn when allowlist lacks ollama.com."""
+    """Global remote permission supersedes the narrower Ollama allowlist."""
     app = settings_app_test.run()
     assert not app.exception
 
@@ -581,7 +579,8 @@ def test_settings_warns_when_ollama_allowlist_missing(
         "Ollama web tools require `https://ollama.com` in "
         "`DOCMIND_SECURITY__ENDPOINT_ALLOWLIST`."
     )
-    assert any(msg.strip() == expected_warning for msg in warnings), warnings
+    assert all(msg.strip() != expected_warning for msg in warnings), warnings
+    assert any("Remote endpoints are allowed" in msg for msg in warnings), warnings
 
 
 def _find_provider_select(app: AppTest):

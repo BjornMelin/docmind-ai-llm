@@ -14,7 +14,7 @@ import contextlib
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from loguru import logger
@@ -22,13 +22,22 @@ from qdrant_client import QdrantClient
 from qdrant_client import models as qmodels
 from qdrant_client.http.models import Distance
 
+from src.config import settings
+from src.config.embedding_defaults import (
+    DEFAULT_SIGLIP_MODEL_ID,
+    DEFAULT_SIGLIP_MODEL_REVISION,
+)
 from src.persistence.artifacts import ArtifactRef
+from src.persistence.deployment_identity import (
+    get_or_create_deployment_id,
+    read_deployment_id,
+)
 from src.utils.images import open_image_encrypted
-from src.utils.log_safety import build_pii_log_entry
 from src.utils.qdrant_utils import get_collection_params
 
 _SIGLIP_VECTOR_NAME = "siglip"
 _DEFAULT_SIGLIP_DIM = 768
+_IMAGE_COLLECTION_SCHEMA_VERSION = "2"
 _UUID_NAMESPACE = uuid.UUID("d3b17330-1e80-4c4f-9f5d-9f2a1432f6cf")
 
 
@@ -51,6 +60,75 @@ class PageImageRecord:
         return uuid.uuid5(_UUID_NAMESPACE, f"{self.doc_id}::page::{self.page_no}")
 
 
+class ImageCollectionIncompatibleError(RuntimeError):
+    """Raised when an image collection does not match its model identity."""
+
+
+def canonical_image_collection_metadata(*, dim: int) -> dict[str, Any]:
+    """Return immutable semantic identity for a staged image collection."""
+    return _image_collection_metadata(
+        dim=dim,
+        deployment_id=get_or_create_deployment_id(settings.data_dir),
+    )
+
+
+def _expected_image_collection_metadata(*, dim: int) -> dict[str, Any]:
+    """Return read-only expected metadata for compatibility checks."""
+    return _image_collection_metadata(
+        dim=dim,
+        deployment_id=read_deployment_id(settings.data_dir),
+    )
+
+
+def _image_collection_metadata(*, dim: int, deployment_id: str) -> dict[str, Any]:
+    """Build image collection metadata from an explicit deployment identity."""
+    model_id = str(settings.embedding.siglip_model_id)
+    revision = settings.embedding.siglip_model_revision
+    if revision is None and model_id == DEFAULT_SIGLIP_MODEL_ID:
+        revision = DEFAULT_SIGLIP_MODEL_REVISION
+    return {
+        "docmind_deployment_id": deployment_id,
+        "docmind_owner": "image",
+        "docmind_schema_version": _IMAGE_COLLECTION_SCHEMA_VERSION,
+        "siglip_model": model_id,
+        "siglip_revision": str(revision or "unpinned"),
+        "siglip_dimension": int(dim),
+        "normalize_image": bool(settings.embedding.normalize_image),
+    }
+
+
+def check_siglip_image_collection(
+    client: QdrantClient,
+    collection_name: str,
+    *,
+    vector_name: str = _SIGLIP_VECTOR_NAME,
+    dim: int = _DEFAULT_SIGLIP_DIM,
+) -> None:
+    """Validate an existing image collection without mutating it."""
+    if not client.collection_exists(collection_name):
+        raise ImageCollectionIncompatibleError("image_collection_missing")
+    info = client.get_collection(collection_name)
+    params = get_collection_params(client, collection_name)
+    vectors = getattr(params, "vectors", None) or getattr(
+        params, "vectors_config", None
+    )
+    if not isinstance(vectors, dict) or vector_name not in vectors:
+        raise ImageCollectionIncompatibleError("siglip_vector_missing")
+    vector = vectors[vector_name]
+    if int(getattr(vector, "size", 0)) != int(dim):
+        raise ImageCollectionIncompatibleError("siglip_dimension_mismatch")
+    if getattr(vector, "distance", None) != Distance.COSINE:
+        raise ImageCollectionIncompatibleError("siglip_distance_mismatch")
+    actual_metadata = getattr(getattr(info, "config", None), "metadata", None)
+    expected_metadata = _expected_image_collection_metadata(dim=dim)
+    if not isinstance(actual_metadata, dict):
+        raise ImageCollectionIncompatibleError("image_collection_metadata_missing")
+    if any(
+        actual_metadata.get(key) != value for key, value in expected_metadata.items()
+    ):
+        raise ImageCollectionIncompatibleError("image_collection_metadata_mismatch")
+
+
 def ensure_siglip_image_collection(
     client: QdrantClient,
     collection_name: str,
@@ -67,59 +145,17 @@ def ensure_siglip_image_collection(
                     size=int(dim), distance=Distance.COSINE
                 ),
             },
+            metadata=canonical_image_collection_metadata(dim=dim),
         )
         logger.info("Created image collection '{}' (dim={})", collection_name, int(dim))
         return
 
-    # Patch missing vector head if needed (idempotent).
-    try:
-        params = get_collection_params(client, collection_name)
-        vec_cfg = getattr(params, "vectors", None) or getattr(
-            params, "vectors_config", None
-        )
-        if not isinstance(vec_cfg, dict) or vector_name not in vec_cfg:
-            # NOTE: qdrant-client's `update_collection(vectors_config=...)` only
-            # supports VectorParamsDiff (no size/distance), so it cannot add new
-            # named vector heads. If the collection was created without the
-            # expected vector, the safest path is to ask the operator to
-            # recreate it.
-            logger.warning(
-                "Image collection '{}' is missing vector head '{}'; recreate the "
-                "collection to enable image indexing",
-                collection_name,
-                vector_name,
-            )
-            return
-
-        vec_params = vec_cfg.get(vector_name)
-        existing_dim = getattr(vec_params, "size", None)
-        if existing_dim is None and isinstance(vec_params, dict):
-            existing_dim = vec_params.get("size")
-        if existing_dim is not None and int(existing_dim) != int(dim):
-            logger.error(
-                "Image collection '{}' vector '{}' has dim={} but expected dim={}; "
-                "recreate the collection to enable image indexing",
-                collection_name,
-                vector_name,
-                int(existing_dim),
-                int(dim),
-            )
-            raise ValueError(
-                "Image collection dimension mismatch; recreate the collection "
-                f"(collection={collection_name}, vector={vector_name}, "
-                f"expected_dim={int(dim)}, actual_dim={int(existing_dim)})"
-            )
-    except ValueError:
-        raise
-    except Exception as exc:  # pragma: no cover - defensive
-        redaction = build_pii_log_entry(
-            str(exc), key_id="image_index.ensure_siglip_image_collection"
-        )
-        logger.warning(
-            "ensure_siglip_image_collection skipped (error_type={}, error={})",
-            type(exc).__name__,
-            redaction.redacted,
-        )
+    check_siglip_image_collection(
+        client,
+        collection_name,
+        vector_name=vector_name,
+        dim=dim,
+    )
 
 
 def _siglip_expected_dim(embedder: Any) -> int:
@@ -196,14 +232,14 @@ def index_page_images_siglip(
 
     if to_payload_only:
         for pid, payload in to_payload_only:
-            with contextlib.suppress(Exception):
-                client.set_payload(
-                    collection_name=collection_name,
-                    points=[pid],
-                    payload=payload,
-                )
+            client.set_payload(
+                collection_name=collection_name,
+                points=[pid],
+                payload=payload,
+                wait=True,
+            )
 
-    indexed = 0
+    indexed = len(to_payload_only)
     batch_size_int = max(1, int(batch_size))
     for i in range(0, len(to_embed), batch_size_int):
         batch = to_embed[i : i + batch_size_int]
@@ -243,6 +279,74 @@ def index_page_images_siglip(
             indexed += len(points)
 
     return indexed
+
+
+def collect_page_image_point_ids_for_doc_id(
+    client: QdrantClient, collection_name: str, *, doc_id: str
+) -> set[str]:
+    """Return every page-image point ID owned by a document.
+
+    Raises:
+        RuntimeError: If Qdrant returns a point without an ID or stalls while
+            paginating the document's points.
+    """
+    flt = qmodels.Filter(
+        must=[
+            qmodels.FieldCondition(
+                key="doc_id", match=qmodels.MatchValue(value=str(doc_id))
+            )
+        ]
+    )
+    point_ids: set[str] = set()
+    offset: Any | None = None
+    seen_offsets: set[str] = set()
+    while True:
+        points, next_offset = client.scroll(
+            collection_name=collection_name,
+            scroll_filter=flt,
+            limit=256,
+            offset=offset,
+            with_payload=False,
+            with_vectors=False,
+        )
+        for point in points or []:
+            point_id = getattr(point, "id", None)
+            if point_id is None:
+                raise RuntimeError("Qdrant returned a page-image point without an ID")
+            point_ids.add(str(point_id))
+        if next_offset is None:
+            return point_ids
+        offset_key = str(next_offset)
+        if offset_key in seen_offsets:
+            raise RuntimeError("Qdrant page-image pagination stalled")
+        seen_offsets.add(offset_key)
+        offset = next_offset
+
+
+def delete_page_image_points_by_id(
+    client: QdrantClient,
+    collection_name: str,
+    *,
+    point_ids: set[str],
+) -> int:
+    """Delete an exact set of stale page-image points and verify removal."""
+    if not point_ids:
+        return 0
+    ordered_ids = sorted(point_ids)
+    client.delete(
+        collection_name=collection_name,
+        points_selector=qmodels.PointIdsList(points=cast(Any, ordered_ids)),
+        wait=True,
+    )
+    remaining = client.retrieve(
+        collection_name=collection_name,
+        ids=ordered_ids,
+        with_payload=False,
+        with_vectors=False,
+    )
+    if remaining:
+        raise RuntimeError("Stale page-image deletion left indexed points behind")
+    return len(ordered_ids)
 
 
 def count_page_images_for_doc_id(
@@ -310,29 +414,6 @@ def collect_artifact_refs_for_doc_id(
     return refs
 
 
-def delete_page_images_for_doc_id(
-    client: QdrantClient, collection_name: str, *, doc_id: str
-) -> int:
-    """Delete page-image points for a doc_id. Returns best-effort prior count."""
-    flt = qmodels.Filter(
-        must=[
-            qmodels.FieldCondition(
-                key="doc_id", match=qmodels.MatchValue(value=str(doc_id))
-            )
-        ]
-    )
-    prior = 0
-    try:
-        prior = count_page_images_for_doc_id(client, collection_name, doc_id=doc_id)
-    except Exception:
-        prior = 0
-    try:
-        client.delete(collection_name=collection_name, points_selector=flt, wait=True)
-    except Exception:  # pragma: no cover - defensive
-        return prior
-    return prior
-
-
 def count_artifact_references_in_image_collection(
     client: QdrantClient, collection_name: str, *, artifact_id: str
 ) -> int:
@@ -387,11 +468,15 @@ def _load_rgb_image(path: Path) -> Any:
 
 
 __all__ = [
+    "ImageCollectionIncompatibleError",
     "PageImageRecord",
+    "canonical_image_collection_metadata",
+    "check_siglip_image_collection",
     "collect_artifact_refs_for_doc_id",
+    "collect_page_image_point_ids_for_doc_id",
     "count_artifact_references_in_image_collection",
     "count_page_images_for_doc_id",
-    "delete_page_images_for_doc_id",
+    "delete_page_image_points_by_id",
     "ensure_siglip_image_collection",
     "index_page_images_siglip",
 ]

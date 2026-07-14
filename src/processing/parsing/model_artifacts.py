@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from hashlib import file_digest
 from pathlib import Path
 from shutil import copy2, rmtree
+from time import monotonic
 
 
 @dataclass(frozen=True)
@@ -56,40 +58,6 @@ DOCLING_LAYOUT_BUNDLE = ModelBundle(
     ),
 )
 
-RAPIDOCR_ENGLISH_BUNDLE = ModelBundle(
-    name="RapidOCR English ONNX",
-    root="RapidOcr",
-    repo_id="RapidAI/RapidOCR",
-    revision="v3.8.0",
-    artifacts=(
-        ModelArtifact(
-            path="onnx/PP-OCRv4/det/en_PP-OCRv3_det_mobile.onnx",
-            size=2421707,
-            sha256="ea07c15d38ac40cd69da3c493444ec75b44ff23840553ff8ba102c1219ed39c2",
-        ),
-        ModelArtifact(
-            path="onnx/PP-OCRv4/cls/ch_ppocr_mobile_v2.0_cls_mobile.onnx",
-            size=585532,
-            sha256="e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
-        ),
-        ModelArtifact(
-            path="onnx/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile.onnx",
-            size=7653044,
-            sha256="e8770c967605983d1570cdf5352041dfb68fa0c21664f49f47b155abd3e0e318",
-        ),
-        ModelArtifact(
-            path="paddle/PP-OCRv4/rec/en_PP-OCRv4_rec_mobile/en_dict.txt",
-            size=190,
-            sha256="5662df9d2d03f0e8ca0d3b0649d6acbab904b6a14b3d3521463c71c37c668ce3",
-        ),
-        ModelArtifact(
-            path="resources/fonts/FZYTK.TTF",
-            size=3241748,
-            sha256="4065a23df6823c8e2b69a0e76d02f02a6470b8774a5e91086609701ad95cc33f",
-        ),
-    ),
-)
-
 
 def model_files(cache_dir: Path, bundle: ModelBundle) -> dict[str, Path]:
     """Return manifest paths for a model bundle."""
@@ -99,6 +67,76 @@ def model_files(cache_dir: Path, bundle: ModelBundle) -> dict[str, Path]:
 
 def model_directory_issues(root: Path, bundle: ModelBundle) -> dict[str, str]:
     """Return missing, unexpected, or mismatched files for a bundle directory."""
+    return _uncached_model_directory_issues(root, bundle)
+
+
+def cached_model_directory_issues(
+    root: Path,
+    bundle: ModelBundle,
+    *,
+    ttl_seconds: float = 30.0,
+) -> dict[str, str]:
+    """Return UI health issues with a stat-aware short-lived digest cache."""
+    if ttl_seconds <= 0:
+        return model_directory_issues(root, bundle)
+    signature = _directory_signature(root)
+    ttl_bucket = int(monotonic() / ttl_seconds)
+    return dict(
+        _cached_model_directory_issues(
+            str(root),
+            bundle,
+            signature,
+            ttl_bucket,
+        )
+    )
+
+
+def _directory_signature(root: Path) -> tuple[tuple[str, int, int, int, int], ...]:
+    """Return metadata that invalidates cached integrity results on file changes."""
+    if not root.exists() and not root.is_symlink():
+        return ((".", 0, 0, 0, 0),)
+    paths = [root]
+    if root.is_dir():
+        paths.extend(root.rglob("*"))
+    signature: list[tuple[str, int, int, int, int]] = []
+    for path in paths:
+        try:
+            stat = path.lstat()
+        except OSError:
+            signature.append((str(path), 0, 0, 0, 0))
+            continue
+        relative = "." if path == root else path.relative_to(root).as_posix()
+        signature.append(
+            (
+                relative,
+                int(stat.st_ino),
+                int(stat.st_size),
+                int(stat.st_mtime_ns),
+                int(stat.st_ctime_ns),
+            )
+        )
+    return tuple(sorted(signature))
+
+
+@lru_cache(maxsize=32)
+def _cached_model_directory_issues(
+    root_value: str,
+    bundle: ModelBundle,
+    signature: tuple[tuple[str, int, int, int, int], ...],
+    ttl_bucket: int,
+) -> tuple[tuple[str, str], ...]:
+    """Hash one unchanged model directory at most once per process."""
+    del signature, ttl_bucket
+    return tuple(
+        sorted(_uncached_model_directory_issues(Path(root_value), bundle).items())
+    )
+
+
+def _uncached_model_directory_issues(
+    root: Path,
+    bundle: ModelBundle,
+) -> dict[str, str]:
+    """Perform a full manifest and digest verification."""
     expected = {artifact.path: artifact for artifact in bundle.artifacts}
     issues: dict[str, str] = {}
     if root.is_symlink():
@@ -182,10 +220,10 @@ def install_downloaded_model_bundle(
 
 __all__ = [
     "DOCLING_LAYOUT_BUNDLE",
-    "RAPIDOCR_ENGLISH_BUNDLE",
     "ModelArtifact",
     "ModelBundle",
     "ModelIntegrityError",
+    "cached_model_directory_issues",
     "install_downloaded_model_bundle",
     "model_directory_issues",
     "model_files",

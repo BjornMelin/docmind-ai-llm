@@ -49,7 +49,8 @@ Add helper (module-local or reusable) that:
 - iterates lines from the telemetry JSONL file
 - ignores invalid JSON lines
 - aggregates counts for:
-  - router_selected route counts
+  - historical or imported `router_selected` route counts when present; the
+    current runtime does not emit this per-query JSONL event
   - snapshot_stale_detected count
   - export_performed count
 - enforces caps:

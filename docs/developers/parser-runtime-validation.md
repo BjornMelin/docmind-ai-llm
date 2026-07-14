@@ -10,7 +10,8 @@ The parser contract is deliberately narrow:
 
 - Docling for document conversion
 - pypdfium2 for PDF inspection and rasterization
-- RapidOCR with ONNX Runtime for CPU OCR
+- RapidOCR's packaged PP-OCRv6 detector/recognizer and PP-OCRv4 classifier
+  defaults for CPU OCR
 - OCRmyPDF and Tesseract for optional searchable-PDF artifacts
 
 PaddleOCR, VLM OCR, Tesseract-as-parser, GPU OCR profiles, backend selectors, and automatic remote fallbacks are not supported. A parser failure is surfaced as a typed `DocumentParseError`; DocMind does not decode failed binary inputs as text.
@@ -24,7 +25,7 @@ Download the parser models into the application cache:
 ```bash
 uv run python tools/models/pull.py \
   --parser-defaults \
-  --rapidocr-cache-dir cache/models
+  --parser-cache-dir cache/models
 ```
 
 Then verify the local parser model supply:
@@ -33,7 +34,7 @@ Then verify the local parser model supply:
 uv run python scripts/parser_health.py --check
 ```
 
-The health command checks parser dependencies and hashes every Docling and RapidOCR model file against the source-controlled canonical manifest. Any mismatch is reported by relative path in `docling.model_issues` or `rapidocr.model_issues`. It does not run a fixture parse.
+The health command checks parser dependencies and hashes every Docling layout file against the source-controlled canonical manifest. Any mismatch is reported by relative path in `docling.model_issues`. RapidOCR validates the packaged models against its own upstream checksums during engine initialization; offline initialization and fixture inference are separate test and image gates.
 
 ## Benchmark evidence
 
@@ -56,9 +57,10 @@ Latency covers isolated parser-worker execution. It does not include application
 
 `network_egress` is recorded as `NOT_MEASURED`. The harness does not instrument the host network, so the artifact is not evidence of network isolation. Parser model preflight and application endpoint policy are separate controls.
 
-### Current release baseline
+### v1.0.0 release baseline
 
-The checked-in schema 3 artifact was generated from clean commit
+The checked-in schema 3 artifact records the v1.0.0 baseline. It was generated
+from clean commit
 `90e20793afe882976712b617197af7d8cf4ac1aa` on Linux under WSL2 with
 CPython 3.12.13. It records Docling 2.92.0, pypdfium2 5.7.1, RapidOCR
 3.8.1, and ONNX Runtime 1.23.2.
@@ -74,3 +76,6 @@ These values are a workstation-specific regression baseline, not a
 cross-platform performance promise. The fixture hashes, individual results,
 runtime identity, and unrounded values live in
 `docs/benchmarks/parser-runtime-validation.json`.
+
+The v2 baseline is pending regeneration from a clean v2 commit. Do not cite the
+checked-in v1.0.0 artifact as v2 release evidence.

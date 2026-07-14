@@ -38,6 +38,7 @@ from src.config.embedding_defaults import (
     BGE_M3_EMBEDDING_DIMENSION,
     DEFAULT_BGE_M3_MODEL_ID,
     DEFAULT_BGE_M3_MODEL_REVISION,
+    DEFAULT_BGE_RERANKER_MODEL_ID,
 )
 from src.config.settings_utils import (
     DEFAULT_LMSTUDIO_BASE_URL,
@@ -276,48 +277,16 @@ def _apply_env_overlay(overlays: list[tuple[str, str]]) -> None:
         os.environ[key] = value
 
 
-class VLLMConfig(BaseModel):
-    """vLLM configuration for FP8 optimization (ADR-004, ADR-010)."""
+class LLMRequestConfig(BaseModel):
+    """Provider-neutral model and generation request controls."""
 
-    # Model Configuration
-    model: str = Field(default="Qwen/Qwen3-4B-Instruct-2507-FP8")
-    context_window: int = Field(default=131072, ge=8192, le=200000)
-    max_tokens: int = Field(default=2048, ge=100, le=8192)
-    temperature: float = Field(default=0.1, ge=0, le=2)
-
-    # FP8 Optimization Settings
-    gpu_memory_utilization: float = Field(default=0.85, ge=0.5, le=0.95)
-    kv_cache_dtype: str = Field(default="fp8_e5m2")
-    attention_backend: str = Field(default="FLASHINFER")
-    enable_chunked_prefill: bool = Field(default=True)
-
-    # Performance Settings
-    max_num_seqs: int = Field(default=16, ge=1, le=64)
-    max_num_batched_tokens: int = Field(default=8192, ge=1024, le=16384)
-
-    vllm_base_url: AnyHttpUrl = Field(
-        default=DEFAULT_VLLM_BASE_URL, description="vLLM server endpoint"
+    model: str | None = Field(
+        default=None,
+        description="Optional model override for the selected provider.",
     )
-
-    @field_validator("vllm_base_url", mode="before")
-    @classmethod
-    def _norm_vllm_base_url(cls, v: object) -> str:
-        candidate = ensure_http_scheme(v) or ""
-        return candidate
-
-
-class SemanticCacheConfig(BaseModel):
-    """Application-level semantic cache configuration (ADR-035)."""
-
-    enabled: bool = Field(default=False)
-    provider: Literal["qdrant", "none"] = Field(default="qdrant")
-    collection_name: str | None = Field(default=None)
-    score_threshold: float = Field(default=0.85, ge=0.0, le=1.0)
-    ttl_seconds: int = Field(default=1_209_600, ge=0)  # 14 days
-    top_k: int = Field(default=5, ge=1)
-    max_response_bytes: int = Field(default=24_000, ge=0)
-    namespace: str = Field(default="default")
-    allow_semantic_for_templates: list[str] | None = Field(default=None)
+    context_window: int = Field(default=131072, ge=8192, le=200000)
+    max_output_tokens: int = Field(default=2048, ge=100, le=8192)
+    temperature: float = Field(default=0.1, ge=0, le=2)
 
 
 class OpenAIConfig(BaseModel):
@@ -382,9 +351,6 @@ class OpenAIConfig(BaseModel):
                 )
             out[k] = val
         return out or None
-
-
-_DEFAULT_OPENAI_BASE_URL = DEFAULT_OPENAI_BASE_URL
 
 
 class ImageEncryptionConfig(BaseModel):
@@ -455,17 +421,9 @@ class ProcessingConfig(BaseModel):
     """Document processing configuration (ADR-009)."""
 
     chunk_size: int = Field(default=1500, ge=100, le=10000)
-    new_after_n_chars: int = Field(default=1200, ge=100, le=8000)
-    combine_text_under_n_chars: int = Field(default=500, ge=50, le=2000)
-    multipage_sections: bool = Field(default=True)
     chunk_overlap: int = Field(default=50, ge=0, le=200)
     max_document_size_mb: int = Field(default=100, ge=1, le=500)
-    debug_chunk_flow: bool = Field(default=False)
     encrypt_page_images: bool = Field(default=False)
-    pipeline_version: str = Field(
-        default="1",
-        description="Version identifier for ingestion pipeline wiring",
-    )
 
     @model_validator(mode="after")
     def _validate_overlap(self) -> "ProcessingConfig":
@@ -479,6 +437,7 @@ class DocumentParsingConfig(BaseModel):
 
     framework: Literal["docling"] = Field(default="docling")
     profile: Literal["cpu_safe"] = Field(default="cpu_safe")
+    model_cache_dir: Path = Field(default=Path("./cache/models"))
     max_pages: int = Field(default=500, ge=1, le=5000)
     max_render_pixels: int = Field(default=40_000_000, ge=1_000_000, le=100_000_000)
     max_total_text_chars: int = Field(
@@ -489,6 +448,13 @@ class DocumentParsingConfig(BaseModel):
     parse_timeout_seconds: float = Field(default=300.0, ge=1.0, le=1800.0)
     ocrmypdf_timeout_seconds: float = Field(default=300.0, ge=1.0, le=1800.0)
     direct_text_probe_bytes: int = Field(default=8192, ge=512, le=65_536)
+
+    @field_validator("model_cache_dir", mode="before")
+    @classmethod
+    def _reject_blank_model_cache_dir(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            raise ValueError("model_cache_dir must not be empty")
+        return value
 
 
 class PdfBackendConfig(BaseModel):
@@ -503,28 +469,14 @@ class OcrConfig(BaseModel):
 
     engine: Literal["rapidocr"] = Field(default="rapidocr")
     force_ocr: bool = Field(default=False)
-    model_cache_dir: Path = Field(default=Path("./cache/models"))
     searchable_pdf_enabled: bool = Field(default=False)
     ocrmypdf_jobs: int = Field(default=1, ge=1, le=8)
-
-    @field_validator("model_cache_dir", mode="before")
-    @classmethod
-    def _reject_blank_model_cache_dir(cls, value: object) -> object:
-        if isinstance(value, str) and not value.strip():
-            raise ValueError("model_cache_dir must not be empty")
-        return value
 
 
 class ChatConfig(BaseModel):
     """Chat memory configuration (ADR-021)."""
 
     sqlite_path: Path = Field(default=Path("chat.db"))
-    memory_store_filter_fetch_cap: int = Field(
-        default=5000,
-        ge=256,
-        le=100000,
-        description="Max rows fetched for filtered memory searches before slicing.",
-    )
     memory_similarity_threshold: float = Field(
         default=0.85,
         ge=0.0,
@@ -545,7 +497,11 @@ class ChatConfig(BaseModel):
     memory_max_items_per_namespace: int = Field(
         default=200,
         ge=1,
-        description="Maximum memories kept per namespace before eviction.",
+        description=(
+            "Maximum memories per namespace. Automatic consolidation evicts only "
+            "older derived memories; explicit writes fail when no safe capacity "
+            "remains."
+        ),
     )
     memory_max_candidates_per_turn: int = Field(
         default=8,
@@ -558,40 +514,8 @@ class ChatConfig(BaseModel):
 class AgentConfig(BaseModel):
     """Multi-agent system configuration (ADR-011)."""
 
-    enable_multi_agent: bool = Field(default=True)
     decision_timeout: int = Field(default=200, ge=10, le=1000)
     max_retries: int = Field(default=2, ge=0, le=10)
-    max_concurrent_agents: int = Field(default=3, ge=1, le=10)
-    enable_fallback_rag: bool = Field(default=True)
-    use_tool_registry: bool = Field(
-        default=True,
-        description=(
-            "Enable the centralized ToolRegistry (Phase 1 supervisor refactor)."
-        ),
-    )
-    use_shared_llm_client: bool = Field(
-        default=True,
-        description=(
-            "Enable retries for the shared LlamaIndex LLM used by agent workflows "
-            "(native retries when available; wrapper fallback otherwise)."
-        ),
-    )
-    enable_deadline_propagation: bool = Field(
-        default=False,
-        description="Propagate deadlines/cancellation tokens through the graph.",
-    )
-    enable_router_injection: bool = Field(
-        default=False,
-        description="Use injected router engines supplied by the tool registry.",
-    )
-
-    # === ADR-011 AGENT CONTEXT MANAGEMENT ===
-    context_trim_threshold: int = Field(default=122880, ge=65536, le=131072)
-    context_buffer_size: int = Field(default=8192, ge=2048, le=131072)
-    enable_parallel_tool_execution: bool = Field(default=True)
-    max_workflow_depth: int = Field(default=5, ge=2, le=10)
-    enable_agent_state_compression: bool = Field(default=True)
-    chat_memory_limit_tokens: int = Field(default=66560, ge=32768, le=98304)
 
 
 class AnalysisConfig(BaseModel):
@@ -666,7 +590,6 @@ class EmbeddingConfig(BaseModel):
     cache_folder: Path = Field(default=Path("./models_cache"))
     dimension: int = Field(default=BGE_M3_EMBEDDING_DIMENSION, ge=256, le=4096)
     max_length: int = Field(default=8192, ge=512, le=16384)
-    enable_sparse: bool = Field(default=True)
     normalize_text: bool = Field(default=True)
     batch_size_text_gpu: int = Field(default=12, ge=1, le=128)
     batch_size_text_cpu: int = Field(default=4, ge=1, le=64)
@@ -760,13 +683,8 @@ class RetrievalConfig(BaseModel):
     prefetch_sparse_limit: int = Field(
         default=400, ge=1, le=5000, description="Per-branch sparse prefetch limit"
     )
-    use_sparse_embeddings: bool = Field(default=True)
     # Deduplication key used before final fused cut
     dedup_key: Literal["page_id", "doc_id"] = Field(default="page_id")
-    # Feature flag for future named-vectors multi-head support (no-op now)
-    named_vectors_multi_head_enabled: bool = Field(default=False)
-    # Router selection (ADR-003)
-    router: Literal["auto", "simple", "hierarchical", "graph"] = Field(default="auto")
     # Server-side hybrid via Qdrant Query API fusion (prefetch + RRF/DBSF).
     # This specifically controls registration of a server-side hybrid tool in
     # router_factory (distinct from any internal client-side hybrid behavior).
@@ -779,30 +697,18 @@ class RetrievalConfig(BaseModel):
     )
     # Reranker model
     # (text-only CrossEncoder; ADR-006 legacy, ADR-037 multimodal supersedes)
-    reranker_model: str = Field(default="BAAI/bge-reranker-v2-m3")
-    # Visual rerank (SigLIP default; ColPali optional)
-    enable_colpali: bool = Field(
-        default=False, description="Enable optional ColPali visual reranker"
-    )
+    reranker_model: str = Field(default=DEFAULT_BGE_RERANKER_MODEL_ID)
+    # Visual rerank
     siglip_batch_size: int = Field(
         default=8, ge=1, le=64, description="SigLIP image batch size"
     )
     siglip_prune_m: int = Field(
         default=64, ge=1, le=512, description="Pre-fusion prune M for visual rerank"
     )
-    # Advanced feature flags (canaries; default to unified behavior)
-    device_policy_core: bool = Field(
-        default=True,
-        description=("Route device/VRAM checks via src.utils.core"),
+    enable_keyword_tool: bool = Field(
+        default=False,
+        description="Expose the sparse-only keyword tool to the retrieval agent.",
     )
-    rerank_executor: Literal["thread", "process"] = Field(
-        default="thread",
-        description=("Executor for rerank timeouts: 'thread' or 'process'"),
-    )
-    # Optional keyword tool (sparse-only Qdrant text-sparse) registration flag
-    # (disabled by default)
-    enable_keyword_tool: bool = Field(default=False)
-
     # --- Centralized reranking timeouts (ms) ---
     # Keep conservative defaults and make all budgets observable in telemetry.
     text_rerank_timeout_ms: int = Field(
@@ -817,14 +723,8 @@ class RetrievalConfig(BaseModel):
         le=5000,
         description="Timeout (ms) for SigLIP visual scoring stage",
     )
-    colpali_timeout_ms: int = Field(
-        default=400,
-        ge=25,
-        le=10000,
-        description="Timeout (ms) for ColPali visual reranking stage",
-    )
     total_rerank_budget_ms: int = Field(
-        default=800,
+        default=400,
         ge=100,
         le=20000,
         description="Overall best-effort budget (ms) across rerank stages",
@@ -834,16 +734,8 @@ class RetrievalConfig(BaseModel):
 
 
 class CacheConfig(BaseModel):
-    """Document processing cache toggles (ADR-030)."""
+    """Document processing cache path configuration (ADR-030)."""
 
-    enable_document_caching: bool = Field(default=True)
-    ttl_seconds: int = Field(default=3600, ge=300, le=86400)
-    max_size_mb: int = Field(default=1000, ge=100, le=10000)
-    backend: Literal["duckdb", "sqlite", "memory"] = Field(
-        default="duckdb",
-        description="Cache backend to use for ingestion artifacts",
-    )
-    # Path configuration for DuckDB KV store
     dir: Path = Field(default=Path("./cache"))
     filename: str = Field(default="docmind.duckdb")
 
@@ -863,18 +755,6 @@ class ArtifactsConfig(BaseModel):
     dir: Path | None = Field(
         default=None,
         description="Optional override; default is data_dir/artifacts",
-    )
-    max_total_mb: int = Field(
-        default=4096,
-        ge=100,
-        le=200_000,
-        description="Best-effort artifact GC budget (MB)",
-    )
-    gc_min_age_seconds: int = Field(
-        default=3600,
-        ge=0,
-        le=31_536_000,
-        description="Do not GC artifacts newer than this age (seconds)",
     )
 
 
@@ -927,21 +807,27 @@ class DatabaseConfig(BaseModel):
     qdrant_image_collection: str = Field(default="docmind_images")
     qdrant_timeout: int = Field(default=60, ge=10, le=300)
 
-    # SQL Database
-    sqlite_db_path: Path = Field(default=Path("docmind.db"))
-    enable_wal_mode: bool = Field(default=True)
+    @field_validator("qdrant_collection", "qdrant_image_collection")
+    @classmethod
+    def _validate_collection_name(cls, value: str) -> str:
+        """Require a non-empty Qdrant owner that is safe as a local path segment."""
+        candidate = value.strip()
+        if (
+            not candidate
+            or candidate in {".", ".."}
+            or "/" in candidate
+            or "\\" in candidate
+            or any(ord(char) < 32 for char in candidate)
+        ):
+            raise ValueError("Qdrant collection names must be safe non-empty names")
+        return candidate
 
 
 class GraphRAGConfig(BaseModel):
     """GraphRAG configuration (ADR-019)."""
 
-    enabled: bool = Field(default=True)
-    relationship_extraction: bool = Field(default=False)
-    entity_resolution: Literal["fuzzy", "exact"] = Field(default="fuzzy")
-    max_hops: int = Field(default=2, ge=1, le=5)
-    max_triplets: int = Field(default=1000, ge=100, le=10000)
-    chunk_size: int = Field(default=1024, ge=128, le=8192)
-    autoload_policy: Literal["latest_non_stale", "pinned", "ignore"] = Field(
+    enabled: bool = Field(default=False)
+    autoload_policy: Literal["latest_non_stale", "ignore"] = Field(
         default="latest_non_stale",
         description="Chat autoload snapshot policy",
     )
@@ -950,9 +836,6 @@ class GraphRAGConfig(BaseModel):
     )
     export_seed_cap: int = Field(
         default=32, ge=1, le=1000, description="Default seed cap for exports"
-    )
-    pinned_snapshot_id: str | None = Field(
-        default=None, description="Pinned snapshot directory name for autoload"
     )
 
 
@@ -979,13 +862,6 @@ class SnapshotConfig(BaseModel):
 class UIConfig(BaseModel):
     """User interface configuration."""
 
-    # Streamlit Configuration
-    streamlit_port: int = Field(default=8501, ge=1024, le=65535)
-    enable_dark_mode: bool = Field(default=True)
-    theme: str = Field(default="auto")
-    enable_session_persistence: bool = Field(default=True)
-    response_streaming: bool = Field(default=True)
-    max_history_items: int = Field(default=100, ge=10, le=1000)
     progress_poll_interval_sec: float = Field(
         default=1.0,
         ge=0.1,
@@ -993,38 +869,7 @@ class UIConfig(BaseModel):
         description="Polling interval for background job progress updates.",
     )
 
-    # User Interface Options
-    context_size_options: list[int] = Field(
-        default=[4096, 8192, 16384, 32768, 65536, 131072]
-    )
     request_timeout_seconds: int = Field(default=30, ge=5, le=300)
-    streaming_delay_seconds: float = Field(default=0.1, ge=0.01, le=2)
-    default_token_limit: int = Field(default=8192, ge=1024, le=131072)
-
-
-class MonitoringConfig(BaseModel):
-    """Performance monitoring and system metrics configuration."""
-
-    # Performance Limits
-    max_query_latency_ms: int = Field(default=2000, ge=100, le=10000)
-    max_memory_gb: float = Field(default=4.0, ge=1, le=64)
-    max_vram_gb: float = Field(default=14.0, ge=2, le=48)
-    enable_performance_logging: bool = Field(default=True)
-
-    # System Metrics
-    cpu_monitoring_interval: float = Field(default=0.1, ge=0.01, le=1)
-    default_batch_size: int = Field(default=20, ge=1, le=100)
-    default_confidence_threshold: float = Field(default=0.8, ge=0, le=1)
-
-    # Memory Conversion Constants
-    bytes_to_gb_divisor: int = Field(default=1024**3)
-    bytes_to_mb_divisor: int = Field(default=1024**2)
-    percent_multiplier: int = Field(default=100)
-
-    # Cache and Timeout Settings
-    cache_expiry_seconds: int = Field(default=3600, ge=300, le=86400)
-    default_agent_timeout: float = Field(default=3.0, ge=0.5, le=30)
-    default_entity_confidence: float = Field(default=0.8, ge=0, le=1)
 
 
 class DocMindSettings(BaseSettings):
@@ -1055,9 +900,6 @@ class DocMindSettings(BaseSettings):
     # Analytics (ADR-032)
     analytics_enabled: bool = Field(
         default=False, description="Enable optional local DuckDB analytics database"
-    )
-    analytics_retention_days: int = Field(
-        default=60, ge=1, le=365, description="Days to retain analytics records"
     )
     analytics_db_path: Path | None = Field(
         default=None,
@@ -1091,22 +933,6 @@ class DocMindSettings(BaseSettings):
         "llamacpp",
         "openai_compatible",
     ] = Field(default="ollama")
-    # Top-level model controls (mirrors nested vllm.* when provided)
-    model: str | None = Field(
-        default=None,
-        description=(
-            "Preferred model identifier. If set, overrides the backend default "
-            "at runtime."
-        ),
-    )
-    context_window: int | None = Field(
-        default=None,
-        ge=1024,
-        le=200000,
-        description=(
-            "Global context window cap. If set, overrides nested vllm.context_window"
-        ),
-    )
     ollama_api_key: SecretStr | None = Field(
         default=None,
         description=(
@@ -1121,15 +947,9 @@ class DocMindSettings(BaseSettings):
             "remote endpoints allowed)."
         ),
     )
-    ollama_embed_dimensions: int | None = Field(
-        default=None,
-        ge=1,
-        le=8192,
-        description="Optional /api/embed dimensions truncation for supported models.",
-    )
     ollama_enable_logprobs: bool = Field(
         default=False,
-        description="Enable token logprobs for Ollama chat/generate (default: off).",
+        description="Enable token logprobs for Ollama chat (default: off).",
     )
     ollama_top_logprobs: int = Field(
         default=0,
@@ -1144,8 +964,9 @@ class DocMindSettings(BaseSettings):
         default=DEFAULT_OLLAMA_BASE_URL,
     )
     lmstudio_base_url: AnyHttpUrl = Field(default=DEFAULT_LMSTUDIO_BASE_URL)
-    vllm_base_url: AnyHttpUrl | None = Field(
-        default=None, description="vLLM server endpoint (OpenAI or native)"
+    vllm_base_url: AnyHttpUrl = Field(
+        default=DEFAULT_VLLM_BASE_URL,
+        description="vLLM OpenAI-compatible HTTP endpoint",
     )
     llamacpp_base_url: AnyHttpUrl | None = Field(
         default=None, description="Optional llama.cpp server (OpenAI-compatible)"
@@ -1165,11 +986,6 @@ class DocMindSettings(BaseSettings):
         description="Local JSONL telemetry configuration.",
     )
 
-    # Feature flags
-    guided_json_enabled: bool = Field(
-        default=False, description="Structured outputs available (SPEC-007 prep)"
-    )
-
     # OpenAI-compatible client configuration group
     openai: OpenAIConfig = Field(default_factory=OpenAIConfig)
 
@@ -1178,30 +994,10 @@ class DocMindSettings(BaseSettings):
     llm_streaming_enabled: bool = Field(default=True)
 
     # Advanced Features
-    enable_graphrag: bool = Field(
-        default=True,
-        description=(
-            "GraphRAG configuration (ADR-019). Breaking change: default is True "
-            "(was False). Disable explicitly to revert to prior behavior."
-        ),
-    )
-    enable_dspy_optimization: bool = Field(
-        default=False
-    )  # Changed to False per user feedback
-    enable_multimodal: bool = Field(default=False)
-
-    # DSPy optimization parameters
-    dspy_optimization_iterations: int = Field(default=10, ge=5, le=50)
-    dspy_optimization_samples: int = Field(default=20, ge=5, le=100)
-    dspy_max_retries: int = Field(default=3, ge=1, le=10)
-    dspy_temperature: float = Field(default=0.1, ge=0, le=2)
-    dspy_metric_threshold: float = Field(default=0.8, ge=0.5, le=1.0)
-    enable_dspy_bootstrapping: bool = Field(default=True)
-
     # UI Configuration moved to nested UIConfig structure
 
     # Nested Configuration Models
-    vllm: VLLMConfig = Field(default_factory=VLLMConfig)
+    llm_request: LLMRequestConfig = Field(default_factory=LLMRequestConfig)
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig)
     spacy: SpacyNlpSettings = Field(default_factory=SpacyNlpSettings)
     agents: AgentConfig = Field(default_factory=AgentConfig)
@@ -1210,9 +1006,7 @@ class DocMindSettings(BaseSettings):
     cache: CacheConfig = Field(default_factory=CacheConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     ui: UIConfig = Field(default_factory=UIConfig)
-    monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
     # Additional nested configs (ADR-024)
-    semantic_cache: SemanticCacheConfig = Field(default_factory=SemanticCacheConfig)
     chat: ChatConfig = Field(default_factory=ChatConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
     graphrag_cfg: GraphRAGConfig = Field(default_factory=GraphRAGConfig)
@@ -1224,15 +1018,6 @@ class DocMindSettings(BaseSettings):
     image_encryption: ImageEncryptionConfig = Field(
         default_factory=ImageEncryptionConfig
     )
-    # Alias fields mapped to nested configs for ergonomic top-level
-    # environment overrides.
-    context_window_size: int | None = Field(default=None)
-    chunk_size: int | None = Field(default=None)
-    chunk_overlap: int | None = Field(default=None)
-    enable_multi_agent: bool | None = Field(default=None)
-    # Top-level LLM context window cap (ADR-004/024)
-    llm_context_window_max: int = Field(default=131072, ge=8192, le=200000)
-
     # Flat env bridges (SPEC-031): keep existing flat env vars without
     # introducing new nested namespaces.
     telemetry_disabled: bool | None = Field(default=None, exclude=True)
@@ -1299,12 +1084,6 @@ class DocMindSettings(BaseSettings):
 
     def _apply_alias_overrides(self) -> None:
         alias_targets: dict[str, tuple[object, str, Callable[[Any], Any]]] = {
-            "model": (self.vllm, "model", str),
-            "context_window": (self.vllm, "context_window", int),
-            "context_window_size": (self.vllm, "context_window", int),
-            "chunk_size": (self.processing, "chunk_size", int),
-            "chunk_overlap": (self.processing, "chunk_overlap", int),
-            "enable_multi_agent": (self.agents, "enable_multi_agent", bool),
             # Flat env vars bridged into nested configs.
             "telemetry_disabled": (self.telemetry, "disabled", bool),
             "telemetry_sample": (self.telemetry, "sample", float),
@@ -1326,23 +1105,11 @@ class DocMindSettings(BaseSettings):
             setattr(target, attr, caster(value))
 
     def _normalize_persistence_paths(self) -> None:
-        """Normalize configured DB paths to live under data_dir by default."""
-        for section, attr in (("chat", "sqlite_path"), ("database", "sqlite_db_path")):
-            candidate = getattr(getattr(self, section, None), attr, None)
-            if not isinstance(candidate, Path):
-                continue
-            if candidate.is_absolute():
-                continue
-            if candidate.parent != Path("."):
-                # _normalize_persistence_paths: only relocate bare filenames.
-                # If `candidate` includes any parent directory
-                # (`candidate.parent != Path(".")`), preserve it as-is rather than
-                # forcing it under `data_dir`.
-                continue
-            target = getattr(self, section, None)
-            if target is None:
-                continue
-            setattr(target, attr, self.data_dir / candidate)
+        """Move a bare chat database filename under ``data_dir``."""
+        candidate = self.chat.sqlite_path
+        if candidate.is_absolute() or candidate.parent != Path("."):
+            return
+        self.chat.sqlite_path = self.data_dir / candidate
 
     @field_validator("lmstudio_base_url", mode="before")
     @classmethod
@@ -1360,11 +1127,9 @@ class DocMindSettings(BaseSettings):
 
     @field_validator("vllm_base_url", mode="before")
     @classmethod
-    def _norm_vllm(cls, v: object | None) -> str | None:
-        if v is None:
-            return None
+    def _norm_vllm(cls, v: object) -> str:
         candidate = ensure_http_scheme(v) or ""
-        return ensure_v1(candidate) or candidate or None
+        return ensure_v1(candidate) or candidate
 
     @field_validator("ollama_base_url", mode="before")
     @classmethod
@@ -1380,20 +1145,17 @@ class DocMindSettings(BaseSettings):
         Returns:
             str: Explicit model override or the selected backend's default model.
         """
-        if self.model:
-            return self.model
+        if self.llm_request.model:
+            return self.llm_request.model
         if self.llm_backend == "ollama":
             return "qwen3:4b-instruct"
-        return self.vllm.model
+        return "Qwen/Qwen3-4B-Instruct-2507-FP8"
 
     @computed_field
     @property
     def effective_context_window(self) -> int:
-        """Return the effective context window with global cap applied."""
-        return min(
-            int(self.context_window or self.vllm.context_window),
-            int(self.llm_context_window_max),
-        )
+        """Return the provider-neutral request context window."""
+        return int(self.llm_request.context_window)
 
     @computed_field
     @property
@@ -1403,29 +1165,17 @@ class DocMindSettings(BaseSettings):
         For OpenAI-compatible endpoints, `/v1` normalization is applied when
         `openai.require_v1` is enabled.
         """
-        openai_fields_set = getattr(self.openai, "model_fields_set", set())
-        openai_base_url = (
-            self.openai.base_url
-            if "base_url" in openai_fields_set
-            and self.openai.base_url
-            and self.openai.base_url != _DEFAULT_OPENAI_BASE_URL
-            else None
-        )
         if self.llm_backend == "ollama":
             return str(self.ollama_base_url).rstrip("/")
         if self.llm_backend == "openai_compatible":
             raw = str(self.openai.base_url).rstrip("/")
             return ensure_v1(raw) if self.openai.require_v1 else raw
         if self.llm_backend == "lmstudio":
-            # Prefer explicit OpenAI group only when customized
-            return ensure_v1(openai_base_url or self.lmstudio_base_url)
+            return ensure_v1(self.lmstudio_base_url)
         if self.llm_backend == "vllm":
-            # Prefer explicit OpenAI-like endpoint only when customized
-            base = openai_base_url or self.vllm_base_url or self.vllm.vllm_base_url
-            return ensure_v1(base)
+            return ensure_v1(self.vllm_base_url)
         if self.llm_backend == "llamacpp":
-            # Prefer explicit OpenAI group only when customized
-            return ensure_v1(openai_base_url or self.llamacpp_base_url)
+            return ensure_v1(self.llamacpp_base_url)
         return None
 
     def allow_remote_effective(self) -> bool:
@@ -1434,58 +1184,6 @@ class DocMindSettings(BaseSettings):
         Uses the centralized security settings; no environment overrides.
         """
         return bool(self.security.allow_remote_endpoints)
-
-    def get_vllm_config(self) -> dict[str, Any]:  # pragma: no cover - simple proxy
-        """Get vLLM configuration for client setup.
-
-        Returns:
-            Mapping with keys ``model``, ``context_window``, and
-            ``temperature`` suitable for initializing a vLLM client. Retained
-            because launcher utilities import this helper instead of the full
-            settings model.
-        """
-        return {
-            "model": self.model or self.vllm.model,
-            "context_window": int(self.context_window or self.vllm.context_window),
-            "temperature": self.vllm.temperature,
-        }
-
-    def get_vllm_env_vars(self) -> dict[str, str]:
-        """Return environment variables for vLLM process setup.
-
-        Returns:
-            Mapping of environment variable names to string values for vLLM.
-            Used by integration scripts that render env files without
-            serializing the entire settings object.
-        """
-        return {
-            "VLLM_ATTENTION_BACKEND": self.vllm.attention_backend,
-            "VLLM_KV_CACHE_DTYPE": self.vllm.kv_cache_dtype,
-            "VLLM_GPU_MEMORY_UTILIZATION": str(self.vllm.gpu_memory_utilization),
-            "VLLM_ENABLE_CHUNKED_PREFILL": "1"
-            if self.vllm.enable_chunked_prefill
-            else "0",
-            # Provide max model len for launcher scripts that read env
-            "VLLM_MAX_MODEL_LEN": str(self.llm_context_window_max),
-        }
-
-    def get_model_config(self) -> dict[str, Any]:
-        """Get model configuration for LlamaIndex setup.
-
-        Returns:
-            Mapping with model identifier, effective context window capped by
-            ``llm_context_window_max``, generation params, and base URL. The
-            LlamaIndex factory consumes this flat dict and predates
-            ``model_dump`` usage in containers.
-        """
-        base_url = self.backend_base_url_normalized
-        return {
-            "model_name": self.effective_model,
-            "context_window": self.effective_context_window,
-            "max_tokens": self.vllm.max_tokens,
-            "temperature": self.vllm.temperature,
-            "base_url": base_url,
-        }
 
     def get_embedding_config(self) -> dict[str, Any]:
         """Get embedding configuration for embedding factories.
@@ -1531,7 +1229,6 @@ class DocMindSettings(BaseSettings):
             "batch_size_text_gpu": self.embedding.batch_size_text_gpu,
             "batch_size_text_cpu": self.embedding.batch_size_text_cpu,
             "normalize_text": self.embedding.normalize_text,
-            "enable_sparse": self.embedding.enable_sparse,
             # Images
             "siglip_model_id": self.embedding.siglip_model_id,
             "siglip_model_revision": self.embedding.siglip_model_revision,
@@ -1539,39 +1236,6 @@ class DocMindSettings(BaseSettings):
             "normalize_image": self.embedding.normalize_image,
             "trust_remote_code": bool(self.security.trust_remote_code),
         }
-
-    def get_graphrag_config(self) -> dict[str, Any]:
-        """Get GraphRAG configuration for ADR-019.
-
-        Returns:
-            Mapping with GraphRAG enablement and extraction/traversal settings.
-            Router initialization consumes this helper directly.
-        """
-        c = self.graphrag_cfg
-        return {
-            "enabled": self.is_graphrag_enabled(),
-            "relationship_extraction": c.relationship_extraction,
-            "entity_resolution": c.entity_resolution,
-            "max_hops": c.max_hops,
-            "max_triplets": c.max_triplets,
-            "chunk_size": c.chunk_size,
-        }
-
-    def is_graphrag_enabled(self) -> bool:
-        """Return True when both the global and nested GraphRAG flags allow it."""
-        base_flag = bool(getattr(self, "enable_graphrag", False))
-        if not base_flag:
-            return False
-        try:
-            graphrag_cfg = getattr(self, "graphrag_cfg", None)
-        except (AttributeError, TypeError):
-            return base_flag
-        if graphrag_cfg is None:
-            return base_flag
-        try:
-            return base_flag and bool(getattr(graphrag_cfg, "enabled", True))
-        except (AttributeError, TypeError, ValueError):
-            return base_flag
 
     # === Validation helpers ===
     def _validate_endpoints_security(self) -> None:
@@ -1598,7 +1262,6 @@ class DocMindSettings(BaseSettings):
             self.openai.base_url,
             self.lmstudio_base_url,
             self.vllm_base_url,
-            getattr(self.vllm, "vllm_base_url", None),
             self.llamacpp_base_url,
         }
         for url in raw_urls:
@@ -1608,6 +1271,14 @@ class DocMindSettings(BaseSettings):
                     "Remote endpoints are disabled. Set allow_remote_endpoints=True "
                     "or use localhost URLs."
                 )
+        if not endpoint_url_allowed(
+            self.database.qdrant_url,
+            allowed_hosts=allowed_hosts,
+        ):
+            raise ValueError(
+                "Remote endpoints are disabled. Set allow_remote_endpoints=True "
+                "or use a localhost Qdrant URL."
+            )
 
     def _validate_lmstudio_url(self) -> None:
         """Ensure LM Studio base URL ends with ``/v1``.
@@ -1624,8 +1295,9 @@ class DocMindSettings(BaseSettings):
     def _validate_web_search_config(self) -> None:
         """Validate Ollama web search prerequisites.
 
-        When ``ollama_enable_web_search`` is True, both ``ollama_api_key`` and
-        ``security.allow_remote_endpoints`` must be configured.
+        Web search requires an API key and permission to reach Ollama Cloud.
+        Permission may be global or limited to an explicitly allowlisted
+        ``ollama.com`` endpoint that passes the canonical DNS/IP policy.
 
         Raises:
             ValueError: If web search is enabled without required prerequisites.
@@ -1639,10 +1311,17 @@ class DocMindSettings(BaseSettings):
                 "Configure DOCMIND_OLLAMA_API_KEY."
             )
 
-        if not self.security.allow_remote_endpoints:
+        if self.security.allow_remote_endpoints:
+            return
+
+        allowed_hosts = parse_endpoint_allowlist_hosts(self.security.endpoint_allowlist)
+        if not endpoint_url_allowed(
+            "https://ollama.com",
+            allowed_hosts=allowed_hosts,
+        ):
             raise ValueError(
-                "ollama_enable_web_search requires security.allow_remote_endpoints "
-                "to be True. Set DOCMIND_SECURITY__ALLOW_REMOTE_ENDPOINTS=true."
+                "ollama_enable_web_search requires https://ollama.com in "
+                "security.endpoint_allowlist or allow_remote_endpoints=True."
             )
 
     @computed_field
@@ -1754,16 +1433,14 @@ __all__ = [
     "EmbeddingConfig",
     "GraphRAGConfig",
     "ImageEncryptionConfig",
-    "MonitoringConfig",
+    "LLMRequestConfig",
     "OcrConfig",
     "PdfBackendConfig",
     "ProcessingConfig",
     "RetrievalConfig",
-    "SemanticCacheConfig",
     "SpacyNlpSettings",
     "TelemetryConfig",
     "UIConfig",
-    "VLLMConfig",
     "bootstrap_settings",
     "settings",
 ]

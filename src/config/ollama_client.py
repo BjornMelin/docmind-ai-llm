@@ -1,8 +1,7 @@
 """Ollama SDK client wiring (official ollama-python).
 
-Centralizes host/auth/timeout configuration and exposes small helpers for
-features introduced in ollama-python >= 0.6.x (logprobs, embed dimensions,
-web_search/web_fetch, thinking, structured outputs).
+Centralizes host/auth/timeout configuration for chat and exposes the gated
+Ollama Cloud web tools used by DocMind.
 """
 
 from __future__ import annotations
@@ -13,15 +12,7 @@ from typing import Any, Literal, overload
 from urllib.parse import urlparse
 
 import ollama
-from ollama import (
-    ChatResponse,
-    EmbedResponse,
-    GenerateResponse,
-    Message,
-    Options,
-    Tool,
-)
-from pydantic import BaseModel
+from ollama import ChatResponse, Message, Options, Tool
 
 from src.config.settings import DocMindSettings, settings
 from src.config.settings_utils import (
@@ -106,11 +97,6 @@ def is_ollama_web_search_enabled(cfg: DocMindSettings = settings) -> bool:
     return bool(cfg.ollama_enable_web_search)
 
 
-def _resolve_ollama_embed_dimensions(cfg: DocMindSettings) -> int | None:
-    """Resolve embedding dimensions from settings."""
-    return cfg.ollama_embed_dimensions
-
-
 def _resolve_ollama_logprobs_defaults(cfg: DocMindSettings) -> tuple[bool, int | None]:
     """Resolve logprobs activation and top_logprobs limit."""
     if not cfg.ollama_enable_logprobs:
@@ -118,24 +104,29 @@ def _resolve_ollama_logprobs_defaults(cfg: DocMindSettings) -> tuple[bool, int |
     return True, int(cfg.ollama_top_logprobs)
 
 
-def _resolve_headers(cfg: DocMindSettings) -> dict[str, str]:
-    """Resolve required HTTP headers for Ollama requests.
+def resolve_ollama_auth(
+    cfg: DocMindSettings,
+) -> tuple[str | None, dict[str, str]]:
+    """Resolve host-aware Ollama credentials and HTTP headers.
 
     Args:
         cfg: Application settings.
 
     Returns:
-        Dictionary of headers (e.g., Authorization for Ollama Cloud).
+        A tuple containing the usable API key and request headers. Credentials
+        are returned only for Ollama Cloud hosts, so local Ollama requests can
+        never inherit a configured cloud token.
     """
-    headers: dict[str, str] = {}
     api_key = _resolve_ollama_api_key(cfg)
     host = _resolve_ollama_host(cfg)
     hostname = (
         (urlparse(_normalize_url(host)).hostname or "").strip().lower().rstrip(".")
     )
-    if api_key and (hostname == "ollama.com" or hostname.endswith(".ollama.com")):
-        headers["authorization"] = f"Bearer {api_key}"
-    return headers
+    if not api_key or not (
+        hostname == "ollama.com" or hostname.endswith(".ollama.com")
+    ):
+        return None, {}
+    return api_key, {"authorization": f"Bearer {api_key}"}
 
 
 @lru_cache(maxsize=4)
@@ -173,7 +164,7 @@ def get_ollama_client(cfg: DocMindSettings = settings) -> ollama.Client:
         raise ValueError("No Ollama host configured")
     _assert_endpoint_allowed(cfg, resolved_host)
     timeout_s = float(cfg.llm_request_timeout_seconds)
-    hdrs = _resolve_headers(cfg)
+    _, hdrs = resolve_ollama_auth(cfg)
     return _cached_client(resolved_host, timeout_s, tuple(sorted(hdrs.items())))
 
 
@@ -266,130 +257,6 @@ def ollama_chat(  # noqa: PLR0913
     )
 
 
-@overload
-def ollama_generate(
-    *,
-    model: str,
-    prompt: str,
-    stream: Literal[False],
-    think: bool | None = None,
-    logprobs: bool | None = None,
-    top_logprobs: int | None = None,
-    response_format: Literal["", "json"] | dict[str, Any] | None = None,
-    options: Mapping[str, Any] | Options | None = None,
-    keep_alive: float | str | None = None,
-    client: ollama.Client | None = None,
-    cfg: DocMindSettings = settings,
-) -> GenerateResponse: ...
-
-
-@overload
-def ollama_generate(
-    *,
-    model: str,
-    prompt: str,
-    stream: Literal[True],
-    think: bool | None = None,
-    logprobs: bool | None = None,
-    top_logprobs: int | None = None,
-    response_format: Literal["", "json"] | dict[str, Any] | None = None,
-    options: Mapping[str, Any] | Options | None = None,
-    keep_alive: float | str | None = None,
-    client: ollama.Client | None = None,
-    cfg: DocMindSettings = settings,
-) -> Iterator[GenerateResponse]: ...
-
-
-def ollama_generate(  # noqa: PLR0913
-    *,
-    model: str,
-    prompt: str,
-    stream: bool,
-    think: bool | None = None,
-    logprobs: bool | None = None,
-    top_logprobs: int | None = None,
-    response_format: Literal["", "json"] | dict[str, Any] | None = None,
-    options: Mapping[str, Any] | Options | None = None,
-    keep_alive: float | str | None = None,
-    client: ollama.Client | None = None,
-    cfg: DocMindSettings = settings,
-) -> GenerateResponse | Iterator[GenerateResponse]:
-    """Call Ollama generate with explicit streaming semantics and optional features.
-
-    Args:
-        model: Model name.
-        prompt: Initial prompt.
-        stream: Whether to stream the response.
-        think: Enable thinking features.
-        logprobs: Whether to return logprobs.
-        top_logprobs: Number of top logprobs to return.
-        response_format: JSON schema or "json" mode.
-        options: Low-level model options.
-        keep_alive: Model TTL in memory.
-        client: Optional client override.
-        cfg: Application settings.
-
-    Returns:
-        Generate response or iterator if streaming.
-    """
-    c = client or get_ollama_client(cfg)
-    if logprobs is None:
-        enabled, top = _resolve_ollama_logprobs_defaults(cfg)
-        logprobs = enabled
-        top_logprobs = top if top_logprobs is None else top_logprobs
-    return c.generate(
-        model=model,
-        prompt=prompt,
-        stream=stream,
-        think=think,
-        logprobs=logprobs if logprobs else None,
-        top_logprobs=top_logprobs,
-        format=response_format,
-        options=options,
-        keep_alive=keep_alive,
-    )
-
-
-def ollama_embed(
-    *,
-    model: str,
-    inputs: str | Sequence[str],
-    dimensions: int | None = None,
-    truncate: bool | None = None,
-    options: Mapping[str, Any] | Options | None = None,
-    keep_alive: float | str | None = None,
-    client: ollama.Client | None = None,
-    cfg: DocMindSettings = settings,
-) -> EmbedResponse:
-    """Call Ollama embed with optional dimensions support.
-
-    Args:
-        model: Model name.
-        inputs: Input string or list of strings.
-        dimensions: Vector dimensions (if supported by model).
-        truncate: Whether to truncate input.
-        options: Low-level model options.
-        keep_alive: Model TTL in memory.
-        client: Optional client override.
-        cfg: Application settings.
-
-    Returns:
-        Embed response containing vectors.
-    """
-    c = client or get_ollama_client(cfg)
-    resolved_dims = (
-        dimensions if dimensions is not None else _resolve_ollama_embed_dimensions(cfg)
-    )
-    return c.embed(
-        model=model,
-        input=inputs,
-        truncate=truncate,
-        options=options,
-        keep_alive=keep_alive,
-        dimensions=resolved_dims,
-    )
-
-
 def get_ollama_web_tools(cfg: DocMindSettings = settings) -> list[Callable[..., Any]]:
     """Return Ollama Cloud web tools when enabled.
 
@@ -418,58 +285,36 @@ def get_ollama_web_tools(cfg: DocMindSettings = settings) -> list[Callable[..., 
     return [web_client.web_search, web_client.web_fetch]
 
 
-def ollama_chat_structured[TModel: BaseModel](
-    *,
-    model: str,
-    messages: Sequence[Mapping[str, Any] | Message],
-    output_model: type[TModel],
-    think: bool | Literal["low", "medium", "high"] | None = None,
-    options: Mapping[str, Any] | Options | None = None,
-    keep_alive: float | str | None = None,
-    client: ollama.Client | None = None,
+def build_ollama_async_web_client(
     cfg: DocMindSettings = settings,
-) -> TModel:
-    """Run a non-streaming structured output chat and validate with Pydantic.
-
-    Args:
-        model: Model name.
-        messages: Chat history.
-        output_model: Pydantic model class for validation.
-        think: Enable thinking features.
-        options: Low-level model options.
-        keep_alive: Model TTL in memory.
-        client: Optional client override.
-        cfg: Application settings.
-
-    Returns:
-        Validated Pydantic model instance.
-
-    Raises:
-        ValueError: If structured output response is empty.
-    """
-    response = ollama_chat(
-        model=model,
-        messages=messages,
-        stream=False,
-        think=think,
-        response_format=output_model.model_json_schema(),
-        options=options,
-        keep_alive=keep_alive,
-        client=client,
-        cfg=cfg,
+    *,
+    timeout_s: float | None = None,
+) -> ollama.AsyncClient:
+    """Build an owned async Ollama Cloud client for one bounded tool call."""
+    api_key = _resolve_ollama_api_key(cfg)
+    if not api_key:
+        raise ValueError(
+            "Ollama web search is enabled, but no API key is configured. "
+            "Set DOCMIND_OLLAMA_API_KEY."
+        )
+    _assert_endpoint_allowed(cfg, "https://ollama.com")
+    effective_timeout = float(cfg.llm_request_timeout_seconds)
+    if timeout_s is not None:
+        if timeout_s <= 0:
+            raise TimeoutError("Ollama web tool deadline exceeded")
+        effective_timeout = min(effective_timeout, float(timeout_s))
+    return ollama.AsyncClient(
+        host="https://ollama.com",
+        timeout=effective_timeout,
+        headers={"authorization": f"Bearer {api_key}"},
     )
-    content = getattr(getattr(response, "message", None), "content", None)
-    if not content:
-        raise ValueError("Structured output response was empty")
-    return output_model.model_validate_json(content)
 
 
 __all__ = [
+    "build_ollama_async_web_client",
     "get_ollama_client",
     "get_ollama_web_tools",
     "is_ollama_web_search_enabled",
     "ollama_chat",
-    "ollama_chat_structured",
-    "ollama_embed",
-    "ollama_generate",
+    "resolve_ollama_auth",
 ]

@@ -52,12 +52,12 @@ def test_validate_candidate_rejects_blank_model_cache_dir(
     page = _load_settings_page_module(monkeypatch)
 
     validated, errors = page._validate_candidate(
-        {"ocr": {"model_cache_dir": ""}},
+        {"parsing": {"model_cache_dir": ""}},
     )
 
     assert validated is None
     assert any(
-        "ocr.model_cache_dir" in error and "must not be empty" in error
+        "parsing.model_cache_dir" in error and "must not be empty" in error
         for error in errors
     )
 
@@ -85,6 +85,156 @@ def test_render_actions_rechecks_ui_errors_before_apply(
 
     assert applied == []
     assert errors == ["Cannot apply: invalid settings."]
+
+
+@pytest.mark.unit
+def test_apply_runtime_failure_rolls_back_settings_and_llm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed provider bind cannot leave config or global LLM half-applied."""
+    page = _load_settings_page_module(monkeypatch)
+    integrations = importlib.import_module("src.config.integrations")
+    from llama_index.core import Settings as LISettings
+
+    previous_settings = page.settings.model_copy(deep=True)
+    previous_llm = object()
+    monkeypatch.setattr(LISettings, "_llm", previous_llm)
+
+    def _fail(**_kwargs: object) -> None:
+        raise RuntimeError("bind failed")
+
+    monkeypatch.setattr(
+        integrations,
+        "initialize_integrations",
+        _fail,
+    )
+    errors: list[str] = []
+    events: list[dict[str, object]] = []
+    invalidations: list[None] = []
+    chat_runtime = importlib.import_module("src.ui.chat_runtime")
+    monkeypatch.setattr(
+        chat_runtime,
+        "invalidate_coordinator",
+        lambda: invalidations.append(None),
+    )
+    monkeypatch.setattr(page.st, "error", lambda message: errors.append(str(message)))
+    monkeypatch.setattr(page, "log_jsonl", lambda event: events.append(event))
+
+    validated = page.DocMindSettings(
+        llm_backend="lmstudio",
+        llm_request={"model": "replacement/model"},
+        _env_file=None,
+    )
+    page._apply_validated_runtime(validated)
+
+    assert page.settings == previous_settings
+    assert LISettings._llm is previous_llm
+    assert errors == ["Runtime apply failed: RuntimeError"]
+    assert events[-1]["success"] is False
+    assert invalidations == []
+
+
+@pytest.mark.unit
+def test_apply_runtime_success_invalidates_stale_chat_coordinator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A successful provider bind advances and invalidates the Chat runtime."""
+    page = _load_settings_page_module(monkeypatch)
+    integrations = importlib.import_module("src.config.integrations")
+    chat_runtime = importlib.import_module("src.ui.chat_runtime")
+    from llama_index.core import Settings as LISettings
+
+    bound_llm = object()
+    previous_version = page.settings.cache_version
+    invalidations: list[None] = []
+    lifecycle_events: list[str] = []
+
+    class _Router:
+        def close(self) -> None:
+            lifecycle_events.append("router")
+
+    def _bind(**_kwargs: object) -> None:
+        monkeypatch.setattr(LISettings, "_llm", bound_llm)
+
+    def _invalidate() -> None:
+        lifecycle_events.append("coordinator")
+        invalidations.append(None)
+
+    monkeypatch.setattr(integrations, "initialize_integrations", _bind)
+    monkeypatch.setattr(
+        chat_runtime,
+        "invalidate_coordinator",
+        _invalidate,
+    )
+    monkeypatch.setattr(
+        page.st,
+        "session_state",
+        {"router_engine": _Router()},
+    )
+    successes: list[str] = []
+    monkeypatch.setattr(
+        page.st, "success", lambda message: successes.append(str(message))
+    )
+    monkeypatch.setattr(page, "log_jsonl", lambda _event: None)
+
+    validated = page.DocMindSettings(
+        llm_backend="lmstudio",
+        llm_request={"model": "replacement/model"},
+        _env_file=None,
+    )
+    page._apply_validated_runtime(validated)
+
+    assert LISettings._llm is bound_llm
+    assert page.settings.cache_version == previous_version + 1
+    assert invalidations == [None]
+    assert lifecycle_events == ["router", "coordinator"]
+    assert successes == ["Runtime applied. Settings.llm bound; Chat runtime refreshed."]
+
+
+@pytest.mark.unit
+def test_web_search_warning_matches_least_privilege_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    page = _load_settings_page_module(monkeypatch)
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        page.st, "warning", lambda message: warnings.append(str(message))
+    )
+
+    page._render_ollama_web_search_warning(
+        enabled=True,
+        allow_remote=False,
+        allowlist=["https://ollama.com"],
+    )
+    page._render_ollama_web_search_warning(
+        enabled=True,
+        allow_remote=True,
+        allowlist=[],
+    )
+
+    assert warnings == []
+
+
+@pytest.mark.unit
+def test_web_search_warning_requests_exact_ollama_allowlist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    page = _load_settings_page_module(monkeypatch)
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        page.st, "warning", lambda message: warnings.append(str(message))
+    )
+
+    page._render_ollama_web_search_warning(
+        enabled=True,
+        allow_remote=False,
+        allowlist=["https://api.example.com"],
+    )
+
+    assert warnings == [
+        "Ollama web tools require `https://ollama.com` in "
+        "`DOCMIND_SECURITY__ENDPOINT_ALLOWLIST`."
+    ]
 
 
 @pytest.mark.unit
@@ -117,21 +267,6 @@ def test_validate_llamacpp_inputs_requires_server_url(
 
 
 @pytest.mark.unit
-def test_validate_llamacpp_inputs_accepts_openai_base_url(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    page = _load_settings_page_module(monkeypatch)
-
-    errors = page._validate_llamacpp_inputs(
-        "llamacpp",
-        "",
-        "http://localhost:8080/v1",
-    )
-
-    assert errors == []
-
-
-@pytest.mark.unit
 def test_validate_llamacpp_inputs_accepts_explicit_localhost_1234(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -143,21 +278,6 @@ def test_validate_llamacpp_inputs_accepts_explicit_localhost_1234(
     )
 
     assert errors == []
-
-
-@pytest.mark.unit
-def test_validate_llamacpp_inputs_rejects_default_openai_base_url(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    page = _load_settings_page_module(monkeypatch)
-
-    errors = page._validate_llamacpp_inputs(
-        "llamacpp",
-        "",
-        "https://api.openai.com/v1",
-    )
-
-    assert errors == ["Provide a llama.cpp OpenAI-compatible server URL."]
 
 
 @pytest.mark.unit

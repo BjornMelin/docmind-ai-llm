@@ -2,8 +2,8 @@
 ADR: 040
 Title: Model Pre-download CLI for Offline-First Operation
 Status: Accepted
-Version: 1.1
-Date: 2026-07-11
+Version: 1.3
+Date: 2026-07-14
 Supersedes:
 Superseded-by:
 Related: SPEC-013
@@ -49,11 +49,11 @@ This ADR documents an existing decision already reflected in SPEC-013 and implem
 ## Decision
 
 Implement `tools/models/pull.py` with complete, pinned snapshot downloads for
-the canonical BGE-M3 dense embedding and SigLIP model, verified parser-model
-prefetch commands, and an explicit `--add` escape hatch for individual files.
-Do not advertise isolated weight files as runnable reranker or sparse-encoder
-models; those optional stages fail open when their complete local artifacts are
-absent.
+the canonical BGE-M3 dense embedding, BM42 sparse model, BGE text reranker, and
+SigLIP model. Include verified parser-model prefetch commands and an explicit
+`--add` escape hatch for individual files. The runtime resolves the same cache
+root and immutable revisions. Do not advertise isolated weight files as
+runnable model snapshots.
 
 The repository MUST document offline flags:
 
@@ -88,4 +88,6 @@ flowchart TD
 
 ## Changelog
 
+- 1.3 (2026-07-14): Added the pinned BM42 source snapshot to the shared model cache.
+- 1.2 (2026-07-14): Added the pinned default BGE reranker and one runtime cache owner.
 - 1.0 (2026-01-09): Backfilled ADR to match SPEC-013 and existing tooling implementation.

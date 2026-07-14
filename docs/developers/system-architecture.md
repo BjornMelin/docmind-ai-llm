@@ -70,7 +70,7 @@ The parser must finish before ingestion publishes documents, nodes, image artifa
 
 PDF parsing follows one path:
 
-1. Validate Docling and RapidOCR model manifests
+1. Validate the Docling layout manifest and RapidOCR package availability
 2. Inspect the PDF with pypdfium2
 3. Convert content with Docling
 4. Run RapidOCR when page routing requires optical character recognition (OCR)
@@ -97,21 +97,22 @@ flowchart LR
 
 Normal startup creates a missing collection and accepts a compatible one. It refuses an incompatible existing schema. Only `scripts/qdrant_schema.py rebuild-empty` can rebuild an empty collection, and the operator must stop every writer first.
 
-SigLIP owns image embedding and visual scoring. ColPali can add visual reranking through the `multimodal` extra. No alternate image embedding fallback remains.
+SigLIP owns image embedding and visual scoring. No alternate image embedding or visual reranking path remains.
 
 ## Trace agent execution
 
-The repository-owned LangGraph `StateGraph` supervisor coordinates five roles:
+The repository-owned LangGraph `StateGraph` supervisor coordinates four workers:
 
-1. Route the request
-2. Plan retrieval work
-3. Execute retrieval tools
-4. Synthesize source-grounded output
-5. Validate the result
+1. Plan retrieval work
+2. Execute retrieval tools through the native LlamaIndex router
+3. Synthesize source-grounded output
+4. Validate the result
 
 LangChain’s `create_agent` builds role agents inside the graph. The supervisor propagates deadlines and caps per-call timeouts. Optional stages fail open only where their owning contract permits it.
 
-The router factory builds the canonical retrieval surface. It exposes semantic and hybrid tools when their indexes are ready. It adds the knowledge graph tool only when dependencies, configuration, and a graph index are available.
+The router factory builds the canonical retrieval surface. Semantic search is
+required; hybrid, keyword, multimodal, and knowledge-graph tools are added only
+when their configuration and indexes are ready.
 
 ## Trace persistence
 
@@ -162,7 +163,9 @@ The canonical container health command is:
 python scripts/container_health.py
 ```
 
-The command validates parser model manifests, then opens a TCP connection to `127.0.0.1:8501`.
+The command only opens a TCP connection to `127.0.0.1:8501`. The container
+entrypoint runs parser dependency and Docling-manifest readiness once before
+starting Streamlit; the image build separately proves offline RapidOCR inference.
 
 ## Validate architecture changes
 
@@ -172,7 +175,7 @@ Run the narrowest relevant checks while developing, then use the full release ga
 uv run ruff format --check .
 uv run ruff check .
 uv run pyright --threads 4
-uv run python scripts/run_tests.py
+uv run pytest tests/unit tests/integration -q --no-cov
 ```
 
 Run the local Qdrant system test and live Docker build when a change crosses those boundaries. Regenerate the schema 3 repeat-three parser benchmark only after the working tree is frozen.

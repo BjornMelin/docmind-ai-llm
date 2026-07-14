@@ -7,22 +7,34 @@ import hashlib
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 import streamlit as st
 from loguru import logger
 
 from src.config import settings
 from src.models.processing import (
-    CANONICAL_DOCUMENT_ID_KEY,
     IngestionInput,
     ParsingOverrides,
 )
 from src.persistence.artifacts import ArtifactRef, ArtifactStore
-from src.persistence.snapshot import SnapshotLockTimeout, load_manifest
+from src.persistence.snapshot import (
+    SnapshotManager,
+    is_snapshot_version_name,
+    load_manifest,
+)
+from src.persistence.snapshot_service import SnapshotActivation, rebuild_snapshot
 from src.persistence.snapshot_utils import timestamped_export_path
+from src.persistence.upload_journal import (
+    promote_pending_uploads,
+    quarantine_upload,
+    restore_quarantined_upload,
+    rollback_upload_promotion,
+)
 from src.processing.ingestion_api import require_unique_document_ids
 from src.processing.parsing.health import parser_health
 from src.retrieval.graph_config import (
@@ -43,14 +55,37 @@ from src.ui.background_jobs import (
     get_or_create_owner_id,
 )
 from src.ui.ingest_adapter import ingest_inputs, save_uploaded_file
-from src.utils.hashing import document_id_from_sha256
-from src.utils.storage import create_vector_store
+from src.ui.router_session import replace_session_router
+from src.ui.vector_session import (
+    VectorIndexResource,
+    clear_stale_session_vector_resource,
+    replace_session_vector_resource,
+)
+from src.utils.hashing import document_id_from_sha256, sha256_file
 
 ProgressReporter = Callable[[ProgressEvent], None]
+_PHYSICAL_COLLECTION_MAX_LENGTH = 200
 
 
 if TYPE_CHECKING:
     from src.nlp.spacy_service import SpacyNlpService
+
+
+def _emit_ingest_progress(
+    report_progress: ProgressReporter,
+    percent: int,
+    phase: str,
+    message: str,
+) -> None:
+    """Emit one bounded background-job progress event without failing work."""
+    event = ProgressEvent(
+        percent=max(0, min(100, int(percent))),
+        phase=phase,  # type: ignore[arg-type]
+        message=str(message)[:200],
+        timestamp=datetime.now(UTC),
+    )
+    with contextlib.suppress(Exception):
+        report_progress(event)
 
 
 @st.cache_resource(show_spinner=False)
@@ -77,6 +112,10 @@ def _get_spacy_service(
 def main() -> None:  # pragma: no cover - Streamlit page
     """Render the Documents page and handle ingestion form submissions."""
     configure_observability(settings)
+    clear_stale_session_vector_resource(
+        st.session_state,
+        runtime_generation=settings.cache_version,
+    )
     st.title("Documents")
 
     owner_id = get_or_create_owner_id()
@@ -95,7 +134,7 @@ def main() -> None:  # pragma: no cover - Streamlit page
         )
     _render_ingest_job_panel(owner_id=owner_id)
 
-    _render_maintenance_controls()
+    _render_maintenance_controls(owner_id=owner_id)
 
     # Snapshot utilities and manual exports are driven by session_state indices.
     _render_export_controls()
@@ -114,11 +153,7 @@ def _render_ingest_form() -> tuple[
         with col_opts[0]:
             use_graphrag = st.checkbox(
                 "Build GraphRAG (beta)",
-                value=bool(
-                    settings.is_graphrag_enabled()
-                    if hasattr(settings, "is_graphrag_enabled")
-                    else getattr(settings, "enable_graphrag", True)
-                ),
+                value=bool(settings.graphrag_cfg.enabled),
             )
         with col_opts[1]:
             encrypt_images = st.checkbox(
@@ -205,6 +240,11 @@ def _handle_ingest_submission(
             encrypt_images=encrypt_images,
             nlp_service=nlp_service,
             owner_id=owner_id,
+            rollback_source_paths=tuple(
+                Path(item.source_path)
+                for item in saved_inputs
+                if item.source_path is not None
+            ),
         )
     except Exception as exc:  # pragma: no cover - UX best effort
         from src.utils.log_safety import build_pii_log_entry
@@ -247,9 +287,9 @@ def _pdf_uploads_are_ready(files: list[Any]) -> bool:
     if not has_pdf:
         return True
     readiness = parser_health(settings)
-    if readiness["pdf_ready"]:
+    if readiness["pdf_dependencies_ready"]:
         return True
-    st.error("PDF parser models are not ready for offline ingestion.")
+    st.error("PDF parser dependencies or Docling models are unavailable.")
     st.code(str(readiness["prefetch_command"]))
     return False
 
@@ -278,6 +318,8 @@ def _save_ingestion_inputs(
     parsing_overrides: ParsingOverrides,
 ) -> list[IngestionInput]:
     """Persist valid uploads and return canonical ingestion inputs."""
+    pending_dir = settings.data_dir / ".pending-uploads" / uuid4().hex
+    pending_dir.mkdir(parents=True, exist_ok=False)
     saved_inputs: list[IngestionInput] = []
     for file_obj in files:
         if file_obj is None:
@@ -296,9 +338,14 @@ def _save_ingestion_inputs(
             file_name=str(file_name),
             encrypt_images=encrypt_images,
             parsing_overrides=parsing_overrides,
+            destination_dir=pending_dir,
         )
         if saved_input is not None:
             saved_inputs.append(saved_input)
+    if not saved_inputs:
+        with contextlib.suppress(OSError):
+            pending_dir.rmdir()
+            pending_dir.parent.rmdir()
     return saved_inputs
 
 
@@ -308,10 +355,14 @@ def _save_ingestion_input(
     file_name: str,
     encrypt_images: bool,
     parsing_overrides: ParsingOverrides,
+    destination_dir: Path,
 ) -> IngestionInput | None:
     """Persist one upload and return its ingestion contract when successful."""
     try:
-        stored_path, digest = save_uploaded_file(file_obj)
+        stored_path, digest = save_uploaded_file(
+            file_obj,
+            destination_dir=destination_dir,
+        )
     except Exception as exc:
         from src.utils.log_safety import build_pii_log_entry
 
@@ -343,24 +394,34 @@ def _start_ingestion_job(
     encrypt_images: bool,
     nlp_service: SpacyNlpService | None,
     owner_id: str,
+    rollback_source_paths: tuple[Path, ...] = (),
+    excluded_source_paths: tuple[Path, ...] = (),
+    quarantine_source: Path | None = None,
 ) -> None:
     """Start one background ingestion job and persist its UI state."""
-    require_unique_document_ids(saved_inputs)
-    job_manager = get_job_manager(settings.cache_version)
+    try:
+        require_unique_document_ids(saved_inputs)
+        job_manager = get_job_manager(settings.cache_version)
 
-    def _work(
-        cancel_event: threading.Event, report: ProgressReporter
-    ) -> dict[str, Any]:
-        return _run_ingest_job(
-            saved_inputs,
-            use_graphrag=use_graphrag,
-            encrypt_images=encrypt_images,
-            nlp_service=nlp_service,
-            cancel_event=cancel_event,
-            report_progress=report,
-        )
+        def _work(
+            cancel_event: threading.Event, report: ProgressReporter
+        ) -> dict[str, Any]:
+            return _run_ingest_job(
+                saved_inputs,
+                use_graphrag=use_graphrag,
+                encrypt_images=encrypt_images,
+                nlp_service=nlp_service,
+                cancel_event=cancel_event,
+                report_progress=report,
+                rollback_source_paths=rollback_source_paths,
+                excluded_source_paths=excluded_source_paths,
+                quarantine_source=quarantine_source,
+            )
 
-    job_id = job_manager.start_job(owner_id=owner_id, fn=_work)
+        job_id = job_manager.start_job(owner_id=owner_id, fn=_work)
+    except Exception:
+        _delete_rollback_sources(rollback_source_paths)
+        raise
     st.session_state["ingest_job_id"] = job_id
     st.session_state["ingest_job_use_graphrag"] = bool(use_graphrag)
     st.session_state["ingest_job_encrypt_images"] = bool(encrypt_images)
@@ -375,6 +436,9 @@ def _run_ingest_job(
     nlp_service: SpacyNlpService | None,
     cancel_event: threading.Event,
     report_progress: ProgressReporter,
+    rollback_source_paths: tuple[Path, ...] = (),
+    excluded_source_paths: tuple[Path, ...] = (),
+    quarantine_source: Path | None = None,
 ) -> dict[str, Any]:
     """Worker entrypoint for ingestion + snapshot rebuild (no Streamlit APIs).
 
@@ -385,6 +449,9 @@ def _run_ingest_job(
         nlp_service: Optional NLP service for entity enrichment.
         cancel_event: Event to monitor for cooperative cancellation.
         report_progress: Function to emit progress events.
+        rollback_source_paths: Newly persisted uploads removed if activation fails.
+        excluded_source_paths: Exact upload paths omitted from the new generation.
+        quarantine_source: Existing upload moved out of the corpus before commit.
 
     Returns:
         dict[str, Any]: Mapping of document IDs to their respective results.
@@ -392,47 +459,399 @@ def _run_ingest_job(
     Raises:
         JobCanceledError: If cancellation is requested.
     """
-
-    def _emit(percent: int, phase: str, message: str) -> None:
-        evt = ProgressEvent(
-            percent=max(0, min(100, int(percent))),
-            phase=phase,  # type: ignore[arg-type]
-            message=str(message)[:200],
-            timestamp=datetime.now(UTC),
-        )
-        with contextlib.suppress(Exception):
-            report_progress(evt)
-
-    _emit(0, "save", f"Prepared {len(inputs)} file(s)")
-    if cancel_event.is_set():
-        raise JobCanceledError()
-
-    _emit(10, "ingest", "Ingesting documents")
-    ingest_result = ingest_inputs(
-        inputs,
-        enable_graphrag=use_graphrag,
-        encrypt_images=encrypt_images,
-        nlp_service=nlp_service,
+    transaction = _IngestTransaction(
+        manager=SnapshotManager(settings.data_dir / "storage"),
+        owned_source_paths=rollback_source_paths,
     )
+    try:
+        _emit_ingest_progress(
+            report_progress, 0, "save", f"Prepared {len(inputs)} file(s)"
+        )
+        if cancel_event.is_set():
+            raise JobCanceledError()
 
-    _emit(70, "index", "Finalizing indices")
-    if cancel_event.is_set():
-        raise JobCanceledError()
+        workspace = transaction.manager.begin_snapshot()
+        transaction.workspace = workspace
+        collections = _physical_collection_names(workspace)
+        transaction.collections = collections
+        inputs, promotion_moves = _plan_pending_inputs(
+            inputs,
+        )
+        transaction.promotion_moves = promotion_moves
+        _emit_ingest_progress(
+            report_progress, 10, "ingest", "Building an isolated corpus generation"
+        )
+        ingest_result = ingest_inputs(
+            inputs,
+            text_collection_name=collections["text"],
+            image_collection_name=collections["image"],
+            excluded_source_paths=excluded_source_paths,
+            activation_path_aliases={
+                source: destination for source, destination, _digest in promotion_moves
+            },
+            enable_graphrag=use_graphrag,
+            encrypt_images=encrypt_images,
+            nlp_service=nlp_service,
+        )
+        resource = ingest_result.get("vector_resource")
+        if not isinstance(resource, VectorIndexResource):
+            raise RuntimeError("Ingestion did not return an owned vector resource")
+        transaction.resource = resource
+        _emit_ingest_progress(report_progress, 70, "index", "Finalizing indices")
+        if cancel_event.is_set():
+            raise JobCanceledError()
 
-    vector_index = ingest_result.get("vector_index") or _create_vector_index_fallback()
-    if vector_index is None:
-        raise RuntimeError("Vector index unavailable after ingestion")
+        _emit_ingest_progress(
+            report_progress,
+            85,
+            "snapshot",
+            "Activating the verified corpus generation",
+        )
+        final = _activate_ingest_generation(
+            transaction,
+            ingest_result,
+            use_graphrag=use_graphrag,
+            quarantine_source=quarantine_source,
+        )
+        _emit_ingest_progress(report_progress, 100, "done", "Done")
+
+        ingest_result["snapshot_id"] = final.name
+        payload = {
+            "ingest": ingest_result,
+            "snapshot_dir": str(final),
+            "use_graphrag": bool(use_graphrag),
+        }
+        transaction.transferred = True
+        return payload
+    finally:
+        transaction.cleanup()
+
+
+@dataclass(slots=True)
+class _IngestTransaction:
+    """Own resources and crash journals for one corpus activation attempt."""
+
+    manager: SnapshotManager
+    owned_source_paths: tuple[Path, ...]
+    workspace: Path | None = None
+    collections: dict[str, str] | None = None
+    resource: VectorIndexResource | None = None
+    quarantined_source: tuple[Path, Path] | None = None
+    promotion_transaction_id: str | None = None
+    promotion_moves: tuple[tuple[Path, Path, str], ...] = ()
+    committed: bool = False
+    transferred: bool = False
+
+    def cleanup(self) -> None:
+        """Release transient resources and roll back every uncommitted owner."""
+        if not self.transferred and self.resource is not None:
+            try:
+                self.resource.close()
+            except Exception as exc:
+                logger.warning(
+                    "Failed to close staged vector resource (error_type={})",
+                    type(exc).__name__,
+                )
+        if self.committed:
+            return
+        try:
+            if self.quarantined_source is not None:
+                try:
+                    restore_quarantined_upload(*self.quarantined_source)
+                except (OSError, ValueError) as exc:
+                    logger.error(
+                        "Failed to restore quarantined upload (error_type={})",
+                        type(exc).__name__,
+                    )
+            if self.promotion_transaction_id is not None:
+                try:
+                    rollback_upload_promotion(
+                        data_dir=settings.data_dir,
+                        transaction_id=self.promotion_transaction_id,
+                    )
+                except (OSError, ValueError, RuntimeError) as exc:
+                    logger.error(
+                        "Upload promotion rollback deferred (error_type={})",
+                        type(exc).__name__,
+                    )
+            else:
+                _delete_rollback_sources(self.owned_source_paths)
+            if self.collections is not None:
+                try:
+                    _delete_staged_collections(self.collections)
+                except Exception as exc:
+                    logger.warning(
+                        "Staged collection cleanup failed (error_type={})",
+                        type(exc).__name__,
+                    )
+        finally:
+            if self.workspace is not None:
+                self.manager.cleanup_tmp(self.workspace)
+
+
+def _activate_ingest_generation(
+    transaction: _IngestTransaction,
+    ingest_result: dict[str, Any],
+    *,
+    use_graphrag: bool,
+    quarantine_source: Path | None,
+) -> Path:
+    """Validate and atomically activate one completed ingestion generation."""
+    resource = transaction.resource
+    if resource is None:
+        raise RuntimeError("Ingestion transaction has no owned vector resource")
+    workspace = transaction.workspace
+    collections = transaction.collections
+    if workspace is None or collections is None:
+        raise RuntimeError("Ingestion transaction was not initialized")
+
+    ingest_result["vector_index"] = resource.index
+    ingest_result["vector_resource"] = resource
     pg_index = ingest_result.get("pg_index") if use_graphrag else None
+    expected_corpus_hash = ingest_result.get("activation_corpus_hash")
+    if not isinstance(expected_corpus_hash, str) or len(expected_corpus_hash) != 64:
+        raise RuntimeError("Ingestion did not return a corpus identity")
+    expected_config_hash = ingest_result.get("snapshot_config_hash")
+    activation_config_hash = ingest_result.get("activation_config_hash")
+    activation_config = ingest_result.get("activation_config")
+    if (
+        not isinstance(expected_config_hash, str)
+        or len(expected_config_hash) != 64
+        or not isinstance(activation_config_hash, str)
+        or len(activation_config_hash) != 64
+        or not isinstance(activation_config, dict)
+    ):
+        raise RuntimeError("Ingestion did not return a configuration identity")
 
-    _emit(85, "snapshot", "Rebuilding snapshot")
-    final = rebuild_snapshot(vector_index, pg_index, settings)
-    _emit(100, "done", "Done")
+    def _commit_source_changes() -> None:
+        if transaction.promotion_moves:
+            promote_pending_uploads(
+                data_dir=settings.data_dir,
+                transaction_id=workspace.name,
+                collections=collections,
+                moves=list(transaction.promotion_moves),
+            )
+            transaction.promotion_transaction_id = workspace.name
+        if quarantine_source is not None:
+            transaction.quarantined_source = quarantine_upload(
+                data_dir=settings.data_dir,
+                source_path=quarantine_source,
+                transaction_id=workspace.name,
+                collections=collections,
+            )
 
-    return {
-        "ingest": ingest_result,
-        "snapshot_dir": str(final),
-        "use_graphrag": bool(use_graphrag),
+    final = rebuild_snapshot(
+        resource.index,
+        pg_index,
+        settings,
+        SnapshotActivation(
+            manager=transaction.manager,
+            workspace=workspace,
+            text_collection=collections["text"],
+            image_collection=collections["image"],
+            expected_corpus_hash=expected_corpus_hash,
+            expected_config_hash=expected_config_hash,
+            activation_config=activation_config,
+            activation_config_hash=activation_config_hash,
+            collection_metadata=_read_collection_metadata(collections),
+            graph_requested=bool(use_graphrag and ingest_result.get("documents")),
+        ),
+        commit_source_changes=_commit_source_changes,
+        log_export_event=_log_export_event,
+        record_graph_export_metric=record_graph_export_metric,
+    )
+    transaction.committed = True
+    return final
+
+
+def _collection_base_name(base_name: str) -> str:
+    """Return the canonical safe prefix for an owned physical collection."""
+    canonical = "".join(
+        character if character.isalnum() or character in {"-", "_"} else "_"
+        for character in base_name
+    ).strip("_")
+    if not canonical:
+        raise ValueError("Qdrant collection base name is empty")
+    return canonical
+
+
+def _physical_collection_prefix(base_name: str, *, build_id_length: int) -> str:
+    """Return the length-bounded prefix shared by one physical generation."""
+    suffix_length = 2 + build_id_length
+    available = _PHYSICAL_COLLECTION_MAX_LENGTH - suffix_length
+    if available < 1:
+        raise ValueError("Physical collection build identity is too long")
+    return f"{_collection_base_name(base_name)[:available]}__"
+
+
+def _physical_collection_names(workspace: Path) -> dict[str, str]:
+    """Return unique immutable collection names owned by one snapshot workspace."""
+    build_id = "".join(
+        character
+        for character in workspace.name.removeprefix("_tmp-")
+        if character.isalnum()
+    )
+    if not build_id:
+        raise ValueError("Snapshot workspace does not expose a valid build identity")
+
+    def _name(base_name: str) -> str:
+        prefix = _physical_collection_prefix(
+            base_name,
+            build_id_length=len(build_id),
+        )
+        return f"{prefix}{build_id}"
+
+    collections = {
+        "text": _name(settings.database.qdrant_collection),
+        "image": _name(settings.database.qdrant_image_collection),
     }
+    if collections["text"] == collections["image"]:
+        raise ValueError("Text and image collection identities must be distinct")
+    return collections
+
+
+def _read_collection_metadata(collections: dict[str, str]) -> dict[str, Any]:
+    """Read the exact Qdrant metadata verified by the ingestion boundary."""
+    from qdrant_client import QdrantClient
+
+    from src.utils.storage import get_client_config
+
+    client = QdrantClient(**get_client_config())
+    try:
+        metadata: dict[str, Any] = {}
+        for owner, collection_name in collections.items():
+            info = client.get_collection(collection_name)
+            value = getattr(getattr(info, "config", None), "metadata", None)
+            if not isinstance(value, dict):
+                raise RuntimeError(
+                    f"Staged {owner} collection has no immutable metadata"
+                )
+            metadata[owner] = dict(value)
+        return metadata
+    finally:
+        with contextlib.suppress(Exception):
+            client.close()
+
+
+def _delete_staged_collections(collections: dict[str, str]) -> None:
+    """Best-effort removal of an uncommitted physical collection generation."""
+    storage_dir = settings.data_dir / "storage"
+    try:
+        retained_manifests = [
+            manifest
+            for candidate in storage_dir.iterdir()
+            if candidate.is_dir()
+            and not candidate.is_symlink()
+            and is_snapshot_version_name(candidate.name)
+            and (manifest := load_manifest(candidate)) is not None
+        ]
+    except FileNotFoundError:
+        retained_manifests = []
+    except Exception as exc:
+        logger.warning(
+            "Staged collection cleanup skipped because snapshots are unreadable "
+            "(error_type={})",
+            type(exc).__name__,
+        )
+        return
+
+    retained_names = {
+        str(value)
+        for manifest in retained_manifests
+        for manifest_collections in [manifest.get("collections")]
+        if isinstance(manifest_collections, dict)
+        for value in manifest_collections.values()
+    }
+    if retained_names.intersection(collections.values()):
+        logger.error("Refusing to delete a collection referenced by a snapshot")
+        return
+
+    from qdrant_client import QdrantClient
+
+    from src.utils.storage import get_client_config
+
+    client = QdrantClient(**get_client_config())
+    try:
+        for collection_name in collections.values():
+            try:
+                if client.collection_exists(collection_name):
+                    client.delete_collection(collection_name=collection_name)
+            except Exception as exc:
+                logger.warning(
+                    "Failed to remove uncommitted Qdrant collection (error_type={})",
+                    type(exc).__name__,
+                )
+    finally:
+        with contextlib.suppress(Exception):
+            client.close()
+
+
+def _delete_rollback_sources(paths: tuple[Path, ...]) -> None:
+    """Remove only newly persisted uploads owned by a failed ingestion job."""
+    uploads_root = (settings.data_dir / "uploads").resolve()
+    pending_root = (settings.data_dir / ".pending-uploads").resolve()
+    for source_path in paths:
+        try:
+            candidate = source_path.resolve()
+            if not (
+                candidate.is_relative_to(uploads_root)
+                or candidate.is_relative_to(pending_root)
+            ):
+                logger.error("Refusing to roll back a source outside owned roots")
+                continue
+            candidate.unlink(missing_ok=True)
+            if candidate.is_relative_to(pending_root):
+                with contextlib.suppress(OSError):
+                    candidate.parent.rmdir()
+                    pending_root.rmdir()
+        except OSError as exc:
+            logger.warning(
+                "Failed to roll back an uncommitted upload (error_type={})",
+                type(exc).__name__,
+            )
+
+
+def _plan_pending_inputs(
+    inputs: list[IngestionInput],
+) -> tuple[list[IngestionInput], tuple[tuple[Path, Path, str], ...]]:
+    """Plan final upload paths without mutating the authoritative corpus."""
+    pending_root = (settings.data_dir / ".pending-uploads").resolve()
+    uploads_root = (settings.data_dir / "uploads").resolve()
+    uploads_root.mkdir(parents=True, exist_ok=True)
+    existing_ids = {
+        document_id_from_sha256(sha256_file(path))
+        for path in uploads_root.iterdir()
+        if path.is_file() and not path.is_symlink()
+    }
+    planned_inputs: list[IngestionInput] = []
+    planned_paths: list[Path] = []
+    moves: list[tuple[Path, Path, str]] = []
+    for item in inputs:
+        if item.source_path is None:
+            planned_inputs.append(item)
+            continue
+        source = Path(item.source_path)
+        resolved = source.resolve(strict=True)
+        if not resolved.is_relative_to(pending_root):
+            planned_inputs.append(item)
+            continue
+        if source.is_symlink() or resolved.parent.parent != pending_root:
+            raise ValueError("Pending upload path is outside its transaction")
+        digest = sha256_file(resolved)
+        current_document_id = document_id_from_sha256(digest)
+        if current_document_id in existing_ids:
+            raise ValueError("This document content already exists in the corpus")
+
+        destination = uploads_root / resolved.name
+        counter = 1
+        while destination.exists() or destination in planned_paths:
+            destination = uploads_root / f"{resolved.stem}-{counter}{resolved.suffix}"
+            counter += 1
+        moves.append((resolved, destination, digest))
+        planned_paths.append(destination)
+        planned_inputs.append(item)
+        existing_ids.add(current_document_id)
+    return planned_inputs, tuple(moves)
 
 
 @st.fragment(run_every=float(settings.ui.progress_poll_interval_sec))
@@ -468,10 +887,18 @@ def _render_ingest_job_panel(*, owner_id: str) -> None:
         st.write(message)
 
     if state.status in ("queued", "running"):
-        if st.button("Cancel ingestion", type="secondary"):
-            job_manager.cancel(job_id, owner_id=owner_id)
-            st.session_state.pop("ingest_job_id", None)
-            st.warning("Ingestion cancelled.")
+        cancellation_requested = (
+            st.session_state.get("ingest_job_cancel_requested_id") == job_id
+        )
+        if st.button(
+            "Cancel ingestion",
+            type="secondary",
+            disabled=cancellation_requested,
+        ) and job_manager.cancel(job_id, owner_id=owner_id):
+            st.session_state["ingest_job_cancel_requested_id"] = job_id
+            cancellation_requested = True
+        if cancellation_requested:
+            st.warning("Cancellation requested. Waiting for a safe stopping point.")
 
     else:
         # Terminal states: render result once, then clear job id.
@@ -492,6 +919,7 @@ def _render_ingest_terminal_state(
         job_id: Unique identifier for the job.
         completed_key: Session state key to track job completion.
     """
+    st.session_state.pop("ingest_job_cancel_requested_id", None)
     if state.status == "succeeded" and isinstance(state.result, dict):
         st.session_state[completed_key] = job_id
         st.session_state.pop("ingest_job_id", None)
@@ -543,25 +971,56 @@ def _render_ingest_results(result: dict[str, Any], use_graphrag: bool) -> None:
     _render_nlp_preview(result.get("nlp_preview") or {}, result.get("metadata") or {})
     _render_image_exports(result.get("exports") or [])
 
-    vector_index = result.get("vector_index")
+    resource = result.get("vector_resource")
+    if not isinstance(resource, VectorIndexResource):
+        raise RuntimeError("Completed ingestion has no owned vector resource")
     pg_index = result.get("pg_index") if use_graphrag else None
-    if vector_index is None:
-        vector_index = _create_vector_index_fallback()
+    vector_index = resource.index
+    collections = result.get("collections")
+    if not isinstance(collections, dict):
+        resource.close()
+        raise RuntimeError("Completed ingestion has no physical collection identity")
+    text_collection = collections.get("text")
+    image_collection = collections.get("image")
+    if not isinstance(text_collection, str) or not isinstance(image_collection, str):
+        resource.close()
+        raise RuntimeError("Completed ingestion has invalid collection identities")
 
-    if vector_index is not None:
-        st.session_state["vector_index"] = vector_index
-        _set_multimodal_retriever()
+    replace_session_vector_resource(
+        st.session_state,
+        resource,
+        runtime_generation=settings.cache_version,
+    )
     if pg_index is not None:
         st.session_state["graphrag_index"] = pg_index
-    elif not use_graphrag:
+    else:
         st.session_state.pop("graphrag_index", None)
 
-    router = None
-    if vector_index is not None:
-        router = build_router_engine(vector_index, pg_index, settings)
-        st.session_state["router_engine"] = router
-    if router is not None:
-        st.info("Router engine is ready for Chat.")
+    try:
+        router = build_router_engine(
+            vector_index,
+            pg_index,
+            settings,
+            text_collection=text_collection,
+            image_collection=image_collection,
+        )
+    except Exception:
+        replace_session_vector_resource(
+            st.session_state,
+            None,
+            runtime_generation=settings.cache_version,
+        )
+        raise
+    replace_session_router(
+        st.session_state,
+        router,
+        runtime_generation=settings.cache_version,
+    )
+    st.session_state["_snapshot_collections"] = dict(collections)
+    snapshot_id = result.get("snapshot_id")
+    if isinstance(snapshot_id, str) and snapshot_id:
+        st.session_state["_snapshot_loaded_id"] = snapshot_id
+    st.info("Router engine is ready for Chat.")
     if pg_index is not None:
         st.info("GraphRAG index is available.")
 
@@ -603,53 +1062,6 @@ def _render_nlp_preview(preview: dict[str, Any], meta: dict[str, Any]) -> None:
                 text = sent.get("text")
                 if isinstance(text, str) and text.strip():
                     st.write(f"- {text}")
-
-
-def _set_multimodal_retriever() -> None:
-    """Initialize a multimodal retriever for downstream tools if available."""
-    try:
-        from src.retrieval.multimodal_fusion import MultimodalFusionRetriever
-
-        st.session_state["hybrid_retriever"] = MultimodalFusionRetriever()
-    except Exception as exc:  # pragma: no cover - UI best-effort
-        from src.utils.log_safety import build_pii_log_entry
-
-        redaction = build_pii_log_entry(str(exc), key_id="documents.multimodal_init")
-        logger.debug(
-            "Multimodal retriever init failed (error_type={} error={})",
-            type(exc).__name__,
-            redaction.redacted,
-        )
-        st.session_state.pop("hybrid_retriever", None)
-
-
-def _handle_snapshot_rebuild(vector_index: Any, pg_index: Any | None) -> None:
-    """Rebuild snapshot and render status feedback.
-
-    Args:
-        vector_index: Processed vector index.
-        pg_index: Optional processed property graph index.
-    """
-    try:
-        final = rebuild_snapshot(vector_index, pg_index, settings)
-        manifest = load_manifest(final)
-        _render_manifest_details(manifest, final)
-        st.session_state["latest_manifest"] = manifest
-        st.success(f"Snapshot created: {final.name}")
-    except SnapshotLockTimeout:
-        st.warning(
-            "Snapshot rebuild already in progress. Please wait and try again shortly."
-        )
-    except Exception as exc:  # pragma: no cover - UX best effort
-        from src.utils.log_safety import build_pii_log_entry
-
-        redaction = build_pii_log_entry(str(exc), key_id="documents.snapshot_rebuild")
-        logger.warning(
-            "Snapshot rebuild failed (error_type={} error={})",
-            type(exc).__name__,
-            redaction.redacted,
-        )
-        st.warning(f"Snapshot failed ({type(exc).__name__}). Check logs for details.")
 
 
 def _render_image_exports(exports: list[dict[str, Any]]) -> None:
@@ -817,40 +1229,34 @@ def _render_export_images(items: list[dict[str, Any]], preview_limit: int) -> No
             )
 
 
-def _render_maintenance_controls() -> None:
-    """Render operational maintenance controls (reindex/delete)."""
+def _render_maintenance_controls(*, owner_id: str) -> None:
+    """Render generation-safe corpus rebuild and deletion controls."""
     uploads_dir = settings.data_dir / "uploads"
     uploads_dir.mkdir(parents=True, exist_ok=True)
 
     with st.expander("Maintenance", expanded=False):
         st.caption(
-            "Operational tools: reindex PDF page images and delete uploaded documents."
+            "Every maintenance action builds and verifies a complete isolated search "
+            "generation before it becomes active."
         )
 
-        st.subheader("Reindex PDF page images")
+        st.subheader("Rebuild search index")
         st.caption(
-            "Re-renders PDF pages to images and reindexes SigLIP vectors in Qdrant. "
-            "This can repair missing artifacts or restore the image collection after "
-            "an outage. Text/vector/graph indices are not rebuilt."
+            "Reparse the complete corpus and rebuild text, image, and optional graph "
+            "indexes as one generation. The active generation stays available until "
+            "the replacement passes verification."
         )
-        cols = st.columns(3)
-        limit = cols[0].number_input(
-            "PDF limit",
-            min_value=1,
-            max_value=200,
-            value=25,
-            step=1,
-            key="reindex_pdf_limit",
-        )
-        encrypt = cols[1].checkbox(
+        cols = st.columns(2)
+        encrypt = cols[0].checkbox(
             "Encrypt images",
             value=bool(settings.processing.encrypt_page_images),
-            key="reindex_encrypt_images",
+            key="rebuild_encrypt_images",
         )
-        do_reindex = cols[2].button("Reindex", use_container_width=True)
-        if do_reindex:
-            _handle_reindex_page_images(
-                uploads_dir=uploads_dir, limit=int(limit), encrypt=encrypt
+        if cols[1].button("Rebuild", use_container_width=True):
+            _start_existing_corpus_rebuild(
+                uploads_dir=uploads_dir,
+                encrypt=bool(encrypt),
+                owner_id=owner_id,
             )
 
         st.subheader("Delete uploaded document")
@@ -868,10 +1274,9 @@ def _render_maintenance_controls() -> None:
             index=0,
             key="delete_upload_select",
         )
-        purge = st.checkbox(
-            "Also delete local artifacts (may break old chats)",
-            value=False,
-            key="delete_upload_purge_artifacts",
+        st.caption(
+            "Content-addressed image artifacts are retained so historical chat "
+            "evidence remains renderable."
         )
         confirm = st.checkbox(
             "I understand this cannot be undone",
@@ -880,215 +1285,94 @@ def _render_maintenance_controls() -> None:
         )
         if st.button("Delete", disabled=not confirm, type="secondary"):
             target = uploads_dir / str(selection)
-            _handle_delete_upload(target=target, purge_artifacts=bool(purge))
-
-
-@st.cache_data(show_spinner=False)
-def _sha256_for_file(path_str: str, mtime_ns: int, size: int) -> str:
-    """Compute file sha256 with cache invalidated by stat tuple.
-
-    Args:
-        path_str: Path to the target file.
-        mtime_ns: Modification time in nanoseconds (for cache busting).
-        size: File size in bytes (for cache busting).
-
-    Returns:
-        str: Hexadecimal SHA-256 hash of the file content.
-    """
-    _ = (mtime_ns, size)
-    p = Path(path_str)
-    h = hashlib.sha256()
-    with p.open("rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
+            _start_upload_deletion(
+                target=target,
+                encrypt=bool(encrypt),
+                owner_id=owner_id,
+            )
 
 
 def _doc_id_for_upload(path: Path) -> str:
     """Return canonical document id for an uploaded file."""
-    stt = path.stat()
-    digest = _sha256_for_file(str(path), int(stt.st_mtime_ns), int(stt.st_size))
+    digest = sha256_file(path)
     return document_id_from_sha256(digest)
 
 
-def _handle_reindex_page_images(
-    *, uploads_dir: Path, limit: int, encrypt: bool
-) -> None:
-    from src.models.processing import IngestionConfig, IngestionInput
-    from src.processing.ingestion_pipeline import reindex_page_images_sync
-
-    pdfs = sorted(uploads_dir.glob("*.pdf"), key=lambda p: p.name)[: int(limit)]
-    if not pdfs:
-        st.info("No PDFs found under uploads.")
-        return
-
-    cache_dir = settings.cache.ingestion_db_path.parent
-    cache_dir.mkdir(parents=True, exist_ok=True)
-
-    cfg = IngestionConfig(
-        chunk_size=int(settings.processing.chunk_size),
-        chunk_overlap=int(settings.processing.chunk_overlap),
-        enable_image_encryption=bool(encrypt),
-        enable_image_indexing=True,
-        cache_dir=cache_dir,
-        cache_collection=f"{settings.database.qdrant_image_collection}_image_reindex",
-    )
-
+def _existing_corpus_inputs(
+    uploads_dir: Path,
+    *,
+    encrypt: bool,
+    excluded_path: Path | None = None,
+) -> list[IngestionInput]:
+    """Build canonical inputs for every direct, regular upload except one target."""
+    excluded = excluded_path.resolve() if excluded_path is not None else None
     inputs: list[IngestionInput] = []
-    for p in pdfs:
-        try:
-            doc_id = _doc_id_for_upload(p)
-        except Exception as exc:
-            from src.utils.log_safety import build_pii_log_entry
-
-            redaction = build_pii_log_entry(str(exc), key_id="documents.sha256")
-            logger.debug(
-                "sha256 compute skipped for {} (error_type={} error={})",
-                p.name,
-                type(exc).__name__,
-                redaction.redacted,
-            )
+    for path in sorted(uploads_dir.iterdir(), key=lambda item: item.name):
+        if path.is_symlink() or not path.is_file():
+            continue
+        if excluded is not None and path.resolve() == excluded:
             continue
         inputs.append(
             IngestionInput(
-                document_id=doc_id,
-                source_path=p,
-                encrypt_images=bool(encrypt),
+                document_id=_doc_id_for_upload(path),
+                source_path=path,
+                encrypt_images=encrypt,
             )
         )
-
-    with st.status("Reindexing page images…", expanded=True) as status:
-        result = reindex_page_images_sync(cfg, inputs)
-        meta_raw = result.get("metadata") if isinstance(result, dict) else None
-        meta = meta_raw if isinstance(meta_raw, dict) else {}
-        st.json(meta or {}, expanded=False)
-        st.success(
-            f"Reindexed {meta.get('image_index.indexed', 0)} page images "
-            f"({meta.get('image_index.skipped', 0)} skipped)."
-        )
-        status.update(label="Done", state="complete")
+    require_unique_document_ids(inputs)
+    return inputs
 
 
-def _handle_delete_upload(*, target: Path, purge_artifacts: bool) -> None:  # noqa: PLR0915
-    """Delete an uploaded file and best-effort clean Qdrant points."""
-    uploads_dir = settings.data_dir / "uploads"
-    uploads_dir_resolved = uploads_dir.resolve()
-
-    candidate = target.expanduser()
-    # Reject symlinks: avoid deleting the link target outside uploads.
-    try:
-        if candidate.is_symlink():
-            st.error("Refusing to delete symlink.")
-            return
-    except OSError:
-        st.error("Invalid path.")
+def _start_existing_corpus_rebuild(
+    *,
+    uploads_dir: Path,
+    encrypt: bool,
+    owner_id: str,
+) -> None:
+    """Start a complete generation rebuild without owning existing sources."""
+    inputs = _existing_corpus_inputs(uploads_dir, encrypt=encrypt)
+    if not inputs:
+        st.info("Add a document before rebuilding the search index.")
         return
+    _start_ingestion_job(
+        inputs,
+        use_graphrag=bool(settings.graphrag_cfg.enabled),
+        encrypt_images=encrypt,
+        nlp_service=_load_optional_spacy_service(),
+        owner_id=owner_id,
+    )
 
-    # Containment: only allow direct children of uploads_dir.
-    try:
-        if candidate.parent.resolve() != uploads_dir_resolved:
-            st.error("Refusing to delete path outside uploads directory.")
-            return
-    except OSError:
-        st.error("Invalid path.")
+
+def _start_upload_deletion(
+    *,
+    target: Path,
+    encrypt: bool,
+    owner_id: str,
+) -> None:
+    """Schedule source removal as a full staged corpus generation."""
+    uploads_dir = (settings.data_dir / "uploads").resolve()
+    if target.is_symlink() or target.parent.resolve() != uploads_dir:
+        st.error("Refusing to delete a path outside the uploads directory.")
         return
-
-    if not candidate.exists():
+    if not target.is_file():
         st.warning("File not found.")
         return
-
-    doc_id = _doc_id_for_upload(candidate)
-
-    deleted_image_points = 0
-    deleted_text_points = 0
-
-    try:
-        from qdrant_client import QdrantClient
-        from qdrant_client import models as qmodels
-
-        from src.retrieval.image_index import (
-            collect_artifact_refs_for_doc_id,
-            count_artifact_references_in_image_collection,
-            delete_page_images_for_doc_id,
-        )
-        from src.utils.storage import get_client_config
-
-        client = QdrantClient(**get_client_config())
-        try:
-            artifacts_to_consider: list[ArtifactRef] = (
-                list(
-                    collect_artifact_refs_for_doc_id(
-                        client,
-                        settings.database.qdrant_image_collection,
-                        doc_id=doc_id,
-                    )
-                )
-                if purge_artifacts
-                else []
-            )
-
-            deleted_image_points = delete_page_images_for_doc_id(
-                client,
-                settings.database.qdrant_image_collection,
-                doc_id=doc_id,
-            )
-
-            # Text points retain the canonical base-document ID under a DocMind-owned
-            # key because LlamaIndex reserves its generic document ID fields.
-            text_filter = qmodels.Filter(
-                must=[
-                    qmodels.FieldCondition(
-                        key=CANONICAL_DOCUMENT_ID_KEY,
-                        match=qmodels.MatchValue(value=str(doc_id)),
-                    ),
-                ]
-            )
-            try:
-                before = client.count(
-                    collection_name=settings.database.qdrant_collection,
-                    count_filter=text_filter,
-                    exact=True,
-                )
-                text_count = int(getattr(before, "count", 0) or 0)
-                client.delete(
-                    collection_name=settings.database.qdrant_collection,
-                    points_selector=qmodels.FilterSelector(filter=text_filter),
-                    wait=True,
-                )
-                deleted_text_points = text_count
-            except Exception:
-                deleted_text_points = 0
-
-            if purge_artifacts and artifacts_to_consider:
-                store = ArtifactStore.from_settings(settings)
-                removed = 0
-                for ref in artifacts_to_consider:
-                    # Safety: only delete if not referenced anywhere in the image
-                    # collection. This does not check chat persistence; old chats may
-                    # lose images if artifacts are purged.
-                    ref_count = count_artifact_references_in_image_collection(
-                        client,
-                        settings.database.qdrant_image_collection,
-                        artifact_id=ref.sha256,
-                    )
-                    if ref_count == 0:
-                        with contextlib.suppress(Exception):
-                            store.delete(ref)
-                            removed += 1
-                st.caption(f"Deleted local artifacts: {removed}")
-        finally:
-            with contextlib.suppress(Exception):
-                client.close()
-    except Exception as exc:
-        st.caption(f"Qdrant cleanup skipped: {type(exc).__name__}")
-
-    with contextlib.suppress(Exception):
-        candidate.unlink()
-
-    st.success(
-        f"Deleted {candidate.name}. "
-        "Qdrant: image_points="
-        f"{deleted_image_points} text_points≈{deleted_text_points}."
+    inputs = _existing_corpus_inputs(
+        uploads_dir,
+        encrypt=encrypt,
+        excluded_path=target,
+    )
+    _start_ingestion_job(
+        inputs,
+        use_graphrag=bool(settings.graphrag_cfg.enabled),
+        encrypt_images=encrypt,
+        nlp_service=_load_optional_spacy_service(),
+        owner_id=owner_id,
+        excluded_source_paths=(target,),
+        quarantine_source=target,
+    )
+    st.info(
+        "Deletion scheduled. The active corpus remains unchanged until verification."
     )
 
 
@@ -1146,41 +1430,6 @@ def _render_export_controls() -> None:
     with col2:
         if st.button("Export Parquet"):
             _handle_manual_export(out_dir, "parquet")
-
-    st.subheader("Snapshot Utilities")
-    st.caption(
-        "Rebuild persisted files and manifest for the current graph/vector"
-        " indices. If your documents changed, re-ingest first to rebuild"
-        " the graph."
-    )
-    if st.button("Rebuild GraphRAG Snapshot"):
-        try:
-            pg_index = st.session_state.get("graphrag_index")
-            vector_index = st.session_state.get("vector_index")
-            if vector_index is None:
-                st.warning("Vector index missing; ingest documents first.")
-            else:
-                final = rebuild_snapshot(vector_index, pg_index, settings)
-                manifest = load_manifest(final)
-                _render_manifest_details(manifest, final)
-                st.success(f"Snapshot rebuilt: {final.name}")
-        except SnapshotLockTimeout:
-            st.warning(
-                "Snapshot rebuild already in progress. Please wait and try again."
-            )
-        except Exception as exc:  # pragma: no cover - UX best effort
-            from src.utils.log_safety import build_pii_log_entry
-
-            redaction = build_pii_log_entry(
-                str(exc), key_id="documents.snapshot_manager"
-            )
-            logger.warning(
-                "Snapshot manager error (error_type={} error={})",
-                type(exc).__name__,
-                redaction.redacted,
-            )
-            st.error(f"Snapshot manager error ({type(exc).__name__}).")
-            st.caption(f"Error reference: {redaction.redacted}")
 
 
 def _handle_manual_export(out_dir: Path, extension: str) -> None:
@@ -1241,20 +1490,6 @@ def _handle_manual_export(out_dir: Path, extension: str) -> None:
 # ---- Page helpers ----
 
 
-def _create_vector_index_fallback() -> Any | None:
-    """Create a vector index from persisted store when ingestion skipped it."""
-    try:
-        from llama_index.core import VectorStoreIndex
-
-        store = create_vector_store(
-            settings.database.qdrant_collection,
-            enable_hybrid=getattr(settings.retrieval, "enable_server_hybrid", True),
-        )
-        return VectorStoreIndex.from_vector_store(store)
-    except Exception:  # pragma: no cover - defensive
-        return None
-
-
 def _log_export_event(payload: dict[str, Any]) -> None:
     """Emit a telemetry event for graph exports (best effort)."""
     event = {**payload, "timestamp": datetime.now(UTC).isoformat()}
@@ -1270,21 +1505,6 @@ def _log_export_event(payload: dict[str, Any]) -> None:
         from src.utils.telemetry import log_jsonl
 
         log_jsonl(event)
-
-
-def rebuild_snapshot(
-    vector_index: Any, pg_index: Any | None, settings_obj: Any
-) -> Path:
-    """Rebuild snapshot for current indices and return final path."""
-    from src.persistence.snapshot_service import rebuild_snapshot as _rebuild
-
-    return _rebuild(
-        vector_index,
-        pg_index,
-        settings_obj,
-        log_export_event=_log_export_event,
-        record_graph_export_metric=record_graph_export_metric,
-    )
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -86,50 +85,3 @@ def test_delete_is_best_effort_when_missing(tmp_path: Path) -> None:
     store = ArtifactStore(root=tmp_path / "artifacts")
     ref = ArtifactRef(sha256="a" * 64, suffix=".webp")
     store.delete(ref)
-
-
-def test_prune_deletes_oldest_until_under_budget(tmp_path: Path) -> None:
-    root = tmp_path / "artifacts"
-    store = ArtifactStore(root=root)
-
-    a = tmp_path / "a.webp"
-    b = tmp_path / "b.webp"
-    a.write_bytes(b"a" * 10)
-    b.write_bytes(b"b" * 10)
-
-    ref_a = store.put_file(a)
-    ref_b = store.put_file(b)
-    p_a = store.resolve_path(ref_a)
-    p_b = store.resolve_path(ref_b)
-
-    # Make A older than B.
-    old = 1_600_000_000
-    new = 1_700_000_000
-    os.utime(p_a, (old, old))
-    os.utime(p_b, (new, new))
-
-    deleted = store.prune(max_total_bytes=10, min_age_seconds=0)
-    assert deleted == 1
-    # Oldest should be deleted first.
-    assert not p_a.exists()
-    assert p_b.exists()
-
-
-def test_prune_respects_min_age_seconds(tmp_path: Path) -> None:
-    root = tmp_path / "artifacts"
-    store = ArtifactStore(root=root)
-
-    src = tmp_path / "recent.webp"
-    src.write_bytes(b"x" * 100)
-    ref = store.put_file(src)
-
-    deleted = store.prune(max_total_bytes=10, min_age_seconds=3600)
-    assert deleted == 0
-    assert store.exists(ref)
-
-
-def test_prune_skips_non_files(tmp_path: Path) -> None:
-    root = tmp_path / "artifacts"
-    store = ArtifactStore(root=root)
-    (root / "subdir").mkdir()
-    assert store.prune(max_total_bytes=0) == 0

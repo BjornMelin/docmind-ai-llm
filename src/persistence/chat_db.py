@@ -11,35 +11,52 @@ creates DocMind-owned tables only.
 
 from __future__ import annotations
 
-import contextlib
 import sqlite3
 import uuid
 from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
 
 from loguru import logger
 
 from src.config.settings import DocMindSettings, settings
-from src.persistence.memory_store import _MAX_NS_DEPTH, NAMESPACE_THREAD_INDEX
+from src.persistence.checkpoint_identity import (
+    checkpoint_thread_id,
+    memory_namespace_prefix,
+)
 from src.persistence.path_utils import resolve_path_under_data_dir
 from src.utils.time import now_ms
 
 CHAT_SESSION_TABLE = "chat_session"
 
-# DocMind store tables (memory store)
-STORE_ITEMS_TABLE = "docmind_store_items"
-STORE_VEC_TABLE = "docmind_store_vec"
-# Safe SQL generation: table names are compile-time constants, ns indexes are
-# bounded by _MAX_NS_DEPTH, and ns values are bound as query parameters.
-_NS_DELETE_VEC = {
-    i: f"DELETE FROM {STORE_VEC_TABLE} WHERE ns{i}=?;"  # noqa: S608 # nosec
-    for i in range(_MAX_NS_DEPTH)
-}
-# Same safety constraints as _NS_DELETE_VEC.
-_NS_DELETE_ITEMS = {
-    i: f"DELETE FROM {STORE_ITEMS_TABLE} WHERE ns{i}=?;"  # noqa: S608 # nosec
-    for i in range(_MAX_NS_DEPTH)
-}
+STORE_TABLE = "store"
+STORE_VECTORS_TABLE = "store_vectors"
+CHECKPOINT_IDENTITY_TABLES = ("checkpoints", "writes")
+LEGACY_CHECKPOINT_IDENTITY_WHERE = """
+    thread_id IS NULL
+    OR length(thread_id) != 72
+    OR substr(thread_id, 1, 8) != 'docmind:'
+"""
+INCOMPATIBLE_CHECKPOINT_DB_MESSAGE = (
+    "Chat checkpoint tables are incompatible with DocMind v2. Stop DocMind, "
+    "archive chat.db with its -wal and -shm sidecars, then start v2 with a fresh "
+    "Chat DB."
+)
+LEGACY_CHECKPOINT_IDENTITY_MESSAGE = (
+    "Legacy v1 checkpoint identities detected. Stop DocMind, archive chat.db with "
+    "its -wal and -shm sidecars, then start v2 with a fresh Chat DB."
+)
+
+
+# Python 3.12 deprecated sqlite3's implicit date/datetime adapters. LangGraph's
+# native TTL store writes datetime parameters, so register the same SQLite-sortable
+# ISO representation explicitly instead of relying on the deprecated defaults.
+sqlite3.register_adapter(date, lambda value: value.isoformat())
+sqlite3.register_adapter(datetime, lambda value: value.isoformat(" "))
+
+
+class LegacyCheckpointIdentityError(RuntimeError):
+    """Raised when a v1 raw thread identifier prevents safe v2 startup."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,7 +83,13 @@ def open_chat_db(path: Path, *, cfg: DocMindSettings = settings) -> sqlite3.Conn
     """Open the Chat DB connection (WAL, busy_timeout, safe location)."""
     resolved = _validate_chat_db_path(path, cfg)
     resolved.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(resolved), check_same_thread=False)
+    # Native LangGraph SqliteStore owns explicit BEGIN/COMMIT boundaries and
+    # therefore requires an autocommit connection.
+    conn = sqlite3.connect(
+        str(resolved),
+        check_same_thread=False,
+        isolation_level=None,
+    )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA foreign_keys=ON;")
@@ -77,6 +100,7 @@ def open_chat_db(path: Path, *, cfg: DocMindSettings = settings) -> sqlite3.Conn
 
 def ensure_session_registry(conn: sqlite3.Connection) -> None:
     """Create the chat_session registry table (SPEC-041)."""
+    reject_legacy_checkpoint_identities(conn)
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS chat_session (
@@ -98,6 +122,32 @@ def ensure_session_registry(conn: sqlite3.Connection) -> None:
         "ON chat_session(deleted_at_ms);"
     )
     conn.commit()
+
+
+def reject_legacy_checkpoint_identities(conn: sqlite3.Connection) -> None:
+    """Fail before startup when checkpoint tables contain pre-v2 raw IDs.
+
+    V2 intentionally has no ambiguous raw-ID migration. Operators must archive
+    the SQLite database (including WAL/SHM sidecars) and start with a fresh file.
+    """
+    for table in CHECKPOINT_IDENTITY_TABLES:
+        if not _table_exists(conn, table):
+            continue
+        try:
+            incompatible = conn.execute(
+                f"""
+                SELECT 1
+                FROM {table}
+                WHERE {LEGACY_CHECKPOINT_IDENTITY_WHERE}
+                LIMIT 1;
+                """,  # noqa: S608 - static internal table allowlist
+            ).fetchone()
+        except sqlite3.DatabaseError as exc:
+            raise LegacyCheckpointIdentityError(
+                INCOMPATIBLE_CHECKPOINT_DB_MESSAGE
+            ) from exc
+        if incompatible is not None:
+            raise LegacyCheckpointIdentityError(LEGACY_CHECKPOINT_IDENTITY_MESSAGE)
 
 
 def create_session(*, title: str, conn: sqlite3.Connection) -> ChatSession:
@@ -248,46 +298,58 @@ def soft_delete_session(conn: sqlite3.Connection, *, thread_id: str) -> None:
     conn.commit()
 
 
-def purge_session(conn: sqlite3.Connection, *, thread_id: str) -> dict[str, int]:
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?;",
+        (table,),
+    ).fetchone()
+    return row is not None
+
+
+def purge_session(
+    conn: sqlite3.Connection,
+    *,
+    thread_id: str,
+    user_id: str,
+) -> dict[str, int]:
     """Hard delete a session's persisted data (checkpoints + writes + memories)."""
     tid = str(thread_id)
+    persistence_tid = checkpoint_thread_id(thread_id=tid, user_id=user_id)
     deleted = {"langgraph": 0, "memory_store": 0, "session": 0}
     with conn:
-        # LangGraph SqliteSaver tables (best-effort; may not exist yet)
+        if not conn.in_transaction:
+            conn.execute("BEGIN IMMEDIATE;")
+        # LangGraph tables may not exist before their primitive's first setup.
         langgraph_deletes = (
-            "DELETE FROM writes WHERE thread_id=?;",
-            "DELETE FROM checkpoints WHERE thread_id=?;",
+            ("writes", "DELETE FROM writes WHERE thread_id=?;"),
+            ("checkpoints", "DELETE FROM checkpoints WHERE thread_id=?;"),
         )
-        for stmt in langgraph_deletes:
-            with contextlib.suppress(sqlite3.OperationalError):
-                cur = conn.execute(stmt, (tid,))
-                if cur.rowcount >= 0:
-                    deleted["langgraph"] += cur.rowcount
+        for table, stmt in langgraph_deletes:
+            if not _table_exists(conn, table):
+                continue
+            cur = conn.execute(stmt, (persistence_tid,))
+            if cur.rowcount >= 0:
+                deleted["langgraph"] += cur.rowcount
 
-        # DocMind memory store tables (best-effort; may not exist yet).
-        # Namespace layout is positional (SPEC-041):
-        # `namespace=(user_id, session_type, thread_id, ...)` so `thread_id` maps to
-        # `ns{NAMESPACE_THREAD_INDEX}` (e.g. ns2).
-        try:
-            if 0 <= NAMESPACE_THREAD_INDEX < _MAX_NS_DEPTH:
-                vec_sql = _NS_DELETE_VEC.get(NAMESPACE_THREAD_INDEX)
-                items_sql = _NS_DELETE_ITEMS.get(NAMESPACE_THREAD_INDEX)
-                if vec_sql and items_sql:
-                    cur = conn.execute(vec_sql, (tid,))
-                    if cur.rowcount >= 0:
-                        deleted["memory_store"] += cur.rowcount
-                    cur = conn.execute(items_sql, (tid,))
-                    if cur.rowcount >= 0:
-                        deleted["memory_store"] += cur.rowcount
-            else:
-                logger.debug(
-                    "Skipping memory store cleanup; namespace layout differs "
-                    "(NAMESPACE_THREAD_INDEX={})",
-                    NAMESPACE_THREAD_INDEX,
-                )
-        except sqlite3.OperationalError:
-            # Tables not created yet; fail gracefully.
-            pass
+        # Native LangGraph store tables may not exist yet. Exact equality is
+        # intentional: user-scope memories and sibling sessions stay.
+        memory_prefix = memory_namespace_prefix(user_id=user_id, thread_id=tid)
+        memory_deletes = (
+            (
+                STORE_VECTORS_TABLE,
+                f"DELETE FROM {STORE_VECTORS_TABLE} WHERE prefix=?;",  # noqa: S608
+            ),
+            (
+                STORE_TABLE,
+                f"DELETE FROM {STORE_TABLE} WHERE prefix=?;",  # noqa: S608
+            ),
+        )
+        for table, stmt in memory_deletes:
+            if not _table_exists(conn, table):
+                continue
+            cur = conn.execute(stmt, (memory_prefix,))
+            if cur.rowcount >= 0:
+                deleted["memory_store"] += cur.rowcount
 
         cur = conn.execute(
             "DELETE FROM chat_session WHERE thread_id=?;",

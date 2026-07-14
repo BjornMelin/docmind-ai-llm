@@ -11,7 +11,6 @@ These files define the active test contract:
 - `tests/fixtures/test_settings.py`: unit, integration, and system settings factories
 - `tests/e2e/conftest.py`: end-to-end (E2E) collection toggle
 - `tests/system/conftest.py`: system collection toggle
-- `scripts/run_tests.py`: tiered test runner
 
 Update the owner before documenting a new profile, marker, or toggle.
 
@@ -51,7 +50,8 @@ The fixture classes use these prefixes when you instantiate them directly:
 - `IntegrationTestSettings`: `DOCMIND_INTEGRATION_`
 - `SystemTestSettings`: `DOCMIND_`
 
-Nested fields use `__`, such as `DOCMIND_TEST_VLLM__MAX_TOKENS`.
+Nested fields use `__`, such as
+`DOCMIND_TEST_LLM_REQUEST__MAX_OUTPUT_TOKENS`.
 
 ## Install the matching dependency profile
 
@@ -62,14 +62,11 @@ Nested fields use `__`, such as `DOCMIND_TEST_VLLM__MAX_TOKENS`.
 | Baseline development | `uv sync --frozen` | Development tools and official CPU-only PyTorch wheels |
 | GPU | `uv sync --frozen --no-group cpu --extra gpu` | CUDA 12.8 PyTorch, torchvision, and CuPy; sparse FastEmbed remains CPU-based |
 | Apple acceleration | `uv sync --frozen --extra apple` | spaCy Apple operations on supported Apple Silicon hosts |
-| Visual reranking | `uv sync --frozen --extra multimodal` | ColPali reranking dependencies |
 | Observability | `uv sync --frozen --extra observability` | LlamaIndex OpenTelemetry integration |
 | Evaluation | `uv sync --frozen --extra eval` | BEIR evaluation dependencies |
 | Searchable PDF export | `uv sync --frozen --extra searchable-pdf` | OCRmyPDF |
 
 The baseline includes `llama-index-core`, its built-in property graph store, selected LlamaIndex storage and large language model adapters, direct FastEmbed, and Transformers SigLIP support. There are no `graph` or `llama` extras and no `--extras` test lane.
-
-The `multimodal` extra adds ColPali only. It does not select another image-embedding backbone.
 
 ## Configure collection-time toggles
 
@@ -104,16 +101,30 @@ Register a new marker in `pyproject.toml` or `tests/conftest.py` before using it
 Run a focused owner first:
 
 ```bash
-uv run pytest tests/unit/processing/test_parser_contract.py -vv
+uv run pytest tests/unit/processing/test_parser_contract.py -vv --no-cov
 ```
 
-Run unit and integration tiers through the runner:
+Run the native Pytest lanes:
 
 ```bash
-uv run python scripts/run_tests.py --unit
-uv run python scripts/run_tests.py --integration
-uv run python scripts/run_tests.py --fast
-uv run python scripts/run_tests.py --coverage
+uv run pytest tests/unit -q --no-cov
+uv run pytest tests/integration -q --no-cov
+uv run pytest tests/unit tests/integration -q --no-cov
+uv run --no-sync pytest -m requires_gpu --no-cov
+```
+
+Run coverage with explicit reports and enforcement:
+
+```bash
+uv run pytest tests/unit tests/integration -q \
+  --cov=src \
+  --cov-branch \
+  --cov-report=term-missing \
+  --cov-report=html:htmlcov \
+  --cov-report=xml:coverage.xml \
+  --cov-report=json:coverage.json \
+  --cov-fail-under=80 \
+  --junitxml=junit.xml
 ```
 
 Run opt-in collections explicitly:
@@ -126,8 +137,32 @@ DOCMIND_RUN_SYSTEM=1 uv run pytest tests/system -vv
 Run the GPU-marked tests only after installing the GPU profile:
 
 ```bash
-uv run python scripts/run_tests.py --gpu
+uv run --no-sync pytest -m requires_gpu --no-cov
 ```
+
+Run the two hardware owners directly when diagnosing the GPU boundary:
+
+```bash
+uv run --no-sync pytest \
+  tests/unit/nlp/test_spacy_service.py \
+  tests/integration/core/test_gpu_memory_cleanup_integration.py \
+  -m requires_gpu \
+  --no-cov \
+  -vv
+```
+
+Use `scripts/test_gpu.py` when you also need hardware metadata and VRAM sampling:
+
+```bash
+uv run --no-sync python scripts/test_gpu.py --compatibility
+uv run --no-sync python scripts/test_gpu.py --quick
+uv run --no-sync python scripts/test_gpu.py --memory-check
+```
+
+`--no-sync` preserves the explicitly installed GPU profile; plain `uv run`
+would reconcile the environment back to the default CPU profile. The GPU
+script invokes supported Pytest paths through the active Python interpreter
+and has no generic performance mode.
 
 ## Validate the Qdrant boundary
 
@@ -153,7 +188,7 @@ Prefetch and verify the pinned parser models before PDF integration or benchmark
 ```bash
 uv run python tools/models/pull.py \
   --parser-defaults \
-  --rapidocr-cache-dir cache/models
+  --parser-cache-dir cache/models
 uv run python scripts/parser_health.py --check
 ```
 

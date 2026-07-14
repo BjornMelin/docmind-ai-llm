@@ -11,7 +11,7 @@ def test_hybrid_dedup_keeps_highest_score(monkeypatch):  # type: ignore[no-untyp
     hmod = importlib.import_module("src.retrieval.hybrid")
     monkeypatch.setattr(
         hmod,
-        "ensure_hybrid_collection",
+        "check_hybrid_collection",
         lambda *_args, **_kwargs: type("_Compatibility", (), {"compatible": True})(),
     )
 
@@ -44,6 +44,7 @@ def test_hybrid_dedup_keeps_highest_score(monkeypatch):  # type: ignore[no-untyp
         dedup_key="page_id",
     )
     retr = hmod.ServerHybridRetriever(params, client=_Client())
+    monkeypatch.setattr(retr, "_encode_sparse", lambda _text: None)
     out = retr.retrieve("q")
     # Ensure only one of p1 remains and it's the higher score one
     ids = [n.node.node_id for n in out]
@@ -58,7 +59,7 @@ def test_fusion_selection(monkeypatch, mode: str, expected: str):  # type: ignor
     hmod = importlib.import_module("src.retrieval.hybrid")
     monkeypatch.setattr(
         hmod,
-        "ensure_hybrid_collection",
+        "check_hybrid_collection",
         lambda *_args, **_kwargs: type("_Compatibility", (), {"compatible": True})(),
     )
     params = hmod.HybridParams(collection="c", fusion_mode=mode)

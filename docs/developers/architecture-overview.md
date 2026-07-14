@@ -32,7 +32,7 @@ The parser boundary lives in `src/processing/parsing/` and has one supported imp
 - RapidOCR performs local optical character recognition (OCR)
 - The direct UTF-8 loader accepts only `.txt`, `.md`, `.markdown`, and `.rst`
 
-PDF parsing requires the pinned Docling and RapidOCR model bundles. Prefetch them with `tools/models/pull.py --parser-defaults`, then validate every manifest entry with `scripts/parser_health.py --check`.
+PDF parsing requires the pinned Docling layout bundle. Prefetch it with `tools/models/pull.py --parser-defaults`, then validate its manifest with `scripts/parser_health.py --check`. RapidOCR owns and validates the models packaged in its locked wheel.
 
 The parser runs behind a killable process boundary. Timeout and cancellation paths terminate and reap the worker. Searchable-PDF export is a separate, optional OCRmyPDF step that requires Portable Operating System Interface (POSIX) process groups.
 
@@ -46,7 +46,6 @@ DocMind has one model path for each retrieval role:
 | Sparse text embedding | Direct `fastembed>=0.5.1` |
 | Text reranking | BGE reranker cross-encoder |
 | Image embedding and scoring | SigLIP through the pinned Transformers loader |
-| Optional visual reranking | ColPali through the `multimodal` extra |
 
 Qdrant stores dense vectors as `text-dense` and sparse vectors as `text-sparse`. Server-side Reciprocal Rank Fusion (RRF) is the default. Distribution-Based Score Fusion (DBSF) is an optional configuration.
 
@@ -54,17 +53,23 @@ SigLIP is the only image embedding backend. The codebase does not include altern
 
 ## Route analysis through LangGraph
 
-The repository-owned LangGraph `StateGraph` supervisor coordinates routing, planning, retrieval, synthesis, and validation roles. LangChain creates the role agents inside that graph.
+The repository-owned LangGraph `StateGraph` supervisor coordinates four worker
+roles: planner, retrieval, synthesis, and validation. LangChain creates the role
+agents inside that graph. The retrieval worker delegates tool selection to
+LlamaIndex's native `RouterQueryEngine`.
 
 The router exposes these tools when their dependencies and indexes are ready:
 
 - `semantic_search`
 - `hybrid_search`
+- `keyword_search`
+- `multimodal_search`
 - `knowledge_graph`
 
-`knowledge_graph` requires both GraphRAG flags and a healthy LlamaIndex core
-property graph index. The router keeps vector and hybrid retrieval available
-when GraphRAG is absent.
+`knowledge_graph` requires a supplied, healthy LlamaIndex core property graph
+index. `DOCMIND_GRAPHRAG_CFG__ENABLED` controls the ingestion default, not a
+second router gate. Keyword, multimodal, and hybrid tools remain
+configuration-gated; semantic retrieval is always present.
 
 ## Persist local state by responsibility
 
@@ -75,7 +80,7 @@ Each persistence surface has one role:
 | SQLite | Chat sessions and LangGraph checkpoints |
 | DuckDB | Ingestion cache and optional local analytics |
 | Qdrant | Named text vectors and SigLIP image vectors |
-| Snapshot manager | Atomic snapshot staging, manifests, and restore data |
+| Snapshot manager | Atomic activation manifests and optional property-graph artifacts |
 | Artifact store | Content-addressed page images and thumbnails |
 
 Durable stores use `ArtifactRef` values for binary artifacts. They do not store raw image blobs or absolute host paths.
@@ -103,10 +108,10 @@ The core dependency surface includes:
 - `llama-index-core>=0.14.21,<0.15.0` and selected integrations
 - `fastembed>=0.5.1`
 - `ollama==0.6.2`
-- `torch==2.8.0`
+- `torch==2.11.0`
 - `transformers>=5.0.0,<6.0.0`
 
-The package excludes the `llama-index` meta-package and removed LlamaIndex embedding adapters. External vLLM and llama.cpp servers connect through OpenAI-compatible HTTP endpoints and are not installed in the DocMind environment.
+The application environment excludes the `llama-index` meta-package and removed LlamaIndex embedding adapters. External vLLM and llama.cpp servers connect through OpenAI-compatible HTTP endpoints and are not installed in the DocMind environment.
 
 ## Measure performance on the target machine
 

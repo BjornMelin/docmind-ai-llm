@@ -56,6 +56,28 @@ def test_select_device_auto_uses_mps_when_no_cuda(monkeypatch):
 
 
 @pytest.mark.unit
+def test_get_vram_gb_reports_device_capacity(monkeypatch):
+    import src.utils.core as core
+
+    class _Props:
+        total_memory = 24 * 1024**3
+
+    class _Cuda:
+        @staticmethod
+        def is_available() -> bool:
+            return True
+
+        @staticmethod
+        def get_device_properties(index: int) -> _Props:
+            assert index == 2
+            return _Props()
+
+    monkeypatch.setattr(core, "TORCH", types.SimpleNamespace(cuda=_Cuda), raising=True)
+
+    assert core.get_vram_gb(2) == 24.0
+
+
+@pytest.mark.unit
 def test_has_cuda_vram_true_and_false(monkeypatch):
     import src.utils.core as core
 

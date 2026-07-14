@@ -42,35 +42,34 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 | **FR-004** | The system **shall** embed text with BGE-M3 and images with SigLIP. No alternate image backend selector is supported. | ADR‑002 | AC‑FR‑004 |
 | **FR-005** | The system **shall** persist vectors in Qdrant with named vectors `text-dense` and `text-sparse` and perform server‑side hybrid queries via the Query API. Default fusion **SHALL** be RRF; DBSF MAY be enabled experimentally via environment when supported by Qdrant. The sparse index **SHALL** prefer FastEmbed BM42 with IDF modifier; fallback to BM25 when BM42 is unavailable. During hybrid queries, the system **shall** emit telemetry fields: `retrieval.fusion_mode`, `retrieval.prefetch_*_limit`, `retrieval.fused_limit`, `retrieval.return_count`, `retrieval.latency_ms`, `retrieval.sparse_fallback`, and `dedup.*`. | SPEC‑004/ADR‑005/006 | AC‑FR‑005 |
 | **FR-006** | The system **shall not** implement client-side fusion as default; all hybrid fusion **SHALL** occur server‑side in Qdrant. | SPEC‑004 | AC‑FR‑006 |
-| **FR-007** | The system **shall** rerank text with BGE‑reranker‑v2‑m3 and visual/page-image nodes with SigLIP text–image similarity by default; ColPali MAY be enabled when thresholds are met (visual‑heavy corpora, small K, sufficient GPU). | SPEC‑005/ADR‑037 | AC‑FR‑007 |
+| **FR-007** | The system **shall** rerank text with BGE‑reranker‑v2‑m3 and visual/page-image nodes with SigLIP text–image similarity. | SPEC‑005/ADR‑037 | AC‑FR‑007 |
 | **FR-008** | The system **shall** run hybrid and reranking **always‑on** with internal caps/timeouts; no UI toggles. Ops overrides MAY be provided via environment variables (canonical: `DOCMIND_RETRIEVAL__USE_RERANKING`). | ADR‑024 | AC‑FR‑008 |
 | **FR-009** | The system **shall** support optional GraphRAG via LlamaIndex PropertyGraphIndex using documented APIs only (e.g., `as_retriever`, `get_rel_map`) and a UI toggle. Compose RouterQueryEngine with vector+graph tools (fallback to vector when graph missing). Persist via SnapshotManager with manifest hashing, `graph_exports` metadata, and a single-writer lock. | ADR‑019/ADR038/SPEC-014 | AC‑FR‑009 |
-| **FR-009.1** | The system **shall** display a staleness badge in Chat when manifest hashes differ, with tooltip copy exactly: “Snapshot is stale (content/config changed). Rebuild in Documents → Rebuild GraphRAG Snapshot.” The check MUST be local‑only (no network). | SPEC‑014 | AC‑FR‑009 |
+| **FR-009.1** | The system **shall** display a staleness badge in Chat when manifest hashes differ, with tooltip copy exactly: “Snapshot is stale (content/config changed). Rebuild in Documents → Rebuild search index.” The check MUST be local‑only (no network). | SPEC‑014 | AC‑FR‑009 |
 | **FR-009.2** | The system **shall** implement SnapshotManager single‑writer lock semantics with bounded timeout, `portalocker`-backed metadata, atomic `_tmp → <timestamp>` rename, and the tri-file manifest. | SPEC‑014 | AC‑FR‑009‑LOCK |
 | **FR-009.3** | The system **shall** provide exports with JSONL required and Parquet optional (guarded by PyArrow), using timestamped filenames stored under `graph/` and recording telemetry. | SPEC‑006 | AC‑FR‑009 |
 | **FR-009.4** | The system **shall** select export seeds deterministically, de‑duplicate, and cap at 32 items. | SPEC‑006 | AC‑FR‑009‑SEEDS |
 | **FR-009.5** | The system **shall** validate export paths as non‑egress, sanitize file names, and block symlink targets. | SPEC‑011 | AC‑FR‑009‑SEC |
-| **FR-009.6** | The system **shall** emit telemetry events for router selection, staleness detection, export actions, and traversal depth (where applicable). | SPEC‑012 | AC‑FR‑OBS‑001 |
+| **FR-009.6** | The system **shall** emit OpenTelemetry router-construction and graph-export signals plus local JSONL retrieval backend/outcome, staleness, and export events. Per-query route and traversal-depth JSONL are not implemented. | SPEC‑012 | AC‑FR‑OBS‑001 |
 | **FR-010** | The system **shall** provide a multipage Streamlit UI using `st.Page`/`st.navigation` with Chat, Documents, Analytics, Settings. | ADR‑013/SPEC‑008 | AC‑FR‑010 |
 | **FR-011** | The system **shall** implement native chat streaming via `st.chat_message` + `st.chat_input` + `st.write_stream`. | ADR‑013/SPEC‑008 | AC‑FR‑011 |
 | **FR-012** | The system **shall** allow users to select an LLM provider among llama.cpp, vLLM, Ollama, LM Studio, and choose the model at runtime in UI and settings. | ADR‑009 | AC‑FR‑012 |
 | **FR-013** | The system **shall** provide OpenAI‑compatible client wiring for vLLM, Ollama, LM Studio, and llama.cpp server modes. | ADR‑009 | AC‑FR‑013 |
 | **FR-014** | The system **shall** run a LangGraph‑supervised multi‑agent flow with deterministic JSON‑schema outputs when available. | ADR‑001 | AC‑FR‑014 |
 | **FR-015** | The system **shall** persist the LlamaIndex ingestion transformation cache via DuckDBKV. | ADR‑010 | AC‑FR‑015 |
-| **FR-016** | The system **shall** provide an evaluation harness for IR (BEIR/M‑BEIR) and E2E (RAGAS) runnable offline. | ADR‑011 | AC‑FR‑016 |
+| **FR-016** | The system **shall** provide an offline BEIR/M‑BEIR evaluation harness for retrieval quality. | SPEC‑010/ADR‑039 | AC‑FR‑016 |
 | **FR-017** | The system **shall** collect minimal observability (latency, memory, top‑k, fusion mode, reranker hits) locally. | Status: Implemented | - |
 | **FR-020** | The system **shall** provide a file‑based prompt template system built on LlamaIndex `RichPromptTemplate` with YAML front matter metadata and presets. | ADR‑020/SPEC‑020 | AC‑FR‑020 |
 | **FR-021** | The system **shall** pre-validate Settings UI configuration before persisting changes and must not use unsafe HTML rendering in UI elements. | SPEC‑022/ADR‑041 | AC‑FR‑021 |
-| **FR-022** | The system **shall** persist Chat history locally across refresh/restart and provide per-session “clear/purge” actions via LangGraph `SqliteSaver` and `ArtifactRef` resolution. | SPEC‑041/ADR‑058 | AC‑FR‑022 |
+| **FR-022** | The system **shall** persist Chat history locally across refresh/restart. Hard purge **shall** atomically fence the user/session identity, drain active execution, and delete its checkpoints, memories, and session record. Startup **shall** reject raw v1 checkpoint identities. | SPEC‑041/ADR‑058 | AC‑FR‑022 |
 | **FR-023** | The system **shall** provide a keyword/lexical retrieval tool for exact term lookups (gated by config; disabled by default). | SPEC‑025/ADR‑044 | AC‑FR‑023 |
 | **FR-024** | The system **shall** provide a canonical programmatic ingestion API for local filesystem inputs. | SPEC‑026/ADR‑045 | AC‑FR‑024 |
 | **FR-025** | The system **shall** support background ingestion and snapshot rebuild jobs in the Documents UI with progress reporting and best-effort cancellation. | SPEC‑033/ADR‑052 | AC‑FR‑025 |
-| **FR-026** | The system **shall** support an optional semantic response cache with strict invalidation by corpus/config/model/template/params. | SPEC‑038/ADR‑035 | AC‑FR‑026 |
-| **FR-027** | The system **shall** support manual local backups (snapshots + cache + optional uploads/analytics) with retention/rotation and documented restore steps. | SPEC‑037/ADR‑033 | AC‑FR‑027 |
+| **FR-027** | The system **shall** support manual local backups (snapshots + cache + chat SQLite + artifacts + optional uploads/analytics) with completeness-aware retention and documented restore steps. | SPEC‑037/ADR‑033 | AC‑FR‑027 |
 | **FR-028** | The system **shall** support document analysis modes `auto \| separate \| combined` with deterministic, offline-safe execution. | SPEC‑036/ADR‑023 | AC‑FR‑028 |
 | **FR-029** | The system **shall** enforce and propagate an agent decision timeout budget so nested tool/LLM calls cannot exceed it. | SPEC‑040/ADR‑056 | AC‑FR‑029 |
 | **FR-030** | The system **shall** provide multi-session Chat management (create/rename/delete/select) and store session metadata locally in the DocMind registry. | SPEC‑041/ADR‑058 | AC‑FR‑030 |
-| **FR-031** | The system **shall** support branching/time travel for Chat sessions: list checkpoints, fork from a checkpoint, and resume execution. | SPEC‑041/ADR‑058 | AC‑FR‑031 |
+| **FR-031** | The system **shall** support branching/time travel for Chat sessions. Fork and hard purge **shall** share one mutation fence so a fork cannot recreate purged state. | SPEC‑041/ADR‑058 | AC‑FR‑031 |
 | **FR-032** | The system **shall** support long-term memory (facts/preferences) with metadata-filtered recall and user-visible review/purge controls. | SPEC‑041/ADR‑058 | AC‑FR‑032 |
 | **FR‑SEC‑IMG‑ENC** | The system **shall** support optional encryption‑at‑rest for page images using AES‑GCM; metadata SHALL record `encrypted=true`, `alg`, and `kid`. | SPEC‑011 | AC‑FR‑SEC‑IMG‑ENC |
 | **FR‑SEC‑NET‑001** | The system **shall** default to offline‑first behavior; remote endpoints are disabled unless explicitly allowlisted. | SPEC‑011/ADR‑024 | AC‑FR‑SEC‑NET‑001 |
@@ -84,10 +83,10 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 | **Reliability** | **NFR‑REL‑001** | The app **shall** recover from vector store restarts without re‑ingestion (idempotent upsert). | demo |
 | **Reliability** | **NFR‑REL‑002** | Cache hits **shall** be deterministic across runs given same inputs and config. | test |
 | **Performance efficiency** | **NFR‑PERF‑001** | Chat benchmarks **shall** report p50 end-to-end latency with the hardware, model, and corpus identified. | test |
-| **Performance efficiency** | **NFR‑PERF‑002** | Rerank benchmarks **shall** report text, SigLIP, and optional ColPali stage latency with the hardware identified. | test |
+| **Performance efficiency** | **NFR‑PERF‑002** | Rerank benchmarks **shall** report text and SigLIP stage latency with the hardware identified. | test |
 | **Performance efficiency** | **NFR‑PERF‑003** | Qdrant benchmarks **shall** report local hybrid-query p50 with collection size and `fused_top_k` identified. | test |
 | **Usability** | **NFR‑USE‑001** | Streamlit UI navigable with keyboard; forms avoid unnecessary reruns. | inspection |
-| **Observability** | **NFR‑OBS‑001** | The app **shall** emit structured, local-first telemetry events (JSONL) for key actions (router selection, staleness detection, exports, job lifecycle) with sampling/rotation controls. | test |
+| **Observability** | **NFR‑OBS‑001** | The app **shall** emit structured, local-first telemetry events (JSONL) for retrieval outcomes, staleness detection, exports, and job lifecycle with sampling/rotation controls. | test |
 | **Observability** | **NFR‑OBS‑002** | The app **shall** support optional OpenTelemetry tracing and metrics export when explicitly enabled; disabled by default and safe for offline operation. | test |
 | **Security** | **NFR‑SEC‑001** | Default egress disabled; only local endpoints allowed unless explicitly configured. | inspection |
 | **Security** | **NFR‑SEC‑002** | Local data **shall** remain on device; logging excludes sensitive content. | inspection |
@@ -264,8 +263,8 @@ Scenario: Non‑egress export path validation
 ```gherkin
 Scenario: Telemetry events emitted
   When a query is processed and/or a snapshot/export action occurs
-  Then the system SHALL emit events: router_selected, snapshot_stale_detected, export_performed
-  And traversal_depth SHALL be recorded when a knowledge_graph route is taken
+  Then local JSONL SHALL record retrieval backend/outcome and applicable snapshot_stale_detected or export_performed events
+  And router construction SHALL emit an OpenTelemetry router_selected event with tool count and names
 ```
 
 ### AC‑FR‑SEC‑NET‑001
@@ -277,19 +276,20 @@ Scenario: Reject non‑allowlisted remote endpoint
   Then the Settings page SHALL reject the value with a helpful error
 ```
 
-### AC‑FR‑026
+### AC‑FR‑022
 
 ```gherkin
-Scenario: Exact cache hit
-  Given semantic cache is enabled and a prior request was stored
-  When I repeat the same request (same prompt_key, template, model, params)
-  Then the system SHALL return the cached response without calling the LLM
+Scenario: Reject raw v1 checkpoint identities
+  Given a Chat DB contains a raw v1 checkpoint thread ID
+  When DocMind v2 opens the Chat DB
+  Then startup SHALL fail with archive-and-recreate guidance
 
-Scenario: Semantic cache hit is invalidated by corpus/config hash
-  Given semantic cache is enabled and a prior response exists
-  And the corpus_hash or config_hash changed
-  When I send a near-duplicate request
-  Then the system SHALL NOT return the cached response
+Scenario: Serialize hard purge and checkpoint fork
+  Given one user session has checkpoints and long-term memories
+  When hard purge and checkpoint fork overlap
+  Then the coordinator SHALL serialize both mutations under one fence
+  And the fork SHALL finish before deletion or fail closed after fencing
+  And no checkpoint or memory SHALL reappear after purge
 ```
 
 ### AC‑FR‑027
@@ -298,8 +298,15 @@ Scenario: Semantic cache hit is invalidated by corpus/config hash
 Scenario: Backup creates a timestamped directory and prunes old backups
   Given keep_last=2 and there are 2 existing backups
   When I run the backup command successfully
-  Then a new backup directory SHALL be created under data/backups/
+  Then a new complete backup directory SHALL be created under data/backups/
   And older backups beyond keep_last SHALL be pruned
+
+Scenario: Incomplete backup preserves known-good recovery points
+  Given an existing complete backup and a required or requested artifact failure
+  When I run the backup command
+  Then the diagnostic manifest SHALL have complete=false
+  And the diagnostic directory SHALL be excluded from every retention prune
+  And the existing complete backup SHALL remain
 ```
 
 ### AC‑FR‑028
@@ -320,14 +327,14 @@ Scenario: Combined mode returns a single output
 
 ```gherkin
 Scenario: Agent deadline propagation caps per-call timeouts
-  Given agent deadline propagation is enabled and decision_timeout=10s
+  Given a workflow has an absolute deadline and decision_timeout=10s
   When the multi-agent workflow runs
-  Then individual LLM/tool call timeouts SHALL be capped to <=10s
+  Then individual LLM/tool call timeouts SHALL not exceed 10s or the remaining workflow budget
 
 Scenario: Deadline exceeded returns a graceful timeout response
-  Given agent deadline propagation is enabled and decision_timeout is small
+  Given a workflow has an absolute deadline with a small remaining budget
   When a call exceeds the remaining budget
-  Then the coordinator SHALL return a timeout response (or fallback) without crashing
+  Then the coordinator SHALL return the canonical timeout response without crashing
 ```
 
 ### AC‑FR‑030
@@ -348,4 +355,5 @@ Scenario: Branch from checkpoint and resume
   When I list checkpoints and fork from checkpoint #N
   Then a new branched session SHALL be created with history up to checkpoint #N
   And resuming the fork SHALL allow new queries without losing the branch point
+  And a concurrent hard purge SHALL delete the completed fork or prevent it
 ```

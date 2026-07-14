@@ -17,19 +17,23 @@ def test_encode_to_qdrant_fastembed_available(monkeypatch):
             self.values = [0.5, 0.7]
 
     class _Enc:
-        def embed(self, texts):
+        def query_embed(self, texts):
             return [_Emb() for _ in texts]
 
-    monkeypatch.setattr(sq, "_get_sparse_encoder", lambda: _Enc())
+    monkeypatch.setattr(sq, "_get_sparse_encoder", lambda _cache: _Enc())
     out = sq.encode_to_qdrant("hello")
     assert isinstance(out, qmodels.SparseVector)
     assert out.indices == [1, 5]
     assert out.values == [0.5, 0.7]
 
 
-def test_encode_to_qdrant_encoder_unavailable(monkeypatch):
-    """Return None when encoder is unavailable (ImportError)."""
+def test_encode_to_qdrant_encoder_failure_propagates(monkeypatch):
+    """Fail closed when the required canonical encoder is unavailable."""
     from src.retrieval import sparse_query as sq
 
-    monkeypatch.setattr(sq, "_get_sparse_encoder", lambda: None)
-    assert sq.encode_to_qdrant("x") is None
+    def _unavailable(_cache):  # type: ignore[no-untyped-def]
+        raise RuntimeError("encoder unavailable")
+
+    monkeypatch.setattr(sq, "_get_sparse_encoder", _unavailable)
+    with pytest.raises(RuntimeError, match="encoder unavailable"):
+        sq.encode_to_qdrant("x")

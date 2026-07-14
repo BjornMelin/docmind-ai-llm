@@ -1,147 +1,152 @@
 ---
 spec: SPEC-040
-title: Agent Deadline Propagation + Router Injection (Cooperative Cancellation)
-date: 2026-01-18
-version: 1.0.1
+title: Agent Deadlines and Canonical Router Retrieval
+date: 2026-07-13
+version: 2.0.0
 owners: ["ai-arch"]
 status: Implemented
 related_requirements:
   - FR-014: LangGraph-supervised multi-agent flow.
-  - FR-029: Agent deadline propagation/cooperative cancellation.
+  - FR-029: Agent deadline propagation and canonical router retrieval.
   - NFR-PERF-001: Chat latency budgets remain within targets.
-  - NFR-REL-002: Fail-open behavior on timeouts (no corruption).
+  - NFR-REL-002: Timed-out runs cannot publish late graph state.
 related_adrs: ["ADR-056", "ADR-011", "ADR-024", "ADR-013"]
 ---
 
 ## Goals
 
-1. Make `settings.agents.enable_deadline_propagation` effective:
-   - seed an absolute deadline in agent state
-   - align per-call timeouts (LLM/Qdrant) to the decision timeout budget
-   - prevent runaway retries when budget is exhausted
-2. Make `settings.agents.enable_router_injection` effective:
-   - prefer an injected `router_engine` when provided by the UI (session snapshot)
-   - fail-open to explicit vector/hybrid retrieval when absent
-3. Restore a consistent retrieval tool contract:
-   - retrieval outputs must include **documents/sources** suitable for synthesis/validation and UI.
+1. Make the coordinator deadline authoritative for each graph run.
+2. Prevent a timed-out run from publishing late checkpoints or overlapping a
+   replacement run for the same thread.
+3. Use one prebuilt LlamaIndex `RouterQueryEngine` as the sole owner of document
+   retrieval strategy selection.
+4. Return sanitized, structured documents for synthesis, validation, and UI
+   source display.
 
 ## Non-goals
 
-- Full async cancellation refactor (`astream` + task cancellation) for Streamlit.
-- Introducing new retrieval backends or modifying Qdrant schema.
-- Logging raw prompts or document text in telemetry for debugging.
+- Forcefully terminating arbitrary in-process Python threads or external side
+  effects.
+- Persisting query engines, indexes, retrievers, or clients in LangGraph state.
+- Maintaining the v1 raw-index, `ToolFactory`, or retrieval-strategy interfaces.
+- Logging prompts, queries, document text, paths, or credentials in telemetry.
 
-## Technical Design
+## Coordinator Deadline
 
-### State: Deadline Fields
+The coordinator seeds an absolute monotonic deadline in every `MultiAgentState`.
+It rejects a missing or non-finite deadline before graph execution. An explicit
+`max_agent_timeout` can lower the configured `settings.agents.decision_timeout`
+for one coordinator instance.
 
-Extend `src/agents/models.py::MultiAgentState` with:
+The coordinator executes `astream(...)` on one bounded, persistent event-loop
+runner. For each run it:
 
-- `deadline_ts: float | None` — absolute timestamp in `time.monotonic()` seconds
-- `cancel_reason: str | None` — e.g. `deadline_exceeded`
+1. calculates the remaining wall-clock budget;
+2. copies the compiled graph with public `Pregel.copy(...)` and sets that copy's
+   `step_timeout` to the remaining budget;
+3. supplies a public `langgraph.runtime.RunControl`;
+4. waits on `Future.result(remaining)` as the authoritative sync boundary; and
+5. fences the canonical user-scoped persistence key until the async wrapper
+   exits.
 
-### Coordinator: Budget Seeding
+On timeout, the coordinator requests drain, cancels the wrapper future, and
+returns one stable timeout state. Only `deadline_exceeded` and
+`dependency_timeout` set `timed_out=true`; capacity, closure, overlapping-run,
+and generic cancellation stops set `workflow_stopped=true` with
+`timed_out=false`. No stopped run is cached, consolidated into memory, or
+counted as successful. A late synchronous node result is neither accepted nor
+checkpointed.
 
-In `src/agents/coordinator.py::process_query`:
+### Provider timeout alignment
 
-- If `settings.agents.enable_deadline_propagation` is true:
-  - compute `deadline_ts = time.monotonic() + settings.agents.decision_timeout`
-  - seed it into the initial state
+Coordinator-owned model calls use the smallest applicable timeout from:
 
-In `_run_agent_workflow`:
+- the provider request timeout;
+- `settings.agents.decision_timeout`; and
+- the coordinator's explicit per-run cap.
 
-- Keep the existing “timeout check between yielded states”
-- When the deadline is exceeded:
-  - set `timed_out=True` + `deadline_s=<decision_timeout>` on the final state dict
-  - exit the loop and trigger coordinator fallback policy (existing behavior)
+When an explicit coordinator cap is present, `ChatOpenAI.max_retries` is zero so
+provider retries cannot multiply the overall budget. Qdrant calls are similarly
+bounded by the smaller configured database and decision timeouts.
 
-### Timeout Alignment (Per-call caps)
+### Cooperative limitation
 
-When deadline propagation is enabled, ensure that **individual call timeouts cannot exceed the overall budget**:
+LangGraph may offload synchronous nodes and tools to worker threads. Python
+cannot safely kill such a thread, so an external call may finish its own side
+effect after the caller deadline if that dependency ignores cancellation. Every
+provider and tool must therefore use a native timeout and make externally visible
+operations idempotent where practical. Process-per-run isolation is out of scope.
 
-- In `src/config/langchain_factory.py::build_chat_model`:
-  - set `timeout = min(cfg.llm_request_timeout_seconds, cfg.agents.decision_timeout)`
-- In `src/config/llm_factory.py::build_llm`:
-  - similarly cap `timeout_s` and `request_timeout` values
-- In Qdrant client construction (where applicable):
-  - cap request timeout using `min(settings.database.qdrant_timeout, settings.agents.decision_timeout)`
+## Canonical Retrieval Boundary
 
-This does not provide perfect cancellation, but prevents the worst case where an individual call exceeds the supervisor budget.
+The Documents and Chat pages build or restore one LlamaIndex
+`RouterQueryEngine`. Chat passes only that object through
+`ToolRuntime.context["router_engine"]`; it is never checkpointed.
 
-### Retrieval Tool Contract + Router Injection
+`src/agents/tools/retrieval.py::retrieve_documents` accepts only the user query
+plus injected state/runtime parameters. It calls `router_engine.query(query)`
+exactly once. The router owns selection among the tools assembled by
+`src/retrieval/router_factory.py`:
 
-Fix default tool wiring:
+- semantic vector search (required);
+- server-side hybrid search (optional);
+- sparse keyword search (optional);
+- multimodal fusion (optional); and
+- knowledge-graph retrieval (optional).
 
-- In `src/agents/registry/tool_registry.py::DefaultToolRegistry.get_retrieval_tools`:
-  - return `retrieve_documents` (from `src/agents/tools/retrieval.py`) as the retrieval tool for the supervisor graph.
+The v2 boundary deliberately has no `strategy`, `use_graphrag`, raw vector
+index, raw graph index, hybrid retriever, or router-enable flag. Missing routers
+and query failures return stable, user-safe error JSON; they do not reconstruct
+an alternate retrieval stack.
 
-Enhance `retrieve_documents` to support router injection:
+Successful output contains:
 
-- If `settings.agents.enable_router_injection` is true and `router_engine` is present in `InjectedState`:
-  - call `router_engine.query(query)` and extract:
-    - response text
-    - `source_nodes` → normalized `documents` list with `{content/text, score, metadata}`
-  - return a JSON payload matching the existing retrieval tool shape:
-    - `documents`, `strategy_used`, `processing_time_ms`, etc.
-- Otherwise:
-  - use the existing explicit hybrid/vector/GraphRAG tool paths.
+- `documents` with sanitized content, score, and metadata;
+- `strategy_used: "router"`;
+- original and optimized query fields;
+- result count and processing time; and
+- `router_used: true`.
 
-### Tool Invocation Model (Sync-first)
+Raw filesystem paths and base64 payloads are removed before documents enter
+graph state. Empty contextual follow-ups may reuse the most recent sanitized
+sources from persisted state.
 
-DocMind's supervisor graph executes subagents synchronously via `agent.invoke(...)`
-(see `src/agents/supervisor_graph.py`). To preserve compatibility:
+## Tool Invocation
 
-- Tools MUST support synchronous invocation (`BaseTool.invoke(...)`), even if they
-  are safe to call via `ainvoke(...)` in unit tests.
-- Avoid defining async-only tools (e.g., `@tool` on `async def`) unless the
-  orchestration is migrated end-to-end to async (`ainvoke`/`astream`), because
-  async-only tools can break sync `invoke` execution paths.
-- Parallelism SHOULD be expressed at the orchestration layer (e.g., multiple tool
-  calls executed by the agent/tool runner with bounded concurrency), not by hiding
-  internal `asyncio.gather(...)` inside a tool implementation.
-- Orchestration-level parallelism is gated by `DOCMIND_AGENTS__ENABLE_PARALLEL_TOOL_EXECUTION`.
-  Supervisors using `agent.invoke(...)` (see `src/agents/supervisor_graph.py`) and tools
-  implementing `BaseTool.invoke(...)` MUST remain sync-compatible; enabling
-  `DOCMIND_AGENTS__ENABLE_PARALLEL_TOOL_EXECUTION` is the supported path for parallel
-  tool execution instead of embedding `asyncio.gather(...)` inside tools or switching
-  to async-only `ainvoke`/`astream` codepaths.
+The retrieval tool remains synchronously invokable for LangGraph and Streamlit.
+Parallelism belongs to graph orchestration, not hidden `asyncio.gather(...)`
+calls inside tools.
 
-### Observability
+## Observability
 
-Emit JSONL events:
+Metadata-only events include:
 
-- `agent_deadline_exceeded` with `{decision_timeout_s, elapsed_s}`
-- `router_injection_used` with `{used: bool, reason}`
+- `agent_deadline_exceeded=true` only for actual deadline overruns;
+- `agent_workflow_stopped` for every canonical stop; and
+- `retrieval.backend="llama_index_router"` with stable outcomes
+  `success`, `router_missing`, or `query_failed`.
 
-Never include raw prompt/doc text.
+## Verification
 
-## Testing Strategy
+- `tests/unit/agents/tools/test_retrieval.py` proves the sole-router contract,
+  one query call, document normalization, deduplication, contextual recall, and
+  safe failures.
+- `tests/unit/agents/tools/test_tool_registry.py` proves the registry
+  exposes the structured retrieval tool.
+- `tests/unit/agents/test_deadline_seeded.py` and
+  `tests/unit/config/test_timeout_caps.py` prove deadline and provider caps.
+- `tests/unit/agents/test_coordinator_additional_coverage.py` proves isolated
+  graph copies, same-thread fencing, and prompt runner shutdown.
+- `tests/integration/test_agent_timeout_behavior.py` runs a real sleeping sync
+  node and proves prompt return without a late checkpoint.
 
-### Unit
+All tests are deterministic and offline.
 
-- `tests/unit/agents/test_tool_registry_retrieval_tool.py`:
-  - registry returns `retrieve_documents` (not `router_tool`) for retrieval agent.
-- `tests/unit/agents/test_deadline_seeded.py`:
-  - deadline_ts exists in initial state when enabled.
-- `tests/unit/config/test_timeout_caps.py`:
-  - build_chat_model/build_llm timeouts are capped when enable_deadline_propagation is true.
-- `tests/unit/agents/test_router_injection_path.py`:
-  - retrieve_documents uses injected router_engine when enabled and present.
+## v2 Migration
 
-### Integration
-
-- `tests/integration/test_agent_timeout_behavior.py`:
-  - configure a small decision_timeout and a slow mocked call, assert coordinator returns timeout fallback without crashing.
-
-All tests must be deterministic and offline.
-
-## Rollout / Migration
-
-- Default behavior unchanged unless flags are enabled.
-- Safe to ship incrementally; fail-open on errors.
-
-## RTM Updates
-
-Update `docs/specs/traceability.md`:
-
-- Add `FR-029` row (and update `FR-014` row if needed) mapping to code/tests above.
+This is a forward-only hard cut. v2 removes
+`AgentConfig.enable_deadline_propagation`, `AgentConfig.enable_router_injection`,
+`src/agents/tool_factory.py`, raw retrieval objects in coordinator overrides, and
+the retrieval tool's manual strategy parameters. Deadline propagation is
+unconditional; no deadline feature flag remains. Callers must build a router
+with `build_router_engine(...)` and pass only `{"router_engine": router}`.

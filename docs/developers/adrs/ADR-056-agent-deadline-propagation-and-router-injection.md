@@ -1,124 +1,135 @@
 ---
 ADR: 056
-Title: Agent Deadline Propagation + Router Injection (Cooperative, Local-First)
+Title: Authoritative Agent Deadlines and Canonical Router Retrieval
 Status: Implemented
-Version: 1.0
-Date: 2026-01-09
+Version: 2.0
+Date: 2026-07-13
 Supersedes:
 Superseded-by:
 Related: 011, 024, 031, 052
 Tags: agents, langgraph, timeouts, cancellation, retrieval, streamlit
 References:
-  - https://langchain-ai.github.io/langgraph/how-tos/streaming/
-  - https://langchain-5e9cc07a.mintlify.app/oss/python/langgraph/interrupts
-  - https://reference.langchain.com/python/langchain_core/runnables/#langchain_core.runnables.RunnableConfig
+  - https://reference.langchain.com/python/langgraph/runtime/RunControl
+  - https://reference.langchain.com/python/langgraph/pregel/Pregel
   - https://reference.langchain.com/python/integrations/langchain_openai/ChatOpenAI/
 ---
 
-## Description
-
-Implement **cooperative deadline propagation** for the LangGraph supervisor workflow and make `AgentConfig.enable_router_injection` meaningful by using injected router engines when available, while restoring a consistent retrieval tool contract.
-
 ## Context
 
-DocMind’s multi-agent coordinator currently:
+DocMind needs a synchronous Streamlit-facing coordinator, bounded LangGraph
+execution, structured retrieval sources, and local-first persistence. The v1
+design accumulated two retrieval owners: an injected LlamaIndex router and a
+manual fallback that reconstructed vector, hybrid, and graph tools from raw
+runtime objects. A feature flag selected between them.
 
-- runs `compiled_graph.stream(…)` synchronously (Streamlit-compatible)
-- enforces a wall-clock timeout only **between** streamed state transitions
-- defines config flags:
-  - `agents.enable_deadline_propagation`
-  - `agents.enable_router_injection`
-    but does not use them
-
-Additionally, there is a **retrieval wiring mismatch**:
-
-- The supervisor prompt describes `retrieval_agent` as “Document search with DSPy optimization”.
-- The default tool registry wires the retrieval agent to a router tool that returns only a text response and does not expose retrieved documents/source nodes.
-
-This drift limits correctness (missing sources), makes timeouts less effective (blocking calls can exceed the supervisor budget), and prevents operators from relying on configuration flags.
+That split duplicated reranking and fallback policy, expanded the transient
+runtime contract, and made the configured router optional even though the UI
+already builds it from each active snapshot. Separately, checking a timeout only
+between synchronous graph events could not bound a blocked graph step.
 
 ## Decision Drivers
 
-- Streamlit constraints: synchronous execution, avoid async event loop complexity
-- Offline-first: no new network surfaces; bounded timeouts for local endpoints
-- Correctness: retrieval outputs must include documents/sources for synthesis/validation
-- Reliability: prevent “runaway retries” when time budget is exhausted
-- Maintainability: one clear contract for “retrieval tool result”
+- Use public LangGraph and LlamaIndex capabilities.
+- Make one wall-clock budget authoritative.
+- Prevent late graph state from being published after timeout.
+- Keep retrieval selection, reranking, and fallbacks in one owner.
+- Never persist live engines, indexes, retrievers, or clients.
+- Prefer deletion and a forward-only v2 contract over compatibility code.
 
-## Alternatives
+## Decision Framework
 
-- A: **Cooperative deadline propagation + injected router engine path** (Selected)
-  - Store absolute deadline in agent state
-  - Cap request timeouts (LLM/Qdrant) to the decision timeout
-  - Prefer injected router engine for retrieval when enabled
-  - Restore retrieval tool contract to return structured docs (sources)
-  - Pros: works with sync Streamlit, minimal re-platforming, improves correctness
-  - Cons: cannot preempt a truly blocking call; relies on bounded timeouts
-- B: Coordinator-only hard timeout (thread/future wrapper)
-  - Pros: quick UX stopgap
-  - Cons: does not stop nested calls; can waste compute and leave background work running
-- C: Full async refactor to `astream` + cancellation
-  - Pros: strongest cancellation semantics
-  - Cons: high-risk in Streamlit; large migration surface
-- D: Interrupt/stop-flag “pseudo cancellation” only
-  - Pros: leverages LangGraph primitives for control flow
-  - Cons: still requires cooperative timeouts; more scattered logic without explicit budgets
+Weights: solution leverage 35%, application value 30%, maintenance and cognitive
+load 25%, architectural adaptability 10%.
 
-### Decision Framework (≥9.0)
+| Retrieval design | Leverage | Value | Maintenance | Adaptability | Total |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Native LlamaIndex router as sole owner | 9.6 | 9.5 | 9.7 | 9.2 | **9.56** |
+| Router plus manual raw-index fallback | 6.5 | 8.0 | 4.0 | 5.5 | 6.23 |
+| App-owned tool factory only | 5.0 | 7.0 | 4.0 | 6.0 | 5.45 |
 
-| Option | Complexity (40%) | Perf (30%) | Alignment (30%) | Total | Decision |
-| --- | --- | --- | --- | --- | --- |
-| A: Deadline propagation + router injection | 8.8 | 9.2 | 9.6 | **9.16** | Selected |
-| B: Coordinator-only hard timeout | 7.5 | 7.0 | 7.5 | 7.35 | Rejected |
-| C: Full async cancellation refactor | 4.0 | 9.0 | 6.0 | 6.10 | Rejected |
-| D: Stop-flag/interrupt only | 6.5 | 7.5 | 7.0 | 6.95 | Rejected |
+The native router is selected.
 
 ## Decision
 
-We will implement a **budget-aware, cooperative timeout model**:
+### Authoritative deadline
 
-1. Add an **absolute deadline** to `MultiAgentState` when `settings.agents.enable_deadline_propagation` is enabled.
-2. Cap request timeouts (LLM and Qdrant client timeouts) so individual calls cannot exceed the agent decision timeout.
-3. Restore a consistent retrieval tool contract by using the structured `retrieve_documents` tool for the retrieval agent.
-4. If `settings.agents.enable_router_injection` is enabled and a `router_engine` is injected in state/tools_data, prefer it as the retrieval path (fail-open to explicit retrieval).
+The coordinator seeds an absolute monotonic deadline in every initial state and
+refuses a missing or non-finite deadline. It owns one persistent, bounded
+event-loop runner and executes the graph with `astream(...)`. Each run uses a
+public `Pregel.copy(...)`, the remaining budget as `step_timeout`, and a public
+`RunControl`. The synchronous caller waits on `Future.result(remaining)`. On
+timeout it requests drain, cancels the wrapper, returns a stable timeout state,
+and fences the same canonical user-scoped persistence key until wrapper cleanup
+finishes. Only deadline and dependency timeouts set `timed_out`; capacity,
+closure, overlap, and generic cancellation remain non-timeout stopped states.
+Stopped runs never schedule memory consolidation or increment success metrics.
 
-## High-Level Architecture
+Provider request timeouts use the smallest configured request timeout,
+`decision_timeout`, and explicit coordinator cap. OpenAI-compatible provider
+retries are disabled when a coordinator cap is supplied so retries cannot
+multiply that budget.
+
+### Canonical retrieval
+
+`build_router_engine(...)` constructs the required semantic tool plus configured
+hybrid, keyword, multimodal, and graph tools using native LlamaIndex query-engine
+APIs. `retrieve_documents` receives only the user query and injected LangGraph
+state/runtime parameters, resolves `ToolRuntime.context["router_engine"]`, and
+queries it once.
+
+The router is mandatory for document retrieval. A missing or failed router
+returns a safe structured error. DocMind does not rebuild a parallel retrieval
+stack or fail open to raw indexes.
+
+Async Qdrant clients remain on the persistent graph event loop that first uses the router. Session replacement performs one idempotent router close on that owner loop before cache or coordinator invalidation stops it. FastEmbed and SigLIP central processing unit (CPU) calls use retriever-owned bounded executors. Cancelling an async waiter does not release capacity until the underlying thread future finishes.
+
+The v2 hard cut removes:
+
+- `AgentConfig.enable_deadline_propagation`;
+- `AgentConfig.enable_router_injection`;
+- raw `vector`, `retriever`, and `kg` coordinator overrides;
+- `src/agents/tool_factory.py`;
+- manual `strategy` and `use_graphrag` retrieval-tool arguments; and
+- duplicate strategy-specific agent fallback code.
+
+Deadline propagation is unconditional after this cut; no deadline feature flag
+remains.
+
+## Architecture
 
 ```mermaid
-flowchart TD
-  COORD[Coordinator] -->|seed deadline_ts| STATE[MultiAgentState]
-  STATE -->|InjectedState| TOOLS[Tools]
-  TOOLS -->|remaining budget| CALLS[LLM/Qdrant calls with capped timeouts]
-  STATE -->|router_engine injected| ROUTE[RouterQueryEngine (optional)]
-  ROUTE -->|fallback| EXPL[Explicit retrieval via vector/hybrid tools]
+flowchart LR
+  UI[Streamlit snapshot] -->|router_engine only| CTX[ToolRuntime.context]
+  CTX --> RET[retrieve_documents]
+  RET --> ROUTER[LlamaIndex RouterQueryEngine]
+  ROUTER --> VEC[semantic]
+  ROUTER --> HYB[hybrid]
+  ROUTER --> KEY[keyword]
+  ROUTER --> MM[multimodal]
+  ROUTER --> KG[knowledge graph]
+  COORD[Coordinator] -->|graph copy + RunControl + budget| GRAPH[astream]
 ```
-
-## Security & Privacy
-
-- No new network surfaces; remote endpoints remain gated by the allowlist policy.
-- Deadline propagation reduces runaway calls but must not log raw user content.
-- Router injection must not bypass allowlist enforcement (it should only route within local stores).
-
-## Testing
-
-- Unit:
-  - `deadline_ts` seeded in state when enabled
-  - LLM and Qdrant timeouts are capped to the decision timeout (mock external calls with fixed delays for determinism)
-  - retrieval tool returns structured payload with documents
-  - router injection preferred when enabled and router_engine is present
-- Integration:
-  - run a short decision timeout (2–3s) and verify the coordinator returns a timeout response without waiting for long retries
-  - regression: reproduce the “runaway retries” scenario and assert retries stop once the deadline elapses
 
 ## Consequences
 
-### Positive Outcomes
+### Positive
 
-- Retrieval results consistently include sources for downstream synthesis/validation and UI display.
-- Timeouts become more meaningful (per-call timeouts align to the overall decision budget).
-- Config flags `enable_deadline_propagation` and `enable_router_injection` become real controls.
+- One retrieval policy owner and one transient runtime object.
+- Native router selection and query-engine postprocessors replace custom factory
+  and fallback code.
+- Downstream agents receive sanitized structured sources consistently.
+- The caller deadline is authoritative and late graph results are rejected.
+- Timed-out native CPU work cannot accumulate in the `asyncio` default executor, and router replacement closes every async client exactly once.
 
-### Negative Consequences / Trade-offs
+### Trade-offs
 
-- Cooperative timeouts cannot force-cancel a call that ignores timeouts.
-- Slightly more complexity in tool wiring and state schema.
+- Chat cannot retrieve until an active snapshot router is available.
+- A dependency that ignores cancellation may finish an external side effect;
+  native timeouts and idempotency remain required.
+- Callers using the v1 raw-index or strategy arguments must migrate to the
+  router-only contract.
+
+## Verification
+
+See SPEC-040 for the unit and integration evidence, including a real sleeping
+synchronous node that proves prompt timeout and absence of a late checkpoint.

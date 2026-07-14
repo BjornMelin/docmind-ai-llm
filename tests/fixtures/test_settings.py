@@ -28,23 +28,18 @@ from src.config.settings import (
     CacheConfig,
     DocMindSettings,
     EmbeddingConfig,
+    LLMRequestConfig,
     ProcessingConfig,
     RetrievalConfig,
-    VLLMConfig,
 )
 
 
-class MockVLLMConfig(VLLMConfig):
-    """Test-optimized vLLM configuration for fast, minimal resource usage."""
+class MockLLMRequestConfig(LLMRequestConfig):
+    """Test-optimized LLM request configuration."""
 
     # Small context for speed
     context_window: int = Field(default=8192, ge=8192, le=200000)
-    max_tokens: int = Field(default=256, ge=100, le=8192)
-
-    # Conservative GPU settings
-    gpu_memory_utilization: float = Field(default=0.5, ge=0.5, le=0.95)
-    max_num_seqs: int = Field(default=4, ge=1, le=64)
-    max_num_batched_tokens: int = Field(default=2048, ge=1024, le=16384)
+    max_output_tokens: int = Field(default=256, ge=100, le=8192)
 
 
 class MockProcessingConfig(ProcessingConfig):
@@ -52,8 +47,6 @@ class MockProcessingConfig(ProcessingConfig):
 
     # Small chunks for speed
     chunk_size: int = Field(default=100, ge=100, le=10000)
-    new_after_n_chars: int = Field(default=100, ge=100, le=8000)
-    combine_text_under_n_chars: int = Field(default=50, ge=50, le=2000)
     max_document_size_mb: int = Field(default=1, ge=1, le=500)
 
 
@@ -63,20 +56,6 @@ class MockAgentConfig(AgentConfig):
     # Fast timeouts for testing
     decision_timeout: int = Field(default=100, ge=10, le=1000)  # 100ms for tests
     max_retries: int = Field(default=1, ge=0, le=10)  # Fewer retries
-    max_concurrent_agents: int = Field(default=2, ge=1, le=10)  # Fewer agents
-
-    # Small context management for tests (use minimum allowed values for speed)
-    context_trim_threshold: int = Field(
-        default=65536, ge=65536, le=131072
-    )  # Use minimum allowed
-    context_buffer_size: int = Field(default=2048, ge=2048, le=16384)
-    chat_memory_limit_tokens: int = Field(
-        default=32768, ge=32768, le=98304
-    )  # Use minimum allowed
-    use_tool_registry: bool = Field(default=True)
-    use_shared_llm_client: bool = Field(default=True)
-    enable_deadline_propagation: bool = Field(default=False)
-    enable_router_injection: bool = Field(default=False)
 
 
 class MockEmbeddingConfig(EmbeddingConfig):
@@ -98,17 +77,9 @@ class MockRetrievalConfig(RetrievalConfig):
 
 
 class MockCacheConfig(CacheConfig):
-    """Test-optimized cache configuration - caching disabled for test isolation."""
+    """Test-isolated cache path configuration."""
 
     dir: Path = Field(default=Path("./test_cache"))
-    enable_document_caching: bool = Field(default=False)  # Disabled for test isolation
-    ttl_seconds: int = Field(
-        default=300, ge=300, le=86400
-    )  # Short TTL for tests (minimum allowed)
-    max_size_mb: int = Field(
-        default=100, ge=100, le=10000
-    )  # Small cache size (minimum allowed)
-    enable_semantic_cache: bool = Field(default=False)  # Disabled for simplicity
 
 
 class MockDocMindSettings(DocMindSettings):
@@ -140,17 +111,13 @@ class MockDocMindSettings(DocMindSettings):
 
     # Temporary directories for test isolation
     data_dir: Path = Field(default=Path("./test_data"))
-    sqlite_db_path: Path = Field(default=Path("./test_data/test.db"))
     log_file: Path = Field(default=Path("./test_logs/test.log"))
 
     # Disable expensive operations for unit tests
     enable_gpu_acceleration: bool = Field(default=False)  # CPU-only for tests
-    enable_dspy_optimization: bool = Field(default=False)  # Disabled for speed
-    enable_performance_logging: bool = Field(default=False)  # Reduced logging
-    enable_graphrag: bool = Field(default=False)  # Disabled for simplicity
 
     # Override nested configurations with test-optimized versions
-    vllm: MockVLLMConfig = Field(default_factory=MockVLLMConfig)
+    llm_request: MockLLMRequestConfig = Field(default_factory=MockLLMRequestConfig)
     processing: MockProcessingConfig = Field(default_factory=MockProcessingConfig)
     agents: MockAgentConfig = Field(default_factory=MockAgentConfig)
     embedding: MockEmbeddingConfig = Field(default_factory=MockEmbeddingConfig)
@@ -163,20 +130,16 @@ class MockDocMindSettings(DocMindSettings):
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.cache.dir.mkdir(parents=True, exist_ok=True)
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
-        if self.sqlite_db_path.parent != self.data_dir:
-            self.sqlite_db_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Call parent's post_init
         super().model_post_init(__context)
 
 
-class IntegrationVLLMConfig(VLLMConfig):
-    """Integration test vLLM config with moderate resource usage."""
+class IntegrationLLMRequestConfig(LLMRequestConfig):
+    """Integration test request config with moderate resource usage."""
 
     context_window: int = Field(default=32768, ge=8192, le=200000)  # Moderate context
-    max_tokens: int = Field(default=1024, ge=100, le=8192)
-    gpu_memory_utilization: float = Field(default=0.75, ge=0.5, le=0.95)
-    max_num_seqs: int = Field(default=8, ge=1, le=64)
+    max_output_tokens: int = Field(default=1024, ge=100, le=8192)
 
 
 class IntegrationAgentConfig(AgentConfig):
@@ -186,7 +149,6 @@ class IntegrationAgentConfig(AgentConfig):
         default=200, ge=10, le=1000
     )  # ADR-011 compliant 200ms
     max_retries: int = Field(default=2, ge=0, le=10)  # Standard retries
-    max_concurrent_agents: int = Field(default=3, ge=1, le=10)  # Standard concurrency
 
 
 class IntegrationProcessingConfig(ProcessingConfig):
@@ -196,16 +158,12 @@ class IntegrationProcessingConfig(ProcessingConfig):
     """
 
     chunk_size: int = Field(default=2048, ge=256, le=10000)
-    new_after_n_chars: int = Field(default=1200, ge=200, le=8000)
-    combine_text_under_n_chars: int = Field(default=200, ge=50, le=2000)
 
 
 class IntegrationCacheConfig(CacheConfig):
-    """Integration test cache config with caching enabled."""
+    """Integration test cache path configuration."""
 
     dir: Path = Field(default=Path("./test_cache"))
-    enable_document_caching: bool = Field(default=True)  # Enabled for integration tests
-    ttl_seconds: int = Field(default=1800, ge=300, le=86400)  # 30 min TTL
 
 
 class IntegrationTestSettings(MockDocMindSettings):
@@ -226,11 +184,11 @@ class IntegrationTestSettings(MockDocMindSettings):
 
     # Enable realistic features for integration testing
     enable_gpu_acceleration: bool = Field(default=True)
-    enable_performance_logging: bool = Field(default=True)
-    enable_graphrag: bool = Field(default=False)  # Keep disabled for speed
 
     # Override with integration-specific nested configs
-    vllm: IntegrationVLLMConfig = Field(default_factory=IntegrationVLLMConfig)
+    llm_request: IntegrationLLMRequestConfig = Field(
+        default_factory=IntegrationLLMRequestConfig
+    )
     agents: IntegrationAgentConfig = Field(default_factory=IntegrationAgentConfig)
     processing: IntegrationProcessingConfig = Field(
         default_factory=IntegrationProcessingConfig

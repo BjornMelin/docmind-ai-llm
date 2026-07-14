@@ -1,15 +1,5 @@
-"""Registry utilities for LangGraph agent tooling.
+"""Tool-set construction for LangGraph workers."""
 
-This module exposes the public interfaces for the agent registry subsystem.
-Keeping the exports lightweight allows callers to import registry components
-without bringing in heavyweight dependencies during module discovery.
-"""
+from .tool_registry import build_agent_tool_sets
 
-from .llamaindex_llm_client import RetryLlamaIndexLLM
-from .tool_registry import DefaultToolRegistry, ToolRegistry
-
-__all__ = [
-    "DefaultToolRegistry",
-    "RetryLlamaIndexLLM",
-    "ToolRegistry",
-]
+__all__ = ["build_agent_tool_sets"]

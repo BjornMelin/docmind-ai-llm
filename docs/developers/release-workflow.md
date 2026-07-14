@@ -8,9 +8,9 @@ The workflow is defined in [`.github/workflows/release.yml`](../../.github/workf
 
 ### Key Settings
 
-- **Triggers**: Release Please runs on pushes to `main`. A published GitHub
-  Release triggers the wheel build, smoke, and asset upload. A manual dispatch
-  can rebuild an existing tag's artifact after a transient failure.
+- **Triggers**: Release Please runs only after the `CI` workflow succeeds for a
+  `main` push. Releases publish the changelog and source tag; DocMind does not
+  build or attach a Python wheel.
 - **Release Type**: `python` (Handles `pyproject.toml` version bumping and `CHANGELOG.md` updates).
 - **Manifest Config**: Advanced Release Please settings live in
   [`release-please-config.json`](../../release-please-config.json) and
@@ -22,21 +22,20 @@ The workflow is defined in [`.github/workflows/release.yml`](../../.github/workf
   `RELEASE_PLEASE_TOKEN`, a fine-grained personal access token owned by the
   maintainer whose release PR commits should be credited. The token needs
   repository contents and pull request write access.
-- **SemVer Strategy**: `bump-minor-pre-major: true`.
-  - This ensures that breaking changes ( `feat!:` ) increment the **minor** version (e.g., `0.1.0` -> `0.2.0`) rather than the **major** version, protecting the `1.0.0` milestone for the actual stable release.
-  - The stable milestone commit uses an explicit `Release-As: 1.0.0` footer.
-    This one-time override wins over pre-major bump behavior.
+- **SemVer Strategy**: After 1.0, `fix:` creates a patch release, `feat:` creates
+  a minor release, and `feat!:` or a `BREAKING CHANGE:` footer creates a major
+  release. This rule is independent of the current major version.
 
 ## How It Works
 
 1. **Commit Messages**: Developers must use [Conventional Commits](https://www.conventionalcommits.org/).
-    - `fix:` -> Patch bump (0.1.0 -> 0.1.1)
-    - `feat:` -> Minor bump (0.1.0 -> 0.2.0)
-    - `feat!:` or `BREAKING CHANGE:` -> Minor bump (0.1.0 -> 0.2.0) (due to pre-major mode).
+    - `fix:` -> Patch bump (`1.0.0` -> `1.0.1`).
+    - `feat:` -> Minor bump (`1.0.0` -> `1.1.0`).
+    - `feat!:` or `BREAKING CHANGE:` -> Major bump (`1.0.0` -> `2.0.0`).
     - `chore:` -> No release (usually).
 
 2. **Release PR**:
-    - When commits are merged to `main`, `release-please` analyzes them.
+    - After a `main` commit passes CI, `release-please` analyzes it.
     - It creates or updates a special "Release PR".
     - This PR contains the updated `CHANGELOG.md`, the version bump in
       `pyproject.toml`, and the matching root package version in `uv.lock`.
@@ -55,15 +54,11 @@ The workflow is defined in [`.github/workflows/release.yml`](../../.github/workf
 3. **Publishing**:
     - When a maintainer **merges** the Release PR, `release-please`:
         - Creates a new GitHub Release.
-        - Tags the commit with the new version (e.g., `v0.2.0`).
-    - Both the publisher and artifact jobs validate the GitHub Release body so
-      empty or unparsable notes fail before a wheel can be uploaded.
-    - The published-release event checks out the tag, builds and smoke-tests the
-      wheel from cleared ignored Setuptools staging with the tag commit
-      timestamp as `SOURCE_DATE_EPOCH`, then uploads it as a GitHub Release
-      asset. If that job fails, run the same workflow
-      manually with the existing tag; the reproducible artifact path does not
-      depend on `release_created` remaining true on a rerun.
+        - Tags the commit with the new version (for example, `v2.0.0`).
+    - The publisher validates the GitHub Release body so empty or unparsable
+      notes fail the release workflow.
+    - GitHub source archives and the production container recipe are the release
+      distribution contract. No package artifact is attached.
 
 ## Release Note Guardrails
 
@@ -75,12 +70,14 @@ The workflow is defined in [`.github/workflows/release.yml`](../../.github/workf
   required title check works for forks while keeping the token read-only.
 - Allowed release-driving PR title types are `feat`, `fix`, `chore`, `docs`,
   `style`, `refactor`, `perf`, `test`, and `deps`.
-- Artifact publication refuses a blank GitHub Release body, including manual
-  recovery runs, so the wheel cannot race ahead of release-note validation.
-- Generated Release Please PRs skip the heavy CI, docs, and automatic CodeRabbit
-  review lanes. They contain only version and release-note files assembled from
-  already-merged commits, so the useful gate is the Release Please contract
-  itself plus the semantic PR title check.
+- Release publication refuses a blank GitHub Release body.
+- Generated Release Please PRs run the normal CI plus a release-contract job that
+  runs `scripts/check_release_contract.py` and `uv lock --check`. The script
+  verifies the root `pyproject.toml` project version, root package version in
+  `uv.lock`, `.release-please-manifest.json`, and newest released `CHANGELOG.md`
+  heading agree. Documentation CI skips generated
+  release PRs because their content was already validated before merge; the
+  semantic PR title check remains required.
 - GitHub Releases should use the curated `CHANGELOG.md` release block as their
   source of truth. Do not use GitHub's auto-generated notes for Release Please
   releases; they summarize pull request titles and contributors instead of the
@@ -88,6 +85,17 @@ The workflow is defined in [`.github/workflows/release.yml`](../../.github/workf
 
 ## Source of Truth
 
-- **Version**: The `version` field in `pyproject.toml` and the latest GitHub Tag.
+- **Release metadata**: The root `pyproject.toml`, root package entry in
+  `uv.lock`, `.release-please-manifest.json`, and newest released
+  `CHANGELOG.md` heading must agree.
+- **Published version**: The latest published GitHub tag must be
+  `v<release metadata version>`.
 - **Tag Format**: `v<major>.<minor>.<patch>`.
 - **Changelog**: `CHANGELOG.md` in the root directory.
+
+Verify a release PR locally:
+
+```bash
+uv run python scripts/check_release_contract.py
+uv lock --check
+```

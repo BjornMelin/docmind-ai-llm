@@ -14,26 +14,28 @@ render/rerank time.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import math
-import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FuturesTimeoutError
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
+from llama_index.core.base.base_retriever import BaseRetriever
 from llama_index.core.schema import NodeWithScore, QueryBundle
 from loguru import logger
-from qdrant_client import QdrantClient
+from qdrant_client import AsyncQdrantClient, QdrantClient
 
 from src.config import settings
+from src.retrieval.async_work import AsyncWorkExecutor
 from src.retrieval.hybrid import HybridParams, ServerHybridRetriever
+from src.retrieval.image_index import check_siglip_image_collection
 from src.retrieval.rrf import rrf_merge
 from src.utils.log_safety import build_pii_log_entry
 from src.utils.qdrant_utils import nodes_from_query_result
 from src.utils.siglip_adapter import SiglipEmbedding
-from src.utils.storage import get_client_config
+from src.utils.storage import get_client_config, sparse_retrieval_enabled
 from src.utils.telemetry import log_jsonl
 
 if TYPE_CHECKING:
@@ -75,21 +77,59 @@ class ImageSiglipRetriever:
         params: ImageSearchParams,
         *,
         client: QdrantClient | None = None,
+        client_factory: Callable[[], QdrantClient] | None = None,
+        async_client: AsyncQdrantClient | None = None,
+        async_client_factory: Callable[[], AsyncQdrantClient] | None = None,
         embedder: SiglipEmbedding | None = None,
     ) -> None:
         """Create a SigLIP image retriever."""
         self.params = params
-        self._client = client or QdrantClient(**get_client_config())
+        client_config = get_client_config()
+        self._client = client
+        self._client_factory = client_factory or (lambda: QdrantClient(**client_config))
+        self._async_client = async_client
+        self._async_client_factory = async_client_factory or (
+            lambda: AsyncQdrantClient(**client_config)
+        )
         self._embedder = embedder or SiglipEmbedding()
-        self._collection_checked = False
-        self._collection_check_lock = threading.Lock()
+        self._cpu_work = AsyncWorkExecutor(name="docmind-siglip-cpu")
+        try:
+            check_siglip_image_collection(
+                self._get_client(),
+                self.params.collection,
+            )
+        except Exception:
+            self.close()
+            raise
 
     def close(self) -> None:
-        """Close underlying client (best-effort)."""
-        try:
-            self._client.close()
-        except Exception:  # pragma: no cover - defensive
-            return
+        """Close the synchronous client (best-effort)."""
+        self._cpu_work.close()
+        if self._client is not None:
+            with contextlib.suppress(Exception):  # pragma: no cover - defensive
+                self._client.close()
+            self._client = None
+
+    async def aclose(self) -> None:
+        """Close both clients after asynchronous use (best-effort)."""
+        self._cpu_work.close()
+        async_client = self._async_client
+        self._async_client = None
+        if async_client is not None:
+            with contextlib.suppress(Exception):  # pragma: no cover - defensive
+                await async_client.close()
+        await self._cpu_work.aclose()
+        self.close()
+
+    def _get_client(self) -> QdrantClient:
+        if self._client is None:
+            self._client = self._client_factory()
+        return self._client
+
+    def _get_async_client(self) -> AsyncQdrantClient:
+        if self._async_client is None:
+            self._async_client = self._async_client_factory()
+        return self._async_client
 
     def _query_vec(self, vec: Any, *, top_k: int | None = None) -> list[NodeWithScore]:
         limit = int(top_k or self.params.top_k)
@@ -97,35 +137,10 @@ class ImageSiglipRetriever:
             vec_list = vec.tolist()
         else:
             vec_list = list(vec) if not isinstance(vec, list) else vec
-        if not self._collection_checked:
-            with self._collection_check_lock:
-                # Double-check after acquiring lock to avoid redundant calls
-                if not self._collection_checked:
-                    try:
-                        from src.retrieval.image_index import (
-                            ensure_siglip_image_collection,
-                        )
-
-                        ensure_siglip_image_collection(
-                            self._client,
-                            self.params.collection,
-                            dim=len(vec_list),
-                        )
-                    except Exception as exc:  # pragma: no cover - best effort
-                        redaction = build_pii_log_entry(
-                            str(exc), key_id="multimodal_fusion.collection_check"
-                        )
-                        logger.warning(
-                            "SigLIP collection check failed (error_type={}, error={})",
-                            type(exc).__name__,
-                            redaction.redacted,
-                        )
-                    self._collection_checked = True
-
         try:
             timeout_ms = settings.retrieval.siglip_timeout_ms
             timeout_s = max(1, math.ceil(timeout_ms / 1000))
-            result = self._client.query_points(
+            result = self._get_client().query_points(
                 collection_name=self.params.collection,
                 query=vec_list,
                 using=self.params.using,
@@ -153,6 +168,39 @@ class ImageSiglipRetriever:
 
         return nodes
 
+    async def _aquery_vec(
+        self, vec: Any, *, top_k: int | None = None
+    ) -> list[NodeWithScore]:
+        """Query image vectors through Qdrant's native async client."""
+        limit = int(top_k or self.params.top_k)
+        vec_list = vec.tolist() if hasattr(vec, "tolist") else list(vec)
+        try:
+            timeout_ms = settings.retrieval.siglip_timeout_ms
+            result = await self._get_async_client().query_points(
+                collection_name=self.params.collection,
+                query=vec_list,
+                using=self.params.using,
+                limit=limit,
+                with_payload=list(self.params.with_payload),
+                timeout=max(1, math.ceil(timeout_ms / 1000)),
+            )
+        except Exception as exc:  # pragma: no cover - fail open
+            redaction = build_pii_log_entry(
+                str(exc), key_id="multimodal_fusion.query_points"
+            )
+            logger.debug(
+                "Image query_points failed (error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
+            return []
+        return nodes_from_query_result(
+            result,
+            top_k=limit,
+            id_keys=("page_id",),
+            prefer_point_id=False,
+        )
+
     def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:
         """Retrieve image nodes for a text query."""
         qtext = query.query_str if isinstance(query, QueryBundle) else str(query)
@@ -169,6 +217,23 @@ class ImageSiglipRetriever:
             )
             return []
         return self._query_vec(vec)
+
+    async def aretrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:
+        """Retrieve image nodes without blocking the event loop."""
+        qtext = query.query_str if isinstance(query, QueryBundle) else str(query)
+        try:
+            vec = await self._cpu_work.run(self._embedder.get_text_embedding, qtext)
+        except Exception as exc:  # pragma: no cover - fail open
+            redaction = build_pii_log_entry(
+                str(exc), key_id="multimodal_fusion.text_embedding"
+            )
+            logger.debug(
+                "SigLIP text embedding failed (error_type={}, error={})",
+                type(exc).__name__,
+                redaction.redacted,
+            )
+            return []
+        return await self._aquery_vec(vec)
 
     def retrieve_by_image(
         self, image: ImageInput, *, top_k: int | None = None
@@ -189,94 +254,90 @@ class ImageSiglipRetriever:
         return self._query_vec(vec, top_k=top_k)
 
 
-class MultimodalFusionRetriever:
+class MultimodalFusionRetriever(BaseRetriever):
     """Fuse text hybrid retrieval with SigLIP image retrieval (rank-based RRF)."""
 
     def __init__(
         self,
         *,
-        text_retriever: ServerHybridRetriever | None = None,
+        text_retriever: Any | None = None,
         image_retriever: ImageSiglipRetriever | None = None,
+        text_collection: str | None = None,
+        image_collection: str | None = None,
         fused_top_k: int | None = None,
         dedup_key: str | None = None,
     ) -> None:
         """Create a fusion retriever from text and image components."""
-        self._text = text_retriever or ServerHybridRetriever(
-            HybridParams(
-                collection=settings.database.qdrant_collection,
-                fused_top_k=settings.retrieval.fused_top_k,
-                prefetch_sparse=settings.retrieval.prefetch_sparse_limit,
-                prefetch_dense=settings.retrieval.prefetch_dense_limit,
-                fusion_mode=settings.retrieval.fusion_mode,
-                rrf_k=settings.retrieval.rrf_k,
-                dedup_key=settings.retrieval.dedup_key,
+        super().__init__()
+        if text_retriever is None:
+            if not sparse_retrieval_enabled():
+                raise ValueError(
+                    "Dense multimodal fusion requires an injected text retriever"
+                )
+            text_retriever = ServerHybridRetriever(
+                HybridParams(
+                    collection=text_collection or settings.database.qdrant_collection,
+                    fused_top_k=settings.retrieval.fused_top_k,
+                    prefetch_sparse=settings.retrieval.prefetch_sparse_limit,
+                    prefetch_dense=settings.retrieval.prefetch_dense_limit,
+                    fusion_mode=settings.retrieval.fusion_mode,
+                    rrf_k=settings.retrieval.rrf_k,
+                    dedup_key=settings.retrieval.dedup_key,
+                )
             )
-        )
+        self._text = text_retriever
         self._image = image_retriever or ImageSiglipRetriever(
-            ImageSearchParams(collection=settings.database.qdrant_image_collection)
+            ImageSearchParams(
+                collection=image_collection or settings.database.qdrant_image_collection
+            )
         )
         self._fused_top_k = fused_top_k or settings.retrieval.fused_top_k
         self._dedup_key = dedup_key or settings.retrieval.dedup_key
 
     def close(self) -> None:
         """Close underlying retrievers (best-effort)."""
-        with contextlib.suppress(Exception):
-            self._text.close()
+        close_text = getattr(self._text, "close", None)
+        if callable(close_text):
+            with contextlib.suppress(Exception):
+                close_text()
         with contextlib.suppress(Exception):
             self._image.close()
 
-    def _timeout_seconds(self) -> tuple[float, float]:
-        try:
-            text_timeout_ms = int(settings.retrieval.text_rerank_timeout_ms)
-        except (AttributeError, TypeError, ValueError):
-            text_timeout_ms = 5000
-        try:
-            image_timeout_ms = int(settings.retrieval.siglip_timeout_ms)
-        except (AttributeError, TypeError, ValueError):
-            image_timeout_ms = 5000
-        return text_timeout_ms / 1000.0, image_timeout_ms / 1000.0
+    async def aclose(self) -> None:
+        """Close both child retrievers after asynchronous use."""
+        close_calls: list[Awaitable[Any]] = [self._image.aclose()]
+        close_text = getattr(self._text, "aclose", None)
+        if callable(close_text):
+            close_calls.append(cast(Callable[[], Awaitable[Any]], close_text)())
+        await asyncio.gather(*close_calls, return_exceptions=True)
 
-    def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:
-        """Retrieve fused multimodal results.
+    def _retrieve(self, query_bundle: QueryBundle) -> list[NodeWithScore]:
+        """Retrieve fused results using each child's configured client timeout."""
+        qtext = query_bundle.query_str
+        t0 = time.perf_counter()
+        text_nodes = self._text.retrieve(qtext)
+        image_nodes = self._image.retrieve(qtext)
+        return self._fuse(text_nodes, image_nodes, t0=t0)
 
-        Notes:
-            Text retrieval is intentionally prioritized; image retrieval uses
-            the remaining latency budget.
-        """
-        qtext = query.query_str if isinstance(query, QueryBundle) else str(query)
+    async def _aretrieve(self, query_bundle: QueryBundle) -> list[NodeWithScore]:
+        """Retrieve both branches under the router's total request deadline."""
+        qtext = query_bundle.query_str
         t0 = time.perf_counter()
 
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            text_future = executor.submit(self._text.retrieve, qtext)
-            image_future = executor.submit(self._image.retrieve, qtext)
-            text_timeout_s, image_timeout_s = self._timeout_seconds()
-            try:
-                text_nodes = text_future.result(timeout=text_timeout_s)
-            except FuturesTimeoutError:
-                # cancel() is best-effort and typically no-ops once running.
-                text_future.cancel()
-                logger.warning("Text retrieval timed out")
-                text_nodes = []
+        text_nodes, image_nodes = await asyncio.gather(
+            self._text.aretrieve(qtext),
+            self._image.aretrieve(qtext),
+        )
+        return self._fuse(text_nodes, image_nodes, t0=t0)
 
-            # Compute remaining time for image retrieval to honor latency budget.
-            # Note: cancel() does not interrupt already-running threads, only
-            # prevents queued tasks from starting.
-            elapsed = time.perf_counter() - t0
-            remaining_time = max(0.0, image_timeout_s - elapsed)
-            if remaining_time <= 0.0:
-                # cancel() is best-effort and typically no-ops once running.
-                image_future.cancel()
-                logger.warning("Image retrieval budget exhausted")
-                image_nodes = []
-            else:
-                try:
-                    image_nodes = image_future.result(timeout=remaining_time)
-                except FuturesTimeoutError:
-                    # cancel() is best-effort and typically no-ops once running.
-                    image_future.cancel()
-                    logger.warning("Image retrieval timed out")
-                    image_nodes = []
-
+    def _fuse(
+        self,
+        text_nodes: list[NodeWithScore],
+        image_nodes: list[NodeWithScore],
+        *,
+        t0: float,
+    ) -> list[NodeWithScore]:
+        """Fuse, deduplicate, and record retrieval results."""
         try:
             k_constant = int(settings.retrieval.rrf_k)
         except (AttributeError, TypeError, ValueError):

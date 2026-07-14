@@ -31,9 +31,9 @@ def test_chat_smoke_router_override() -> None:
         runtime_context,
     ):
         # Simulate that tools execute router with provided engine
-        del thread_id, user_id, checkpoint_id, runtime_context
-        tools = initial_state.get("tools_data", {}) or {}
-        router = tools.get("router_engine", None)
+        del thread_id, user_id, checkpoint_id
+        assert "tools_data" not in initial_state
+        router = (runtime_context or {}).get("router_engine")
         result = router.query("hello") if router else SimpleNamespace(response="ok")
         return {
             "messages": [{"content": result.response}],

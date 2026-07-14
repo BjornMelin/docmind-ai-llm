@@ -66,13 +66,17 @@ result = client.query_points_groups(
 - De‑duplication: use Qdrant `query_points_groups()` with `group_by=page_id|doc_id`, `group_size=1`, and `limit=fused_top_k`. Do not overfetch or deduplicate fused points in Python.
 - Settings: `retrieval.dedup_key=page_id|doc_id` selects the server grouping key. `retrieval.rrf_k` is passed to Qdrant through `RrfQuery(Rrf(k=...))`; DBSF uses `FusionQuery(Fusion.DBSF)`.
 - Telemetry: log prefetch sizes, fusion mode, fused_top_k, query latency, and `retrieval.sparse_fallback=true` when sparse prefetch is skipped.
+- Async retrieval uses the native Qdrant client. Sparse encoding runs in the retriever-owned bounded executor; cancellation retains its slot until the actual encoder future completes.
 
 ### Router Interop (Note)
 
-- Compose router tools `[semantic_search, hybrid_search, knowledge_graph]` when a graph is present and healthy; otherwise `[semantic_search, hybrid_search]`. Health is determined via a shallow probe: `pg_index.as_retriever(include_text=False, path_depth=1, similarity_top_k=1).retrieve("health")` must return at least one result. Selector preference: `PydanticSingleSelector` when available, else `LLMSingleSelector`. See ADR‑038 and SPEC‑006.
-- Rerank parity: RouterQueryEngine tools (vector/hybrid/KG) apply the same reranking policy via `node_postprocessors` when `DOCMIND_RETRIEVAL__USE_RERANKING=true`. See SPEC‑005 for reranking architecture and attachment points.
-
-- Agent tool fallback: At the tool layer, when a hybrid query returns no documents for the primary query, the agent MUST fall back to vector search for that query (if available) and record a `hybrid_fallback` telemetry event.
+- Compose `hybrid_search` into the canonical router when server-side hybrid is
+  enabled. The same router may also contain keyword, multimodal, and graph tools;
+  `semantic_search` is always present. LlamaIndex's native router owns selection.
+- Rerank parity: semantic, hybrid, multimodal, and graph query engines apply the
+  configured policy via `node_postprocessors`. See SPEC-005.
+- The agent layer has no second hybrid/vector fallback. Retrieval fallback and
+  selection policy belong to the router and its query engines.
 
 ## Libraries and Imports
 
@@ -88,11 +92,13 @@ from llama_index.core import StorageContext
 ### UPDATE / CREATE
 
 - `src/retrieval/hybrid.py`: implement `ServerHybridRetriever` using qdrant_client Query API with `prefetch` on `text-dense` and `text-sparse`, native RRF/DBSF fusion, and server grouping before `limit=fused_top_k`.
-- `src/retrieval/router_factory.py`: register a `hybrid_search` tool by wrapping `ServerHybridRetriever` in `RetrieverQueryEngine`; compose with `semantic_search` and optional `knowledge_graph` tool.
+- `src/retrieval/router_factory.py`: register `hybrid_search` by wrapping
+  `ServerHybridRetriever` in `RetrieverQueryEngine` and compose it into the
+  canonical router.
 - `src/utils/storage.py`: precreate collections with named vectors `text-dense` (COSINE, BGE‑M3 1024D) and `text-sparse` (SparseIndexParams); prefer `fastembed_sparse_model="Qdrant/bm42-all-minilm-l6-v2-attentions"` else `"Qdrant/bm25"`.
 - `src/models/processing.py`: own the parser-reserved
   `docmind_document_id` metadata key.
-- `src/ui/_ingest_adapter_impl.py`: assign deterministic UUIDv5 point IDs from
+- `src/ui/ingest_adapter.py`: assign deterministic UUIDv5 point IDs from
   canonical document ID, page ID, and chunk position; after a successful
   upsert, delete only stale IDs captured for the affected documents.
 

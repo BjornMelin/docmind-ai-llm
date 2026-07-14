@@ -1,4 +1,4 @@
-"""Timeout cap tests when deadline propagation is enabled (SPEC-040)."""
+"""Authoritative timeout-cap tests (SPEC-040)."""
 
 from __future__ import annotations
 
@@ -13,8 +13,8 @@ from src.config.settings import DocMindSettings
 pytestmark = pytest.mark.unit
 
 
-def test_build_chat_model_timeout_capped_by_decision_timeout() -> None:
-    """Cap ChatOpenAI timeout using the decision timeout.
+def test_build_chat_model_timeout_always_capped_by_decision_timeout() -> None:
+    """Always cap ChatOpenAI timeout using the decision timeout.
 
     Args:
         None.
@@ -22,14 +22,15 @@ def test_build_chat_model_timeout_capped_by_decision_timeout() -> None:
     Returns:
         None.
     """
-    cfg = DocMindSettings()
-    cfg.llm_backend = "openai_compatible"
-    cfg.openai.base_url = "http://localhost:8000"
-    cfg.openai.api_key = "abc"
-    cfg.vllm.model = "model-1"
-    cfg.llm_request_timeout_seconds = 120
-    cfg.agents.decision_timeout = 10
-    cfg.agents.enable_deadline_propagation = True
+    cfg = DocMindSettings.model_validate(
+        {
+            "llm_backend": "openai_compatible",
+            "openai": {"base_url": "http://localhost:8000", "api_key": "abc"},
+            "vllm": {"model": "model-1"},
+            "llm_request_timeout_seconds": 120,
+            "agents": {"decision_timeout": 10},
+        }
+    )
 
     with patch("src.config.langchain_factory.ChatOpenAI", autospec=True) as p:
         inst = MagicMock(name="ChatOpenAIInstance")
@@ -38,10 +39,34 @@ def test_build_chat_model_timeout_capped_by_decision_timeout() -> None:
         assert out is inst
         _, kwargs = p.call_args
         assert float(kwargs["timeout"]) == 10.0
+        assert kwargs["max_retries"] == cfg.agents.max_retries
 
 
-def test_build_llm_timeout_capped_by_decision_timeout() -> None:
-    """Cap LLM timeout using the decision timeout.
+def test_build_chat_model_timeout_capped_by_coordinator_override() -> None:
+    """Cap ChatOpenAI timeout using the coordinator-owned deadline."""
+    cfg = DocMindSettings.model_validate(
+        {
+            "llm_backend": "openai_compatible",
+            "openai": {"base_url": "http://localhost:8000", "api_key": "abc"},
+            "vllm": {"model": "model-1"},
+            "llm_request_timeout_seconds": 120,
+        }
+    )
+
+    with patch("src.config.langchain_factory.ChatOpenAI", autospec=True) as p:
+        inst = MagicMock(name="ChatOpenAIInstance")
+        p.return_value = inst
+
+        out = build_chat_model(cfg, timeout_cap=3.5)
+
+        assert out is inst
+        _, kwargs = p.call_args
+        assert float(kwargs["timeout"]) == 3.5
+        assert kwargs["max_retries"] == 0
+
+
+def test_build_llm_timeout_always_capped_by_decision_timeout() -> None:
+    """Always cap LLM timeout using the decision timeout.
 
     Args:
         None.
@@ -49,14 +74,16 @@ def test_build_llm_timeout_capped_by_decision_timeout() -> None:
     Returns:
         None.
     """
-    cfg = DocMindSettings()
-    cfg.llm_backend = "vllm"
-    cfg.vllm_base_url = "http://localhost:8000"
-    cfg.vllm.model = "model-1"
-    cfg.llm_request_timeout_seconds = 120
-    cfg.openai.api_key = "abc"
-    cfg.agents.decision_timeout = 10
-    cfg.agents.enable_deadline_propagation = True
+    cfg = DocMindSettings.model_validate(
+        {
+            "llm_backend": "vllm",
+            "vllm_base_url": "http://localhost:8000",
+            "vllm": {"model": "model-1"},
+            "llm_request_timeout_seconds": 120,
+            "openai": {"api_key": "abc"},
+            "agents": {"decision_timeout": 10},
+        }
+    )
 
     with patch("llama_index.llms.openai_like.OpenAILike", autospec=True) as p:
         inst = MagicMock(name="OpenAILikeInstance")
@@ -65,3 +92,4 @@ def test_build_llm_timeout_capped_by_decision_timeout() -> None:
         assert out is inst
         _, kwargs = p.call_args
         assert float(kwargs["timeout"]) == 10.0
+        assert kwargs["max_retries"] == cfg.agents.max_retries

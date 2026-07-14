@@ -44,16 +44,12 @@
 ### Example: Deterministic router test
 
 ```python
-def test_selects_hybrid(mock_vector_index, mock_hybrid_retriever, mock_llm_for_routing):
-    mock_llm_for_routing.response_text = "hybrid_search"
-    engine = build_router_engine(
+def test_builds_semantic_router(mock_vector_index, router_settings):
+    router = build_router_engine(
         vector_index=mock_vector_index,
-        hybrid_retriever=mock_hybrid_retriever,
-        llm=mock_llm_for_routing,
+        settings=router_settings,
     )
-    # Stub underlying router call to control output
-    engine.router_engine.query = MagicMock(return_value=MagicMock(response="ok"))
-    assert engine.query("broad query").response == "ok"
+    assert [metadata.name for metadata in router._metadatas] == ["semantic_search"]
 ```
 
 ### Example: Deterministic reranker test (text via SentenceTransformerRerank)

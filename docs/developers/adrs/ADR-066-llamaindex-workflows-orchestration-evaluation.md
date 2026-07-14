@@ -2,11 +2,11 @@
 ADR: 066
 Title: LlamaIndex Workflows Evaluation Without Runtime Replacement
 Status: Accepted
-Version: 1.1
-Date: 2026-07-11
+Version: 1.2
+Date: 2026-07-13
 Supersedes:
 Superseded-by:
-Related: 001, 003, 011, 024, 035, 056, 058, 063
+Related: 001, 003, 011, 024, 056, 058, 063
 Tags: orchestration, agents, langgraph, llamaindex, workflows
 References:
 - [Issue #86](https://github.com/BjornMelin/docmind-ai-llm/issues/86)
@@ -33,9 +33,9 @@ The current runtime has production behavior tied to LangGraph semantics:
 
 - `src/agents/coordinator.py` compiles the supervisor graph with a checkpointer
   and store, streams graph values, enforces coordinator-level deadlines, and owns
-  semantic cache policy.
+  response assembly and memory-consolidation lifecycle.
 - `src/agents/supervisor_graph.py` owns the local LangGraph v1 `StateGraph`
-  supervisor, handoff tools, forward-to-user behavior, and handoff-back messages.
+  supervisor, one atomic multi-worker dispatch tool, and handoff-back messages.
 - `src/pages/01_chat.py` wires the runtime to a SQLite LangGraph checkpointer.
 - `src/persistence/memory_store.py` provides the LangGraph `BaseStore`
   implementation for local-first memory and optional semantic search.
@@ -45,29 +45,15 @@ parallelism, human-in-the-loop events, context serialization, observability, and
 service deployment options. They are not, by default, the same architecture as
 DocMind's in-process checkpointed LangGraph supervisor.
 
-## Package And Ecosystem Facts
+## Package and ecosystem facts
 
-Repository snapshot facts were verified from `uv.lock` and `pyproject.toml`.
-Local installed source on 2026-04-30 was used only as a cross-check, not as the
-authoritative source for this ADR.
+`pyproject.toml` defines supported dependency ranges, and `uv.lock` defines exact resolved versions. This decision depends on stable ownership boundaries rather than one lockfile snapshot:
 
-- The repo snapshot pins `llama-index-core==0.14.21` and selected adapters directly; the `llama-index` meta-package is absent.
-- The repo snapshot already contains `llama-index-workflows==2.20.0`
-  transitively through `llama-index-core==0.14.21`.
-- The repo snapshot pins `langgraph==1.1.10`,
-  `langgraph-checkpoint==4.0.3`, and
-  `langgraph-checkpoint-sqlite==3.0.3`.
-- The repo snapshot pins `langchain==1.2.16` and `langchain-core==1.3.2`.
-
-PyPI metadata and the local install cross-check confirmed the broader ecosystem
-posture at the time of review:
-
-- `llama-agents-server==0.5.0`, Python `>=3.10`
-- `llama-agents-client==0.3.7`, Python `>=3.10`
-- `llamactl==0.9.1`, Python `>=3.10,<4`
-- old `llama-agents==0.0.14`, uploaded in 2024
-
-The old `llama-agents` package MUST NOT be added.
+- DocMind depends directly on `llama-index-core` and selected adapters; it does not install the `llama-index` meta-package
+- LlamaIndex Workflows arrives through the core dependency and does not own the application runtime
+- LangGraph owns orchestration, checkpointing, resume, and time-travel behavior
+- LangChain creates role agents inside the repository-owned LangGraph supervisor
+- The legacy `llama-agents` distribution is not a supported dependency
 
 ## Decision Drivers
 
@@ -86,7 +72,7 @@ Architecture options were scored from 1.0 to 10.0 using these weights:
 - Persistence, checkpointing, resume, and time-travel fit: 20%
 - Streaming, events, handoff, and deadline semantics: 15%
 - Offline-first behavior and local/degraded-mode compatibility: 10%
-- Telemetry, cache, and log-safety fit: 10%
+- Telemetry, memory, and log-safety fit: 10%
 - Dependency risk, ecosystem maturity, and operational simplicity: 10%
 - Code deletion potential and entropy reduction: 10%
 
@@ -99,7 +85,7 @@ Thresholds:
 
 | Option | Score | Decision | Rationale |
 | --- | ---: | --- | --- |
-| Keep current LangGraph v1 supervisor with no runtime pilot now | 9.0 | Adopt | Best current parity for checkpointing, store, time travel, deadlines, telemetry, cache, and offline behavior. Lower deletion upside, but lowest risk. |
+| Keep current LangGraph v1 supervisor with no runtime pilot now | 9.0 | Adopt | Best current parity for checkpointing, store, time travel, deadlines, telemetry, memory, and offline behavior. Lower deletion upside, but lowest risk. |
 | Add ADR/research note and open a future pilot issue | 9.3 | Adopt | Captures issue #86 cleanly, preserves default runtime, creates explicit gates, and adds no runtime entropy. |
 | Pilot `llama-index-workflows` on one contained in-process flow | 8.7 | Defer | Promising future pilot candidate because Workflows are active and already transitive. Needs parity proof for checkpoint/time travel and must stay isolated. |
 | Pilot LlamaIndex `AgentWorkflow` on one contained flow | 7.8 | Defer | Useful built-in handoff/state model, but overlaps more directly with the current supervisor and would likely require translation. |
@@ -119,8 +105,7 @@ to the application runtime. Do not add a dual-runtime abstraction layer.
 Modern LlamaIndex Workflows MAY be revisited only as a future contained,
 in-process pilot. The candidate pilot scope is synthesis plus validation, not
 retrieval, persistence, or UI routing. Retrieval remains out of scope because it
-touches Qdrant, GraphRAG, router injection, semantic cache, and more durable
-DocMind contracts.
+touches Qdrant, GraphRAG, router injection, and more durable DocMind contracts.
 
 ## Future Pilot Conditions
 
@@ -134,7 +119,6 @@ A future pilot must satisfy all of these conditions before implementation:
 - It preserves store/persistence expectations.
 - It compares streaming event shape and handoff/backflow semantics.
 - It preserves timeout and deadline propagation.
-- It preserves semantic cache policy or proves cache is outside pilot scope.
 - It preserves metadata-only telemetry and log safety.
 - It works offline and with local/degraded LLM backends.
 - It has deterministic failure and retry behavior.
@@ -186,6 +170,7 @@ checking, and broader quality gates before adoption.
 
 ## Changelog
 
+- 1.2 (2026-07-13): Replaced unanchored package snapshots with stable ownership and lockfile authority.
 - 1.1 (2026-07-11): Aligned dependency evidence with the direct `llama-index-core` and selected-adapter contract.
 - 1.0 (2026-05-01): Accepted issue #86 decision: keep LangGraph as default,
   defer runtime replacement, and define strict future LlamaIndex Workflows pilot

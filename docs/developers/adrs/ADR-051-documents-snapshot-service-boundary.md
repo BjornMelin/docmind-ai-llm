@@ -2,8 +2,8 @@
 ADR: 051
 Title: Documents Snapshot Service Boundary (Extract Snapshot Rebuild/Exports From UI)
 Status: Implemented
-Version: 1.0
-Date: 2026-01-09
+Version: 2.0
+Date: 2026-07-14
 Supersedes:
 Superseded-by:
 Related: 031, 038, 013, 016
@@ -18,10 +18,10 @@ Extract snapshot rebuild and GraphRAG export packaging logic from `src/pages/02_
 
 ## Context
 
-`src/pages/02_documents.py` currently implements substantial domain logic:
+`src/pages/02_documents.py` originally implemented substantial domain logic:
 
-- snapshot workspace lifecycle (`SnapshotManager.begin_snapshot/finalize_snapshot/cleanup_tmp`)
-- vector/graph persistence
+- snapshot workspace lifecycle
+- physical collection construction and graph persistence
 - GraphRAG export packaging (JSONL required; Parquet optional) and export metadata hashing
 - corpus/config hashing and manifest writing
 
@@ -54,13 +54,19 @@ Weights: Complexity 40% · Performance 30% · Alignment 30% (10 = best)
 
 We will:
 
-1. Add `src/persistence/snapshot_service.py` that owns snapshot rebuild/export packaging orchestration and returns a structured result.
+1. Add `src/persistence/snapshot_service.py` that owns snapshot rebuild/export
+   packaging and finalization inside a caller-owned transaction.
 
 2. Refactor `src/pages/02_documents.py` to call the service and only:
 
+   - acquire the snapshot lock before physical collection construction
+   - clean up the workspace when pre-commit work fails
    - gather UI inputs
    - update `st.session_state` with indices/router on success
    - render status/progress and user-facing errors
+
+   Collection reclamation remains an explicit, dry-run-first offline operation
+   through `scripts/cleanup_collections.py` after every reader and writer stops.
 
 3. Move the unit tests that currently validate snapshot rebuild behavior from the page module to the service module, and keep only a thin UI wiring test at the page level.
 
@@ -68,10 +74,12 @@ We will:
 
 ```mermaid
 flowchart LR
-  UI[Documents Page] --> SVC[snapshot_service]
-  SVC --> SNAP[SnapshotManager]
+  UI[Documents Page] --> SNAP[SnapshotManager begin]
+  SNAP --> BUILD[Physical collection build]
+  BUILD --> SVC[snapshot_service]
+  SVC --> COMMIT[SnapshotManager finalize]
   SVC --> GEXP[Graph export helpers]
-  SNAP --> FS[(data/storage)]
+  COMMIT --> FS[(data/storage/CURRENT)]
 ```
 
 ## Security & Privacy
@@ -84,6 +92,8 @@ flowchart LR
 
 - Unit tests for `src/persistence/snapshot_service.py`:
   - writes manifest triad
+  - records required physical text/image collection identities
+  - never begins or cleans up the caller-owned workspace
   - includes deterministic `graph_exports` metadata (sha256, size, seed_count)
   - skips exports when graph index lacks required context
 - Integration/AppTest: Documents page still renders and the snapshot rebuild action triggers the service (stubbing the service for deterministic tests).
@@ -92,7 +102,12 @@ flowchart LR
 
 ### Positive Outcomes
 
-- Clear boundary: pages do UI, persistence does snapshot orchestration.
+- Clear boundary: the caller owns transaction lifetime; the persistence service
+  owns payload construction and finalization.
+- One lock spans physical collection construction through manifest activation.
+- Collection cleanup is an explicit offline operation, never an activation
+  callback. It preserves every retained manifest reference and requires exact
+  deployment ownership metadata before deletion.
 - Lower regression risk: snapshot behavior tested without Streamlit.
 - Enables future non-UI callers (CLI/batch) without importing Streamlit pages.
 
@@ -102,4 +117,7 @@ flowchart LR
 
 ## Changelog
 
+- 2.0 (2026-07-14): The service records physical collection identities and
+  finalizes a caller-owned transaction. One lock spans collection construction
+  through activation; vectors remain owned by Qdrant.
 - 1.0 (2026-01-09): Proposed for v1 maintainability and correctness.

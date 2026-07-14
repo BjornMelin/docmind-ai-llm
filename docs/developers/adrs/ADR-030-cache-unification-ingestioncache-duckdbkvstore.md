@@ -82,7 +82,7 @@ graph TD
 - **ADR-031**: Local-first persistence; vectors in Qdrant, cache via DuckDBKVStore
 - **ADR-025**: Simplified caching; now unified on IngestionCache(DuckDBKVStore)
 - **ADR-026**: Test/production separation; removes SimpleCache from src
-- **ADR-035**: Application-level semantic cache (GPTCache) — separate from document-processing cache described here
+- **ADR-035**: Superseded v1 application-level response cache, separate from the document-processing cache described here
 
 ## Design
 

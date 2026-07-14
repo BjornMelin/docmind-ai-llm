@@ -1,8 +1,8 @@
 ---
 spec: SPEC-043
 title: Ollama Native SDK Integration and Optional Capabilities
-version: 1.0.0
-date: 2026-01-15
+version: 1.1.0
+date: 2026-07-13
 owners: ["ai-arch"]
 status: Implemented
 related_requirements:
@@ -15,7 +15,9 @@ related_adrs: ["ADR-004","ADR-024","ADR-047","ADR-059"]
 
 ## Objective
 
-Define DocMind’s canonical integration for Ollama-native APIs and capabilities using the official `ollama` Python SDK, including explicit security/egress policy and explicit streaming semantics.
+Define DocMind’s canonical integration for its Ollama chat and cloud web-tool use
+through the official `ollama` Python SDK, including explicit security, egress,
+and streaming semantics.
 
 This spec complements (does not replace) the LlamaIndex-based runtime selection described in SPEC-001.
 
@@ -23,21 +25,23 @@ This spec complements (does not replace) the LlamaIndex-based runtime selection 
 
 In scope:
 
-- Ollama host/auth/timeout configuration and security gating.
-- Ollama-native capability usage via `/api/chat`, `/api/generate`, `/api/embed`.
-- Optional capabilities (feature-flagged): logprobs, embed dimensions, thinking, structured outputs, tool calling, cloud web tools.
+- Ollama host, authentication, timeout configuration, and security gating.
+- Ollama-native chat with logprobs, thinking, structured response formats, and
+  tool calling.
+- Opt-in Ollama Cloud web tools.
 
 Out of scope:
 
 - Changing the primary chat UI runtime away from LlamaIndex adapters (SPEC-001).
 - Enabling network/remote endpoints by default.
 - Adding new agent orchestration abstractions.
+- Pass-through wrappers for SDK methods that have no DocMind-owned policy.
 
 ## Canonical Code Locations
 
 - Client/config entrypoint: `src/config/ollama_client.py`
 - Settings fields: `src/config/settings.py` (see `ollama_*` and `security.*`)
-- Optional agent tool loop example (feature-flagged): `src/agents/tools/ollama_web_tools.py`
+- Feature-flagged LangGraph web tools: `src/agents/tools/ollama_web_tools.py`
 
 ## Configuration
 
@@ -46,7 +50,6 @@ Canonical settings (Pydantic Settings, prefix `DOCMIND_`):
 - `DOCMIND_OLLAMA_BASE_URL` (default: `http://localhost:11434`)
 - `DOCMIND_OLLAMA_API_KEY` (optional; required for Ollama Cloud and web tools)
 - `DOCMIND_OLLAMA_ENABLE_WEB_SEARCH` (default: `false`)
-- `DOCMIND_OLLAMA_EMBED_DIMENSIONS` (optional int)
 - `DOCMIND_OLLAMA_ENABLE_LOGPROBS` (default: `false`)
 - `DOCMIND_OLLAMA_TOP_LOGPROBS` (default: `0`)
 - `DOCMIND_LLM_REQUEST_TIMEOUT_SECONDS` (default: `120`)
@@ -66,7 +69,9 @@ DocMind uses `DOCMIND_*` for all app-level configuration (including Ollama) to a
 
 ### Explicit streaming semantics
 
-All Ollama chat/generate calls initiated by DocMind MUST pass `stream=` explicitly (derived from `settings.llm_streaming_enabled`). Do not rely on server defaults.
+Every call to `ollama_chat` MUST pass `stream=` explicitly. Any future direct
+SDK call with streaming support MUST also make its streaming mode explicit; do
+not rely on server defaults.
 
 ### Optional fields must be treated as optional
 
@@ -86,19 +91,16 @@ Callers MUST NOT assume these response fields exist unless enabled/requested and
 - Default posture is **off** unless explicitly enabled.
 - Response parsing must tolerate missing `logprobs`.
 
-### Embed dimensions
-
-- `/api/embed` optionally accepts `dimensions` to truncate embeddings for supported models.
-- When configured, DocMind passes `dimensions` and surfaces a clear error if the server/model rejects it.
-
 ### Structured outputs
 
-DocMind should prefer Ollama-native structured outputs when using Ollama-native `/api/*`:
+DocMind should prefer Ollama-native structured outputs when using native chat:
 
 - `format="json"` for “JSON mode”
 - `format=<json-schema-dict>` for schema-constrained outputs
 
-When a Pydantic model is available, DocMind should pass `format=<Model>.model_json_schema()` and validate output with Pydantic on receipt.
+`ollama_chat` passes the format through to the SDK. When a Pydantic model is
+available, the owning caller should pass `format=<Model>.model_json_schema()`
+and validate the response at its consumption boundary.
 
 ### Thinking
 
@@ -122,7 +124,19 @@ When `ollama_enable_web_search` is enabled and the endpoint policy allows `https
 
 ## Acceptance Criteria
 
-- All Ollama SDK usage flows through `src/config/ollama_client.py`.
-- Remote endpoints remain blocked by default; enabling web tools requires explicit config + allowlist.
+- DocMind host, authentication, timeout, chat, and web-tool policy flows through
+  `src/config/ollama_client.py`.
+- The module does not duplicate native SDK methods with policy-free pass-through
+  wrappers. A future concrete consumer may use the configured client directly.
+- Remote endpoints remain blocked by default; enabling web tools requires
+  explicit configuration and endpoint-policy approval.
 - Streaming vs non-streaming behavior is explicitly controlled by settings.
-- Docs for enabling logprobs, embed dimensions, thinking, structured outputs, and web tools are consistent across specs/ADRs/prompts.
+- Docs for enabling logprobs, thinking, structured outputs, and web tools are
+  consistent across specs and ADRs.
+
+## Changelog
+
+- **1.1.0 (2026-07-13)**: Hard-cut the unused exported
+  `run_web_search_agent` example loop, pass-through API helpers, and their
+  dedicated tests and configuration. Production agents use the gated LangGraph
+  web tools instead.

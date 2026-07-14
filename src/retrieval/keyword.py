@@ -11,6 +11,7 @@ if sparse encoding or Qdrant query fails, it returns an empty list.
 
 from __future__ import annotations
 
+import asyncio
 import random
 import time
 from collections.abc import Callable
@@ -18,11 +19,13 @@ from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from llama_index.core.base.base_retriever import BaseRetriever
 from llama_index.core.schema import NodeWithScore, QueryBundle
 from loguru import logger
-from qdrant_client import QdrantClient
+from qdrant_client import AsyncQdrantClient, QdrantClient
 from qdrant_client.common.client_exceptions import ResourceExhaustedResponse
 
+from src.retrieval.async_work import AsyncWorkCapacityError, AsyncWorkExecutor
 from src.retrieval.sparse_query import encode_to_qdrant
 from src.utils.log_safety import build_pii_log_entry
 from src.utils.qdrant_exceptions import QDRANT_SCHEMA_EXCEPTIONS
@@ -47,7 +50,7 @@ class KeywordParams:
     rate_limit_backoff_max_s: float = 8.0
 
 
-class KeywordSparseRetriever:
+class KeywordSparseRetriever(BaseRetriever):
     """Sparse-only retriever for exact-term / keyword lookups (Qdrant)."""
 
     def __init__(
@@ -56,6 +59,8 @@ class KeywordSparseRetriever:
         *,
         client: QdrantClient | None = None,
         client_factory: Callable[[], QdrantClient] | None = None,
+        async_client: AsyncQdrantClient | None = None,
+        async_client_factory: Callable[[], AsyncQdrantClient] | None = None,
     ) -> None:
         """Initialize retriever with query parameters and an optional client.
 
@@ -63,11 +68,19 @@ class KeywordSparseRetriever:
             params: Keyword retrieval parameters (collection, top_k, payload fields).
             client: Optional pre-configured QdrantClient instance.
             client_factory: Optional factory to lazily construct a QdrantClient.
+            async_client: Optional pre-configured AsyncQdrantClient instance.
+            async_client_factory: Optional factory for AsyncQdrantClient.
         """
+        super().__init__()
         self.params = params
         cfg = get_client_config()
         self._client: QdrantClient | None = client
         self._client_factory = client_factory or (lambda: QdrantClient(**cfg))
+        self._async_client = async_client
+        self._async_client_factory = async_client_factory or (
+            lambda: AsyncQdrantClient(**cfg)
+        )
+        self._cpu_work = AsyncWorkExecutor(name="docmind-keyword-cpu")
         # Cache timeout for telemetry; keep consistent with configured client.
         try:
             self._qdrant_timeout_s = int(cfg.get("timeout", 60))
@@ -75,27 +88,44 @@ class KeywordSparseRetriever:
             self._qdrant_timeout_s = 60
 
     def close(self) -> None:
-        """Close the underlying client (best-effort)."""
+        """Close the synchronous client (best-effort)."""
+        self._cpu_work.close()
         if self._client is None:
             return
         with suppress(Exception):  # pragma: no cover - defensive
             self._client.close()
+        self._client = None
+
+    async def aclose(self) -> None:
+        """Close both clients after asynchronous use (best-effort)."""
+        self.close()
+        async_client = self._async_client
+        self._async_client = None
+        if async_client is not None:
+            with suppress(Exception):  # pragma: no cover - defensive
+                await async_client.close()
+        await self._cpu_work.aclose()
 
     def _get_client(self) -> QdrantClient:
         if self._client is None:
             self._client = self._client_factory()
         return self._client
 
-    def retrieve(self, query: str | QueryBundle) -> list[NodeWithScore]:
+    def _get_async_client(self) -> AsyncQdrantClient:
+        if self._async_client is None:
+            self._async_client = self._async_client_factory()
+        return self._async_client
+
+    def _retrieve(self, query_bundle: QueryBundle) -> list[NodeWithScore]:
         """Retrieve nodes via sparse-only search against ``text-sparse``.
 
         Args:
-            query: Query string or ``QueryBundle``.
+            query_bundle: Canonical LlamaIndex query bundle.
 
         Returns:
             A list of ``NodeWithScore`` results (may be empty).
         """
-        qtext = query.query_str if isinstance(query, QueryBundle) else str(query)
+        qtext = query_bundle.query_str
         t0 = time.time()
 
         sparse_vec = encode_to_qdrant(qtext)
@@ -110,7 +140,7 @@ class KeywordSparseRetriever:
             ResourceExhaustedResponse,
         ) as exc:
             logger.warning(
-                "Qdrant keyword query failed (error_type=%s)", type(exc).__name__
+                "Qdrant keyword query failed (error_type={})", type(exc).__name__
             )
             self._emit_telemetry(
                 t0=t0,
@@ -129,6 +159,52 @@ class KeywordSparseRetriever:
 
         self._emit_telemetry(
             t0=t0, return_count=len(nodes), sparse_fallback=False, error_type=None
+        )
+        return nodes
+
+    async def _aretrieve(self, query_bundle: QueryBundle) -> list[NodeWithScore]:
+        """Retrieve sparse results through Qdrant's native async client."""
+        t0 = time.time()
+        try:
+            sparse_vec = await self._cpu_work.run(
+                encode_to_qdrant,
+                query_bundle.query_str,
+            )
+        except AsyncWorkCapacityError:
+            self._emit_telemetry(t0=t0, return_count=0, sparse_fallback=True)
+            return []
+        if sparse_vec is None:
+            self._emit_telemetry(t0=t0, return_count=0, sparse_fallback=True)
+            return []
+
+        try:
+            result = await self._aquery_points_with_retry(sparse_vec)
+        except (
+            *QDRANT_SCHEMA_EXCEPTIONS,
+            ResourceExhaustedResponse,
+        ) as exc:
+            logger.warning(
+                "Qdrant keyword query failed (error_type={})", type(exc).__name__
+            )
+            self._emit_telemetry(
+                t0=t0,
+                return_count=0,
+                sparse_fallback=False,
+                error_type=type(exc).__name__,
+            )
+            return []
+
+        nodes = nodes_from_query_result(
+            result,
+            top_k=int(self.params.top_k),
+            id_keys=("chunk_id", "page_id", "doc_id"),
+            prefer_point_id=True,
+        )
+        self._emit_telemetry(
+            t0=t0,
+            return_count=len(nodes),
+            sparse_fallback=False,
+            error_type=None,
         )
         return nodes
 
@@ -151,6 +227,28 @@ class KeywordSparseRetriever:
                     break
                 delay = self._rate_limit_delay(exc, attempt)
                 time.sleep(delay)
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("Qdrant rate limit retry exhausted without exception")
+
+    async def _aquery_points_with_retry(self, sparse_vec: Any) -> QdrantQueryResponse:
+        """Query Qdrant asynchronously with cancellation-safe backoff."""
+        retries = max(0, int(self.params.rate_limit_retries))
+        last_exc: Exception | None = None
+        for attempt in range(retries + 1):
+            try:
+                return await self._get_async_client().query_points(
+                    collection_name=self.params.collection,
+                    query=sparse_vec,
+                    using=self.params.using,
+                    limit=int(self.params.top_k),
+                    with_payload=list(self.params.with_payload),
+                )
+            except ResourceExhaustedResponse as exc:
+                last_exc = exc
+                if attempt >= retries:
+                    break
+                await asyncio.sleep(self._rate_limit_delay(exc, attempt))
         if last_exc is not None:
             raise last_exc
         raise RuntimeError("Qdrant rate limit retry exhausted without exception")

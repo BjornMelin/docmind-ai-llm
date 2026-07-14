@@ -1,13 +1,13 @@
 ---
 ADR: 031
-Title: Local-First Persistence Architecture (Vectors, Cache, Operational Data)
+Title: Local-First Persistence Architecture (Vectors, Cache, Snapshots)
 Status: Accepted (Amended)
-Version: 1.7
-Date: 2026-07-10
+Version: 2.2
+Date: 2026-07-14
 Supersedes:
 Superseded-by:
 Related: 026, 030, 033, 035, 038
-Tags: persistence, storage, qdrant, duckdb, sqlite, cache
+Tags: persistence, storage, qdrant, duckdb, snapshots, cache
 References:
 - [Qdrant — Documentation](https://qdrant.tech/documentation/)
 - [LlamaIndex — Ingestion Pipeline & Cache](https://docs.llamaindex.ai/)
@@ -16,11 +16,19 @@ References:
 
 ## Description
 
-Adopt a simple, offline-first persistence split: Qdrant for vectors, LlamaIndex IngestionCache backed by DuckDBKVStore for document-processing cache, and optional SQLite for operational metadata. No external services required; minimal code and clear responsibilities.
+Adopt a simple, offline-first persistence split: Qdrant for vectors,
+LlamaIndex IngestionCache backed by DuckDBKVStore for document-processing
+cache, and the snapshot store for durable index manifests. Chat and agent state
+retain their dedicated stores. Do not add a shared operational database without
+a concrete consumer.
 
 ## Context
 
-Earlier designs mixed concerns and introduced multiple storage backends. To reduce complexity and maintenance, we separate responsibilities: vector search in Qdrant; processing cache in a single DuckDB file via LlamaIndex; operational metadata optionally in SQLite. Analytics remains separate (ADR‑032/033), avoiding coupling to cache or vectors.
+Earlier designs mixed concerns and introduced multiple storage backends. To
+reduce complexity and maintenance, each subsystem retains one persistence
+owner: vector search in Qdrant, processing cache in one DuckDB file, snapshots
+in their manifest store, and chat/agent state in their dedicated stores.
+Analytics remains separate (ADR-032/033), avoiding coupling to cache or vectors.
 
 ## Decision Drivers
 
@@ -45,7 +53,11 @@ Earlier designs mixed concerns and introduced multiple storage backends. To redu
 
 ## Decision
 
-Adopt Qdrant for vectors, LlamaIndex IngestionCache with DuckDBKVStore for processing cache (single configured file at `settings.cache.ingestion_db_path`), and optionally SQLite for operational metadata. No test-only hooks in src; rely on library clients.
+Adopt Qdrant for vectors and LlamaIndex IngestionCache with DuckDBKVStore for
+processing cache (single configured file at
+`settings.cache.ingestion_db_path`). Keep snapshot, chat, agent-state, and
+analytics persistence at their existing subsystem boundaries. No test-only
+hooks in `src`; rely on library clients.
 
 Hybrid Retrieval Schema (Qdrant Collections):
 
@@ -59,11 +71,30 @@ Hybrid Retrieval Schema (Qdrant Collections):
 
 For GraphRAG and indices requiring consistent reloads, adopt a SnapshotManager:
 
-- Write under `storage/_tmp-<uuid>`; `fsync` and atomically rename to `storage/<timestamp>`; readers resolve the `CURRENT` pointer first before falling back to lexicographic ordering.
-- Persist vector index via `StorageContext.persist`; persist property graph via `SimpleGraphStore.persist` and package graph exports under `graph/graph_export-YYYYMMDDTHHMMSSZ.*` (JSONL required, Parquet optional) with telemetry metadata (`seed_count`, `size_bytes`, `duration_ms`, checksum).
-- Emit tri-file manifests (`manifest.jsonl`, `manifest.meta.json`, `manifest.checksum`) plus optional `errors.jsonl`; `manifest.meta.json` keeps `complete=false` until promotion succeeds, then flips to `true`. Legacy `manifest.json` SHALL NOT be emitted.
-- Use a bounded `SnapshotLock` (`.lock` + JSON metadata) implemented via `portalocker` with heartbeats and stale eviction; metadata captures `owner_id`, `ttl_seconds`, `takeover_count`, and timestamps. Rotate stale lock files to `.stale-*` suffixes; fall back to `os.O_EXCL` when `portalocker` is unavailable. Telemetry captures export operations, lock takeovers, and stale-snapshot detection for observability.
-- Run retention under the same lock, pruning `_tmp-*` workspaces older than `gc_grace_seconds` while never deleting the directory referenced by `CURRENT`.
+- Write under `storage/_tmp-<uuid>`; `fsync` and atomically rename to
+  `storage/<timestamp>`. Readers activate only the checksum-verified manifest
+  referenced by `CURRENT`; no directory-order fallback exists.
+- Record immutable physical Qdrant text/image collection identities. Do not
+  serialize vectors into app snapshots; Qdrant backups own point-in-time vector
+  data. Persist the optional complete native property-graph `StorageContext`
+  under `graph/`, including its graph-local vector store, and package snapshot
+  exports under `graph/graph_export-snapshot-YYYYMMDDTHHMMSSZ.*`. The local
+  graph vectors preserve semantic GraphRAG retrieval across restart and are not
+  copies of the live Qdrant corpus vectors.
+- Emit tri-file manifests (`manifest.jsonl`, `manifest.meta.json`,
+  `manifest.checksum`). Redacted persistence failures live at
+  `storage/errors.jsonl`; an aborted graph workspace may contain a transient
+  error record. `manifest.meta.json` keeps `complete=false` until promotion
+  succeeds, then flips to `true`. Legacy `manifest.json` SHALL NOT be emitted.
+- Use a bounded `SnapshotLock` implemented with required `portalocker`. The OS
+  lock on the permanent `.lock` sentinel is authoritative; JSON heartbeats are
+  diagnostic only and never permit stale takeover. Fail closed when OS-lock
+  support is unavailable. Telemetry captures export operations, lock timeouts,
+  and stale-snapshot detection.
+- Acquire the writer lock before crash recovery or retention. `CURRENT`
+  replacement is the final commit point. A durable activation journal binds the
+  promoted destination before rename, and recovery never promotes an
+  unreferenced snapshot.
 - Load latest snapshot in Chat (ADR‑038; SPEC‑014) using the pointer and staleness digests for badge display.
 
 ## High-Level Architecture
@@ -74,7 +105,8 @@ graph TD
     B --> C["IngestionPipeline"]
     C --> D["IngestionCache (DuckDBKVStore)"]
     B --> E["Vector Store (Qdrant)"]
-    A --> F["Operational (SQLite, optional)"]
+    A --> F["Snapshot Store"]
+    A --> G["Chat and Agent State"]
 ```
 
 ## Related Requirements
@@ -105,7 +137,8 @@ graph TD
 ### Architecture Overview
 
 - Qdrant handles vectors; DuckDBKVStore handles cache via LlamaIndex IngestionCache
-- Optional SQLite for ops data (e.g., session metadata) via app settings
+- Snapshot, chat, and agent-state persistence remain separate from ingestion
+  cache configuration
 
 ### Implementation Details
 
@@ -141,7 +174,11 @@ def test_cache_roundtrip(cache):
 
 - `configure_observability()` (SPEC-012) provisions OpenTelemetry SDK providers with OTLP exporters **only when enabled** via `settings.observability.enabled` (offline-first default is disabled).
 - Key workflows emit spans/metrics (no-op unless exporters are enabled), including snapshot persistence (`snapshot.*` spans), ingestion (`ingest_documents` span), router composition (`router_factory.build_router_engine` span), and GraphRAG export metrics (`docmind.graph.export.*`).
-- Local JSONL telemetry events (`router_selected`, `snapshot_stale_detected`, `export_performed`, plus retrieval/rerank keys) serve as the structured logging contract for offline audits. Rotation/sampling are controlled by `DOCMIND_TELEMETRY_*` env vars.
+- Local JSONL telemetry records retrieval backend/outcome,
+  `snapshot_stale_detected`, `export_performed`, and retrieval/rerank fields for
+  offline audits. Router construction emits `router_selected` through
+  OpenTelemetry, not per-query JSONL. Rotation and sampling are controlled by
+  `DOCMIND_TELEMETRY_*` environment variables.
 
 ## Consequences
 
@@ -166,6 +203,11 @@ def test_cache_roundtrip(cache):
 
 ## Changelog
 
+- 2.2 (2026-07-14): Persist the complete property-graph StorageContext so graph
+  vector retrieval survives restart.
+- 2.1 (2026-07-14): Require OS-fenced portalocker ownership and remove unsafe
+  lease-file takeover and fallback locking.
+- 2.0 (2026-07-13): Remove the unimplemented shared operational database and keep persistence with each live subsystem owner.
 - 1.7 (2026-07-10): Align the Qdrant contract with fail-closed named-vector schema validation and replace the removed LlamaIndex meta-package with direct dependencies.
 - 1.6 (2026-01-09): Docs-only: align observability section with SPEC-012 and shipped telemetry (no implicit console fallback; remove lock_takeover mention).
 - 1.5 (2025-09-16): Clarified SnapshotLock heartbeat/takeover semantics, retention discipline, and OpenTelemetry logging requirements.

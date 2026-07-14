@@ -11,6 +11,7 @@ import importlib
 from typing import Any
 
 import pytest
+from llama_index.core.query_engine import RouterQueryEngine
 
 
 class _StubIndex:
@@ -29,6 +30,10 @@ class _StubIndex:
         return _QE()
 
 
+def _tool_names(router: RouterQueryEngine) -> set[str]:
+    return {metadata.name for metadata in router._metadatas}
+
+
 @pytest.mark.integration
 @pytest.mark.retrieval
 def test_router_tools_and_rerank_toggle(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -41,9 +46,9 @@ def test_router_tools_and_rerank_toggle(monkeypatch: pytest.MonkeyPatch) -> None
     # Case 1: hybrid off, rerank on
     monkeypatch.setattr(cfg.retrieval, "enable_server_hybrid", False, raising=False)
     monkeypatch.setattr(cfg.retrieval, "use_reranking", True, raising=False)
+    monkeypatch.setattr(cfg.retrieval, "enable_image_retrieval", False, raising=False)
     router = rfac.build_router_engine(vector_index=_StubIndex(), pg_index=None)
-    tools = getattr(router, "query_engine_tools", [])
-    names = {t.metadata.name for t in tools}
+    names = _tool_names(router)
     assert "semantic_search" in names
     assert "hybrid_search" not in names
 
@@ -72,7 +77,28 @@ def test_router_tools_and_rerank_toggle(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(hy, "ServerHybridRetriever", _StubRetriever, raising=False)
     monkeypatch.setattr(cfg.retrieval, "enable_server_hybrid", True, raising=False)
     router2 = rfac.build_router_engine(vector_index=_StubIndex(), pg_index=None)
-    tools2 = getattr(router2, "query_engine_tools", [])
-    names2 = {t.metadata.name for t in tools2}
+    names2 = _tool_names(router2)
     assert "semantic_search" in names2
     assert "hybrid_search" in names2
+
+    # Case 3: keyword retrieval is composed into the router, not the agent registry.
+    import src.retrieval.keyword as keyword
+
+    class _StubKeywordRetriever:
+        def __init__(self, *_a: Any, **_k: Any) -> None:
+            pass
+
+        def retrieve(self, *_a: Any, **_k: Any) -> list[Any]:
+            return []
+
+    monkeypatch.setattr(
+        keyword,
+        "KeywordSparseRetriever",
+        _StubKeywordRetriever,
+        raising=True,
+    )
+    monkeypatch.setattr(cfg.retrieval, "enable_server_hybrid", False, raising=False)
+    monkeypatch.setattr(cfg.retrieval, "enable_keyword_tool", True, raising=False)
+    router3 = rfac.build_router_engine(vector_index=_StubIndex(), pg_index=None)
+    names3 = _tool_names(router3)
+    assert names3 == {"semantic_search", "keyword_search"}
