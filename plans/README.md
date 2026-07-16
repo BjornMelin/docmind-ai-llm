@@ -31,7 +31,7 @@ value 30%, maintenance/cognitive load 25%, architectural adaptability 10%.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 | --- | --- | --- | --- | --- | --- |
-| 001 | Preserve job ownership and serialize corpus mutations | P1 | M | — | TODO |
+| 001 | Preserve job ownership and serialize corpus mutations | P1 | M | — | DONE |
 | 002 | Make Chat loading and generation states truthful | P1 | S–M | 001 | TODO |
 | 003 | Remove duplicate and eager page-startup work | P1 | M | 001, 002 | TODO |
 | 004 | Add rendered-browser and accessibility acceptance | P1 | M | 001–003 | TODO |

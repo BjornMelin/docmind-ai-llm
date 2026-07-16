@@ -11,6 +11,9 @@
 
 ## Status
 
+- **Status**: DONE
+- **Validated implementation**: commit `fa16439edda27e6845b0ebf6a5f14f0ca85cde9f`, 2026-07-16
+- **Execution scope**: Revision 8 approved expansion
 - **Priority**: P1
 - **Effort**: M
 - **Risk**: MED
@@ -153,14 +156,26 @@ model caches, and prove the same job remains queryable and cancelable.
 
 ## Done criteria
 
-- [ ] No production caller passes `settings.cache_version` to
+- [x] No production caller passes `settings.cache_version` to
   `get_job_manager`.
-- [ ] One process manager retains a job across runtime cache version changes.
-- [ ] No owner/session can start a corpus mutation while another process job
+- [x] One process manager retains a job across runtime cache version changes.
+- [x] No owner/session can start a corpus mutation while another process job
   owns the `corpus-mutation` slot.
-- [ ] Confirmation for one filename never enables deletion of another.
-- [ ] Focused, UI integration, Ruff, Pyright, and full tests are green.
-- [ ] No out-of-scope persistence or parser files changed.
+- [x] Confirmation for one filename never enables deletion of another.
+- [x] Foreground runtime readers and maintenance are mutually exclusive through
+  the final use of every closeable cached resource and manual graph export.
+- [x] Terminal state is published only after its payload is complete, exposed
+  through immutable observer views, and released after owner-authorized UI
+  handoff or TTL expiry.
+- [x] Snapshot finalization returns the manifest validated under the writer and
+  retention boundary; terminal presentation never depends on reopening the
+  completed job's snapshot.
+- [x] Settings Apply restores the prior settings, runtime generation,
+  LlamaIndex globals, and session runtime owners after any ordinary exception.
+- [x] Focused, UI integration, Ruff, Pyright, and full tests are green.
+- [x] The approved persistence change is limited to the typed finalization
+  result and validation reuse; parser, Qdrant storage, deployment, queue, and
+  security contracts remain unchanged.
 
 ## STOP conditions
 
@@ -168,6 +183,29 @@ Stop if process-stable ownership requires disabling snapshot locks, sharing a
 job across different owner IDs, persisting executable callables, or changing
 the worker transaction contract. Stop if Streamlit cache clearing cannot be
 separated without a broader lifecycle design; report the exact API behavior.
+
+## Approved execution reconciliation
+
+Revision 8 approved the narrow lifecycle expansion required after adversarial
+review reproduced races outside the original boundary. Process-stable mutation
+ownership now includes one process-wide admission and foreground-resource
+lifecycle boundary around coordinator, router, vector, Chat session database,
+memory-store, SigLIP, manual graph-export, and Settings cache-release paths.
+This also includes exact Settings rollback and owner-authorized terminal
+consumption for ingestion and Chat analysis.
+
+Revision 8 additionally approved replacing the snapshot finalizer's path-only
+return with `FinalizedSnapshot(path, manifest)`. The manifest is the same value
+validated while the cross-process writer and retention boundary is active;
+Documents alone derives the bounded, object-free presentation DTO. Canonical
+`CURRENT` verification may inspect the active snapshot, but a completed or
+superseded job never reopens its result snapshot to construct presentation.
+
+This reconciliation supersedes only the original cache-invalidation exclusion
+and the lifecycle/worker-contract STOP clauses for this execution. Snapshot
+locking and activation semantics, deployment identity, parser and Qdrant
+storage contracts, queue architecture, security, and deployment configuration
+remain out of scope.
 
 ## Maintenance notes
 
