@@ -31,6 +31,14 @@ def clear_caches(settings_obj: Any | None = None) -> int:
 
         settings_obj = _settings
 
+    from src.ui.background_jobs import get_job_manager
+
+    with get_job_manager().admission_quiescence():
+        return _clear_caches_quiesced(settings_obj)
+
+
+def _clear_caches_quiesced(settings_obj: Any) -> int:
+    """Clear caches after the caller has paused background job admission."""
     try:
         cur = int(getattr(settings_obj, "cache_version", 0))
         settings_obj.cache_version = cur + 1
@@ -38,11 +46,10 @@ def clear_caches(settings_obj: Any | None = None) -> int:
         settings_obj.cache_version = 1
 
     with suppress(Exception):
-        from src.ui.vector_session import replace_session_vector_resource
+        from src.ui.vector_session import clear_session_runtime
 
-        replace_session_vector_resource(
+        clear_session_runtime(
             st.session_state,
-            None,
             runtime_generation=int(settings_obj.cache_version),
         )
 

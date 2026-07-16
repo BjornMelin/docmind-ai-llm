@@ -35,6 +35,19 @@ class _Router:
             raise RuntimeError("cleanup failed")
 
 
+class _FailingState(dict[str, object]):
+    def __init__(self, initial: dict[str, object], fail_key: str) -> None:
+        super().__init__(initial)
+        self._fail_key = fail_key
+        self._armed = True
+
+    def __setitem__(self, key: str, value: object) -> None:
+        super().__setitem__(key, value)
+        if self._armed and key == self._fail_key:
+            self._armed = False
+            raise RuntimeError("publication failed")
+
+
 def test_replace_closes_prior_router_once() -> None:
     old = _Router()
     new = _Router()
@@ -98,3 +111,27 @@ def test_generation_invalidation_retires_two_sessions() -> None:
     assert second.close_calls == 1
     assert replacement.close_calls == 0
     assert session_router_is_current(second_state, runtime_generation=2)
+
+
+@pytest.mark.parametrize(
+    "fail_key",
+    ["router_engine", "_router_runtime_generation"],
+)
+def test_failed_router_publication_preserves_old_owner(fail_key: str) -> None:
+    old = _Router()
+    new = _Router()
+    state = _FailingState(
+        {
+            "router_engine": old,
+            "_router_runtime_generation": 1,
+        },
+        fail_key,
+    )
+
+    with pytest.raises(RuntimeError, match="publication failed"):
+        replace_session_router(state, new, runtime_generation=2)  # type: ignore[arg-type]
+
+    assert state["router_engine"] is old
+    assert state["_router_runtime_generation"] == 1
+    assert old.close_calls == 0
+    assert new.close_calls == 1

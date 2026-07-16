@@ -21,6 +21,12 @@ from src.config.llm_runtime_probe import probe_openai_compatible_runtime
 from src.config.settings import DocMindSettings, settings
 from src.config.settings_utils import ensure_v1
 from src.retrieval.llama_index_adapter import get_graphrag_health
+from src.ui.background_jobs import (
+    ForegroundRuntimeConflictError,
+    JobAdmissionPausedError,
+    JobConflictError,
+    get_job_manager,
+)
 from src.ui.components.provider_badge import provider_badge
 from src.utils.telemetry import log_jsonl
 
@@ -90,6 +96,20 @@ def _validate_candidate(
 
 
 def _apply_validated_runtime(validated: DocMindSettings) -> None:
+    """Apply a validated runtime while background job admission is paused."""
+    manager = get_job_manager()
+    try:
+        with manager.admission_quiescence():
+            _apply_validated_runtime_quiesced(validated)
+    except JobAdmissionPausedError:
+        st.warning("Runtime maintenance is already in progress.")
+    except ForegroundRuntimeConflictError:
+        st.warning("Runtime changes are unavailable while the live runtime is in use.")
+    except JobConflictError:
+        st.warning("Runtime changes are unavailable while background work is active.")
+
+
+def _apply_validated_runtime_quiesced(validated: DocMindSettings) -> None:
     """Apply runtime and rebind LlamaIndex settings.
 
     Args:
@@ -99,6 +119,9 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
 
     previous_settings = settings.model_copy(deep=True)
     previous_llm = getattr(LISettings, "_llm", None)
+    previous_embed_model = getattr(LISettings, "_embed_model", None)
+    previous_context_window = LISettings.context_window
+    previous_num_output = LISettings.num_output
     updated = settings.model_copy(
         update={
             "llm_backend": validated.llm_backend,
@@ -141,22 +164,27 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
     model_label = validated.effective_model
     try:
         from src.config.integrations import initialize_integrations
+        from src.ui.vector_session import clear_session_runtime
 
         # Reinitialize the singleton in place so existing imports keep the same
         # object. The previous validated snapshot is restored on any bind error.
         settings.__init__(**updated.model_dump(mode="python"))
         initialize_integrations(force_llm=True, force_embed=False)
-    except (
-        ImportError,
-        OSError,
-        RuntimeError,
-        TypeError,
-        ValueError,
-    ) as exc:  # pragma: no cover - defensive UI feedback
+        if getattr(LISettings, "_llm", None) is None:
+            raise RuntimeError("Settings.llm is not bound")
+        settings.cache_version = previous_settings.cache_version + 1
+        clear_session_runtime(
+            st.session_state,
+            runtime_generation=settings.cache_version,
+        )
+    except Exception as exc:  # pragma: no cover - defensive UI transaction boundary
         from src.utils.log_safety import build_pii_log_entry
 
         settings.__init__(**previous_settings.model_dump(mode="python"))
         LISettings._llm = previous_llm
+        LISettings._embed_model = previous_embed_model
+        LISettings.context_window = previous_context_window
+        LISettings.num_output = previous_num_output
         redaction = build_pii_log_entry(str(exc), key_id="settings.apply")
         st.error(f"Runtime apply failed: {exc.__class__.__name__}")
         log_jsonl(
@@ -172,30 +200,8 @@ def _apply_validated_runtime(validated: DocMindSettings) -> None:
         )
         return
 
-    if getattr(LISettings, "_llm", None) is None:
-        settings.__init__(**previous_settings.model_dump(mode="python"))
-        LISettings._llm = previous_llm
-        st.error("Runtime apply failed: Settings.llm is not bound.")
-        log_jsonl(
-            {
-                "settings.apply": True,
-                "success": False,
-                "backend": validated.llm_backend,
-                "model": model_label,
-                "reason": "llm_unbound",
-            }
-        )
-        return
-
     from src.ui.chat_runtime import invalidate_coordinator
-    from src.ui.vector_session import replace_session_vector_resource
 
-    settings.cache_version += 1
-    replace_session_vector_resource(
-        st.session_state,
-        None,
-        runtime_generation=settings.cache_version,
-    )
     invalidate_coordinator()
     st.success("Runtime applied. Settings.llm bound; Chat runtime refreshed.")
     log_jsonl(
@@ -1149,13 +1155,31 @@ def _render_ollama_web_search_warning(
 
 def _render_actions(validated: DocMindSettings | None, ui_errors: list[str]) -> None:
     """Render apply/save actions based on validation status."""
-    actions_disabled = validated is None or bool(ui_errors)
+    validation_disabled = validated is None or bool(ui_errors)
+    activity = get_job_manager().activity_snapshot()
+    if activity.maintenance_active:
+        st.info("Runtime maintenance is in progress. Save remains available.")
+    elif activity.foreground_runtime_active:
+        st.info(
+            "A live runtime operation is active. Save remains available; "
+            "apply after it finishes."
+        )
+    elif activity.has_active_jobs:
+        st.info(
+            "Background work is active. You can save settings now, but apply them "
+            "after the work finishes."
+        )
     col_a, col_b = st.columns(2)
     with col_a:
         if st.button(
             "Apply runtime",
             use_container_width=True,
-            disabled=actions_disabled,
+            disabled=(
+                validation_disabled
+                or activity.has_active_jobs
+                or activity.foreground_runtime_active
+                or activity.maintenance_active
+            ),
         ):
             if validated is None or ui_errors:
                 st.error("Cannot apply: invalid settings.")
@@ -1163,7 +1187,7 @@ def _render_actions(validated: DocMindSettings | None, ui_errors: list[str]) -> 
                 _apply_validated_runtime(validated)
 
     with col_b:
-        if st.button("Save", use_container_width=True, disabled=actions_disabled):
+        if st.button("Save", use_container_width=True, disabled=validation_disabled):
             if validated is None or ui_errors:
                 st.error("Cannot save: invalid settings.")
             else:
@@ -1296,12 +1320,35 @@ def _render_cache_controls() -> None:
         "Bump the global cache version and clear Streamlit caches. "
         "Use this if results seem stale after changing settings or content."
     )
-    if st.button("Clear caches", use_container_width=True):
+    activity = get_job_manager().activity_snapshot()
+    if activity.maintenance_active:
+        st.info("Runtime maintenance is already in progress.")
+    elif activity.foreground_runtime_active:
+        st.info("Cache clearing is unavailable while the live runtime is in use.")
+    elif activity.has_active_jobs:
+        st.info("Cache clearing is unavailable while background work is active.")
+    if st.button(
+        "Clear caches",
+        use_container_width=True,
+        disabled=(
+            activity.has_active_jobs
+            or activity.foreground_runtime_active
+            or activity.maintenance_active
+        ),
+    ):
         try:
             from src.ui.cache import clear_caches
 
             new_v = clear_caches(settings)
             st.success(f"Caches cleared. Cache version bumped to {new_v}.")
+        except JobAdmissionPausedError:
+            st.warning("Runtime maintenance is already in progress.")
+        except ForegroundRuntimeConflictError:
+            st.warning(
+                "Cache clearing is unavailable while the live runtime is in use."
+            )
+        except JobConflictError:
+            st.warning("Cache clearing is unavailable while background work is active.")
         except (
             OSError,
             RuntimeError,

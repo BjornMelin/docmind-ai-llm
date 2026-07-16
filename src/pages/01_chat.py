@@ -12,11 +12,11 @@ import contextlib
 import functools
 import sqlite3
 import threading
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import streamlit as st
 from langchain_core.messages import AIMessage, HumanMessage
@@ -65,7 +65,10 @@ from src.retrieval.router_factory import build_router_engine
 from src.telemetry.opentelemetry import configure_observability
 from src.ui.artifacts import render_artifact_image
 from src.ui.background_jobs import (
+    ForegroundRuntimeConflictError,
+    JobAdmissionPausedError,
     JobCanceledError,
+    JobConflictError,
     ProgressEvent,
     get_job_manager,
     get_or_create_owner_id,
@@ -79,10 +82,14 @@ from src.ui.chat_sessions import (
 )
 from src.ui.components.provider_badge import provider_badge
 from src.ui.router_session import (
-    replace_session_router,
     session_router_is_current,
 )
-from src.ui.vector_session import VectorIndexResource, replace_session_vector_resource
+from src.ui.vector_session import (
+    VectorIndexResource,
+    clear_session_runtime,
+    replace_session_runtime,
+    session_vector_resource_is_current,
+)
 from src.utils.log_safety import build_pii_log_entry
 from src.utils.telemetry import log_jsonl
 
@@ -100,6 +107,18 @@ _MEMORY_SAVE_ERROR = "Memory could not be saved. Please retry."
 _MEMORY_SAVE_REJECTED_ERROR = "This memory scope was purged and is no longer writable."
 _MEMORY_SEARCH_ERROR = "Memories could not be loaded. Please retry."
 _MEMORY_DELETE_ERROR = "Memory could not be deleted. Please retry."
+_SNAPSHOT_REFRESH_BUSY = "Snapshot refresh deferred while background work is active."
+_SNAPSHOT_REFRESH_FOREGROUND = (
+    "Snapshot refresh deferred while the live runtime is in use."
+)
+_SNAPSHOT_REFRESH_MAINTENANCE = (
+    "Snapshot refresh deferred while runtime maintenance is in progress."
+)
+_ANALYSIS_TERMINAL_NOTICE_KEY = "analysis_terminal_notice"
+_ANALYSIS_COMPLETED_JOB_KEY = "analysis_job_completed_id"
+
+if TYPE_CHECKING:
+    from src.retrieval.multimodal_fusion import ImageSiglipRetriever
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,6 +208,67 @@ def _get_coordinator() -> MultiAgentCoordinator:
     )
 
 
+@contextlib.contextmanager
+def _coordinator_activity() -> Iterator[MultiAgentCoordinator]:
+    """Lease the live runtime before acquiring its current coordinator."""
+    with get_job_manager().foreground_runtime_activity():
+        yield _get_coordinator()
+
+
+@contextlib.contextmanager
+def _chat_session_activity() -> Iterator[sqlite3.Connection]:
+    """Lease and acquire the current cached Chat session connection."""
+    with get_job_manager().foreground_runtime_activity():
+        yield get_chat_db_conn()
+
+
+@contextlib.contextmanager
+def _memory_store_activity() -> Iterator[SqliteStore]:
+    """Lease and acquire the current cached memory store."""
+    with get_job_manager().foreground_runtime_activity():
+        yield _get_memory_store()
+
+
+def _purge_chat_session(
+    *,
+    thread_id: str,
+    user_id: str,
+) -> bool:
+    """Purge one session through a freshly leased coordinator."""
+    with _chat_session_activity() as conn, _coordinator_activity() as coord:
+        return bool(
+            coord.purge_session(
+                conn=conn,
+                thread_id=thread_id,
+                user_id=user_id,
+            )
+        )
+
+
+def _list_chat_checkpoints(
+    selection: ChatSelection, *, limit: int
+) -> list[dict[str, object]]:
+    """List checkpoints through a freshly leased coordinator."""
+    with _coordinator_activity() as coord:
+        return coord.list_checkpoints(
+            thread_id=selection.thread_id,
+            user_id=selection.user_id,
+            limit=limit,
+        )
+
+
+def _fork_chat_checkpoint(
+    *, thread_id: str, user_id: str, checkpoint_id: str
+) -> str | None:
+    """Fork a checkpoint through a freshly leased coordinator."""
+    with _coordinator_activity() as coord:
+        return coord.fork_from_checkpoint(
+            thread_id=thread_id,
+            user_id=user_id,
+            checkpoint_id=checkpoint_id,
+        )
+
+
 def _chunked_stream(text: str, chunk_size: int = 48) -> Iterable[str]:
     """Yield text in fixed-size chunks.
 
@@ -231,35 +311,41 @@ def main() -> None:  # pragma: no cover - Streamlit page
     provider_badge(settings)
 
     owner_id = get_or_create_owner_id()
-    conn = get_chat_db_conn()
-    coord = _get_coordinator()
-    selection = render_session_sidebar(
-        conn,
-        hard_purge=lambda thread_id, user_id: coord.purge_session(
-            conn=conn,
-            thread_id=thread_id,
-            user_id=user_id,
-        ),
-    )
-    render_time_travel_sidebar(
-        coord=coord,
-        conn=conn,
-        thread_id=selection.thread_id,
-        user_id=selection.user_id,
-        checkpoints=coord.list_checkpoints(
-            thread_id=selection.thread_id, user_id=selection.user_id, limit=20
-        ),
-    )
+    try:
+        with _chat_session_activity() as conn:
+            selection = render_session_sidebar(
+                conn,
+                hard_purge=lambda thread_id, user_id: _purge_chat_session(
+                    thread_id=thread_id,
+                    user_id=user_id,
+                ),
+            )
+            try:
+                checkpoints = _list_chat_checkpoints(selection, limit=20)
+            except JobAdmissionPausedError:
+                checkpoints = []
+                st.caption("Time travel is unavailable during runtime maintenance.")
+            render_time_travel_sidebar(
+                fork_from_checkpoint=_fork_chat_checkpoint,
+                conn=conn,
+                thread_id=selection.thread_id,
+                user_id=selection.user_id,
+                checkpoints=checkpoints,
+            )
+    except JobAdmissionPausedError:
+        st.info("Chat sessions are unavailable during runtime maintenance.")
+        return
     _render_memory_sidebar(selection.user_id, selection.thread_id)
     _render_visual_search_sidebar()
     _ensure_router_engine()
     _render_analysis_sidebar(owner_id=owner_id)
     _render_analysis_job_panel(owner_id=owner_id)
+    _render_analysis_terminal_notice()
     _render_analysis_results()
     _render_staleness_badge()
-    messages = _load_chat_messages(coord, selection)
+    messages = _load_chat_messages(selection)
     _render_chat_history(messages)
-    _handle_chat_prompt(coord, selection, conn)
+    _handle_chat_prompt(selection)
 
 
 # ---- Page helpers ----
@@ -579,24 +665,30 @@ def _render_memory_purge(
 
 def _render_memory_sidebar(user_id: str, thread_id: str) -> None:
     """Render a simple memory review UI (ADR-058/SPEC-041)."""
-    store = _get_memory_store()
-
-    with st.sidebar:
-        st.subheader("Memories")
-        scope = st.selectbox(
-            "Scope",
-            options=["session", "user"],
-            index=0,
-            key="memory_scope",
-        )
-        ns = _memory_sidebar_namespace(
-            user_id=user_id, thread_id=thread_id, scope=scope
-        )
-        _render_memory_add(store=store, ns=ns)
-        _render_memory_results(store=store, ns=ns)
-        _render_memory_purge(
-            store=store, ns=ns, scope=scope, user_id=user_id, thread_id=thread_id
-        )
+    try:
+        with _memory_store_activity() as store, st.sidebar:
+            st.subheader("Memories")
+            scope = st.selectbox(
+                "Scope",
+                options=["session", "user"],
+                index=0,
+                key="memory_scope",
+            )
+            ns = _memory_sidebar_namespace(
+                user_id=user_id, thread_id=thread_id, scope=scope
+            )
+            _render_memory_add(store=store, ns=ns)
+            _render_memory_results(store=store, ns=ns)
+            _render_memory_purge(
+                store=store,
+                ns=ns,
+                scope=scope,
+                user_id=user_id,
+                thread_id=thread_id,
+            )
+    except JobAdmissionPausedError:
+        with st.sidebar:
+            st.info("Memories are unavailable during runtime maintenance.")
 
 
 def _ensure_router_engine() -> None:
@@ -612,28 +704,35 @@ def _ensure_router_engine() -> None:
         )
         st.caption("Autoload skipped.")
         _clear_snapshot_runtime()
-    if not session_router_is_current(
-        st.session_state,
-        runtime_generation=settings.cache_version,
-    ):
-        _clear_snapshot_runtime()
 
 
-def _clear_snapshot_runtime() -> None:
-    """Close and forget all snapshot-owned session resources."""
-    replace_session_vector_resource(
+def _report_snapshot_refresh_conflict(exc: JobConflictError) -> None:
+    """Render sanitized, truthful feedback for a deferred runtime mutation."""
+    if isinstance(exc, JobAdmissionPausedError):
+        st.caption(_SNAPSHOT_REFRESH_MAINTENANCE)
+    elif isinstance(exc, ForegroundRuntimeConflictError):
+        st.caption(_SNAPSHOT_REFRESH_FOREGROUND)
+    else:
+        st.caption(_SNAPSHOT_REFRESH_BUSY)
+
+
+def _clear_snapshot_runtime() -> bool:
+    """Close snapshot resources only after acquiring runtime quiescence."""
+    try:
+        with get_job_manager().admission_quiescence():
+            _clear_snapshot_runtime_quiesced()
+    except (JobAdmissionPausedError, JobConflictError) as exc:
+        _report_snapshot_refresh_conflict(exc)
+        return False
+    return True
+
+
+def _clear_snapshot_runtime_quiesced() -> None:
+    """Close snapshot resources while the caller owns runtime quiescence."""
+    clear_session_runtime(
         st.session_state,
-        None,
         runtime_generation=settings.cache_version,
     )
-    replace_session_router(
-        st.session_state,
-        None,
-        runtime_generation=settings.cache_version,
-    )
-    st.session_state.pop("graphrag_index", None)
-    st.session_state.pop("_snapshot_loaded_id", None)
-    st.session_state.pop("_snapshot_collections", None)
 
 
 def _render_staleness_badge() -> None:
@@ -673,13 +772,17 @@ def _render_staleness_badge() -> None:
         st.caption(f"Staleness check skipped: {exc}")
 
 
-def _load_chat_messages(coord: Any, selection: ChatSelection) -> list[Any]:
+def _load_chat_messages(selection: ChatSelection) -> list[Any]:
     """Load persisted chat messages from the coordinator."""
     try:
-        state = coord.get_state_values(
-            thread_id=selection.thread_id, user_id=selection.user_id
-        )
+        with _coordinator_activity() as coord:
+            state = coord.get_state_values(
+                thread_id=selection.thread_id, user_id=selection.user_id
+            )
         return state.get("messages", []) if isinstance(state, dict) else []
+    except JobAdmissionPausedError:
+        st.caption("Chat history is unavailable during runtime maintenance.")
+        return []
     except Exception as exc:
         thread_redacted = build_pii_log_entry(
             str(selection.thread_id), key_id="chat.thread_id"
@@ -714,9 +817,7 @@ def _render_chat_history(messages: list[Any]) -> None:
             st.markdown(str(content))
 
 
-def _handle_chat_prompt(
-    coord: Any, selection: ChatSelection, conn: sqlite3.Connection
-) -> None:
+def _handle_chat_prompt(selection: ChatSelection) -> None:
     """Handle user input and render assistant response."""
     prompt = st.chat_input("Ask something…")
     if not prompt:
@@ -724,14 +825,37 @@ def _handle_chat_prompt(
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    overrides = _get_settings_override()
     try:
-        resp = coord.process_query(
-            query=prompt,
-            settings_override=overrides,
-            thread_id=selection.thread_id,
-            user_id=selection.user_id,
-        )
+        with _coordinator_activity() as coord:
+            conn = get_chat_db_conn()
+            overrides = _get_settings_override()
+            resp = coord.process_query(
+                query=prompt,
+                settings_override=overrides,
+                thread_id=selection.thread_id,
+                user_id=selection.user_id,
+            )
+            try:
+                checkpoints = coord.list_checkpoints(
+                    thread_id=selection.thread_id,
+                    user_id=selection.user_id,
+                    limit=1,
+                )
+            except Exception:
+                checkpoints = []
+            with contextlib.suppress(Exception):
+                last = checkpoints[0].get("checkpoint_id") if checkpoints else None
+                touch_session(
+                    conn,
+                    thread_id=selection.thread_id,
+                    last_checkpoint_id=str(last) if last else None,
+                )
+    except JobAdmissionPausedError:
+        with st.chat_message("assistant"):
+            st.warning(
+                "Runtime maintenance is in progress. Try your request again shortly."
+            )
+        return
     except Exception as exc:
         err_redaction = build_pii_log_entry(str(exc), key_id="chat.process_query")
         logger.error(
@@ -753,16 +877,6 @@ def _handle_chat_prompt(
         if isinstance(sources, list) and sources:
             _set_last_sources_for_render(sources, thread_id=selection.thread_id)
             _render_sources_fragment()
-    with contextlib.suppress(Exception):
-        cps = coord.list_checkpoints(
-            thread_id=selection.thread_id, user_id=selection.user_id, limit=1
-        )
-        last = cps[0].get("checkpoint_id") if cps else None
-        touch_session(
-            conn,
-            thread_id=selection.thread_id,
-            last_checkpoint_id=str(last) if last else None,
-        )
 
 
 @st.cache_data(show_spinner=False)
@@ -899,12 +1013,16 @@ def _render_analysis_sidebar(*, owner_id: str) -> None:
 
         job_id = st.session_state.get("analysis_job_id")
         has_job = isinstance(job_id, str) and bool(job_id)
+        job_manager = get_job_manager()
+        activity = job_manager.activity_snapshot()
+        if activity.maintenance_active:
+            st.info("Runtime maintenance is in progress. Analysis is unavailable.")
         cols = st.columns(2)
         run_clicked = cols[0].button(
             "Run analysis",
             key="analysis_run",
             type="primary",
-            disabled=has_job,
+            disabled=has_job or activity.maintenance_active,
             use_container_width=True,
         )
         cancel_clicked = cols[1].button(
@@ -915,9 +1033,7 @@ def _render_analysis_sidebar(*, owner_id: str) -> None:
         )
 
         if cancel_clicked and has_job:
-            if get_job_manager(settings.cache_version).cancel(
-                str(job_id), owner_id=owner_id
-            ):
+            if get_job_manager().cancel(str(job_id), owner_id=owner_id):
                 st.session_state["analysis_cancel_requested_id"] = str(job_id)
                 st.warning("Cancellation requested. Waiting for a safe stopping point.")
             return
@@ -927,27 +1043,35 @@ def _render_analysis_sidebar(*, owner_id: str) -> None:
         if not query:
             st.error("Analysis prompt is required.")
             return
-        vector_index = st.session_state.get("vector_index")
-        if vector_index is None:
-            st.error("No snapshot loaded. Build a snapshot in Documents first.")
-            return
         if requested_mode == "separate" and not selected_docs:
             st.error("Separate mode requires selecting at least one document.")
             return
 
-        job_manager = get_job_manager(settings.cache_version)
-        work_fn = functools.partial(
-            _run_analysis_job_work,
-            query=query,
-            mode=requested_mode,
-            vector_index=vector_index,
-            documents=selected_docs,
-        )
-        job_id = job_manager.start_job(owner_id=owner_id, fn=work_fn)
-        st.session_state["analysis_job_id"] = job_id
-        st.session_state.pop("analysis_last_result", None)
-        st.toast("Analysis started", icon="⏳")
-        return
+        try:
+            with job_manager.foreground_runtime_activity():
+                vector_index = st.session_state.get("vector_index")
+                if vector_index is None:
+                    st.error("No snapshot loaded. Build a snapshot in Documents first.")
+                    return
+                work_fn = functools.partial(
+                    _run_analysis_job_work,
+                    query=query,
+                    mode=requested_mode,
+                    vector_index=vector_index,
+                    documents=selected_docs,
+                )
+                job_id = job_manager.start_job(owner_id=owner_id, fn=work_fn)
+        except JobAdmissionPausedError:
+            st.warning(
+                "Runtime maintenance is in progress. Try analysis again shortly."
+            )
+        else:
+            st.session_state["analysis_job_id"] = job_id
+            st.session_state.pop("analysis_last_result", None)
+            st.session_state.pop("analysis_last_event", None)
+            st.session_state.pop(_ANALYSIS_COMPLETED_JOB_KEY, None)
+            st.session_state.pop(_ANALYSIS_TERMINAL_NOTICE_KEY, None)
+            st.toast("Analysis started", icon="⏳")
 
 
 @st.fragment(run_every=float(settings.ui.progress_poll_interval_sec))
@@ -961,10 +1085,21 @@ def _render_analysis_job_panel(*, owner_id: str) -> None:
     if not isinstance(job_id, str) or not job_id:
         return
 
-    job_manager = get_job_manager(settings.cache_version)
+    job_manager = get_job_manager()
     state = job_manager.get(job_id, owner_id=owner_id)
     if state is None:
-        st.session_state.pop("analysis_job_id", None)
+        _clear_analysis_job_tracking()
+        st.rerun(scope="app")
+        return
+
+    if st.session_state.get(_ANALYSIS_COMPLETED_JOB_KEY) == job_id:
+        if job_manager.consume_terminal(job_id, owner_id=owner_id):
+            _clear_analysis_job_tracking()
+            st.rerun(scope="app")
+        else:
+            logger.warning(
+                "Terminal analysis job consumption deferred; retaining job state"
+            )
         return
 
     events = job_manager.drain_progress(job_id, owner_id=owner_id)
@@ -1000,17 +1135,48 @@ def _render_analysis_job_panel(*, owner_id: str) -> None:
             st.warning("Cancellation requested. Waiting for a safe stopping point.")
         return
 
-    st.session_state.pop("analysis_job_id", None)
-    st.session_state.pop("analysis_cancel_requested_id", None)
     succeeded = state.status == "succeeded"
     result_is_analysis = isinstance(state.result, AnalysisResult)
     if succeeded and result_is_analysis:
         st.session_state["analysis_last_result"] = state.result
-        st.success("Analysis completed.")
+        notice = {"status": "succeeded", "message": "Analysis completed."}
     elif state.status == "canceled":
-        st.warning("Analysis canceled.")
-    elif state.status == "failed":
-        st.error("Analysis failed.")
+        notice = {"status": "canceled", "message": "Analysis canceled."}
+    else:
+        notice = {"status": "failed", "message": "Analysis failed."}
+    st.session_state[_ANALYSIS_TERMINAL_NOTICE_KEY] = notice
+    st.session_state[_ANALYSIS_COMPLETED_JOB_KEY] = job_id
+    if job_manager.consume_terminal(job_id, owner_id=owner_id):
+        _clear_analysis_job_tracking()
+    else:
+        logger.warning(
+            "Terminal analysis job consumption deferred; retaining job state"
+        )
+    st.rerun(scope="app")
+
+
+def _clear_analysis_job_tracking() -> None:
+    """Clear session-local polling state after manager ownership is released."""
+    st.session_state.pop("analysis_job_id", None)
+    st.session_state.pop("analysis_cancel_requested_id", None)
+    st.session_state.pop("analysis_last_event", None)
+
+
+def _render_analysis_terminal_notice() -> None:
+    """Render one durable analysis outcome exactly once."""
+    notice = st.session_state.pop(_ANALYSIS_TERMINAL_NOTICE_KEY, None)
+    if not isinstance(notice, dict):
+        return
+    status = notice.get("status")
+    message = notice.get("message")
+    if not isinstance(message, str):
+        return
+    if status == "succeeded":
+        st.success(message)
+    elif status == "canceled":
+        st.warning(message)
+    elif status == "failed":
+        st.error(message)
 
 
 def _render_analysis_results() -> None:
@@ -1068,8 +1234,16 @@ def _visual_search_inputs() -> tuple[Any | None, int, bool]:
         return up, int(top_k), bool(run)
 
 
-@st.cache_resource
-def _get_image_siglip_retriever(collection_name: str, cache_version: int) -> Any:
+def _close_image_siglip_retriever(retriever: ImageSiglipRetriever) -> None:
+    """Close one cached visual retriever and its owned workers/clients."""
+    with contextlib.suppress(Exception):
+        retriever.close()
+
+
+@st.cache_resource(on_release=_close_image_siglip_retriever)
+def _get_image_siglip_retriever(
+    collection_name: str, cache_version: int
+) -> ImageSiglipRetriever:
     """Get cached ImageSiglipRetriever to avoid reconnection overhead."""
     from src.retrieval.multimodal_fusion import ImageSearchParams, ImageSiglipRetriever
 
@@ -1102,17 +1276,18 @@ def _query_visual_search(upload: Any, top_k: int) -> list[Any]:
         st.warning("Uploaded image could not be opened safely.")
         return []
 
-    collections = st.session_state.get("_snapshot_collections")
-    image_collection = (
-        collections.get("image") if isinstance(collections, dict) else None
-    )
-    if not isinstance(image_collection, str) or not image_collection:
-        raise RuntimeError("No activated image collection is available")
-    retriever = _get_image_siglip_retriever(
-        image_collection,
-        settings.cache_version,
-    )
-    return retriever.retrieve_by_image(img, top_k=int(top_k))
+    with get_job_manager().foreground_runtime_activity():
+        collections = st.session_state.get("_snapshot_collections")
+        image_collection = (
+            collections.get("image") if isinstance(collections, dict) else None
+        )
+        if not isinstance(image_collection, str) or not image_collection:
+            raise RuntimeError("No activated image collection is available")
+        retriever = _get_image_siglip_retriever(
+            image_collection,
+            settings.cache_version,
+        )
+        return retriever.retrieve_by_image(img, top_k=int(top_k))
 
 
 def _render_visual_results(nodes: list[Any], top_k: int) -> None:
@@ -1169,64 +1344,130 @@ def _render_visual_search_sidebar() -> None:
     try:
         points = _query_visual_search(upload, top_k)
         _render_visual_results(points, top_k)
+    except JobAdmissionPausedError:
+        st.warning("Visual search is unavailable during runtime maintenance.")
     except Exception as exc:  # pragma: no cover - UI best-effort
         st.caption(f"Visual search unavailable: {type(exc).__name__}")
 
 
-def _load_latest_snapshot_into_session() -> None:
+def _snapshot_runtime_present() -> bool:
+    """Return whether session state owns any snapshot runtime state."""
+    return any(
+        key in st.session_state
+        for key in (
+            "_vector_index_resource",
+            "_vector_runtime_generation",
+            "vector_index",
+            "router_engine",
+            "_router_runtime_generation",
+            "graphrag_index",
+            "_snapshot_loaded_id",
+            "_snapshot_collections",
+        )
+    )
+
+
+def _snapshot_runtime_is_current(snapshot_id: str) -> bool:
+    """Return whether the full snapshot runtime is current and queryable."""
+    return (
+        st.session_state.get("_snapshot_loaded_id") == snapshot_id
+        and session_router_is_current(
+            st.session_state,
+            runtime_generation=settings.cache_version,
+        )
+        and session_vector_resource_is_current(
+            st.session_state,
+            runtime_generation=settings.cache_version,
+        )
+    )
+
+
+def _snapshot_autoload_action() -> tuple[str, Path | None]:
+    """Plan a no-op, clear, or hydrate action without mutating runtime state."""
+    policy = getattr(settings.graphrag_cfg, "autoload_policy", "latest_non_stale")
+    snap_dir = latest_snapshot_dir()
+    manifest = load_manifest(snap_dir) if snap_dir is not None else None
+    if snap_dir is None or not manifest:
+        return ("clear", None) if _snapshot_runtime_present() else ("none", None)
+
+    uploads_dir = settings.data_dir / "uploads"
+    corpus_paths = _collect_corpus_paths(uploads_dir)
+    cfg = _current_config_dict()
+    if compute_staleness(manifest, corpus_paths, cfg):
+        return ("clear", None) if _snapshot_runtime_present() else ("none", None)
+
+    if policy == "ignore":
+        loaded_id = st.session_state.get("_snapshot_loaded_id")
+        should_clear = (
+            _snapshot_runtime_present()
+            and not session_router_is_current(
+                st.session_state,
+                runtime_generation=settings.cache_version,
+            )
+        ) or (loaded_id is not None and not _snapshot_runtime_is_current(snap_dir.name))
+        return ("clear" if should_clear else "none"), None
+
+    if _snapshot_runtime_is_current(snap_dir.name):
+        return "none", None
+    return "hydrate", snap_dir
+
+
+def _load_latest_snapshot_into_session() -> bool:
     """Autoload the latest snapshot into session_state per policy.
 
     Policies:
     - latest_non_stale (default): Load when manifest not stale.
     - ignore: Do not autohydrate, but invalidate stale snapshot-owned runtime.
     """
-    policy = getattr(settings.graphrag_cfg, "autoload_policy", "latest_non_stale")
-    snap_dir = latest_snapshot_dir()
-
-    if not snap_dir:
-        _clear_snapshot_runtime()
-        return
-
-    man = load_manifest(snap_dir)
-    if not man:
-        _clear_snapshot_runtime()
-        return
+    action, snap_dir = _snapshot_autoload_action()
+    if action == "none":
+        return True
     try:
-        uploads_dir = settings.data_dir / "uploads"
-        corpus_paths = _collect_corpus_paths(uploads_dir)
-        cfg = _current_config_dict()
-        if compute_staleness(man, corpus_paths, cfg):
-            _clear_snapshot_runtime()
-            return
-        if policy == "ignore":
-            loaded_id = st.session_state.get("_snapshot_loaded_id")
-            if loaded_id is not None and str(loaded_id) != snap_dir.name:
-                _clear_snapshot_runtime()
-            return
-        _hydrate_router_from_snapshot(snap_dir)
-    except (
-        OSError,
-        RuntimeError,
-        ValueError,
-        TypeError,
-    ):  # pragma: no cover - defensive
-        _clear_snapshot_runtime()
+        with get_job_manager().admission_quiescence():
+            # The first read keeps the common current-runtime path lease-free. The
+            # second makes the check and mutation one quiesced transaction.
+            try:
+                action, snap_dir = _snapshot_autoload_action()
+                if action == "clear":
+                    _clear_snapshot_runtime_quiesced()
+                elif action == "hydrate" and snap_dir is not None:
+                    _hydrate_router_from_snapshot_quiesced(snap_dir)
+            except (
+                OSError,
+                RuntimeError,
+                ValueError,
+                TypeError,
+            ):  # pragma: no cover - defensive
+                _clear_snapshot_runtime_quiesced()
+    except (JobAdmissionPausedError, JobConflictError) as exc:
+        _report_snapshot_refresh_conflict(exc)
+        return False
+    return True
 
 
-def _hydrate_router_from_snapshot(snap_dir: Path) -> None:
+def _hydrate_router_from_snapshot(snap_dir: Path) -> bool:
     """Hydrate the router engine and indices from a snapshot directory.
 
     Args:
         snap_dir: Path to the snapshot storage directory.
     """
-    # Avoid repeated hydration on every rerun; snapshot load can be expensive.
     current_id = str(getattr(snap_dir, "name", snap_dir))
-    if st.session_state.get(
-        "_snapshot_loaded_id"
-    ) == current_id and session_router_is_current(
-        st.session_state,
-        runtime_generation=settings.cache_version,
-    ):
+    if _snapshot_runtime_is_current(current_id):
+        return True
+    try:
+        with get_job_manager().admission_quiescence():
+            if not _snapshot_runtime_is_current(current_id):
+                _hydrate_router_from_snapshot_quiesced(snap_dir)
+    except (JobAdmissionPausedError, JobConflictError) as exc:
+        _report_snapshot_refresh_conflict(exc)
+        return False
+    return True
+
+
+def _hydrate_router_from_snapshot_quiesced(snap_dir: Path) -> None:
+    """Hydrate and publish a snapshot while runtime quiescence is held."""
+    current_id = str(getattr(snap_dir, "name", snap_dir))
+    if _snapshot_runtime_is_current(current_id):
         return
 
     resource: VectorIndexResource | None = None
@@ -1256,17 +1497,8 @@ def _hydrate_router_from_snapshot(snap_dir: Path) -> None:
     except Exception:
         if resource is not None:
             resource.close()
-        _clear_snapshot_runtime()
+        _clear_snapshot_runtime_quiesced()
         raise
-    replace_session_vector_resource(
-        st.session_state,
-        resource,
-        runtime_generation=settings.cache_version,
-    )
-    if kg is not None:
-        st.session_state["graphrag_index"] = kg
-    else:
-        st.session_state.pop("graphrag_index", None)
     try:
         router = build_router_engine(
             vec,
@@ -1275,13 +1507,23 @@ def _hydrate_router_from_snapshot(snap_dir: Path) -> None:
             text_collection=text_collection,
             image_collection=image_collection,
         )
-        replace_session_router(
+        state_updates: dict[str, Any] = {
+            "_snapshot_loaded_id": current_id,
+            "_snapshot_collections": dict(collections),
+        }
+        state_removals: list[str] = []
+        if kg is not None:
+            state_updates["graphrag_index"] = kg
+        else:
+            state_removals.append("graphrag_index")
+        replace_session_runtime(
             st.session_state,
+            resource,
             router,
             runtime_generation=settings.cache_version,
+            state_updates=state_updates,
+            state_removals=state_removals,
         )
-        st.session_state["_snapshot_loaded_id"] = current_id
-        st.session_state["_snapshot_collections"] = dict(collections)
         st.caption(
             f"Autoloaded snapshot: {snap_dir.name} (graph={'yes' if kg else 'no'})"
         )
@@ -1292,6 +1534,8 @@ def _hydrate_router_from_snapshot(snap_dir: Path) -> None:
         OSError,
         TypeError,
     ) as exc:  # pragma: no cover - defensive
+        if resource is not None:
+            resource.close()
         redaction = build_pii_log_entry(str(exc), key_id="chat.router_from_snapshot")
         logger.debug(
             "Failed to build router from snapshot; clearing snapshot runtime "
@@ -1299,7 +1543,7 @@ def _hydrate_router_from_snapshot(snap_dir: Path) -> None:
             type(exc).__name__,
             redaction.redacted,
         )
-        _clear_snapshot_runtime()
+        _clear_snapshot_runtime_quiesced()
         raise RuntimeError("Activated snapshot router construction failed") from exc
 
 

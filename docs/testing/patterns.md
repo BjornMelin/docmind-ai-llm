@@ -61,17 +61,21 @@ def test_manifest_round_trip(tmp_path: Path) -> None:
     manager.write_manifest(
         workspace,
         index_id="test",
-        graph_store_type="property_graph",
+        graph_store_type="none",
         vector_store_type="qdrant",
-        corpus_hash="sha256:corpus",
-        config_hash="sha256:config",
+        text_collection="physical-text",
+        image_collection="physical-image",
+        corpus_hash="c" * 64,
+        config_hash="f" * 64,
         versions={"app": "test"},
     )
 
-    snapshot = manager.finalize_snapshot(workspace)
+    finalized = manager.finalize_snapshot(workspace)
+    snapshot = finalized.path
 
     assert snapshot.is_dir()
     assert (snapshot / "manifest.jsonl").is_file()
+    assert finalized.manifest["complete"] is True
 ```
 
 ## Parser tests

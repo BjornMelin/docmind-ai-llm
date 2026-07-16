@@ -73,7 +73,7 @@ def test_snapshot_roundtrip_with_stubs(
             config_hash="f" * 64,
             versions={"app": "test"},
         )
-        final = mgr.finalize_snapshot(tmp)
+        final = mgr.finalize_snapshot(tmp).path
     except Exception:
         mgr.cleanup_tmp(tmp)
         raise
@@ -183,7 +183,7 @@ def test_property_graph_vector_retrieval_survives_snapshot_restart(
         config_hash="f" * 64,
         versions={"app": "test"},
     )
-    final = manager.finalize_snapshot(workspace)
+    final = manager.finalize_snapshot(workspace).path
 
     monkeypatch.setattr(Settings, "_embed_model", embed_model)
     loaded = load_property_graph_index(final)
@@ -219,7 +219,7 @@ def test_vector_activation_failure_closes_both_qdrant_clients(
         config_hash="f" * 64,
         versions={"app": "test"},
     )
-    final = mgr.finalize_snapshot(tmp)
+    final = mgr.finalize_snapshot(tmp).path
 
     core_mod = ModuleType("llama_index.core")
     monkeypatch.setitem(sys.modules, "llama_index.core", core_mod)

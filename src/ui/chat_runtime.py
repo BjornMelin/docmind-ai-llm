@@ -7,6 +7,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 from src.agents import coordinator as coordinator_module
 from src.ui.vector_session import retire_session_runtime_resources
 
@@ -59,16 +61,29 @@ def get_coordinator(
 
 
 def invalidate_coordinator() -> None:
-    """Detach and close the active coordinator without constructing one."""
+    """Detach and best-effort close the active coordinator without raising."""
     global _COORDINATOR, _RESOURCE_KEY
 
     with _LOCK:
         coordinator = _COORDINATOR
-        _retire_session_resources()
-        _COORDINATOR = None
-        _RESOURCE_KEY = None
+        try:
+            _retire_session_resources()
+        except Exception as exc:  # pragma: no cover - defensive cleanup boundary
+            logger.warning(
+                "Session runtime retirement failed (error_type={})",
+                type(exc).__name__,
+            )
+        finally:
+            _COORDINATOR = None
+            _RESOURCE_KEY = None
     if coordinator is not None:
-        coordinator.close()
+        try:
+            coordinator.close()
+        except Exception as exc:  # pragma: no cover - defensive cleanup boundary
+            logger.warning(
+                "Chat coordinator cleanup failed (error_type={})",
+                type(exc).__name__,
+            )
 
 
 atexit.register(invalidate_coordinator)

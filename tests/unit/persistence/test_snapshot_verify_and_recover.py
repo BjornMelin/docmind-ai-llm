@@ -271,6 +271,31 @@ def test_recovery_preserves_current_and_never_promotes_newer_snapshot(
     assert unreferenced.is_dir()
 
 
+def test_recovery_keeps_last_valid_current_and_removes_invalid_newer_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Startup recovery retains CURRENT and rejects malformed final metadata."""
+    base = tmp_path / "storage"
+    base.mkdir()
+    current = base / "20250101T000000-aaaaaaaa"
+    invalid = base / "20250102T000000-bbbbbbbb"
+    current.mkdir()
+    invalid.mkdir()
+    _write_complete_manifest(current)
+    invalid_metadata = _manifest_metadata(invalid.name)
+    invalid_metadata["versions"] = {"app": ["not-scalar"]}
+    writer.write_manifest(invalid, manifest_meta=invalid_metadata)
+    writer.mark_manifest_complete(invalid)
+    (base / "CURRENT").write_text(current.name, encoding="utf-8")
+    monkeypatch.setattr(snap.settings.snapshots, "gc_grace_seconds", 0)
+
+    snap.recover_snapshots(base)
+
+    assert snap.latest_snapshot_dir(base) == current
+    assert not invalid.exists()
+
+
 def test_recovery_discards_journaled_uncommitted_destination(tmp_path: Path) -> None:
     """A hard crash before CURRENT cannot pin a failed complete generation."""
     base = tmp_path / "storage"

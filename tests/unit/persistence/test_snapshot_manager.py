@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -75,7 +76,8 @@ def test_snapshot_manager_roundtrip(tmp_path: Path) -> None:
         config_hash=cfg_hash,
         versions={"app": "test"},
     )
-    snap = mgr.finalize_snapshot(tmp)
+    finalized = mgr.finalize_snapshot(tmp)
+    snap = finalized.path
     assert snap.exists()
     manifest_meta = snap / "manifest.meta.json"
     manifest_jsonl = snap / "manifest.jsonl"
@@ -312,7 +314,8 @@ def test_snapshot_manager_includes_graph_exports(tmp_path: Path) -> None:
             "image": {"schema": "image-v1"},
         },
     )
-    snap = mgr.finalize_snapshot(workspace)
+    finalized = mgr.finalize_snapshot(workspace)
+    snap = finalized.path
     manifest_meta = json.loads(
         (snap / "manifest.meta.json").read_text(encoding="utf-8")
     )
@@ -323,6 +326,108 @@ def test_snapshot_manager_includes_graph_exports(tmp_path: Path) -> None:
     }
     entries = list(snapshot.load_manifest_entries(snap))
     assert any(entry["content_type"] == "application/x-ndjson" for entry in entries)
+
+
+@pytest.mark.parametrize(
+    "versions",
+    [
+        cast(dict[str, Any], {1: "invalid-key"}),
+        {"app": ["invalid-value"]},
+    ],
+)
+def test_invalid_versions_never_replace_current(
+    tmp_path: Path,
+    versions: dict[str, Any],
+) -> None:
+    """Every version row must be projection-safe before CURRENT can move."""
+    manager = SnapshotManager(tmp_path)
+    prior_workspace = manager.begin_snapshot()
+    manager.write_manifest(
+        prior_workspace,
+        index_id="prior",
+        graph_store_type="none",
+        vector_store_type="qdrant",
+        text_collection="physical-text",
+        image_collection="physical-image",
+        corpus_hash="c" * 64,
+        config_hash="f" * 64,
+    )
+    prior = manager.finalize_snapshot(prior_workspace).path
+    workspace = manager.begin_snapshot()
+    try:
+        with pytest.raises(ValueError, match="metadata contract"):
+            manager.write_manifest(
+                workspace,
+                index_id="invalid-versions",
+                graph_store_type="none",
+                vector_store_type="qdrant",
+                text_collection="physical-text",
+                image_collection="physical-image",
+                corpus_hash="d" * 64,
+                config_hash="e" * 64,
+                versions=versions,
+            )
+    finally:
+        manager.cleanup_tmp(workspace)
+
+    assert latest_snapshot_dir(tmp_path) == prior
+
+
+@pytest.mark.parametrize("format_name", [None, "x" * 33])
+def test_invalid_graph_export_format_never_replaces_current(
+    tmp_path: Path,
+    format_name: str | None,
+) -> None:
+    """Missing and oversized export formats fail before CURRENT commit."""
+    from llama_index.core import StorageContext
+    from llama_index.core.graph_stores import SimplePropertyGraphStore
+
+    from src.utils.hashing import sha256_file
+
+    manager = SnapshotManager(tmp_path)
+    prior_workspace = manager.begin_snapshot()
+    manager.write_manifest(
+        prior_workspace,
+        index_id="prior",
+        graph_store_type="none",
+        vector_store_type="qdrant",
+        text_collection="physical-text",
+        image_collection="physical-image",
+        corpus_hash="c" * 64,
+        config_hash="f" * 64,
+    )
+    prior = manager.finalize_snapshot(prior_workspace).path
+    workspace = manager.begin_snapshot()
+    manager.persist_graph_storage_context(
+        StorageContext.from_defaults(property_graph_store=SimplePropertyGraphStore()),
+        workspace,
+    )
+    export = workspace / "graph" / "graph_export.jsonl"
+    export.write_text("{}\n", encoding="utf-8")
+    export_metadata: dict[str, Any] = {
+        "filename": export.name,
+        "size_bytes": export.stat().st_size,
+        "sha256": sha256_file(export),
+    }
+    if format_name is not None:
+        export_metadata["format"] = format_name
+    try:
+        with pytest.raises(ValueError, match="metadata contract"):
+            manager.write_manifest(
+                workspace,
+                index_id="invalid-export",
+                graph_store_type="property_graph",
+                vector_store_type="qdrant",
+                text_collection="physical-text",
+                image_collection="physical-image",
+                corpus_hash="d" * 64,
+                config_hash="e" * 64,
+                graph_exports=[export_metadata],
+            )
+    finally:
+        manager.cleanup_tmp(workspace)
+
+    assert latest_snapshot_dir(tmp_path) == prior
 
 
 def test_snapshot_manifest_rejects_native_graph_file_as_export(
@@ -504,7 +609,7 @@ def test_post_commit_observability_failure_does_not_report_rebuild_failure(
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("telemetry")),
     )
 
-    final = manager.finalize_snapshot(workspace)
+    final = manager.finalize_snapshot(workspace).path
 
     assert latest_snapshot_dir(tmp_path) == final
 
@@ -553,6 +658,79 @@ def test_finalize_retires_upload_journals_while_writer_lock_is_live(
     ]
 
 
+def test_finalization_returns_manifest_without_post_commit_snapshot_reload(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Durable success carries the verified manifest through writer release."""
+    manager = SnapshotManager(tmp_path)
+    workspace = manager.begin_snapshot()
+    manager.write_manifest(
+        workspace,
+        index_id="captured-manifest",
+        graph_store_type="none",
+        vector_store_type="qdrant",
+        text_collection="physical-text",
+        image_collection="physical-image",
+        corpus_hash="c" * 64,
+        config_hash="f" * 64,
+    )
+    monkeypatch.setattr(
+        snapshot,
+        "_load_complete_manifest",
+        lambda _path: pytest.fail("finalized result snapshot was reopened"),
+    )
+
+    finalized = manager.finalize_snapshot(workspace)
+
+    assert finalized.path.is_dir()
+    assert finalized.manifest["index_id"] == "captured-manifest"
+    assert finalized.manifest["collections"] == {
+        "text": "physical-text",
+        "image": "physical-image",
+    }
+
+
+def test_current_commit_recovery_returns_captured_manifest_without_reload(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A durability-confirmation error reuses the pre-commit verified manifest."""
+    manager = SnapshotManager(tmp_path)
+    workspace = manager.begin_snapshot()
+    manager.write_manifest(
+        workspace,
+        index_id="captured-recovery",
+        graph_store_type="none",
+        vector_store_type="qdrant",
+        text_collection="physical-text",
+        image_collection="physical-image",
+        corpus_hash="c" * 64,
+        config_hash="f" * 64,
+    )
+    write_current_pointer = snapshot._write_current_pointer
+
+    def _commit_then_fail(paths: object, version_name: str) -> None:
+        write_current_pointer(paths, version_name)  # type: ignore[arg-type]
+        raise OSError("simulated durability confirmation failure")
+
+    monkeypatch.setattr(snapshot, "_write_current_pointer", _commit_then_fail)
+    monkeypatch.setattr(
+        snapshot,
+        "_load_complete_manifest",
+        lambda _path: pytest.fail("committed result snapshot was reopened"),
+    )
+
+    finalized = manager.finalize_snapshot(workspace)
+
+    assert (tmp_path / "CURRENT").read_text(encoding="utf-8").strip() == (
+        finalized.path.name
+    )
+    assert finalized.path.is_dir()
+    assert finalized.manifest["index_id"] == "captured-recovery"
+    assert (tmp_path / ".activation-transaction.json").is_file()
+
+
 def test_current_directory_fsync_failure_defers_source_journal_retirement(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -589,7 +767,7 @@ def test_current_directory_fsync_failure_defers_source_journal_retirement(
         lambda **kwargs: source_recovery_calls.append(kwargs),
     )
 
-    final = manager.finalize_snapshot(workspace)
+    final = manager.finalize_snapshot(workspace).path
 
     assert latest_snapshot_dir(tmp_path) == final
     assert (tmp_path / ".activation-transaction.json").is_file()

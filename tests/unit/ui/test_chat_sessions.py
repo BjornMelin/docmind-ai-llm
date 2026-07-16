@@ -167,12 +167,8 @@ def test_render_time_travel_sidebar_forks_on_resume(monkeypatch) -> None:
     touched: list[tuple] = []
     monkeypatch.setattr(cs, "touch_session", lambda *_a, **_k: touched.append((_a, _k)))
 
-    class _Coord:
-        def fork_from_checkpoint(self, **_k):  # type: ignore[no-untyped-def]
-            return "c2"
-
     cs.render_time_travel_sidebar(
-        coord=_Coord(),
+        fork_from_checkpoint=lambda **_k: "c2",
         conn=object(),  # type: ignore[arg-type]
         thread_id="t1",
         user_id="local",
@@ -190,12 +186,8 @@ def test_render_time_travel_sidebar_no_resume_when_button_false(monkeypatch) -> 
     monkeypatch.setattr(st, "selectbox", lambda *_a, **_k: "c1", raising=False)
     monkeypatch.setattr(st, "button", lambda *_a, **_k: False, raising=False)
 
-    class _Coord:
-        def fork_from_checkpoint(self, **_k):  # type: ignore[no-untyped-def]
-            return "c2"
-
     cs.render_time_travel_sidebar(
-        coord=_Coord(),
+        fork_from_checkpoint=lambda **_k: "c2",
         conn=object(),  # type: ignore[arg-type]
         thread_id="t1",
         user_id="local",

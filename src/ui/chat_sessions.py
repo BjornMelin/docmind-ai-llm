@@ -21,6 +21,7 @@ from src.persistence.chat_db import (
     soft_delete_session,
     touch_session,
 )
+from src.ui.background_jobs import JobAdmissionPausedError
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,13 +37,13 @@ class ChatSelection:
     user_id: str
 
 
-class ForkableCoordinator(Protocol):
-    """Protocol for coordinators supporting checkpoint forking."""
+class CheckpointFork(Protocol):
+    """Callback that forks from a checkpoint through the current runtime."""
 
-    def fork_from_checkpoint(
+    def __call__(
         self, *, thread_id: str, user_id: str, checkpoint_id: str
     ) -> str | None:
-        """Fork a thread from a checkpoint and return the new checkpoint id."""
+        """Fork a thread from a checkpoint and return its new identity."""
         ...
 
 
@@ -289,7 +290,12 @@ def _handle_purge(
         type="primary",
         disabled=not confirm_purge,
     ):
-        if not hard_purge(active.thread_id, user_id):
+        try:
+            purged = hard_purge(active.thread_id, user_id)
+        except JobAdmissionPausedError:
+            st.warning("Session purge is unavailable during runtime maintenance.")
+            return
+        if not purged:
             st.error(
                 "Purge deferred because an active request did not stop in time. "
                 "Retry after it finishes."
@@ -307,7 +313,7 @@ def _handle_purge(
 
 def render_time_travel_sidebar(
     *,
-    coord: ForkableCoordinator,
+    fork_from_checkpoint: CheckpointFork,
     conn: sqlite3.Connection,
     thread_id: str,
     user_id: str,
@@ -318,7 +324,7 @@ def render_time_travel_sidebar(
     Allows users to resume conversation threads from historical state snapshots.
 
     Args:
-        coord: Coordinator instance supporting checkpoint forking.
+        fork_from_checkpoint: Callback that forks through the current coordinator.
         conn: SQLite connection for metadata updates.
         thread_id: Target thread identifier.
         user_id: User/tenant namespace.
@@ -347,14 +353,15 @@ def render_time_travel_sidebar(
         if st.button(
             "Resume from checkpoint", key=f"chat_time_travel_resume__{thread_id}"
         ):
-            fork = getattr(coord, "fork_from_checkpoint", None)
-            if not callable(fork):
-                st.error("Time travel is unavailable (missing coordinator support).")
+            try:
+                new_checkpoint_id = fork_from_checkpoint(
+                    thread_id=thread_id,
+                    user_id=user_id,
+                    checkpoint_id=str(picked),
+                )
+            except JobAdmissionPausedError:
+                st.warning("Time travel is unavailable during runtime maintenance.")
                 return
-
-            new_checkpoint_id = fork(
-                thread_id=thread_id, user_id=user_id, checkpoint_id=str(picked)
-            )
             if not new_checkpoint_id:
                 st.error("Failed to fork from the selected checkpoint.")
                 return

@@ -1,8 +1,8 @@
 ---
 spec: SPEC-014
 title: Collection Activation Snapshots (SnapshotManager)
-version: 2.2.0
-date: 2026-07-14
+version: 2.2.6
+date: 2026-07-16
 owners: ["ai-arch"]
 status: Accepted
 related_requirements:
@@ -92,6 +92,12 @@ storage/
   order, including a newline delimiter after each entry, followed by the full
   canonical metadata object.
 - `graph_exports` enumerates GraphRAG export artifacts packaged with the snapshot, capturing telemetry metadata (`seed_count`, `duration_ms`, `size_bytes`, `sha256`).
+- `versions` is a string-keyed mapping whose values are strings, numbers,
+  booleans, or null. Nested version values and non-string keys are invalid.
+- Every `graph_exports` row has a unique non-dot basename `filename` no longer
+  than 200 characters, a nonempty string `format` no longer than 32 characters,
+  an exact nonnegative integer `size_bytes`, and a lowercase SHA-256. These
+  presentation-safe identities are validated before payload correspondence.
 - `collections.text` and `collections.image` are required physical collection
   identities. They are never resolved from mutable runtime settings during load.
 - `collection_metadata` records any immutable semantic identity copied from the
@@ -134,6 +140,24 @@ storage/
 ## UI Integration
 
 - Documents page: show snapshot path after ingest; provide rebuild action and export summary from `graph_exports`.
+- Snapshot finalization MUST verify and capture the complete manifest inside the
+  writer-lock and retention boundary, then return the typed
+  `FinalizedSnapshot(path, manifest)` result. Missing, unreadable, or malformed
+  manifest data MUST prevent `CURRENT` commit and runtime transfer.
+- Before returning success, a background ingestion worker MUST derive its bounded,
+  object-free presentation DTO from the manifest carried by that finalized result.
+- Terminal preparation and rendering MUST validate and use the captured DTO
+  without reading the finalized snapshot again. A superseded success remains
+  truthful even when retention has already removed its snapshot directory.
+- A successful terminal handoff MUST publish live runtime only while its captured
+  runtime generation is current and its finalized snapshot remains canonical
+  `CURRENT`. Otherwise it remains a truthful durable success, closes its
+  unaccepted runtime resource, and leaves the current runtime unchanged.
+- Terminal rendering MUST recompute live readiness from the current generation,
+  canonical `CURRENT`, snapshot identity, and current vector/router/graph owners.
+  It MUST suppress stale ready copy and graph exports. Resolving and verifying
+  canonical `CURRENT` for readiness or recovery is allowed; it is distinct from
+  reopening the completed worker's result snapshot for presentation.
 - Chat page: read latest manifest metadata, compute hashes, show a staleness badge
   when mismatched, and direct the operator to rebuild in Documents
 
@@ -214,10 +238,14 @@ Feature: Atomic snapshots with manifest
   2. Write and `fsync` `.activation-transaction.json` for the exact destination.
   3. Atomically rename `_tmp-<uuid>` to `<timestamp>`.
   4. Set `complete=true`, refresh the checksum, `fsync`, and verify the complete
-     closed-world payload and manifest.
+     closed-world payload and manifest. Retain that verified manifest in memory.
   5. Write and `fsync` `CURRENT.tmp`, then atomically replace `CURRENT`. This is
      the commit point.
   6. Clear the activation journal and run best-effort manifest retention.
+- Finalization returns the captured manifest without reopening its committed
+  destination. If `CURRENT` replacement succeeded but durability confirmation
+  raises, recovery returns the same captured manifest and retains the activation
+  journal for startup recovery.
 - Readers MUST resolve only `CURRENT`. Recovery may discard an invalid pointer
   and crash debris but MUST NOT infer or promote an unreferenced directory.
 - Recovery deletes the journaled destination when `CURRENT` did not commit. If
@@ -261,6 +289,21 @@ Feature: Atomic snapshots with manifest
 
 ## Changelog
 
+- 2.2.6 (2026-07-16): Made presentation-safe version and graph-export shapes part
+  of canonical persistence validation before `CURRENT`, shared export bounds with
+  Documents, and added invalid-build recovery and projection-parity proofs.
+- 2.2.5 (2026-07-16): Added typed finalization results carrying the manifest
+  verified under the writer lock, protected the new destination throughout
+  retention, and prohibited post-commit result-snapshot reloads while preserving
+  canonical `CURRENT` validation.
+- 2.2.4 (2026-07-16): Moved bounded manifest capture into the successful worker
+  result so terminal handoff remains truthful after superseded snapshot cleanup.
+- 2.2.3 (2026-07-16): Required generation- and `CURRENT`-guarded terminal
+  publication, truthful superseded success, and render-time runtime readiness.
+- 2.2.2 (2026-07-16): Required manifest validation before live runtime transfer
+  and a bounded single-read terminal presentation handoff.
+- 2.2.1 (2026-07-16): Required process-wide serialization and active-state UI
+  guards for ingestion, rebuild, and deletion corpus mutations.
 - 2.1.0 (2026-07-14): Required OS-fenced portalocker ownership, closed-world
   manifests, activation/source crash journals, native property-graph persistence,
   and deployment-scoped offline collection cleanup.
@@ -282,8 +325,9 @@ Feature: Atomic snapshots with manifest
 - SnapshotManager MUST implement a single-writer OS lock backed by required
   `portalocker`; metadata heartbeats are diagnostic and never authorize takeover.
   Timeout errors MUST surface clear user messaging.
-- While rebuilding, Documents ingestion controls MUST reflect a locked state and
-  prevent concurrent rebuilds.
+- While any ingestion, rebuild, or deletion mutation is queued or running,
+  Documents mutation controls MUST reflect the active state and prevent another
+  process-wide corpus mutation. Read-only exports remain available.
 
 ## Atomic rename
 

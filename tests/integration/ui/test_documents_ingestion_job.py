@@ -95,6 +95,7 @@ def documents_ingest_app_test(  # noqa: PLR0915 - integration harness owns page 
                 "corpus_hash": "c" * 64,
                 "config_hash": "f" * 64,
                 "versions": {},
+                "graph_exports": [],
             },
             "exports": [],
             "duration_ms": 0.0,
@@ -156,7 +157,7 @@ def documents_ingest_app_test(  # noqa: PLR0915 - integration harness owns page 
     monkeypatch.setattr(snapshot_mod, "SnapshotManager", _SnapshotManager)
     monkeypatch.setattr(qdrant_client, "QdrantClient", _QdrantClient)
 
-    def _rebuild_snapshot(*args, **kwargs) -> Path:  # type: ignore[no-untyped-def]
+    def _rebuild_snapshot(*args, **kwargs):  # type: ignore[no-untyped-def]
         activation = args[3]
         assert activation.workspace == workspace
         assert activation.text_collection == physical_collections["text"]
@@ -166,7 +167,16 @@ def documents_ingest_app_test(  # noqa: PLR0915 - integration harness owns page 
             "image": {"snapshot_id": "build123", "role": "image"},
         }
         kwargs["commit_source_changes"]()
-        return snapshot_dir
+        return snapshot_mod.FinalizedSnapshot(
+            path=snapshot_dir,
+            manifest={
+                "corpus_hash": "c" * 64,
+                "config_hash": "f" * 64,
+                "versions": {},
+                "graph_exports": [],
+                "collections": dict(physical_collections),
+            },
+        )
 
     monkeypatch.setattr(
         snapshot_service,
@@ -180,14 +190,39 @@ def documents_ingest_app_test(  # noqa: PLR0915 - integration harness owns page 
             "corpus_hash": "c" * 64,
             "config_hash": "f" * 64,
             "versions": {},
+            "graph_exports": [],
             "collections": dict(physical_collections),
         },
+    )
+    monkeypatch.setattr(
+        snapshot_mod,
+        "latest_snapshot_dir",
+        lambda *_a, **_k: snapshot_dir,
     )
 
     # Replace background job manager with a synchronous fake so success renders
     # deterministically in the same AppTest run.
 
-    monkeypatch.setattr(bg, "get_job_manager", lambda *_a, **_k: fake_job_manager)
+    class _CorpusMutationJobManager:
+        def is_exclusivity_active(self, _key: str) -> bool:
+            return False
+
+        def exclusivity_activity_snapshot(
+            self, key: str
+        ) -> tuple[bool, bg.JobActivitySnapshot]:
+            return self.is_exclusivity_active(key), fake_job_manager.activity_snapshot()
+
+        def start_job(  # type: ignore[no-untyped-def]
+            self, *, owner_id: str, fn, exclusivity_key: str | None = None
+        ):
+            assert exclusivity_key == "corpus-mutation"
+            return fake_job_manager.start_job(owner_id=owner_id, fn=fn)
+
+        def __getattr__(self, name: str):  # type: ignore[no-untyped-def]
+            return getattr(fake_job_manager, name)
+
+    manager = _CorpusMutationJobManager()
+    monkeypatch.setattr(bg, "get_job_manager", lambda: manager)
     monkeypatch.setattr(bg, "get_or_create_owner_id", lambda: fake_job_owner_id)
 
     root = Path(__file__).resolve().parents[3]
@@ -262,8 +297,265 @@ def test_documents_ingestion_job_renders_success(
     result = ingest_buttons[0].click().run()
     assert not result.exception
     state = fake_job_manager.get("job-1", owner_id=fake_job_owner_id)
-    assert state is not None
-    assert state.status == "succeeded", state.error
+    assert state is None
 
     success_messages = [msg.value for msg in result.success]
     assert any("Snapshot created" in value for value in success_messages)
+    info_messages = [message.value for message in result.info]
+    router_ready = any(
+        "Router engine is ready for Chat." in value for value in info_messages
+    )
+    assert router_ready, info_messages
+    assert result.session_state["latest_manifest"]["corpus_hash"] == "c" * 64
+    assert (
+        next(button for button in result.button if button.label == "Ingest").disabled
+        is False
+    )
+    assert (
+        next(button for button in result.button if button.label == "Rebuild").disabled
+        is False
+    )
+
+    followup = result.run()
+    assert not followup.exception
+    assert not any("Snapshot created" in msg.value for msg in followup.success)
+    confirm = next(
+        checkbox
+        for checkbox in followup.checkbox
+        if checkbox.label == 'I understand deleting "doc.txt" cannot be undone'
+    )
+    confirmed = confirm.check().run()
+    delete = next(
+        button for button in confirmed.button if button.label == 'Delete "doc.txt"'
+    )
+    assert delete.disabled is False
+
+
+@pytest.mark.integration
+def test_active_ingestion_blocks_a_second_mutation(
+    documents_ingest_app_test: AppTest,
+    monkeypatch,
+) -> None:
+    """Keep a second corpus worker from starting while ingestion is active."""
+
+    class _RunningState:
+        status = "running"
+        result = None
+        error = None
+
+    class _RunningJobManager:
+        def __init__(self) -> None:
+            self.submissions = 0
+            self.owner_id: str | None = None
+
+        def is_exclusivity_active(self, _key: str) -> bool:
+            return self.submissions > 0
+
+        def activity_snapshot(self) -> SimpleNamespace:
+            return SimpleNamespace(
+                has_active_jobs=self.submissions > 0,
+                maintenance_active=False,
+            )
+
+        def exclusivity_activity_snapshot(
+            self, key: str
+        ) -> tuple[bool, SimpleNamespace]:
+            return self.is_exclusivity_active(key), self.activity_snapshot()
+
+        def start_job(  # type: ignore[no-untyped-def]
+            self, *, owner_id: str, fn, exclusivity_key: str | None = None
+        ) -> str:
+            del fn
+            assert exclusivity_key == "corpus-mutation"
+            self.submissions += 1
+            self.owner_id = owner_id
+            return "running-job"
+
+        def get(self, job_id: str, *, owner_id: str):  # type: ignore[no-untyped-def]
+            if job_id == "running-job" and owner_id == self.owner_id:
+                return _RunningState()
+            return None
+
+        def drain_progress(self, *_args, **_kwargs):  # type: ignore[no-untyped-def]
+            return []
+
+        def cancel(self, *_args, **_kwargs) -> bool:  # type: ignore[no-untyped-def]
+            return True
+
+    manager = _RunningJobManager()
+    monkeypatch.setattr(bg, "get_job_manager", lambda: manager)
+    from src.config.settings import settings as app_settings
+
+    uploads = app_settings.data_dir / "uploads"
+    uploads.mkdir(parents=True, exist_ok=True)
+    (uploads / "existing.txt").write_text("existing", encoding="utf-8")
+
+    app = documents_ingest_app_test.run()
+    first_ingest = next(button for button in app.button if button.label == "Ingest")
+    active = first_ingest.click().run()
+    assert not active.exception
+    assert manager.submissions == 1
+
+    second_ingest = next(button for button in active.button if button.label == "Ingest")
+    rebuild = next(button for button in active.button if button.label == "Rebuild")
+    delete = next(
+        button for button in active.button if button.label == 'Delete "existing.txt"'
+    )
+    assert second_ingest.disabled is True
+    assert rebuild.disabled is True
+    assert delete.disabled is True
+
+    attempted = second_ingest.click().run()
+    assert not attempted.exception
+    assert manager.submissions == 1
+
+
+@pytest.mark.integration
+def test_foreign_corpus_mutation_disables_all_mutation_controls(
+    documents_ingest_app_test: AppTest,
+    monkeypatch,
+) -> None:
+    """Expose only foreign occupancy while disabling every corpus mutation."""
+
+    class _ForeignMutationManager:
+        def __init__(self) -> None:
+            self.submissions = 0
+            self.active = False
+
+        def is_exclusivity_active(self, key: str) -> bool:
+            assert key == "corpus-mutation"
+            return self.active
+
+        def activity_snapshot(self) -> SimpleNamespace:
+            return SimpleNamespace(
+                has_active_jobs=self.active,
+                maintenance_active=False,
+            )
+
+        def exclusivity_activity_snapshot(
+            self, key: str
+        ) -> tuple[bool, SimpleNamespace]:
+            return self.is_exclusivity_active(key), self.activity_snapshot()
+
+        def start_job(self, **_kwargs):  # type: ignore[no-untyped-def]
+            self.submissions += 1
+            raise AssertionError("foreign occupancy reached job submission")
+
+    manager = _ForeignMutationManager()
+    monkeypatch.setattr(bg, "get_job_manager", lambda: manager)
+    from src.config.settings import settings as app_settings
+
+    uploads = app_settings.data_dir / "uploads"
+    uploads.mkdir(parents=True, exist_ok=True)
+    (uploads / "existing.txt").write_text("existing", encoding="utf-8")
+
+    app = documents_ingest_app_test.run()
+    assert not app.exception
+    assert (
+        next(button for button in app.button if button.label == "Ingest").disabled
+        is False
+    )
+    assert (
+        next(button for button in app.button if button.label == "Rebuild").disabled
+        is False
+    )
+
+    manager.active = True
+    acquired = app.run()
+    assert not acquired.exception
+    assert any(
+        "Another session is changing the corpus" in message.value
+        for message in acquired.info
+    )
+    ingest = next(button for button in acquired.button if button.label == "Ingest")
+    rebuild = next(button for button in acquired.button if button.label == "Rebuild")
+    assert ingest.disabled is True
+    assert rebuild.disabled is True
+
+    confirm = next(
+        checkbox
+        for checkbox in acquired.checkbox
+        if checkbox.label == 'I understand deleting "existing.txt" cannot be undone'
+    )
+    confirmed = confirm.check().run()
+    delete = next(
+        button for button in confirmed.button if button.label == 'Delete "existing.txt"'
+    )
+    assert delete.disabled is True
+    ingest.click().run()
+    assert manager.submissions == 0
+
+    steady = confirmed.run()
+    assert not steady.exception
+    assert (
+        next(button for button in steady.button if button.label == "Ingest").disabled
+        is True
+    )
+
+    manager.active = False
+    released = steady.run()
+    assert not released.exception
+    assert (
+        next(button for button in released.button if button.label == "Ingest").disabled
+        is False
+    )
+    assert (
+        next(button for button in released.button if button.label == "Rebuild").disabled
+        is False
+    )
+    released_confirm = next(
+        checkbox
+        for checkbox in released.checkbox
+        if checkbox.label == 'I understand deleting "existing.txt" cannot be undone'
+    )
+    if not released_confirm.value:
+        released = released_confirm.check().run()
+    assert (
+        next(
+            button
+            for button in released.button
+            if button.label == 'Delete "existing.txt"'
+        ).disabled
+        is False
+    )
+
+
+@pytest.mark.integration
+def test_delete_confirmation_is_bound_to_selected_file(
+    documents_ingest_app_test: AppTest,
+) -> None:
+    """Require independent confirmation after the deletion target changes."""
+    from src.config.settings import settings as app_settings
+
+    uploads = app_settings.data_dir / "uploads"
+    uploads.mkdir(parents=True, exist_ok=True)
+    (uploads / "a.txt").write_text("a", encoding="utf-8")
+    (uploads / "b.txt").write_text("b", encoding="utf-8")
+
+    app = documents_ingest_app_test.run()
+    assert not app.exception
+    selection = next(box for box in app.selectbox if box.label == "Select file")
+    selected_a = selection.select("a.txt").run()
+    confirm_a = next(
+        box
+        for box in selected_a.checkbox
+        if box.label == 'I understand deleting "a.txt" cannot be undone'
+    )
+    confirmed_a = confirm_a.check().run()
+    delete_a = next(
+        button for button in confirmed_a.button if button.label == 'Delete "a.txt"'
+    )
+    assert delete_a.disabled is False
+
+    selection = next(box for box in confirmed_a.selectbox if box.label == "Select file")
+    selected_b = selection.select("b.txt").run()
+    confirm_b = next(
+        box
+        for box in selected_b.checkbox
+        if box.label == 'I understand deleting "b.txt" cannot be undone'
+    )
+    delete_b = next(
+        button for button in selected_b.button if button.label == 'Delete "b.txt"'
+    )
+    assert confirm_b.value is False
+    assert delete_b.disabled is True
