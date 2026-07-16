@@ -4,7 +4,7 @@
 > sessions, sources, and checkpoints. Do not claim historical source support.
 >
 > **Drift check**:
-> `git diff --stat 4fea380..HEAD -- src/pages/01_chat.py src/ui/components/evidence.py tests/unit/ui/test_chat_page_helpers.py tests/integration/ui/test_app_smoke_flows.py tests/integration/ui/test_analysis_modes.py tests/browser/app.spec.ts docs/specs/spec-008-ui-streamlit.md README.md`
+> `git diff --stat 9accab1..HEAD -- src/pages/01_chat.py src/ui/components/evidence.py tests/unit/ui/test_chat_page_helpers.py tests/integration/ui/test_app_smoke_flows.py tests/integration/ui/test_analysis_modes.py tests/browser/app.spec.ts docs/specs/spec-008-ui-streamlit.md README.md`
 > Plans 002–005 are expected to change truthful status, job calls, imports, and
 > the shared shell. Reconcile those named changes; STOP on unexplained Chat
 > capability drift.
@@ -16,7 +16,7 @@
 - **Risk**: MED
 - **Depends on**: Plans 002, 003, 004, and 005
 - **Category**: direction
-- **Planned at**: commit `4fea380`, 2026-07-16
+- **Planned at**: commit `9accab1`, 2026-07-16
 
 ## Exact mapping
 

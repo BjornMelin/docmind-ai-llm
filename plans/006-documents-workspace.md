@@ -4,7 +4,7 @@
 > rebuild, and deletion capability. Use only canonical local metadata.
 >
 > **Drift check**:
-> `git diff --stat 4fea380..HEAD -- src/pages/02_documents.py src/ui/corpus_inventory.py tests/unit/ui/test_corpus_inventory.py tests/unit/pages/test_documents_page_helpers.py tests/integration/ui/test_documents_ingestion_job.py tests/browser/app.spec.ts docs/developers/adrs/ADR-013-user-interface-architecture.md README.md`
+> `git diff --stat 9accab1..HEAD -- src/pages/02_documents.py src/ui/corpus_inventory.py tests/unit/ui/test_corpus_inventory.py tests/unit/pages/test_documents_page_helpers.py tests/integration/ui/test_documents_ingestion_job.py tests/browser/app.spec.ts docs/developers/adrs/ADR-013-user-interface-architecture.md README.md`
 > Plan 001 is expected to change mutation-control signatures and tests. Plan 003
 > is expected to move heavy Documents imports behind action/resource boundaries.
 > Plan 005 may add shared readiness display. Reconcile only those named changes;
@@ -17,7 +17,7 @@
 - **Risk**: MED
 - **Depends on**: Plans 001, 003, 004, and 005
 - **Category**: direction
-- **Planned at**: commit `4fea380`, 2026-07-16
+- **Planned at**: commit `9accab1`, 2026-07-16
 
 ## Why this matters
 

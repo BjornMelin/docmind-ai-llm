@@ -4,7 +4,7 @@
 > in `plans/README.md` when done. Do not expose raw exceptions or identifiers.
 >
 > **Drift check**:
-> `git diff --stat 4fea380..HEAD -- src/pages/01_chat.py tests/unit/pages/test_chat_page_helpers.py tests/unit/ui/test_chat_page_helpers.py tests/integration/ui/test_chat_streaming_timeout_flow.py tests/integration/ui/test_streaming_chunking.py tests/integration/ui/test_app_smoke_flows.py docs/specs/spec-008-ui-streamlit.md`
+> `git diff --stat 9accab1..HEAD -- src/pages/01_chat.py tests/unit/pages/test_chat_page_helpers.py tests/unit/ui/test_chat_page_helpers.py tests/integration/ui/test_chat_streaming_timeout_flow.py tests/integration/ui/test_streaming_chunking.py tests/integration/ui/test_app_smoke_flows.py docs/specs/spec-008-ui-streamlit.md`
 > Plan 001 is expected to remove the `settings.cache_version` argument from the
 > Chat `get_job_manager` caller and update direct job-lifecycle tests. Reconcile
 > only that named change; any other drift in Chat/history/streaming symbols is a
@@ -17,7 +17,7 @@
 - **Risk**: LOW
 - **Depends on**: `plans/001-mutation-job-ownership.md`
 - **Category**: bug
-- **Planned at**: commit `4fea380`, 2026-07-16
+- **Planned at**: commit `9accab1`, 2026-07-16
 
 ## Why this matters
 
@@ -85,7 +85,7 @@ event API exists at execution time. Wrap the synchronous call in a native
 normally. Preserve current error IDs, source rendering, checkpoint touch, and
 all response content.
 
-If a genuine incremental coordinator API has landed since `4fea380`, STOP and
+If a genuine incremental coordinator API has landed since `9accab1`, STOP and
 report it rather than designing a second adapter inside this plan.
 
 **Verify**: a unit test monkeypatches `st.status` (or the selected native status

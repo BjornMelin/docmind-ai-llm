@@ -6,7 +6,7 @@
 > `plans/README.md` when complete.
 >
 > **Drift check (run first)**:
-> `git diff --stat 4fea380..HEAD -- src/ui/background_jobs.py src/pages/01_chat.py src/pages/02_documents.py src/pages/04_settings.py tests/unit/ui tests/unit/pages tests/integration/ui`
+> `git diff --stat 9accab1..HEAD -- src/ui/background_jobs.py src/pages/01_chat.py src/pages/02_documents.py src/pages/04_settings.py tests/unit/ui tests/unit/pages tests/integration/ui`
 > If an in-scope symbol below changed, reconcile it before editing.
 
 ## Status
@@ -16,7 +16,7 @@
 - **Risk**: MED
 - **Depends on**: none
 - **Category**: bug
-- **Planned at**: commit `4fea380`, 2026-07-16
+- **Planned at**: commit `9accab1`, 2026-07-16
 
 ## Why this matters
 

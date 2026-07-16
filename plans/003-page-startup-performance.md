@@ -4,7 +4,7 @@
 > retrieval contract intact. Update `plans/README.md` when done.
 >
 > **Drift check**:
-> `git diff --stat 4fea380..HEAD -- src/app.py src/pages/01_chat.py src/pages/02_documents.py src/ui src/retrieval scripts/check_ui_import_boundary.py tests/unit/ui tests/integration/ui`
+> `git diff --stat 9accab1..HEAD -- src/app.py src/pages/01_chat.py src/pages/02_documents.py src/ui src/retrieval scripts/check_ui_import_boundary.py tests/unit/ui tests/integration/ui`
 > Plan 001 is expected to change `get_job_manager` call signatures in Chat/
 > Documents and job tests. Plan 002 is expected to replace `_load_chat_messages`
 > return handling and remove `_chunked_stream` plus its direct tests. Reconcile
@@ -18,7 +18,7 @@
 - **Risk**: MED
 - **Depends on**: Plans 001 and 002
 - **Category**: perf
-- **Planned at**: commit `4fea380`, 2026-07-16
+- **Planned at**: commit `9accab1`, 2026-07-16
 
 ## Why this matters
 

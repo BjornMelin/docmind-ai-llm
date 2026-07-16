@@ -1,7 +1,7 @@
 # DocMind UI Modernization Plans
 
-Generated from a read-only `improve` audit on 2026-07-16 at commit
-`4fea380`. Execute in order. Each executor must read its plan completely,
+Generated from a read-only `improve` audit on 2026-07-16 and rebased on commit
+`9accab1`. Execute in order. Each executor must read its plan completely,
 honor STOP conditions, and update the status row when work is complete.
 
 The target is a polished local-first Streamlit application, not a framework

@@ -4,7 +4,7 @@
 > hierarchy, not page-specific capabilities. Update `plans/README.md`.
 >
 > **Drift check**:
-> `git diff --stat 4fea380..HEAD -- src/app.py src/ui/readiness.py tests/unit/ui/test_readiness.py tests/integration/ui/test_app_smoke_flows.py tests/browser/app.spec.ts docs/developers/adrs/ADR-013-user-interface-architecture.md README.md`
+> `git diff --stat 9accab1..HEAD -- src/app.py src/ui/readiness.py tests/unit/ui/test_readiness.py tests/integration/ui/test_app_smoke_flows.py tests/browser/app.spec.ts docs/developers/adrs/ADR-013-user-interface-architecture.md README.md`
 > Earlier plans are expected to change job/chat tests and browser harness files.
 > Plan 003 is specifically expected to relocate
 > `recover_snapshot_transactions` behind `_recover_persistence_once` while
@@ -18,7 +18,7 @@
 - **Risk**: LOW
 - **Depends on**: Plans 001–004
 - **Category**: direction
-- **Planned at**: commit `4fea380`, 2026-07-16
+- **Planned at**: commit `9accab1`, 2026-07-16
 
 ## Why this matters
 

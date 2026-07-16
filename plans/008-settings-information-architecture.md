@@ -5,7 +5,7 @@
 > may not change.
 >
 > **Drift check**:
-> `git diff --stat 4fea380..HEAD -- src/pages/04_settings.py tests/unit/pages/test_settings_page_validation.py tests/integration/test_settings_page.py tests/browser/app.spec.ts docs/specs/spec-008-ui-streamlit.md docs/specs/spec-022-settings-ui-hardening.md README.md`
+> `git diff --stat 9accab1..HEAD -- src/pages/04_settings.py tests/unit/pages/test_settings_page_validation.py tests/integration/test_settings_page.py tests/browser/app.spec.ts docs/specs/spec-008-ui-streamlit.md docs/specs/spec-022-settings-ui-hardening.md README.md`
 > Plans 001/005 may change job/readiness display. Reconcile only those named
 > changes; STOP on other settings contract drift.
 
@@ -16,7 +16,7 @@
 - **Risk**: MED
 - **Depends on**: Plans 001, 004, 005
 - **Category**: direction
-- **Planned at**: commit `4fea380`, 2026-07-16
+- **Planned at**: commit `9accab1`, 2026-07-16
 
 ## Canonical behavior and labels
 

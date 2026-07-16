@@ -4,7 +4,7 @@
 > analytics feature gate.
 >
 > **Drift check**:
-> `git diff --stat 4fea380..HEAD -- src/pages/03_analytics.py src/ui/analytics_view.py tests/unit/ui/test_analytics_view.py tests/integration/ui/test_app_smoke_flows.py tests/browser/app.spec.ts docs/developers/observability-metrics.md README.md`
+> `git diff --stat 9accab1..HEAD -- src/pages/03_analytics.py src/ui/analytics_view.py tests/unit/ui/test_analytics_view.py tests/integration/ui/test_app_smoke_flows.py tests/browser/app.spec.ts docs/developers/observability-metrics.md README.md`
 > Plan 005 may add shared shell rendering; reconcile that only.
 
 ## Status
@@ -14,7 +14,7 @@
 - **Risk**: LOW
 - **Depends on**: Plans 004 and 005
 - **Category**: direction
-- **Planned at**: commit `4fea380`, 2026-07-16
+- **Planned at**: commit `9accab1`, 2026-07-16
 
 ## Why this matters
 

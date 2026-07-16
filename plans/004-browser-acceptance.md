@@ -5,7 +5,7 @@
 > `plans/README.md` when done.
 >
 > **Drift check**:
-> `git diff --stat 4fea380..HEAD -- package.json bun.lock playwright.config.ts tests/browser .github/workflows/browser-ui.yml .gitignore docs/developers/testing-notes.md src/pages`
+> `git diff --stat 9accab1..HEAD -- package.json bun.lock playwright.config.ts tests/browser .github/workflows/browser-ui.yml .gitignore docs/developers/testing-notes.md src/pages`
 > Plans 001–003 are expected to change Documents/Chat behavior, tests, imports,
 > and the first-run degraded Chat state, not these new harness files. Reconcile
 > those named visible labels; unexplained drift in harness/config/docs paths is
@@ -18,7 +18,7 @@
 - **Risk**: LOW
 - **Depends on**: Plans 001, 002, and 003
 - **Category**: tests
-- **Planned at**: commit `4fea380`, 2026-07-16
+- **Planned at**: commit `9accab1`, 2026-07-16
 
 ## Why this matters
 
