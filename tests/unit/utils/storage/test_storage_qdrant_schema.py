@@ -9,6 +9,8 @@ from typing import Any
 import pytest
 from qdrant_client import models as qmodels
 
+from src.persistence.deployment_identity import get_or_create_deployment_id
+
 
 def test_ensure_hybrid_collection_creates_when_missing(monkeypatch):  # type: ignore[no-untyped-def]
     """Ensure ensure_hybrid_collection creates a new schema when absent."""
@@ -126,6 +128,7 @@ def test_check_hybrid_collection_rejects_non_cosine_dense_vector() -> None:
 def test_check_hybrid_collection_rejects_missing_metadata() -> None:
     """A structurally valid collection without owner metadata is incompatible."""
     smod = importlib.import_module("src.utils.storage")
+    get_or_create_deployment_id(smod.settings.data_dir)
 
     class _Client:
         def collection_exists(self, _name: str) -> bool:
