@@ -72,7 +72,10 @@ uv run pytest tests/unit/processing/test_parser_contract.py -vv --no-cov
   an empty `warnings` list. Follow the operations guide for restore.
 - `cleanup_collections.py`: inspect deployment-owned orphan Qdrant generations
   after stopping every DocMind reader and writer. It is dry-run by default;
-  `--delete` is an explicit second step.
+  `--delete` is an explicit second step. It does not adopt pre-v2 state that
+  lacks `data/.deployment-id`; follow the
+  [pre-v2 no-adoption procedure](../docs/developers/operations-guide.md#preserve-activation-identity-and-journals)
+  instead of fabricating an identity.
 - `qdrant_schema.py`: inspect or rebuild an empty canonical Qdrant collection.
 - `qdrant_fusion_smoke.py`: prove client support for native RRF and DBSF.
 - `start_qdrant_local.sh`: start the supported local Qdrant service.
