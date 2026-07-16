@@ -174,6 +174,13 @@ directory. If the file is missing or invalid after `CURRENT` or a canonical
 snapshot exists, startup fails closed instead of assigning a new owner. Preserve
 the file with the entire data directory and every recovery point.
 
+Retained pre-v2 snapshots and Qdrant state without `data/.deployment-id` cannot
+be adopted in place because v2 cannot prove their deployment ownership. Stop
+the old deployment and preserve and back up both its full data directory and
+Qdrant service or volume. Configure v2 with a fresh, empty data directory and
+Qdrant boundary, then re-ingest the source corpus. Do not fabricate an identity,
+and do not delete the old state until its backup is verified.
+
 DocMind resolves source and snapshot crash journals while it holds the snapshot
 writer lock. Promotion journals under `data/.upload-transactions/` either finish
 the exact generation named by `CURRENT` or roll promoted files back to pending

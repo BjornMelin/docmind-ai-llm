@@ -78,7 +78,10 @@ def _streamlit_disable_repl_detection() -> Generator[None]:
 
 
 @pytest.fixture(autouse=True)
-def _reset_docmind_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+def _reset_docmind_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     """Keep tests deterministic even when a developer `.env` exists.
 
     Pytest runs in the developer's working tree. Some environments or tools may
@@ -94,7 +97,10 @@ def _reset_docmind_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.config.settings import settings as app_settings
 
     reset_bootstrap_state()
-    app_settings.__init__(_env_file=None)  # type: ignore[arg-type]
+    app_settings.__init__(
+        data_dir=tmp_path / "data",
+        _env_file=None,  # type: ignore[arg-type]
+    )
 
 
 @pytest.fixture(autouse=True)

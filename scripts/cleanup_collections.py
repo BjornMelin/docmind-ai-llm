@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from qdrant_client import QdrantClient
 
-from src.config import settings
+from src.config import bootstrap_settings, settings
 from src.persistence.collection_cleanup import cleanup_orphan_collections
 from src.utils.storage import get_client_config
 
@@ -40,30 +40,42 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    client = QdrantClient(**get_client_config(settings))
+    client: QdrantClient | None = None
+    result: dict[str, object] | None = None
+    error: Exception | None = None
     try:
-        summary = cleanup_orphan_collections(
+        bootstrap_settings()
+        client = QdrantClient(**get_client_config(settings))
+        result = cleanup_orphan_collections(
             client,
             delete=bool(args.delete),
             cfg=settings,
-        )
+        ).as_dict()
     except Exception as exc:
+        error = exc
+    finally:
+        if client is not None:
+            try:
+                client.close()
+            except Exception as exc:
+                if error is None:
+                    error = exc
+
+    if error is not None:
+        error_payload: dict[str, object] = {
+            "status": "error",
+            "error_type": type(error).__name__,
+            "error": str(error),
+        }
+        if result is not None:
+            error_payload["result"] = result
         print(
-            json.dumps(
-                {
-                    "status": "error",
-                    "error_type": type(exc).__name__,
-                    "error": str(exc),
-                },
-                sort_keys=True,
-            ),
+            json.dumps(error_payload, sort_keys=True),
             file=sys.stderr,
         )
         return 2
-    finally:
-        client.close()
 
-    print(json.dumps(summary.as_dict(), sort_keys=True))
+    print(json.dumps(result, sort_keys=True))
     return 0
 
 

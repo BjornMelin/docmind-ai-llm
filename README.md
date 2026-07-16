@@ -379,6 +379,11 @@ library update.
   from local automation. Reconcile `.env` against the tracked `.env.example`;
   removed agent fallback, UI, cache-limit, monitoring-limit, and legacy
   GraphRAG knobs no longer change runtime behavior.
+- Do not point v2 at retained pre-v2 data or Qdrant state when
+  `data/.deployment-id` is absent. V2 cannot safely prove ownership of that
+  state and does not adopt it in place. Preserve the old state and follow the
+  [pre-v2 no-adoption procedure](docs/developers/operations-guide.md#preserve-activation-identity-and-journals).
+  Never fabricate a deployment identity.
 - Stop DocMind before the v2 upgrade. V1 stored raw public thread IDs, while v2 hashes each `(user_id, public_thread_id)` pair for LangGraph checkpoints. V2 has no checkpoint-key migration. Startup rejects a Chat DB that contains raw v1 checkpoint identities. Archive the database and its write-ahead log (WAL) sidecars, then let v2 create a fresh database:
 
   ```bash
