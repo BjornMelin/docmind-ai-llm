@@ -18,6 +18,10 @@ from tests.helpers.apptest_utils import apptest_timeout_sec
 class _CoordinatorStub:
     """Minimal coordinator stub for chat smoke tests."""
 
+    history_error: Exception | None = None
+    query_error: Exception | None = None
+    response: AgentResponse | None = None
+
     def __init__(self, *_, **__) -> None:
         self._messages: list[object] = []
 
@@ -35,9 +39,13 @@ class _CoordinatorStub:
         checkpoint_id: str | None = None,
     ) -> AgentResponse:
         _ = (settings_override, thread_id, user_id, checkpoint_id)
-        return AgentResponse(content=f"Echo: {query}")
+        if self.query_error is not None:
+            raise self.query_error
+        return self.response or AgentResponse(content=f"Echo: {query}")
 
     def get_state_values(self, *_, **__) -> dict[str, object]:
+        if self.history_error is not None:
+            raise self.history_error
         return {"messages": self._messages}
 
     def list_checkpoints(self, *_, **__) -> list[dict[str, object]]:
@@ -116,6 +124,9 @@ def chat_app_smoke(
     app_settings.data_dir = tmp_path
     app_settings.chat.sqlite_path = tmp_path / "chat.db"
     app_settings.graphrag_cfg.autoload_policy = "ignore"
+    _CoordinatorStub.history_error = None
+    _CoordinatorStub.query_error = None
+    _CoordinatorStub.response = None
 
     st.cache_resource.clear()
     st.cache_data.clear()
@@ -135,6 +146,9 @@ def chat_app_smoke(
         app_settings.data_dir = original_data_dir
         app_settings.chat.sqlite_path = original_chat_path
         app_settings.graphrag_cfg.autoload_policy = original_autoload
+        _CoordinatorStub.history_error = None
+        _CoordinatorStub.query_error = None
+        _CoordinatorStub.response = None
         st.cache_resource.clear()
         st.cache_data.clear()
 
@@ -145,6 +159,10 @@ def test_chat_smoke_echo(chat_app_smoke: AppTest) -> None:
     app = chat_app_smoke.run()
     assert not app.exception
     assert app.chat_input
+    assert any(
+        "No messages yet" in str(getattr(caption, "value", ""))
+        for caption in app.caption
+    )
 
     app = app.chat_input[0].set_value("hello").run()
     assert not app.exception
@@ -153,6 +171,116 @@ def test_chat_smoke_echo(chat_app_smoke: AppTest) -> None:
     assistant_texts = _chat_message_texts(app, avatar="assistant")
     assert any("hello" in text for text in user_texts)
     assert any("Echo: hello" in text for text in assistant_texts)
+
+
+@pytest.mark.integration
+def test_chat_history_failure_is_sanitized_and_retry_recovers(
+    chat_app_smoke: AppTest,
+) -> None:
+    """A failed history read is explicit, sanitized, and normally retryable."""
+    _CoordinatorStub.history_error = RuntimeError("history leaked-secret")
+
+    app = chat_app_smoke.run()
+
+    assert not app.exception
+    assert not app.chat_input
+    assert any(
+        "Chat history could not be loaded" in str(getattr(error, "value", ""))
+        for error in app.error
+    )
+    visible = " ".join(
+        str(getattr(element, "value", ""))
+        for collection in (app.error, app.caption)
+        for element in collection
+    )
+    assert "leaked-secret" not in visible
+
+    retry = next(
+        button for button in app.button if button.label == "Retry chat history"
+    )
+    _CoordinatorStub.history_error = None
+    app = retry.click().run()
+
+    assert not app.exception
+    assert app.chat_input
+    assert not any(
+        "Chat history could not be loaded" in str(getattr(error, "value", ""))
+        for error in app.error
+    )
+
+
+@pytest.mark.integration
+def test_chat_history_maintenance_blocks_prompt_and_offers_retry(
+    chat_app_smoke: AppTest,
+) -> None:
+    """Maintenance cannot be mistaken for a new, writable conversation."""
+    from src.ui.background_jobs import JobAdmissionPausedError
+
+    _CoordinatorStub.history_error = JobAdmissionPausedError("maintenance")
+
+    app = chat_app_smoke.run()
+
+    assert not app.exception
+    assert not app.chat_input
+    assert any(
+        "Chat history is unavailable during runtime maintenance"
+        in str(getattr(info, "value", ""))
+        for info in app.info
+    )
+    assert any(button.label == "Retry chat history" for button in app.button)
+
+
+@pytest.mark.integration
+def test_chat_provider_failure_preserves_sanitized_error_contract(
+    chat_app_smoke: AppTest,
+) -> None:
+    """A synchronous provider failure renders the existing safe error contract."""
+    app = chat_app_smoke.run()
+    assert not app.exception
+    _CoordinatorStub.query_error = RuntimeError("provider leaked-secret")
+
+    app = app.chat_input[0].set_value("hello").run()
+
+    assert not app.exception
+    assert any(
+        "Verify provider settings and endpoint connectivity"
+        in str(getattr(error, "value", ""))
+        for error in app.error
+    )
+    visible = " ".join(
+        str(getattr(element, "value", ""))
+        for collection in (app.error, app.caption)
+        for element in collection
+    )
+    assert "Error id:" in visible
+    assert "leaked-secret" not in visible
+
+
+@pytest.mark.integration
+def test_chat_completed_timeout_response_renders_as_terminal_markdown(
+    chat_app_smoke: AppTest,
+) -> None:
+    """A completed timeout response is terminal content, not fake streaming."""
+    _CoordinatorStub.response = AgentResponse(
+        content="Request timed out.",
+        sources=[],
+        metadata={"reason": "timeout"},
+        validation_score=0.0,
+        processing_time=0.01,
+        optimization_metrics={"timeout": True},
+    )
+    app = chat_app_smoke.run()
+
+    app = app.chat_input[0].set_value("hello").run()
+
+    assert not app.exception
+    assistant_markdown = [
+        str(item.value)
+        for message in app.chat_message
+        if getattr(message, "avatar", None) != "user"
+        for item in getattr(message, "markdown", [])
+    ]
+    assert "Request timed out." in assistant_markdown
 
 
 @pytest.fixture

@@ -1,6 +1,6 @@
 # DocMind AI software requirements specification
 
-Version: 2.0.0 • Date: 2026-01-14 • Owner: Eng/Arch
+Version: 2.0.1 • Date: 2026-07-16 • Owner: Eng/Arch
 Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking, GraphRAG, and multi-provider LLM runtimes.
 
 ## 0. Front-matter
@@ -52,7 +52,7 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 | **FR-009.5** | The system **shall** validate export paths as non‑egress, sanitize file names, and block symlink targets. | SPEC‑011 | AC‑FR‑009‑SEC |
 | **FR-009.6** | The system **shall** emit OpenTelemetry router-construction and graph-export signals plus local JSONL retrieval backend/outcome, staleness, and export events. Per-query route and traversal-depth JSONL are not implemented. | SPEC‑012 | AC‑FR‑OBS‑001 |
 | **FR-010** | The system **shall** provide a multipage Streamlit UI using `st.Page`/`st.navigation` with Chat, Documents, Analytics, Settings. | ADR‑013/SPEC‑008 | AC‑FR‑010 |
-| **FR-011** | The system **shall** implement native chat streaming via `st.chat_message` + `st.chat_input` + `st.write_stream`. | ADR‑013/SPEC‑008 | AC‑FR‑011 |
+| **FR-011** | The system **shall** use native `st.chat_message` and `st.chat_input`, show a native spinner only around the synchronous coordinator call, render the completed answer normally, distinguish the coordinator's successful empty state from raised history reads and runtime maintenance, and **shall not** simulate streaming by chunking completed text. Real incremental streaming requires a public coordinator event API and proof that output arrives before completion. | ADR‑013/SPEC‑008 | AC‑FR‑011 |
 | **FR-012** | The system **shall** allow users to select an LLM provider among llama.cpp, vLLM, Ollama, LM Studio, and choose the model at runtime in UI and settings. | ADR‑009 | AC‑FR‑012 |
 | **FR-013** | The system **shall** provide OpenAI‑compatible client wiring for vLLM, Ollama, LM Studio, and llama.cpp server modes. | ADR‑009 | AC‑FR‑013 |
 | **FR-014** | The system **shall** run a LangGraph‑supervised multi‑agent flow with deterministic JSON‑schema outputs when available. | ADR‑001 | AC‑FR‑014 |
@@ -113,7 +113,8 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 
 - LLM API: OpenAI‑compatible for vLLM/Ollama/LM Studio/llama.cpp server, plus optional Ollama-native `/api/*` support for advanced capabilities (SPEC-043).
 
-- UI contracts: `st.Page` navigation, chat stream, status blocks, fragments.
+- UI contracts: `st.Page` navigation, truthful Chat status and terminal output,
+  status blocks, and fragments.
 
 - Configuration schema: nested groups expose canonical policy surfaces.
 
@@ -177,6 +178,31 @@ Scenario: Switch provider from vLLM to Ollama
   Given Settings provider=vllm and model=A
   When I change provider to "ollama" and model=B and press Save
   Then subsequent chats shall hit the Ollama base_url and model=B
+```
+
+### AC‑FR‑011
+
+```gherkin
+Scenario: A successful empty history remains writable
+  Given the coordinator history read succeeds with no messages
+  When Chat renders
+  Then the UI SHALL identify a new conversation
+  And Chat input SHALL remain available
+
+Scenario: An unavailable history fails closed
+  Given the history read raises or runtime maintenance is active
+  When Chat renders
+  Then the UI SHALL show the distinct unavailable state and a retry action
+  And Chat history and input SHALL NOT render
+  And raw errors, provider secrets, thread IDs, and user IDs SHALL NOT render
+
+Scenario: Synchronous generation is represented truthfully
+  Given the public coordinator returns one completed AgentResponse
+  When a user submits a prompt
+  Then a native spinner SHALL wrap only the coordinator query call
+  And checkpoint and session provenance SHALL be recorded after that call
+  And the completed answer and sources SHALL render normally
+  And the UI SHALL NOT simulate streaming by chunking completed text
 ```
 
 ### AC‑FR‑005‑B
