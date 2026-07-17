@@ -8,6 +8,7 @@ owned by Qdrant backups.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -679,7 +680,11 @@ def _manifest_versions_valid(value: Any) -> bool:
     """Return whether every version identity is presentation-safe."""
     return isinstance(value, dict) and all(
         isinstance(key, str)
-        and (isinstance(version, str | int | float | bool) or version is None)
+        and (
+            isinstance(version, str | bool | int)
+            or (isinstance(version, float) and math.isfinite(version))
+            or version is None
+        )
         for key, version in value.items()
     )
 
@@ -718,13 +723,20 @@ def _manifest_semantics_valid(
     entries: list[dict[str, Any]] | None = None,
 ) -> bool:
     """Validate the canonical snapshot metadata contract in one place."""
+    try:
+        hash_manifest(entries or [], manifest)
+    except (TypeError, ValueError):
+        strict_json = False
+    else:
+        strict_json = True
     activation_config = manifest.get("activation_config")
     activation_config_hash = manifest.get("activation_config_hash")
     graph_store_type = manifest.get("graph_store_type")
     versions = manifest.get("versions")
     graph_exports = manifest.get("graph_exports")
     if (
-        not isinstance(manifest.get("index_id"), str)
+        not strict_json
+        or not isinstance(manifest.get("index_id"), str)
         or not manifest["index_id"]
         or graph_store_type not in {"none", "property_graph"}
         or manifest.get("vector_store_type") != "qdrant"

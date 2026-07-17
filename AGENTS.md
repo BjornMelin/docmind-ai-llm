@@ -251,10 +251,12 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
   `collections.image` identities, optional collection metadata, hashes,
   versions, graph type, and optional `graph_exports`.
 - The canonical manifest validator owns presentation-safe metadata: every version
-  key is a string and every value is scalar or null; every graph export has a
-  unique basename of at most 200 characters, a nonempty format of at most 32
-  characters, a nonnegative integer size, and a lowercase SHA-256. Graph type
-  `none` requires no exports. Reject invalid metadata before moving `CURRENT`.
+  key is a string and every value is a string, finite number, boolean, or null;
+  every graph export has a unique basename of at most 200 characters, a nonempty
+  format of at most 32 characters, a nonnegative integer size, and a lowercase
+  SHA-256. Graph type `none` requires no exports. Reject invalid metadata before
+  moving `CURRENT`; canonical hash preflight rejects non-finite numbers across
+  the complete manifest before any artifact is written.
 - `CURRENT` is the sole activation boundary. Never infer an active snapshot from
   directory ordering or promote an unreferenced snapshot during recovery.
 - Result presentation must use the manifest captured by finalization. Canonical

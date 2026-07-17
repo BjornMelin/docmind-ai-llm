@@ -333,6 +333,9 @@ def test_snapshot_manager_includes_graph_exports(tmp_path: Path) -> None:
     [
         cast(dict[str, Any], {1: "invalid-key"}),
         {"app": ["invalid-value"]},
+        pytest.param({"app": float("nan")}, id="nan"),
+        pytest.param({"app": float("inf")}, id="positive-infinity"),
+        pytest.param({"app": float("-inf")}, id="negative-infinity"),
     ],
 )
 def test_invalid_versions_never_replace_current(
@@ -371,6 +374,30 @@ def test_invalid_versions_never_replace_current(
         manager.cleanup_tmp(workspace)
 
     assert latest_snapshot_dir(tmp_path) == prior
+
+
+def test_non_finite_collection_metadata_never_writes_manifest(tmp_path: Path) -> None:
+    """Strict JSON validation covers metadata outside the versions mapping."""
+    manager = SnapshotManager(tmp_path)
+    workspace = manager.begin_snapshot()
+    try:
+        with pytest.raises(ValueError, match="metadata contract"):
+            manager.write_manifest(
+                workspace,
+                index_id="invalid-collection-metadata",
+                graph_store_type="none",
+                vector_store_type="qdrant",
+                text_collection="physical-text",
+                image_collection="physical-image",
+                corpus_hash="d" * 64,
+                config_hash="e" * 64,
+                collection_metadata={"probe": float("nan")},
+            )
+        assert not (workspace / "manifest.jsonl").exists()
+        assert not (workspace / "manifest.meta.json").exists()
+        assert not (workspace / "manifest.checksum").exists()
+    finally:
+        manager.cleanup_tmp(workspace)
 
 
 @pytest.mark.parametrize("format_name", [None, "x" * 33])

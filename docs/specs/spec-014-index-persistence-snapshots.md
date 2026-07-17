@@ -1,7 +1,7 @@
 ---
 spec: SPEC-014
 title: Collection Activation Snapshots (SnapshotManager)
-version: 2.2.6
+version: 2.2.7
 date: 2026-07-16
 owners: ["ai-arch"]
 status: Accepted
@@ -92,8 +92,12 @@ storage/
   order, including a newline delimiter after each entry, followed by the full
   canonical metadata object.
 - `graph_exports` enumerates GraphRAG export artifacts packaged with the snapshot, capturing telemetry metadata (`seed_count`, `duration_ms`, `size_bytes`, `sha256`).
-- `versions` is a string-keyed mapping whose values are strings, numbers,
-  booleans, or null. Nested version values and non-string keys are invalid.
+- `versions` is a string-keyed mapping whose values are strings, finite numbers,
+  booleans, or null. Nested version values, non-finite numbers, and non-string
+  keys are invalid.
+- All manifest artifacts use strict JSON serialization. Canonical hash preflight
+  rejects non-finite numbers across the complete metadata and entry objects
+  before any manifest artifact is written.
 - Every `graph_exports` row has a unique non-dot basename `filename` no longer
   than 200 characters, a nonempty string `format` no longer than 32 characters,
   an exact nonnegative integer `size_bytes`, and a lowercase SHA-256. These
@@ -289,6 +293,9 @@ Feature: Atomic snapshots with manifest
 
 ## Changelog
 
+- 2.2.7 (2026-07-16): Enforced strict JSON serialization during canonical hash
+  preflight and every manifest write, rejecting non-finite numbers across all
+  metadata and during recovery.
 - 2.2.6 (2026-07-16): Made presentation-safe version and graph-export shapes part
   of canonical persistence validation before `CURRENT`, shared export bounds with
   Documents, and added invalid-build recovery and projection-parity proofs.

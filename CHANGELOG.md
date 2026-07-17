@@ -39,8 +39,9 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
   rerun before rendering its exactly-once notice, including deferred-consume and
   missing-state cleanup. Manual graph export rejects a retired session resource
   before borrowing either index.
-- Snapshot metadata now rejects non-scalar versions and malformed graph-export
-  identities before `CURRENT`, using shared persistence/UI bounds. The duplicate
+- Snapshot metadata now rejects non-scalar versions, non-finite numbers anywhere
+  in the manifest, and malformed graph-export identities before `CURRENT`, using
+  strict JSON serialization and shared persistence/UI bounds. The duplicate
   ingestion render wrapper was removed in favor of the canonical prepare/render
   stages.
 - Settings runtime publication now restores the complete prior runtime for every
