@@ -93,12 +93,12 @@ def _restore_session_value(session_state: Any, key: str, value: Any) -> None:
 
 def session_router_is_current(session_state: Any, *, runtime_generation: int) -> bool:
     """Return whether the session owns a live router for this runtime generation."""
-    router = session_state.get("router_engine")
-    if router is None or session_state.get(_ROUTER_GENERATION_KEY) != int(
-        runtime_generation
-    ):
-        return False
     with _RUNTIME_LIFECYCLE_LOCK:
+        router = session_state.get("router_engine")
+        if router is None or session_state.get(_ROUTER_GENERATION_KEY) != int(
+            runtime_generation
+        ):
+            return False
         registered = _REGISTERED_ROUTERS.get(id(router))
         if registered is None:
             registered = _NON_WEAK_ROUTERS.get(id(router))

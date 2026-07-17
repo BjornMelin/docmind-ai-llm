@@ -111,7 +111,15 @@ def replace_session_vector_resource(
 
 
 def clear_session_runtime(session_state: Any, *, runtime_generation: int) -> None:
-    """Atomically clear every session runtime owner and snapshot identity."""
+    """Atomically clear every session runtime owner and snapshot identity.
+
+    Args:
+        session_state: Mutable Streamlit session state.
+        runtime_generation: Generation to publish for the cleared runtime.
+
+    Returns:
+        None.
+    """
     replace_session_runtime(
         session_state,
         None,
@@ -130,7 +138,22 @@ def replace_session_runtime(
     state_updates: Mapping[str, Any] | None = None,
     state_removals: Sequence[str] = (),
 ) -> None:
-    """Atomically publish a vector/router runtime, then retire prior owners."""
+    """Atomically publish a vector/router runtime, then retire prior owners.
+
+    Args:
+        session_state: Mutable Streamlit session state.
+        resource: New generation-bound vector resource, if any.
+        router: New generation-bound router, if any.
+        runtime_generation: Generation shared by the new runtime owners.
+        state_updates: Additional session values to publish atomically.
+        state_removals: Additional session keys to remove atomically.
+
+    Returns:
+        None.
+
+    Raises:
+        ValueError: If ``state_updates`` contains reserved runtime ownership keys.
+    """
     with _RUNTIME_LIFECYCLE_LOCK:
         generation = int(runtime_generation)
         previous_resource = session_state.get(_VECTOR_RESOURCE_KEY, _STATE_MISSING)

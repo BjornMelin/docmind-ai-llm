@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import threading
+from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 
 from src.ui.router_session import (
@@ -14,7 +18,7 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture(autouse=True)
-def _reset_router_registry() -> None:
+def _reset_router_registry() -> Iterator[None]:
     retire_all_session_routers()
     yield
     retire_all_session_routers()
@@ -46,6 +50,30 @@ class _FailingState(dict[str, object]):
         if self._armed and key == self._fail_key:
             self._armed = False
             raise RuntimeError("publication failed")
+
+
+class _BlockingGenerationState:
+    def __init__(self) -> None:
+        self.values: dict[str, object] = {}
+        self.generation_read = threading.Event()
+        self.release_generation_read = threading.Event()
+        self._block_next_generation_read = False
+
+    def arm_generation_read(self) -> None:
+        self._block_next_generation_read = True
+
+    def get(self, key: str, default: object = None) -> object:
+        if key == "_router_runtime_generation" and self._block_next_generation_read:
+            self._block_next_generation_read = False
+            self.generation_read.set()
+            assert self.release_generation_read.wait(5)
+        return self.values.get(key, default)
+
+    def __setitem__(self, key: str, value: object) -> None:
+        self.values[key] = value
+
+    def pop(self, key: str, default: object = None) -> object:
+        return self.values.pop(key, default)
 
 
 def test_replace_closes_prior_router_once() -> None:
@@ -111,6 +139,41 @@ def test_generation_invalidation_retires_two_sessions() -> None:
     assert second.close_calls == 1
     assert replacement.close_calls == 0
     assert session_router_is_current(second_state, runtime_generation=2)
+
+
+def test_current_check_serializes_with_generation_replacement() -> None:
+    router = _Router()
+    state = _BlockingGenerationState()
+    replace_session_router(state, router, runtime_generation=1)  # type: ignore[arg-type]
+    state.arm_generation_read()
+    replacement_started = threading.Event()
+    replacement_finished = threading.Event()
+
+    def _replace_generation() -> None:
+        replacement_started.set()
+        replace_session_router(state, router, runtime_generation=2)  # type: ignore[arg-type]
+        replacement_finished.set()
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            current = executor.submit(
+                session_router_is_current,
+                state,
+                runtime_generation=1,
+            )
+            assert state.generation_read.wait(5)
+            replacement = executor.submit(_replace_generation)
+            assert replacement_started.wait(5)
+            assert not replacement_finished.wait(0.1)
+
+            state.release_generation_read.set()
+            assert current.result(timeout=5)
+            replacement.result(timeout=5)
+
+        assert not session_router_is_current(state, runtime_generation=1)
+        assert session_router_is_current(state, runtime_generation=2)
+    finally:
+        state.release_generation_read.set()
 
 
 @pytest.mark.parametrize(
