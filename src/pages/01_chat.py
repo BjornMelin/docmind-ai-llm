@@ -76,6 +76,7 @@ _MEMORY_SAVE_ERROR = "Memory could not be saved. Please retry."
 _MEMORY_SAVE_REJECTED_ERROR = "This memory scope was purged and is no longer writable."
 _MEMORY_SEARCH_ERROR = "Memories could not be loaded. Please retry."
 _MEMORY_DELETE_ERROR = "Memory could not be deleted. Please retry."
+_CHAT_PERSISTENCE_ERROR = "Chat persistence is unavailable. Please retry."
 _SNAPSHOT_REFRESH_BUSY = "Snapshot refresh deferred while background work is active."
 _SNAPSHOT_REFRESH_FOREGROUND = (
     "Snapshot refresh deferred while the live runtime is in use."
@@ -363,6 +364,13 @@ def main() -> None:  # pragma: no cover - Streamlit page
                     )
     except JobAdmissionPausedError:
         st.info("Chat sessions are unavailable during runtime maintenance.")
+        return
+    except sqlite3.DatabaseError as exc:
+        logger.bind(
+            event="chat_persistence_unavailable",
+            error_type=type(exc).__name__,
+        ).error("Chat persistence unavailable")
+        st.error(_CHAT_PERSISTENCE_ERROR)
         return
     if model_readiness.status != "ready":
         if _snapshot_runtime_present():

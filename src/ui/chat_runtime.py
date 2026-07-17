@@ -6,7 +6,7 @@ import atexit
 import json
 import threading
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import TYPE_CHECKING, Any, Literal
 
 from loguru import logger
@@ -44,6 +44,61 @@ class ChatModelReadiness:
     status: Literal["ready"] | ChatModelFailureStatus
 
 
+def _nonempty_regular_file(path: Path) -> bool:
+    """Return whether ``path`` resolves to a nonempty regular file."""
+    try:
+        return path.is_file() and path.stat().st_size > 0
+    except OSError:
+        return False
+
+
+def _resolve_model_shard(manifest_parent: Path, shard_name: object) -> Path | None:
+    """Resolve one safe shard path beneath its manifest directory."""
+    if not isinstance(shard_name, str) or not shard_name.strip():
+        return None
+    posix_path = PurePosixPath(shard_name)
+    windows_path = PureWindowsPath(shard_name)
+    if (
+        posix_path.is_absolute()
+        or windows_path.is_absolute()
+        or ".." in posix_path.parts
+        or ".." in windows_path.parts
+    ):
+        return None
+    try:
+        shard = (manifest_parent / Path(shard_name)).resolve(strict=True)
+        shard.relative_to(manifest_parent)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return shard
+
+
+def _sharded_weights_ready(index_path: Path) -> bool:
+    """Validate every unique shard named by a Transformers weight index."""
+    try:
+        manifest = json.loads(index_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return False
+    if not isinstance(manifest, dict):
+        return False
+    weight_map = manifest.get("weight_map")
+    if not isinstance(weight_map, dict) or not weight_map:
+        return False
+
+    try:
+        manifest_parent = index_path.parent.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
+    shards: set[Path] = set()
+    for shard_name in weight_map.values():
+        shard = _resolve_model_shard(manifest_parent, shard_name)
+        if shard is None:
+            return False
+        shards.add(shard)
+
+    return all(_nonempty_regular_file(shard) for shard in shards)
+
+
 def _local_model_artifacts_ready(model_path: Path) -> bool:
     """Return whether a local SentenceTransformers directory has core assets."""
     roots = (model_path, model_path / "0_Transformer")
@@ -57,23 +112,15 @@ def _local_model_artifacts_ready(model_path: Path) -> bool:
         if isinstance(config, dict) and config:
             has_config = True
             break
-    weight_names = (
-        "model.safetensors",
-        "model.safetensors.index.json",
-        "pytorch_model.bin",
-        "pytorch_model.bin.index.json",
-    )
+    direct_weight_names = ("model.safetensors", "pytorch_model.bin")
+    index_names = ("model.safetensors.index.json", "pytorch_model.bin.index.json")
     has_weights = False
     for root in roots:
-        for weight_name in weight_names:
-            weight_path = root / weight_name
-            try:
-                if weight_path.is_file() and weight_path.stat().st_size > 0:
-                    has_weights = True
-                    break
-            except OSError:
-                continue
-        if has_weights:
+        if any(_nonempty_regular_file(root / name) for name in direct_weight_names):
+            has_weights = True
+            break
+        if any(_sharded_weights_ready(root / name) for name in index_names):
+            has_weights = True
             break
     return has_config and has_weights
 

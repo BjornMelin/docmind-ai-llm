@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -55,6 +56,153 @@ def test_local_model_readiness_requires_config_and_weights(tmp_path: Path) -> No
         cache_folder=tmp_path / "cache",
         local_model_path=model_path,
     ) == chat_runtime.ChatModelReadiness(status="ready")
+
+
+@pytest.mark.parametrize(
+    "index_name",
+    ["model.safetensors.index.json", "pytorch_model.bin.index.json"],
+)
+def test_local_model_readiness_accepts_complete_sharded_weights(
+    tmp_path: Path,
+    index_name: str,
+) -> None:
+    model_path = tmp_path / "embedding"
+    shard_dir = model_path / "weights"
+    shard_dir.mkdir(parents=True)
+    (model_path / "config.json").write_text('{"model_type": "bert"}', encoding="utf-8")
+    (shard_dir / "shard-01.bin").write_bytes(b"first")
+    (shard_dir / "shard-02.bin").write_bytes(b"second")
+    (model_path / index_name).write_text(
+        json.dumps(
+            {
+                "weight_map": {
+                    "layer.0": "weights/shard-01.bin",
+                    "layer.1": "weights/shard-02.bin",
+                    "layer.2": "weights/shard-01.bin",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    readiness = chat_runtime.check_model_artifacts(
+        model_name="unused",
+        model_revision=None,
+        cache_folder=tmp_path / "cache",
+        local_model_path=model_path,
+    )
+
+    assert readiness == chat_runtime.ChatModelReadiness(status="ready")
+
+
+@pytest.mark.parametrize("shard_state", ["missing", "empty"])
+def test_local_model_readiness_rejects_incomplete_sharded_weights(
+    tmp_path: Path,
+    shard_state: str,
+) -> None:
+    model_path = tmp_path / "embedding"
+    model_path.mkdir()
+    (model_path / "config.json").write_text('{"model_type": "bert"}', encoding="utf-8")
+    if shard_state == "empty":
+        (model_path / "shard.bin").touch()
+    (model_path / "model.safetensors.index.json").write_text(
+        json.dumps({"weight_map": {"layer": "shard.bin"}}),
+        encoding="utf-8",
+    )
+
+    readiness = chat_runtime.check_model_artifacts(
+        model_name="unused",
+        model_revision=None,
+        cache_folder=tmp_path / "cache",
+        local_model_path=model_path,
+    )
+
+    assert readiness == chat_runtime.ChatModelReadiness(status="local_path_incomplete")
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        "not-json",
+        "[]",
+        '{"weight_map": []}',
+        '{"weight_map": {}}',
+        '{"weight_map": {"layer": ""}}',
+        '{"weight_map": {"layer": 1}}',
+    ],
+)
+def test_local_model_readiness_rejects_malformed_weight_index(
+    tmp_path: Path,
+    manifest: str,
+) -> None:
+    model_path = tmp_path / "embedding"
+    model_path.mkdir()
+    (model_path / "config.json").write_text('{"model_type": "bert"}', encoding="utf-8")
+    (model_path / "model.safetensors.index.json").write_text(manifest, encoding="utf-8")
+
+    readiness = chat_runtime.check_model_artifacts(
+        model_name="unused",
+        model_revision=None,
+        cache_folder=tmp_path / "cache",
+        local_model_path=model_path,
+    )
+
+    assert readiness == chat_runtime.ChatModelReadiness(status="local_path_incomplete")
+
+
+@pytest.mark.parametrize(
+    "path_kind",
+    ["parent-traversal", "absolute"],
+)
+def test_local_model_readiness_rejects_non_relative_shard_paths(
+    tmp_path: Path,
+    path_kind: str,
+) -> None:
+    model_path = tmp_path / "embedding"
+    model_path.mkdir()
+    (model_path / "config.json").write_text('{"model_type": "bert"}', encoding="utf-8")
+    outside = tmp_path / "outside.bin"
+    outside.write_bytes(b"outside")
+    shard_name = "../outside.bin" if path_kind == "parent-traversal" else str(outside)
+    (model_path / "model.safetensors.index.json").write_text(
+        json.dumps({"weight_map": {"layer": shard_name}}),
+        encoding="utf-8",
+    )
+
+    readiness = chat_runtime.check_model_artifacts(
+        model_name="unused",
+        model_revision=None,
+        cache_folder=tmp_path / "cache",
+        local_model_path=model_path,
+    )
+
+    assert readiness == chat_runtime.ChatModelReadiness(status="local_path_incomplete")
+
+
+def test_local_model_readiness_rejects_shard_symlink_escape(tmp_path: Path) -> None:
+    model_path = tmp_path / "embedding"
+    model_path.mkdir()
+    (model_path / "config.json").write_text('{"model_type": "bert"}', encoding="utf-8")
+    outside = tmp_path / "outside.bin"
+    outside.write_bytes(b"outside")
+    shard = model_path / "shard.bin"
+    try:
+        shard.symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlinks unavailable: {type(exc).__name__}")
+    (model_path / "model.safetensors.index.json").write_text(
+        json.dumps({"weight_map": {"layer": shard.name}}),
+        encoding="utf-8",
+    )
+
+    readiness = chat_runtime.check_model_artifacts(
+        model_name="unused",
+        model_revision=None,
+        cache_folder=tmp_path / "cache",
+        local_model_path=model_path,
+    )
+
+    assert readiness == chat_runtime.ChatModelReadiness(status="local_path_incomplete")
 
 
 def test_local_model_readiness_expands_home(

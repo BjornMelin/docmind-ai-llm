@@ -352,11 +352,12 @@ def test_chat_smoke_echo(chat_app_smoke: AppTest) -> None:
 
 
 @pytest.mark.integration
-def test_chat_corrupt_session_database_is_not_relabelled_as_missing_model(
+def test_chat_corrupt_session_database_is_sanitized_without_model_guidance(
     chat_app_smoke: AppTest,
     monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
 ) -> None:
-    """Unexpected persistence failures fail closed outside degraded-model UX."""
+    """Corrupt session persistence renders one sanitized retry-safe error."""
     from src.ui import chat_sessions
 
     monkeypatch.setattr(
@@ -367,14 +368,27 @@ def test_chat_corrupt_session_database_is_not_relabelled_as_missing_model(
 
     app = chat_app_smoke.run()
 
-    assert app.exception
-    assert "database is malformed" in str(app.exception[0].value)
-    assert not any(
-        "local model artifacts" in str(getattr(item, "value", ""))
-        for item in app.warning
+    assert not app.exception
+    assert [str(getattr(item, "value", "")) for item in app.error] == [
+        "Chat persistence is unavailable. Please retry."
+    ]
+    assert "database is malformed" not in str(app)
+    captured = capfd.readouterr()
+    assert "database is malformed" not in captured.out
+    assert "database is malformed" not in captured.err
+    model_guidance = " ".join(
+        str(getattr(item, "value", ""))
+        for collection in (app.warning, app.caption, app.code)
+        for item in collection
     )
-    assert not any(
-        "tools/models/pull.py" in str(getattr(item, "value", "")) for item in app.code
+    assert all(
+        guidance not in model_guidance
+        for guidance in (
+            "local model artifacts",
+            "configured local model",
+            "embedding could not initialize",
+            "tools/models/pull.py",
+        )
     )
 
 
