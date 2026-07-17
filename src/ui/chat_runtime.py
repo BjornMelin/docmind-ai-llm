@@ -52,6 +52,75 @@ def _nonempty_regular_file(path: Path) -> bool:
         return False
 
 
+def _contained_nonempty_regular_file(path: Path, *, containment_root: Path) -> bool:
+    """Return whether ``path`` is a nonempty file inside its storage boundary."""
+    try:
+        resolved_path = path.resolve(strict=True)
+        resolved_path.relative_to(containment_root.resolve(strict=True))
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return _nonempty_regular_file(resolved_path)
+
+
+def _marian_tokenizer_artifacts_ready(
+    root: Path,
+    *,
+    containment_root: Path,
+) -> bool:
+    """Validate Marian's paired SentencePiece payload and vocabulary."""
+
+    def has_file(name: str) -> bool:
+        return _contained_nonempty_regular_file(
+            root / name,
+            containment_root=containment_root,
+        )
+
+    tokenizer_config_path = root / "tokenizer_config.json"
+    if not all(has_file(name) for name in ("source.spm", "target.spm", "vocab.json")):
+        return False
+    try:
+        tokenizer_config = json.loads(
+            tokenizer_config_path.resolve(strict=True).read_text(encoding="utf-8")
+        )
+    except (json.JSONDecodeError, OSError, RuntimeError, UnicodeError):
+        return False
+    return not (
+        isinstance(tokenizer_config, dict)
+        and tokenizer_config.get("separate_vocabs") is True
+        and not has_file("target_vocab.json")
+    )
+
+
+def _tokenizer_artifacts_ready(root: Path, *, containment_root: Path) -> bool:
+    """Validate one supported Transformers tokenizer family in ``root``."""
+
+    def has_file(name: str) -> bool:
+        return _contained_nonempty_regular_file(
+            root / name,
+            containment_root=containment_root,
+        )
+
+    if not has_file("tokenizer_config.json"):
+        return False
+    if has_file("tokenizer.json") or has_file("vocab.txt"):
+        return True
+    if any(
+        _contained_nonempty_regular_file(
+            candidate,
+            containment_root=containment_root,
+        )
+        for pattern in ("*.model", "*.tokenizer")
+        for candidate in root.glob(pattern)
+    ):
+        return True
+    if has_file("source.spm") or has_file("target.spm"):
+        return _marian_tokenizer_artifacts_ready(
+            root,
+            containment_root=containment_root,
+        )
+    return has_file("vocab.json") and has_file("merges.txt")
+
+
 def _resolve_model_shard(
     manifest_parent: Path,
     shard_name: object,
@@ -81,20 +150,21 @@ def _resolve_model_shard(
 def _sharded_weights_ready(index_path: Path, *, containment_root: Path) -> bool:
     """Validate every unique shard named by a Transformers weight index."""
     try:
-        manifest = json.loads(index_path.read_text(encoding="utf-8"))
+        resolved_index_path = index_path.resolve(strict=True)
+        manifest_parent = index_path.parent.resolve(strict=True)
+        resolved_containment_root = containment_root.resolve(strict=True)
+        resolved_index_path.relative_to(resolved_containment_root)
+        manifest_parent.relative_to(resolved_containment_root)
+    except (OSError, RuntimeError, ValueError):
+        return False
+    try:
+        manifest = json.loads(resolved_index_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError):
         return False
     if not isinstance(manifest, dict):
         return False
     weight_map = manifest.get("weight_map")
     if not isinstance(weight_map, dict) or not weight_map:
-        return False
-
-    try:
-        manifest_parent = index_path.parent.resolve(strict=True)
-        resolved_containment_root = containment_root.resolve(strict=True)
-        manifest_parent.relative_to(resolved_containment_root)
-    except (OSError, RuntimeError, ValueError):
         return False
     shards: set[Path] = set()
     for shard_name in weight_map.values():
@@ -118,23 +188,34 @@ def _local_model_artifacts_ready(
     """Return whether a local SentenceTransformers directory has core assets."""
     roots = (model_path, model_path / "0_Transformer")
     containment_root = shard_containment_root or model_path
-    has_config = False
     for root in roots:
         config_path = root / "config.json"
+        if not _contained_nonempty_regular_file(
+            config_path,
+            containment_root=containment_root,
+        ):
+            continue
         try:
             config = json.loads(config_path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, json.JSONDecodeError):
             continue
-        if isinstance(config, dict) and config:
-            has_config = True
-            break
-    direct_weight_names = ("model.safetensors", "pytorch_model.bin")
-    index_names = ("model.safetensors.index.json", "pytorch_model.bin.index.json")
-    has_weights = False
-    for root in roots:
-        if any(_nonempty_regular_file(root / name) for name in direct_weight_names):
-            has_weights = True
-            break
+        if not isinstance(config, dict) or not config:
+            continue
+        if not _tokenizer_artifacts_ready(root, containment_root=containment_root):
+            continue
+        direct_weight_names = ("model.safetensors", "pytorch_model.bin")
+        if any(
+            _contained_nonempty_regular_file(
+                root / name,
+                containment_root=containment_root,
+            )
+            for name in direct_weight_names
+        ):
+            return True
+        index_names = (
+            "model.safetensors.index.json",
+            "pytorch_model.bin.index.json",
+        )
         if any(
             _sharded_weights_ready(
                 root / name,
@@ -142,9 +223,8 @@ def _local_model_artifacts_ready(
             )
             for name in index_names
         ):
-            has_weights = True
-            break
-    return has_config and has_weights
+            return True
+    return False
 
 
 def check_model_artifacts(
