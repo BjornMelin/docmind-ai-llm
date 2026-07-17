@@ -1,8 +1,9 @@
 # DocMind UI Modernization Plans
 
-Generated from a read-only `improve` audit on 2026-07-16 and rebased on commit
-`9accab1`. Execute in order. Each executor must read its plan completely,
-honor STOP conditions, and update the status row when work is complete.
+Generated from a read-only `improve` audit on 2026-07-16 and rebased through
+the merged Plan 002 base at `8b728e7`. Execute in order. Each executor must read
+its plan completely, honor STOP conditions, and update the status row when work
+is complete.
 
 The target is a polished local-first Streamlit application, not a framework
 rewrite. Native Streamlit and Python standard-library capabilities are the
@@ -33,7 +34,7 @@ value 30%, maintenance/cognitive load 25%, architectural adaptability 10%.
 | --- | --- | --- | --- | --- | --- |
 | 001 | Preserve job ownership and serialize corpus mutations | P1 | M | — | DONE |
 | 002 | Make Chat loading and generation states truthful | P1 | S–M | 001 | DONE |
-| 003 | Remove duplicate and eager page-startup work | P1 | M | 001, 002 | TODO |
+| 003 | Remove duplicate and eager page-startup work | P1 | M | 001, 002 | DONE |
 | 004 | Add rendered-browser and accessibility acceptance | P1 | M | 001–003 | TODO |
 | 005 | Add the guided workspace shell | P2 | M | 001–004 | TODO |
 | 006 | Build the Documents corpus workspace | P2 | M | 001, 003, 004, 005 | TODO |

@@ -4,12 +4,10 @@
 > retrieval contract intact. Update `plans/README.md` when done.
 >
 > **Drift check**:
-> `git diff --stat 9accab1..HEAD -- src/app.py src/pages/01_chat.py src/pages/02_documents.py src/ui src/retrieval scripts/check_ui_import_boundary.py tests/unit/ui tests/integration/ui`
-> Plan 001 is expected to change `get_job_manager` call signatures in Chat/
-> Documents and job tests. Plan 002 is expected to replace `_load_chat_messages`
-> return handling and remove `_chunked_stream` plus its direct tests. Reconcile
-> only those named changes. Any other drift in startup/import/snapshot symbols
-> is a STOP condition.
+> `git diff --stat 8b728e7..HEAD -- src/app.py src/pages/01_chat.py src/pages/02_documents.py src/ui src/retrieval scripts/check_ui_import_boundary.py tests/unit/ui tests/integration/ui`
+> Execution was rebased on the completed Plan 001 stack (`a6709da`, plus
+> `488f1ab`) and Plan 002 stack (`7a3e69b`, `aa82b53`). Their job-ownership and
+> truthful-Chat changes are the accepted baseline, not drift to undo.
 
 ## Status
 
@@ -18,7 +16,11 @@
 - **Risk**: MED
 - **Depends on**: Plans 001 and 002
 - **Category**: perf
+- **Status**: DONE
+- **Validated implementation**: commit `455b7dd`, 2026-07-16
 - **Planned at**: commit `9accab1`, 2026-07-16
+- **Executed at**: merged Plan 002 base `8b728e7`, 2026-07-16 (transient
+  worktree ancestry `aa82b53`)
 
 ## Why this matters
 
@@ -84,8 +86,10 @@ imports`. Do not push or open a PR until parent review.
 Create one typed per-rerun snapshot-status value containing the exact snapshot
 identity, manifest presence, staleness, and sanitized error state needed by
 autoload and badge rendering. Compute it once in Chat `main` and pass it to
-both consumers. Do not time-cache filesystem state; changes must be visible on
-the next rerun.
+both consumers. A steady/no-op rerun performs exactly that one read. A clear or
+hydrate mutation performs one additional fresh read inside
+`admission_quiescence()` so its check and mutation remain atomic. Do not
+time-cache filesystem state; changes must be visible on the next rerun.
 
 **Verify**: a unit spy proves corpus/config staleness computation occurs once
 per main rerun and stale/up-to-date/missing/error UI behavior is unchanged.
@@ -148,6 +152,24 @@ The machine-checkable gate is `scripts/check_ui_import_boundary.py`; timing and
 RSS are comparative evidence because shared-runner timing is not stable. Keep
 the logs under `/tmp` and record only totals and environment in the PR.
 
+### Recorded evidence
+
+The comparable clean baseline and final measurements used the commands above.
+The executor's first `src.app` baseline also created the worktree virtual
+environment, so that contaminated 2.79-second sample is excluded from the
+comparison. Final import-time logs are retained at the three documented `/tmp`
+paths; `src.app` reports 291,282 microseconds cumulative import time.
+
+| Target | Clean baseline | Final | RSS reduction |
+| --- | --- | --- | ---: |
+| `src.app` | 1.05 s / 134,648 KiB | 0.42 s / 70,704 KiB | 47.5% |
+| Chat page | 3.99 s / 447,256 KiB | 0.68 s / 95,800 KiB | 78.6% |
+| Documents page | 2.82 s / 434,936 KiB | 0.50 s / 75,124 KiB | 82.7% |
+
+Environment: WSL2 Linux `6.6.114.1-microsoft-standard-WSL2` x86_64, Python
+3.12.13, uv 0.11.28, merged Plan 002 base `8b728e7` (transient stacked
+worktree ancestry `aa82b53`).
+
 ## Test plan
 
 Cover snapshot missing, current, stale, malformed/error, autoload policy, and
@@ -155,14 +177,15 @@ module import boundaries. Preserve all AppTest flows and full tests.
 
 ## Done criteria
 
-- [ ] Snapshot freshness is computed once per Chat rerun.
-- [ ] Action-only heavy ML/retrieval modules are not imported by page startup.
-- [ ] Empty offline caches render a sanitized degraded Chat state without an
+- [x] Snapshot freshness is computed once on steady Chat reruns and twice only
+  when a quiesced clear/hydrate mutation needs a fresh atomic check.
+- [x] Action-only heavy ML/retrieval modules are not imported by page startup.
+- [x] Empty offline caches render a sanitized degraded Chat state without an
   implicit model download or weakened persistence failure.
-- [ ] No TTL can hide local file/config changes across reruns.
-- [ ] `scripts/check_ui_import_boundary.py` passes with the fixed prohibited
+- [x] No TTL can hide local file/config changes across reruns.
+- [x] `scripts/check_ui_import_boundary.py` passes with the fixed prohibited
   roots, and before/after evidence is recorded with environment details.
-- [ ] Focused, Ruff, Pyright, and full tests pass.
+- [x] Focused, Ruff, Pyright, and full tests pass.
 
 ## STOP conditions
 
