@@ -185,6 +185,13 @@ def test_chat_missing_artifacts_render_import_light_degraded_shell(
             "warnings": [str(getattr(item, "value", "")) for item in app.warning],
             "captions": [str(getattr(item, "value", "")) for item in app.caption],
             "code": [str(getattr(item, "value", "")) for item in app.code],
+            "titles": [str(getattr(item, "value", "")) for item in app.title],
+            "markdown": [str(getattr(item, "value", "")) for item in app.markdown],
+            "selectboxes": [str(getattr(item, "label", "")) for item in app.selectbox],
+            "buttons": [str(getattr(item, "label", "")) for item in app.button],
+            "text_inputs": [
+                str(getattr(item, "label", "")) for item in app.text_input
+            ],
             "network_calls": network_calls,
             "coordinator_loaded": "src.agents.coordinator" in sys.modules,
             "prohibited_roots": sorted(
@@ -221,6 +228,11 @@ def test_chat_missing_artifacts_render_import_light_degraded_shell(
         else "Chat is unavailable because its local model artifacts are not installed."
     )
     assert payload["warnings"] == [expected_warning]
+    assert payload["titles"] == ["Chat"]
+    assert any("Provider: ollama" in item for item in payload["markdown"])
+    assert "Session" in payload["selectboxes"]
+    assert {"New", "Delete"}.issubset(payload["buttons"])
+    assert "Rename" in payload["text_inputs"]
     assert "Sessions and local snapshot status remain available." in payload["captions"]
     if artifact_mode == "incomplete-local":
         assert str(tmp_path) not in str(payload)
