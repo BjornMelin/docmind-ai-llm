@@ -23,7 +23,11 @@ from tests.helpers.apptest_utils import apptest_timeout_sec
 
 
 @pytest.fixture
-def chat_app_autoload(tmp_path: Path, monkeypatch) -> AppTest:
+def chat_app_autoload(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _reset_router_and_graph_modules: pytest.MonkeyPatch,
+) -> AppTest:
     # Point data_dir to tmp
     from src.config.settings import settings as _settings  # local import
 
@@ -81,7 +85,9 @@ def chat_app_autoload(tmp_path: Path, monkeypatch) -> AppTest:
 
     coord_mod: Any = ModuleType("src.agents.coordinator")
     coord_mod.MultiAgentCoordinator = _CoordinatorStub
-    monkeypatch.setitem(sys.modules, "src.agents.coordinator", coord_mod)
+    _reset_router_and_graph_modules.setitem(
+        sys.modules, "src.agents.coordinator", coord_mod
+    )
 
     @dataclass(frozen=True, slots=True)
     class _ChatSelection:
@@ -95,7 +101,9 @@ def chat_app_autoload(tmp_path: Path, monkeypatch) -> AppTest:
         thread_id="t", user_id="local"
     )
     chat_sessions_mod.render_time_travel_sidebar = lambda *_, **__: None
-    monkeypatch.setitem(sys.modules, "src.ui.chat_sessions", chat_sessions_mod)
+    _reset_router_and_graph_modules.setitem(
+        sys.modules, "src.ui.chat_sessions", chat_sessions_mod
+    )
 
     # Stub LI modules for loader internals
     core_mod: Any = ModuleType("llama_index.core")
@@ -130,7 +138,7 @@ def chat_app_autoload(tmp_path: Path, monkeypatch) -> AppTest:
     core_mod.PropertyGraphIndex = _PropertyGraphIndex
     core_mod.StorageContext = _StorageContext
 
-    monkeypatch.setitem(sys.modules, "llama_index.core", core_mod)
+    _reset_router_and_graph_modules.setitem(sys.modules, "llama_index.core", core_mod)
     monkeypatch.setattr(
         "src.utils.storage.connect_vector_store",
         lambda *_args, **_kwargs: vector_store,
@@ -139,7 +147,9 @@ def chat_app_autoload(tmp_path: Path, monkeypatch) -> AppTest:
     # Stub router factory
     rf_mod: Any = ModuleType("src.retrieval.router_factory")
     rf_mod.build_router_engine = lambda *_, **__: object()
-    monkeypatch.setitem(sys.modules, "src.retrieval.router_factory", rf_mod)
+    _reset_router_and_graph_modules.setitem(
+        sys.modules, "src.retrieval.router_factory", rf_mod
+    )
 
     # Build AppTest for Chat page
     root = Path(__file__).resolve().parents[3]
