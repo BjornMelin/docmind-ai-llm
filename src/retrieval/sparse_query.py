@@ -20,7 +20,6 @@ from src.config.embedding_defaults import (
 
 SparseBatch = tuple[list[list[int]], list[list[float]]]
 SparseEncoder = Callable[[list[str]], SparseBatch]
-SPARSE_ENCODING_CONTRACT = "bm42:doc=embed;query=query_embed:v1"
 
 
 class SparseEncodingError(RuntimeError):
@@ -110,7 +109,6 @@ def encode_to_qdrant(text: str) -> qmodels.SparseVector | None:
 
 
 __all__ = [
-    "SPARSE_ENCODING_CONTRACT",
     "SparseEncodingError",
     "encode_documents",
     "encode_queries",

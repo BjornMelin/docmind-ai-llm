@@ -10,6 +10,7 @@ from qdrant_client import models as qmodels
 
 from src.config import settings
 from src.retrieval import multimodal_fusion as multimodal_module
+from src.retrieval import vector_contract
 from src.retrieval.image_index import (
     ImageCollectionIncompatibleError,
     canonical_image_collection_metadata,
@@ -46,7 +47,7 @@ def test_multimodal_constructor_does_not_leak_text_retriever_on_image_failure(
     def _fail_image(_params: ImageSearchParams) -> None:
         raise ImageCollectionIncompatibleError("image_collection_missing")
 
-    monkeypatch.setattr(multimodal_module, "sparse_retrieval_enabled", lambda: True)
+    monkeypatch.setattr(vector_contract, "sparse_retrieval_enabled", lambda: True)
     monkeypatch.setattr(multimodal_module, "ServerHybridRetriever", lambda _p: text)
     monkeypatch.setattr(multimodal_module, "ImageSiglipRetriever", _fail_image)
 

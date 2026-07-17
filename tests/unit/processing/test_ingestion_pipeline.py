@@ -23,6 +23,7 @@ from src.processing.ingestion_pipeline import (
     ingest_documents,
     ingest_documents_sync,
 )
+from src.retrieval import vector_contract
 
 
 def test_manifest_parsing_config_tracks_per_input_overrides() -> None:
@@ -260,7 +261,7 @@ async def test_mixed_retry_builds_complete_immutable_generation(
                             node_id
                         ].metadata[adapter.CANONICAL_DOCUMENT_ID_KEY]
                     },
-                    vector={adapter.DENSE_VECTOR_NAME: [1.0]},
+                    vector={vector_contract.DENSE_VECTOR_NAME: [1.0]},
                 )
                 for node_id in ids
             ]
@@ -281,7 +282,7 @@ async def test_mixed_retry_builds_complete_immutable_generation(
         return store
 
     monkeypatch.setattr(adapter, "create_vector_store", _create_vector_store)
-    monkeypatch.setattr(adapter, "sparse_retrieval_enabled", lambda: False)
+    monkeypatch.setattr(vector_contract, "sparse_retrieval_enabled", lambda: False)
     monkeypatch.setattr(
         adapter,
         "StorageContext",

@@ -1,8 +1,8 @@
 ---
 spec: SPEC-013
 title: Packaging: Model Pre-download with huggingface_hub and Integrity Checks
-version: 1.3.0
-date: 2026-07-14
+version: 1.4.0
+date: 2026-07-16
 owners: ["ai-arch"]
 status: Final
 related_requirements:
@@ -47,6 +47,12 @@ The BGE reranker manifest contains every Transformers file required by the
 runtime CrossEncoder. The BM42 manifest contains FastEmbed's ONNX model,
 tokenizer, and stopword files. The model-free BM25 fallback needs no snapshot.
 
+When `--cache_dir` or `--parser-cache-dir` is omitted for requested work, the
+CLI MUST run the canonical settings bootstrap once, including `.env`, and use
+`embedding.cache_folder` or `parsing.model_cache_dir`, respectively. Explicit
+CLI destinations remain authoritative and MUST skip settings bootstrap when
+both requested destinations are supplied.
+
 Offline flags to set before runtime: `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1`.
 
 ## Acceptance Criteria
@@ -60,6 +66,16 @@ Feature: Pre-download
   Scenario: Download runtime defaults
     When I run the CLI with --all
     Then the pinned BGE-M3, BM42, BGE reranker, and SigLIP snapshots SHALL exist under one HF cache directory
+
+  Scenario: Use configured cache destinations
+    Given model and parser cache directories are configured in .env
+    When I omit both cache destination flags
+    Then the CLI SHALL bootstrap settings once and use both configured directories
+
+  Scenario: Override cache destinations explicitly
+    When I supply both cache destination flags
+    Then those paths SHALL be authoritative
+    And settings bootstrap SHALL NOT run solely to resolve cache paths
 ```
 
 ## References

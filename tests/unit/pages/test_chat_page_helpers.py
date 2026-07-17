@@ -71,7 +71,8 @@ def test_memory_add_relies_on_canonical_idempotent_store_not_global_guard(
     )
     monkeypatch.setattr(st, "button", lambda *_a, **_k: True, raising=False)
     monkeypatch.setattr(st, "rerun", lambda: reruns.append(True), raising=False)
-    monkeypatch.setattr(mod, "save_memory", saved)
+    memory_tools = importlib.import_module("src.agents.tools.memory")
+    monkeypatch.setattr(memory_tools, "save_memory", saved)
     store = object()
     namespace = ("memories", "other-user", "other-thread")
 
@@ -97,10 +98,15 @@ def test_memory_add_renders_capacity_error_without_clearing_or_rerunning(
     monkeypatch.setattr(st, "button", lambda *_a, **_k: True, raising=False)
     monkeypatch.setattr(st, "error", errors.append, raising=False)
     monkeypatch.setattr(st, "rerun", lambda: reruns.append(True), raising=False)
+    memory_tools = importlib.import_module("src.agents.tools.memory")
     monkeypatch.setattr(
-        mod,
+        memory_tools,
         "save_memory",
-        Mock(side_effect=mod.MemoryCapacityError("memory namespace is at capacity")),
+        Mock(
+            side_effect=memory_tools.MemoryCapacityError(
+                "memory namespace is at capacity"
+            )
+        ),
     )
 
     mod._render_memory_add(object(), ("memories", "user", "session"))
@@ -234,7 +240,8 @@ def test_memory_results_delete_failure_keeps_confirmation_and_does_not_rerun(
                 raise delete_outcome
 
     if delete_outcome is False:
-        monkeypatch.setattr(mod, "delete_memory", Mock(return_value=False))
+        memory_tools = importlib.import_module("src.agents.tools.memory")
+        monkeypatch.setattr(memory_tools, "delete_memory", Mock(return_value=False))
     monkeypatch.setattr(st, "session_state", state, raising=False)
     monkeypatch.setattr(st, "text_input", lambda *_a, **_k: "", raising=False)
     monkeypatch.setattr(st, "checkbox", lambda *_a, **_k: True, raising=False)

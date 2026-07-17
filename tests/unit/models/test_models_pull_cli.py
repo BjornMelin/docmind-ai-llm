@@ -72,6 +72,88 @@ def test_all_prefetches_complete_pinned_snapshots(
     assert raw_pairs == []
 
 
+def test_cli_default_uses_configured_embedding_cache(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Omitted cache overrides follow bootstrapped canonical settings."""
+    from importlib import import_module
+
+    settings_module = import_module("src.config.settings")
+
+    configured_models = tmp_path / "configured-models"
+    configured_parser = tmp_path / "configured-parser"
+    (tmp_path / ".env").write_text(
+        "\n".join(
+            (
+                f"DOCMIND_EMBEDDING__CACHE_FOLDER={configured_models}",
+                f"DOCMIND_PARSING__MODEL_CACHE_DIR={configured_parser}",
+            )
+        ),
+        encoding="utf-8",
+    )
+    snapshots: list[Path] = []
+    parser_caches: list[Path] = []
+    monkeypatch.chdir(tmp_path)
+    settings_module.reset_bootstrap_state()
+    monkeypatch.setattr("sys.argv", ["pull.py", "--bge-m3", "--parser-defaults"])
+    monkeypatch.setattr("tools.models.pull.pull_bge_m3_snapshot", snapshots.append)
+    monkeypatch.setattr(
+        "tools.models.pull.pull_docling_layout",
+        lambda path, *, force=False: parser_caches.append(path),
+    )
+
+    try:
+        main()
+    finally:
+        settings_module.settings.__init__(_env_file=None)  # type: ignore[arg-type]
+        settings_module.reset_bootstrap_state()
+
+    assert snapshots == [configured_models.resolve()]
+    assert parser_caches == [configured_parser.resolve()]
+
+
+def test_explicit_cache_overrides_skip_settings_bootstrap(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Explicit model and parser destinations remain authoritative."""
+    from importlib import import_module
+    from unittest.mock import Mock
+
+    settings_module = import_module("src.config.settings")
+
+    bootstrap = Mock()
+    model_cache = tmp_path / "models"
+    parser_cache = tmp_path / "parser"
+    monkeypatch.setattr(settings_module, "bootstrap_settings", bootstrap)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "pull.py",
+            "--bge-m3",
+            "--cache_dir",
+            str(model_cache),
+            "--parser-defaults",
+            "--parser-cache-dir",
+            str(parser_cache),
+        ],
+    )
+    snapshots: list[Path] = []
+    parser_caches: list[Path] = []
+    monkeypatch.setattr("tools.models.pull.pull_bge_m3_snapshot", snapshots.append)
+    monkeypatch.setattr(
+        "tools.models.pull.pull_docling_layout",
+        lambda path, *, force=False: parser_caches.append(path),
+    )
+
+    main()
+
+    bootstrap.assert_not_called()
+    assert snapshots == [model_cache.resolve()]
+    assert parser_caches == [parser_cache.resolve()]
+
+
 def test_pull_mocks_hf(tmp_path: Path) -> None:
     """Test that model pull CLI invokes HuggingFace download correctly.
 

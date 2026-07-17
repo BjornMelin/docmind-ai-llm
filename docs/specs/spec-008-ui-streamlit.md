@@ -1,7 +1,7 @@
 ---
 spec: SPEC-008
 title: Streamlit UI: Programmatic Multipage, Truthful Chat, Settings, Documents, Analytics
-version: 1.1.0
+version: 1.2.0
 date: 2026-07-16
 owners: ["ai-arch"]
 status: Final
@@ -31,10 +31,20 @@ output arrives before completion.
 
 ```python
 import streamlit as st
-from src.config import settings, setup_llamaindex
+from src.config import settings
 from src.ui.components.provider_badge import provider_badge
-from src.utils.storage import human_size
 ```
+
+Page modules MUST remain import-light. Model, coordinator, router, snapshot,
+Qdrant, and ingestion implementations belong inside the cached resource or
+user action that needs them. App recovery remains fail-closed but imports its
+persistence implementation only inside the recovery resource boundary.
+
+Chat computes one immutable snapshot-status value for a steady rerun and passes
+that same value to the status badge and autoload policy. A clear or hydrate
+mutation MUST recompute status once inside `admission_quiescence()` before
+mutating runtime ownership. No TTL may hide local filesystem or configuration
+changes.
 
 ## File Operations
 
@@ -66,6 +76,30 @@ Feature: Truthful Chat state
     Given the public history read raises or runtime maintenance is active
     Then the UI SHALL distinguish that state from an empty conversation
     And offer a retry without exposing raw errors or user/thread identifiers
+
+  Scenario: Required embedding artifacts are absent offline
+    Given an isolated empty model cache
+    And HF_HUB_OFFLINE=1 and TRANSFORMERS_OFFLINE=1
+    When Chat renders
+    Then title, provider, sessions, and local snapshot status SHALL remain usable
+    And embedding-dependent controls SHALL be disabled with sanitized guidance
+    And no model download or network request SHALL occur
+
+  Scenario: A configured local embedding snapshot is incomplete
+    Given DOCMIND_EMBEDDING__LOCAL_MODEL_PATH does not contain a complete snapshot
+    When Chat renders
+    Then the UI SHALL explain how to repair or remove the override without showing its path
+
+  Scenario: Embedding initialization fails after preflight
+    Given required model files pass the lightweight local preflight
+    But embedding initialization fails
+    Then Chat SHALL show a sanitized initialization failure distinct from a cache miss
+
+  Scenario: Chat persistence is corrupt
+    Given the Chat session database raises an unexpected persistence error
+    When Chat renders
+    Then Chat SHALL fail closed
+    And SHALL NOT relabel the error as missing model artifacts
 
 Feature: Settings save
   Scenario: Change provider

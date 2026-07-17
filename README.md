@@ -163,6 +163,11 @@ best effort until they have dedicated CI coverage.
    uv run python scripts/parser_health.py --check
    ```
 
+   When a requested download's cache destination is omitted, the pull command
+   bootstraps `.env` and uses `embedding.cache_folder` or
+   `parsing.model_cache_dir`. Explicit `--cache_dir` and
+   `--parser-cache-dir` values remain authoritative.
+
    Regenerate the schema 3 parser benchmark artifact after the code is frozen:
 
    ```bash

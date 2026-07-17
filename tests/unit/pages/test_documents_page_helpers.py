@@ -14,7 +14,11 @@ from typing import cast
 import pytest
 
 from src.models.processing import IngestionInput
+from src.persistence import snapshot as snapshot_module
+from src.persistence import snapshot_service, snapshot_utils
 from src.persistence.snapshot_service import SnapshotActivation
+from src.retrieval import graph_config, router_factory
+from src.ui import ingest_adapter
 
 pytestmark = pytest.mark.unit
 
@@ -764,10 +768,12 @@ def test_success_details_survive_terminal_handoff(
         lambda *, scope="app": rerun_scopes.append(scope),
         raising=False,
     )
-    monkeypatch.setattr(page, "build_router_engine", lambda *_a, **_k: router)
-    monkeypatch.setattr(page, "latest_snapshot_dir", lambda *_a, **_k: snapshot_dir)
+    monkeypatch.setattr(router_factory, "build_router_engine", lambda *_a, **_k: router)
     monkeypatch.setattr(
-        page,
+        snapshot_module, "latest_snapshot_dir", lambda *_a, **_k: snapshot_dir
+    )
+    monkeypatch.setattr(
+        snapshot_module,
         "load_manifest",
         lambda _path: pytest.fail("terminal handoff reread the finalized manifest"),
     )
@@ -837,7 +843,9 @@ def test_malformed_success_payload_is_sanitized_and_releases_resource(
     snapshot_dir = tmp_path / "storage" / "snapshot-v1"
     snapshot_dir.mkdir(parents=True)
     resource = page.VectorIndexResource("vector")
-    monkeypatch.setattr(page, "load_manifest", lambda _path: _valid_manifest())
+    monkeypatch.setattr(
+        snapshot_module, "load_manifest", lambda _path: _valid_manifest()
+    )
     ingest_result: dict[str, object] = {
         "count": 1,
         "metadata": {},
@@ -848,7 +856,7 @@ def test_malformed_success_payload_is_sanitized_and_releases_resource(
     }
     ingest_result[field] = invalid_value
     monkeypatch.setattr(
-        page,
+        router_factory,
         "build_router_engine",
         lambda *_a, **_k: pytest.fail("router built for malformed payload"),
     )
@@ -912,9 +920,13 @@ def test_success_handoff_is_bounded_and_contains_no_runtime_objects(
         }
         for index in range(150)
     ]
-    monkeypatch.setattr(page, "build_router_engine", lambda *_a, **_k: router)
-    monkeypatch.setattr(page, "load_manifest", lambda _path: _valid_manifest())
-    monkeypatch.setattr(page, "latest_snapshot_dir", lambda *_a, **_k: snapshot_dir)
+    monkeypatch.setattr(router_factory, "build_router_engine", lambda *_a, **_k: router)
+    monkeypatch.setattr(
+        snapshot_module, "load_manifest", lambda _path: _valid_manifest()
+    )
+    monkeypatch.setattr(
+        snapshot_module, "latest_snapshot_dir", lambda *_a, **_k: snapshot_dir
+    )
 
     notice = page._prepare_ingest_success_notice(  # type: ignore[attr-defined]
         {
@@ -1038,16 +1050,18 @@ def test_stale_success_remains_truthful_without_replacing_live_runtime(
     )
     new_client = _Client()
     new_resource = page.VectorIndexResource("new-index", client=new_client)
-    monkeypatch.setattr(page, "load_manifest", lambda _path: _valid_manifest())
     monkeypatch.setattr(
-        page,
+        snapshot_module, "load_manifest", lambda _path: _valid_manifest()
+    )
+    monkeypatch.setattr(
+        snapshot_module,
         "latest_snapshot_dir",
         lambda *_a, **_k: (
             newer_dir if stale_dimension == "current-snapshot" else snapshot_dir
         ),
     )
     monkeypatch.setattr(
-        page,
+        router_factory,
         "build_router_engine",
         lambda *_a, **_k: pytest.fail("router built for superseded terminal state"),
     )
@@ -1112,14 +1126,16 @@ def test_deleted_superseded_snapshot_uses_captured_manifest_dto(
     newer_dir.mkdir(parents=True)
     manifest = _valid_manifest()
     resource = page.VectorIndexResource("new-index")
-    monkeypatch.setattr(page, "latest_snapshot_dir", lambda *_a, **_k: newer_dir)
     monkeypatch.setattr(
-        page,
+        snapshot_module, "latest_snapshot_dir", lambda *_a, **_k: newer_dir
+    )
+    monkeypatch.setattr(
+        snapshot_module,
         "load_manifest",
         lambda _path: pytest.fail("terminal capture reread a deleted snapshot"),
     )
     monkeypatch.setattr(
-        page,
+        router_factory,
         "build_router_engine",
         lambda *_a, **_k: pytest.fail("router built for superseded snapshot"),
     )
@@ -1211,7 +1227,7 @@ def test_terminal_render_rechecks_live_runtime_and_suppresses_stale_exports(
     else:
         authoritative = newer_dir
     monkeypatch.setattr(
-        page,
+        snapshot_module,
         "latest_snapshot_dir",
         lambda *_a, **_k: authoritative,
     )
@@ -1283,10 +1299,14 @@ def test_router_failure_is_sanitized_and_unwinds_runtime_ownership(
 
     client = _Client()
     resource = page.VectorIndexResource("vector", client=client)
-    monkeypatch.setattr(page, "load_manifest", lambda _path: _valid_manifest())
-    monkeypatch.setattr(page, "latest_snapshot_dir", lambda *_a, **_k: snapshot_dir)
     monkeypatch.setattr(
-        page,
+        snapshot_module, "load_manifest", lambda _path: _valid_manifest()
+    )
+    monkeypatch.setattr(
+        snapshot_module, "latest_snapshot_dir", lambda *_a, **_k: snapshot_dir
+    )
+    monkeypatch.setattr(
+        router_factory,
         "build_router_engine",
         lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("secret router failure")),
     )
@@ -1378,12 +1398,12 @@ def test_manifest_failure_preserves_existing_runtime(
         manifest = _valid_manifest()
         manifest["graph_exports"] = {"not": "a list"}
     monkeypatch.setattr(
-        page,
+        snapshot_module,
         "load_manifest",
         lambda _path: pytest.fail("terminal handoff reread a snapshot manifest"),
     )
     monkeypatch.setattr(
-        page,
+        router_factory,
         "build_router_engine",
         lambda *_a, **_k: pytest.fail("router built before manifest validation"),
     )
@@ -1912,7 +1932,7 @@ def test_handle_ingest_submission_starts_job(monkeypatch) -> None:
 
     monkeypatch.setattr(page, "get_job_manager", lambda *_a, **_k: _DummyJobManager())
     monkeypatch.setattr(
-        page,
+        ingest_adapter,
         "save_uploaded_file",
         lambda file_obj, **_kwargs: (Path("/tmp/doc.txt"), "a" * 64),
     )
@@ -1955,7 +1975,7 @@ def test_handle_ingest_submission_rejects_duplicate_ids_before_persistence(
     ]
 
     monkeypatch.setattr(
-        page,
+        ingest_adapter,
         "save_uploaded_file",
         lambda _file: pytest.fail("upload persisted before duplicate preflight"),
     )
@@ -1995,7 +2015,7 @@ def test_prepare_and_render_ingest_sets_session_state(
         router_calls.append((args, kwargs))
         return "R"
 
-    monkeypatch.setattr(page, "build_router_engine", _build_router)
+    monkeypatch.setattr(router_factory, "build_router_engine", _build_router)
 
     st.session_state.clear()
     first_resource = page.VectorIndexResource("V")
@@ -2289,7 +2309,7 @@ def test_render_latest_snapshot_summary(
     page = importlib.import_module("src.pages.02_documents")
     monkeypatch.setattr(settings, "data_dir", tmp_path, raising=False)
     monkeypatch.setattr(
-        page,
+        snapshot_module,
         "load_manifest",
         lambda *_, **__: {
             "created_at": "now",
@@ -2354,16 +2374,20 @@ def test_handle_manual_export_smoke(
         state_updates={"graphrag_index": object()},
     )
 
-    monkeypatch.setattr(page, "get_export_seed_ids", lambda *_a, **_k: ["0", "1"])
-    out_file = tmp_path / "out.jsonl"
-    monkeypatch.setattr(page, "timestamped_export_path", lambda _d, _e, **_k: out_file)
     monkeypatch.setattr(
-        page,
+        graph_config, "get_export_seed_ids", lambda *_a, **_k: ["0", "1"]
+    )
+    out_file = tmp_path / "out.jsonl"
+    monkeypatch.setattr(
+        snapshot_utils, "timestamped_export_path", lambda _d, _e, **_k: out_file
+    )
+    monkeypatch.setattr(
+        graph_config,
         "export_graph_jsonl",
         lambda **_k: out_file.write_text("x", encoding="utf-8"),
     )
     monkeypatch.setattr(
-        page,
+        graph_config,
         "export_graph_parquet",
         lambda **_k: out_file.write_text("x", encoding="utf-8"),
     )
@@ -2389,7 +2413,7 @@ def test_manual_export_seed_lookup_rejects_runtime_maintenance(
     manager = background_jobs.JobManager()
     monkeypatch.setattr(page, "get_job_manager", lambda: manager)
     monkeypatch.setattr(
-        page,
+        graph_config,
         "get_export_seed_ids",
         lambda *_a, **_k: pytest.fail("seed lookup ran during maintenance"),
     )
@@ -2429,15 +2453,17 @@ def test_manual_export_holds_foreground_lease_through_file_write(
         state_updates={"graphrag_index": object()},
     )
     monkeypatch.setattr(page, "get_job_manager", lambda: manager)
-    monkeypatch.setattr(page, "get_export_seed_ids", lambda *_a, **_k: ["seed"])
-    monkeypatch.setattr(page, "timestamped_export_path", lambda *_a, **_k: output)
+    monkeypatch.setattr(graph_config, "get_export_seed_ids", lambda *_a, **_k: ["seed"])
+    monkeypatch.setattr(
+        snapshot_utils, "timestamped_export_path", lambda *_a, **_k: output
+    )
 
     def _export(**_kwargs: object) -> None:
         export_entered.set()
         assert release_export.wait(5)
         output.write_text("{}\n", encoding="utf-8")
 
-    monkeypatch.setattr(page, "export_graph_jsonl", _export)
+    monkeypatch.setattr(graph_config, "export_graph_jsonl", _export)
     monkeypatch.setattr(page, "record_graph_export_metric", lambda *_a, **_k: None)
     monkeypatch.setattr(page, "_log_export_event", lambda _payload: None)
 
@@ -2485,12 +2511,12 @@ def test_manual_export_rejects_resource_retired_after_controls_probe(
     monkeypatch.setattr(settings, "data_dir", tmp_path, raising=False)
     monkeypatch.setattr(page, "get_job_manager", lambda: manager)
     monkeypatch.setattr(
-        page,
+        graph_config,
         "get_export_seed_ids",
         lambda *_a, **_k: pytest.fail("stale indices reached seed lookup"),
     )
     monkeypatch.setattr(
-        page,
+        graph_config,
         "export_graph_jsonl",
         lambda **_k: pytest.fail("stale graph reached export"),
     )
@@ -2646,7 +2672,7 @@ def test_ingest_job_closes_vector_resource_when_snapshot_fails(
         assert path == workspace
         return collections
 
-    monkeypatch.setattr(page, "SnapshotManager", lambda _base_dir: manager)
+    monkeypatch.setattr(snapshot_module, "SnapshotManager", lambda _base_dir: manager)
     monkeypatch.setattr(page, "_physical_collection_names", _collection_names)
     monkeypatch.setattr(
         page,
@@ -2673,7 +2699,7 @@ def test_ingest_job_closes_vector_resource_when_snapshot_fails(
         }
 
     monkeypatch.setattr(
-        page,
+        ingest_adapter,
         "ingest_inputs",
         _ingest_inputs,
     )
@@ -2683,7 +2709,7 @@ def test_ingest_job_closes_vector_resource_when_snapshot_fails(
         raise RuntimeError("snapshot failed")
 
     monkeypatch.setattr(
-        page,
+        snapshot_service,
         "rebuild_snapshot",
         _rebuild_snapshot,
     )
@@ -2737,7 +2763,7 @@ def test_prepare_ingest_runtime_replaces_and_clears_router(
     new = _Router()
     st.session_state.clear()
     st.session_state["router_engine"] = old
-    monkeypatch.setattr(page, "build_router_engine", lambda *_a, **_k: new)
+    monkeypatch.setattr(router_factory, "build_router_engine", lambda *_a, **_k: new)
     resource = page.VectorIndexResource(object())
 
     presentation, graph_enabled = page._prepare_ingest_runtime(
@@ -2790,7 +2816,7 @@ def test_prepare_ingest_runtime_build_failure_preserves_router(
     st.session_state.clear()
     st.session_state["router_engine"] = old
     monkeypatch.setattr(
-        page,
+        router_factory,
         "build_router_engine",
         lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("router failed")),
     )
@@ -2965,11 +2991,13 @@ def test_handle_manual_export_parquet(
         state_updates={"graphrag_index": object()},
     )
 
-    monkeypatch.setattr(page, "get_export_seed_ids", lambda *_a, **_k: ["0"])
+    monkeypatch.setattr(graph_config, "get_export_seed_ids", lambda *_a, **_k: ["0"])
     out_file = tmp_path / "out.parquet"
-    monkeypatch.setattr(page, "timestamped_export_path", lambda _d, _e, **_k: out_file)
     monkeypatch.setattr(
-        page,
+        snapshot_utils, "timestamped_export_path", lambda _d, _e, **_k: out_file
+    )
+    monkeypatch.setattr(
+        graph_config,
         "export_graph_parquet",
         lambda **_k: out_file.write_text("x", encoding="utf-8"),
     )

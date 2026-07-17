@@ -22,17 +22,6 @@ from src.models.processing import (
     ParsingOverrides,
 )
 from src.persistence.artifacts import ArtifactRef, ArtifactStore
-from src.persistence.snapshot import (
-    MANIFEST_EXPORT_FILENAME_MAX_LENGTH,
-    MANIFEST_EXPORT_FORMAT_MAX_LENGTH,
-    FinalizedSnapshot,
-    SnapshotManager,
-    is_snapshot_version_name,
-    latest_snapshot_dir,
-    load_manifest,
-)
-from src.persistence.snapshot_service import SnapshotActivation, rebuild_snapshot
-from src.persistence.snapshot_utils import timestamped_export_path
 from src.persistence.upload_journal import (
     promote_pending_uploads,
     quarantine_upload,
@@ -41,12 +30,6 @@ from src.persistence.upload_journal import (
 )
 from src.processing.ingestion_api import require_unique_document_ids
 from src.processing.parsing.health import parser_health
-from src.retrieval.graph_config import (
-    export_graph_jsonl,
-    export_graph_parquet,
-    get_export_seed_ids,
-)
-from src.retrieval.router_factory import build_router_engine
 from src.telemetry.opentelemetry import (
     configure_observability,
     record_graph_export_metric,
@@ -63,7 +46,6 @@ from src.ui.background_jobs import (
     get_job_manager,
     get_or_create_owner_id,
 )
-from src.ui.ingest_adapter import ingest_inputs, save_uploaded_file
 from src.ui.router_session import session_router_is_current
 from src.ui.vector_session import (
     VectorIndexResource,
@@ -106,6 +88,7 @@ ActiveIngestionJob = tuple[str, JobStateView]
 
 if TYPE_CHECKING:
     from src.nlp.spacy_service import SpacyNlpService
+    from src.persistence.snapshot import FinalizedSnapshot, SnapshotManager
 
 
 def _emit_ingest_progress(
@@ -472,6 +455,8 @@ def _save_ingestion_input(
     destination_dir: Path,
 ) -> IngestionInput | None:
     """Persist one upload and return its ingestion contract when successful."""
+    from src.ui.ingest_adapter import save_uploaded_file
+
     try:
         stored_path, digest = save_uploaded_file(
             file_obj,
@@ -595,6 +580,9 @@ def _run_ingest_job(
     Raises:
         JobCanceledError: If cancellation is requested.
     """
+    from src.persistence.snapshot import SnapshotManager
+    from src.ui.ingest_adapter import ingest_inputs
+
     transaction = _IngestTransaction(
         manager=SnapshotManager(settings.data_dir / "storage"),
         owned_source_paths=rollback_source_paths,
@@ -736,6 +724,8 @@ def _activate_ingest_generation(
     quarantine_source: Path | None,
 ) -> FinalizedSnapshot:
     """Validate and atomically activate one completed ingestion generation."""
+    from src.persistence.snapshot_service import SnapshotActivation, rebuild_snapshot
+
     resource = transaction.resource
     if resource is None:
         raise RuntimeError("Ingestion transaction has no owned vector resource")
@@ -874,6 +864,8 @@ def _read_collection_metadata(collections: dict[str, str]) -> dict[str, Any]:
 
 def _delete_staged_collections(collections: dict[str, str]) -> None:
     """Best-effort removal of an uncommitted physical collection generation."""
+    from src.persistence.snapshot import is_snapshot_version_name, load_manifest
+
     storage_dir = settings.data_dir / "storage"
     try:
         retained_manifests = [
@@ -1309,6 +1301,8 @@ def _store_ingest_terminal_notice(
 
 def _prepare_ingest_success_notice(result: Any) -> dict[str, Any]:
     """Validate a worker result, transfer runtime ownership, and build its DTO."""
+    from src.persistence.snapshot import latest_snapshot_dir
+
     resource: VectorIndexResource | None = None
     try:
         if not isinstance(result, dict):
@@ -1385,6 +1379,8 @@ def _terminal_runtime_readiness(
     notice: dict[str, Any], snapshot_dir: Path
 ) -> tuple[bool, bool, bool]:
     """Revalidate terminal runtime ownership at the moment it is rendered."""
+    from src.persistence.snapshot import latest_snapshot_dir
+
     identity = notice.get("runtime_identity")
     publication = notice.get("runtime_publication")
     if not isinstance(identity, dict) or publication not in {
@@ -1477,6 +1473,11 @@ def _validated_sha256(value: Any, field: str) -> str:
 
 def _bounded_manifest_export(value: Any) -> dict[str, Any]:
     """Validate one graph-export row needed by snapshot presentation."""
+    from src.persistence.snapshot import (
+        MANIFEST_EXPORT_FILENAME_MAX_LENGTH,
+        MANIFEST_EXPORT_FORMAT_MAX_LENGTH,
+    )
+
     if not isinstance(value, dict):
         raise TypeError("Finalized manifest export entries must be dictionaries")
     filename = value.get("filename") or value.get("path")
@@ -1503,6 +1504,8 @@ def _prepare_ingest_runtime(
     result: dict[str, Any], use_graphrag: bool
 ) -> tuple[dict[str, Any], bool]:
     """Validate ingestion output and transfer its live runtime resources."""
+    from src.retrieval.router_factory import build_router_engine
+
     (
         resource,
         pg_index,
@@ -2208,6 +2211,8 @@ def _start_upload_deletion(
 
 def _render_latest_snapshot_summary() -> None:
     """Show a summary of the latest snapshot manifest when available."""
+    from src.persistence.snapshot import load_manifest
+
     base_dir = settings.data_dir / "storage"
     with contextlib.suppress(Exception):
         manifest = load_manifest(base_dir=base_dir)
@@ -2264,6 +2269,13 @@ def _render_export_controls() -> None:
 
 def _handle_manual_export(out_dir: Path, extension: str) -> None:
     """Handle manual graph export actions."""
+    from src.persistence.snapshot_utils import timestamped_export_path
+    from src.retrieval.graph_config import (
+        export_graph_jsonl,
+        export_graph_parquet,
+        get_export_seed_ids,
+    )
+
     try:
         with get_job_manager().foreground_runtime_activity():
             if not session_vector_resource_is_current(

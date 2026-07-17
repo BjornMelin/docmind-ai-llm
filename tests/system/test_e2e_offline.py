@@ -13,9 +13,8 @@ from src.config.embedding_defaults import BGE_M3_EMBEDDING_DIMENSION
 from src.config.settings import DocMindSettings
 from src.processing.ingestion_api import load_documents
 from src.processing.parsing.service import parse_document_sync
+from src.retrieval.vector_contract import DENSE_VECTOR_NAME, SPARSE_VECTOR_NAME
 from src.utils.storage import (
-    DENSE_VECTOR_NAME,
-    SPARSE_VECTOR_NAME,
     ensure_hybrid_collection,
 )
 

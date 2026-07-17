@@ -78,6 +78,8 @@ def fixture_settings_app_test(tmp_path, monkeypatch) -> Iterator[AppTest]:
 
     from llama_index.core import Settings as LISettings
 
+    from src.retrieval.llama_index_adapter import GraphRAGHealth
+
     original_llm = getattr(LISettings, "_llm", None)
     original_embed = getattr(LISettings, "_embed_model", None)
 
@@ -85,10 +87,10 @@ def fixture_settings_app_test(tmp_path, monkeypatch) -> Iterator[AppTest]:
     # cover the LlamaIndex PropertyGraph API check.
     monkeypatch.setattr(
         "src.retrieval.llama_index_adapter.get_graphrag_health",
-        lambda *, force_refresh=False: (
-            False,
-            "unavailable",
-            "GraphRAG disabled for Settings AppTest",
+        lambda *, force_refresh=False: GraphRAGHealth(
+            status="unavailable",
+            adapter_name="unavailable",
+            hint="GraphRAG disabled for Settings AppTest",
         ),
     )
 

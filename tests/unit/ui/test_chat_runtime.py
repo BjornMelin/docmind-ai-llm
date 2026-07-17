@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from src.agents import coordinator as coordinator_module
 from src.ui import chat_runtime
 from src.ui.router_session import replace_session_router, session_router_is_current
 
@@ -24,7 +25,7 @@ def test_invalidate_without_resource_does_not_construct(
 ) -> None:
     constructed: list[object] = []
     monkeypatch.setattr(
-        chat_runtime.coordinator_module,
+        coordinator_module,
         "MultiAgentCoordinator",
         lambda **_kwargs: constructed.append(object()),
     )
@@ -32,6 +33,90 @@ def test_invalidate_without_resource_does_not_construct(
     chat_runtime.invalidate_coordinator()
 
     assert constructed == []
+
+
+def test_local_model_readiness_requires_config_and_weights(tmp_path: Path) -> None:
+    model_path = tmp_path / "embedding"
+    model_path.mkdir()
+
+    assert chat_runtime.check_model_artifacts(
+        model_name="unused",
+        model_revision=None,
+        cache_folder=tmp_path / "cache",
+        local_model_path=model_path,
+    ) == chat_runtime.ChatModelReadiness(status="local_path_incomplete")
+
+    (model_path / "config.json").write_text('{"model_type": "bert"}', encoding="utf-8")
+    (model_path / "model.safetensors").write_bytes(b"model")
+
+    assert chat_runtime.check_model_artifacts(
+        model_name="unused",
+        model_revision=None,
+        cache_folder=tmp_path / "cache",
+        local_model_path=model_path,
+    ) == chat_runtime.ChatModelReadiness(status="ready")
+
+
+def test_local_model_readiness_expands_home(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    model_path = tmp_path / "embedding"
+    model_path.mkdir()
+    (model_path / "config.json").write_text('{"model_type": "bert"}', encoding="utf-8")
+    (model_path / "model.safetensors").write_bytes(b"model")
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    readiness = chat_runtime.check_model_artifacts(
+        model_name="unused",
+        model_revision=None,
+        cache_folder=Path("~/cache"),
+        local_model_path=Path("~/embedding"),
+    )
+
+    assert readiness == chat_runtime.ChatModelReadiness(status="ready")
+
+
+@pytest.mark.parametrize("complete", [False, True])
+def test_cached_model_readiness_validates_returned_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    complete: bool,
+) -> None:
+    from huggingface_hub import snapshot_download
+
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    if complete:
+        (snapshot / "config.json").write_text(
+            '{"model_type": "bert"}', encoding="utf-8"
+        )
+        (snapshot / "model.safetensors").write_bytes(b"model")
+    calls: list[dict[str, object]] = []
+
+    def _download(**kwargs: object) -> str:
+        calls.append(kwargs)
+        return str(snapshot)
+
+    monkeypatch.setattr("huggingface_hub.snapshot_download", _download)
+
+    readiness = chat_runtime.check_model_artifacts(
+        model_name="org/model",
+        model_revision="revision",
+        cache_folder=Path("~/cache"),
+        local_model_path=None,
+    )
+
+    assert readiness.status == ("ready" if complete else "cache_missing")
+    assert calls == [
+        {
+            "repo_id": "org/model",
+            "revision": "revision",
+            "cache_dir": Path("~/cache").expanduser(),
+            "local_files_only": True,
+        }
+    ]
+    assert snapshot_download is not _download
 
 
 def test_same_generation_reuses_one_coordinator(
@@ -46,7 +131,7 @@ def test_same_generation_reuses_one_coordinator(
             self.close_count += 1
 
     monkeypatch.setattr(
-        chat_runtime.coordinator_module,
+        coordinator_module,
         "MultiAgentCoordinator",
         _Coordinator,
     )
@@ -78,7 +163,7 @@ def test_new_generation_closes_previous_coordinator_once(
             self.close_count += 1
 
     monkeypatch.setattr(
-        chat_runtime.coordinator_module,
+        coordinator_module,
         "MultiAgentCoordinator",
         _Coordinator,
     )
@@ -125,7 +210,7 @@ def test_new_generation_retires_two_session_routers_before_old_coordinator(
             events.append(self.name)
 
     monkeypatch.setattr(
-        chat_runtime.coordinator_module,
+        coordinator_module,
         "MultiAgentCoordinator",
         _Coordinator,
     )
@@ -173,7 +258,7 @@ def test_invalidate_detaches_coordinator_when_cleanup_fails(
                 raise RuntimeError("close failed")
 
     monkeypatch.setattr(
-        chat_runtime.coordinator_module,
+        coordinator_module,
         "MultiAgentCoordinator",
         _Coordinator,
     )

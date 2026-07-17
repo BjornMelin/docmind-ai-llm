@@ -14,12 +14,13 @@ from pathlib import Path
 import streamlit as st
 
 from src.config import bootstrap_settings, settings
-from src.persistence.snapshot import recover_snapshot_transactions
 
 
 @st.cache_resource(show_spinner=False)
 def _recover_persistence_once(data_dir: str, cache_version: int) -> None:
     """Recover interrupted persistence transactions once per runtime generation."""
+    from src.persistence.snapshot import recover_snapshot_transactions
+
     del cache_version
     recover_snapshot_transactions(Path(data_dir) / "storage")
 

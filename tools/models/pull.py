@@ -159,6 +159,38 @@ def pull_docling_layout(cache_dir: Path, *, force: bool = False) -> None:
     print(f"ok: Docling layout model -> {target}")
 
 
+def _resolve_cache_dirs(args: argparse.Namespace) -> tuple[Path, Path]:
+    """Resolve explicit overrides or bootstrapped canonical cache settings."""
+    needs_model_cache = bool(
+        args.all or args.bge_m3 or args.bge_reranker or args.bm42 or args.add
+    )
+    needs_parser_cache = bool(args.parser_defaults or args.docling_layout)
+    if (needs_model_cache and args.cache_dir is None) or (
+        needs_parser_cache and args.parser_cache_dir is None
+    ):
+        from src.config.settings import bootstrap_settings
+
+        bootstrap_settings()
+
+    if args.cache_dir is None:
+        from src.config.settings import settings
+
+        configured_cache_dir = settings.embedding.cache_folder
+    else:
+        configured_cache_dir = Path(args.cache_dir)
+
+    if args.parser_cache_dir is None:
+        from src.config.settings import settings
+
+        configured_parser_cache_dir = settings.parsing.model_cache_dir
+    else:
+        configured_parser_cache_dir = Path(args.parser_cache_dir)
+    return (
+        configured_cache_dir.expanduser().resolve(),
+        configured_parser_cache_dir.expanduser().resolve(),
+    )
+
+
 def main() -> None:
     """Parse CLI arguments and pull requested model artifacts."""
     ap = argparse.ArgumentParser(description="Pre-download models for offline use")
@@ -199,8 +231,10 @@ def main() -> None:
     )
     ap.add_argument(
         "--parser-cache-dir",
-        default="./cache/models",
-        help="Destination for Docling parser files",
+        default=None,
+        help=(
+            "Parser cache destination (defaults to configured parsing.model_cache_dir)"
+        ),
     )
     ap.add_argument(
         "--add",
@@ -209,9 +243,13 @@ def main() -> None:
         metavar=("REPO_ID", "FILENAME"),
         help="Additional model file(s) to fetch",
     )
-    ap.add_argument("--cache_dir", default="~/.cache/huggingface/hub")
+    ap.add_argument(
+        "--cache_dir",
+        default=None,
+        help="Model cache destination (defaults to configured embedding.cache_folder)",
+    )
     args = ap.parse_args()
-    model_cache_dir = Path(args.cache_dir).expanduser().resolve()
+    model_cache_dir, parser_cache_dir = _resolve_cache_dirs(args)
 
     pairs: list[tuple[str, str]] = []
     if args.add:
@@ -219,7 +257,7 @@ def main() -> None:
 
     if args.parser_defaults or args.docling_layout:
         pull_docling_layout(
-            Path(args.parser_cache_dir).expanduser(),
+            parser_cache_dir,
             force=bool(args.force),
         )
 

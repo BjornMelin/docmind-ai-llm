@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+from src.retrieval import vector_contract
 from src.utils import storage as storage_mod
 
 
@@ -50,8 +51,8 @@ def test_create_vector_store_returns_store(monkeypatch):
 
     store = storage_mod.create_vector_store("test_collection", enable_hybrid=True)
     assert store.collection_name == "test_collection"
-    assert store.dense_vector_name == storage_mod.DENSE_VECTOR_NAME
-    assert store.sparse_vector_name == storage_mod.SPARSE_VECTOR_NAME
+    assert store.dense_vector_name == vector_contract.DENSE_VECTOR_NAME
+    assert store.sparse_vector_name == vector_contract.SPARSE_VECTOR_NAME
 
 
 def test_get_collection_info_exists(monkeypatch):

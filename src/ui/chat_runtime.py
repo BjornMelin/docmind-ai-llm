@@ -3,18 +3,109 @@
 from __future__ import annotations
 
 import atexit
+import json
 import threading
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from loguru import logger
 
-from src.agents import coordinator as coordinator_module
 from src.ui.vector_session import retire_session_runtime_resources
 
+if TYPE_CHECKING:
+    from src.agents.coordinator import MultiAgentCoordinator
+
 _LOCK = threading.RLock()
-_COORDINATOR: coordinator_module.MultiAgentCoordinator | None = None
+_COORDINATOR: MultiAgentCoordinator | None = None
 _RESOURCE_KEY: tuple[int, Path, int] | None = None
+
+type ChatModelFailureStatus = Literal[
+    "cache_missing", "local_path_incomplete", "initialization_failed"
+]
+
+
+class ChatModelUnavailableError(RuntimeError):
+    """Raised with one sanitized configured-embedding failure state."""
+
+    def __init__(
+        self,
+        status: ChatModelFailureStatus,
+    ) -> None:
+        """Create a sanitized failure carrying only its canonical UI state."""
+        super().__init__("Configured Chat embedding is unavailable")
+        self.status: ChatModelFailureStatus = status
+
+
+@dataclass(frozen=True, slots=True)
+class ChatModelReadiness:
+    """Local-only readiness for the configured Chat embedding artifacts."""
+
+    status: Literal["ready"] | ChatModelFailureStatus
+
+
+def _local_model_artifacts_ready(model_path: Path) -> bool:
+    """Return whether a local SentenceTransformers directory has core assets."""
+    roots = (model_path, model_path / "0_Transformer")
+    has_config = False
+    for root in roots:
+        config_path = root / "config.json"
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            continue
+        if isinstance(config, dict) and config:
+            has_config = True
+            break
+    weight_names = (
+        "model.safetensors",
+        "model.safetensors.index.json",
+        "pytorch_model.bin",
+        "pytorch_model.bin.index.json",
+    )
+    has_weights = False
+    for root in roots:
+        for weight_name in weight_names:
+            weight_path = root / weight_name
+            try:
+                if weight_path.is_file() and weight_path.stat().st_size > 0:
+                    has_weights = True
+                    break
+            except OSError:
+                continue
+        if has_weights:
+            break
+    return has_config and has_weights
+
+
+def check_model_artifacts(
+    *,
+    model_name: str,
+    model_revision: str | None,
+    cache_folder: Path,
+    local_model_path: Path | None,
+) -> ChatModelReadiness:
+    """Check the native Hugging Face cache without network or model imports."""
+    if local_model_path is not None:
+        if _local_model_artifacts_ready(Path(local_model_path).expanduser()):
+            return ChatModelReadiness(status="ready")
+        return ChatModelReadiness(status="local_path_incomplete")
+
+    from huggingface_hub import snapshot_download
+    from huggingface_hub.errors import LocalEntryNotFoundError
+
+    try:
+        snapshot_path = snapshot_download(
+            repo_id=model_name,
+            revision=model_revision,
+            cache_dir=cache_folder.expanduser(),
+            local_files_only=True,
+        )
+    except LocalEntryNotFoundError:
+        return ChatModelReadiness(status="cache_missing")
+    if not _local_model_artifacts_ready(Path(snapshot_path)):
+        return ChatModelReadiness(status="cache_missing")
+    return ChatModelReadiness(status="ready")
 
 
 def _retire_session_resources() -> None:
@@ -27,7 +118,7 @@ def get_coordinator(
     cache_version: int,
     checkpointer_path: Path,
     store: Any,
-) -> coordinator_module.MultiAgentCoordinator:
+) -> MultiAgentCoordinator:
     """Return the coordinator for the current runtime generation.
 
     A settings generation change replaces and closes the previous coordinator,
@@ -36,13 +127,15 @@ def get_coordinator(
     """
     global _COORDINATOR, _RESOURCE_KEY
 
+    from src.agents.coordinator import MultiAgentCoordinator
+
     key = (int(cache_version), Path(checkpointer_path), id(store))
-    previous: coordinator_module.MultiAgentCoordinator | None
+    previous: MultiAgentCoordinator | None
     with _LOCK:
         if _COORDINATOR is not None and key == _RESOURCE_KEY:
             return _COORDINATOR
 
-        replacement = coordinator_module.MultiAgentCoordinator(
+        replacement = MultiAgentCoordinator(
             checkpointer_path=checkpointer_path,
             store=store,
         )
@@ -88,4 +181,10 @@ def invalidate_coordinator() -> None:
 
 atexit.register(invalidate_coordinator)
 
-__all__ = ["get_coordinator", "invalidate_coordinator"]
+__all__ = [
+    "ChatModelReadiness",
+    "ChatModelUnavailableError",
+    "check_model_artifacts",
+    "get_coordinator",
+    "invalidate_coordinator",
+]

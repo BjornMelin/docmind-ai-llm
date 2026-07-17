@@ -10,6 +10,7 @@ import pytest
 from qdrant_client import models as qmodels
 
 from src.persistence.deployment_identity import get_or_create_deployment_id
+from src.retrieval import vector_contract
 
 
 def test_ensure_hybrid_collection_creates_when_missing(monkeypatch):  # type: ignore[no-untyped-def]
@@ -29,11 +30,13 @@ def test_ensure_hybrid_collection_creates_when_missing(monkeypatch):  # type: ig
 
     result = smod.ensure_hybrid_collection(_Client(), "c", dense_dim=128)
     assert len(calls) == 1
-    assert set(calls[0]["vectors_config"]) == {smod.DENSE_VECTOR_NAME}
-    assert set(calls[0]["sparse_vectors_config"]) == {smod.SPARSE_VECTOR_NAME}
+    assert set(calls[0]["vectors_config"]) == {vector_contract.DENSE_VECTOR_NAME}
+    assert set(calls[0]["sparse_vectors_config"]) == {
+        vector_contract.SPARSE_VECTOR_NAME
+    }
     assert calls[0]["metadata"] == smod.canonical_text_collection_metadata(
         dense_dim=128,
-        sparse_enabled=smod.sparse_retrieval_enabled(),
+        sparse_enabled=vector_contract.sparse_retrieval_enabled(),
     )
     assert result.compatible is True
     assert result.action == "created"

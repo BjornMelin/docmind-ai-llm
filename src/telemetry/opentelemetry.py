@@ -8,17 +8,10 @@ development/testing.
 
 from __future__ import annotations
 
-import importlib
 import os
 from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from typing import Any, cast
-
-try:  # pragma: no cover - optional dependency
-    _otel_mod = importlib.import_module("llama_index.observability.otel")
-    LlamaIndexOpenTelemetry = cast(Any, _otel_mod.LlamaIndexOpenTelemetry)
-except (ImportError, AttributeError):
-    LlamaIndexOpenTelemetry = None
 
 from opentelemetry import metrics, trace
 from opentelemetry.sdk.metrics import MeterProvider
@@ -328,11 +321,16 @@ def _maybe_configure_llamaindex(obs: ObservabilityConfig) -> None:
     """Attach LlamaIndex OpenTelemetry instrumentation when configured."""
     if not obs.enabled or not obs.instrument_llamaindex:
         return
-    if LlamaIndexOpenTelemetry is None:
-        return
     if _get_instrumentor() is not None:
         return
-    instrumentor = LlamaIndexOpenTelemetry()
+    try:  # pragma: no cover - optional dependency
+        from importlib import import_module
+
+        module = import_module("llama_index.observability.otel")
+        instrumentor_type = cast(Any, module.LlamaIndexOpenTelemetry)
+    except (ImportError, AttributeError):
+        return
+    instrumentor = instrumentor_type()
     instrumentor.start_registering()
     _set_instrumentor(instrumentor)
 

@@ -22,6 +22,7 @@ from src.persistence.chat_db import (
     touch_session,
 )
 from src.ui.background_jobs import JobAdmissionPausedError
+from src.ui.chat_runtime import ChatModelUnavailableError
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,7 +138,7 @@ def ensure_active_session(conn: sqlite3.Connection) -> ChatSession:
 def render_session_sidebar(
     conn: sqlite3.Connection,
     *,
-    hard_purge: Callable[[str, str], bool],
+    hard_purge: Callable[[str, str], bool] | None,
 ) -> ChatSelection:
     """Renders the session management interface in the Streamlit sidebar.
 
@@ -145,7 +146,7 @@ def render_session_sidebar(
 
     Args:
         conn: SQLite connection for metadata persistence.
-        hard_purge: Coordinator-owned atomic hard-delete callback.
+        hard_purge: Coordinator-owned atomic hard-delete callback, when available.
 
     Returns:
         The current chat selection identifiers.
@@ -274,15 +275,19 @@ def _handle_purge(
     active: ChatSession,
     *,
     user_id: str,
-    hard_purge: Callable[[str, str], bool],
+    hard_purge: Callable[[str, str], bool] | None,
 ) -> None:
     """Handles irreversible session purging with confirmation.
 
     Args:
         active: The currently active session record.
         user_id: User namespace owning the persisted checkpoints.
-        hard_purge: Coordinator-owned atomic hard-delete callback.
+        hard_purge: Coordinator-owned atomic hard-delete callback, when available.
     """
+    if hard_purge is None:
+        st.caption("Hard purge requires the local Chat model artifacts.")
+        st.button("Purge session (hard delete)", type="primary", disabled=True)
+        return
     confirm_key = f"purge_confirm:{active.thread_id}"
     confirm_purge = st.checkbox("I understand this is irreversible", key=confirm_key)
     if st.button(
@@ -292,6 +297,9 @@ def _handle_purge(
     ):
         try:
             purged = hard_purge(active.thread_id, user_id)
+        except ChatModelUnavailableError:
+            st.warning("Session purge requires the local Chat model artifacts.")
+            return
         except JobAdmissionPausedError:
             st.warning("Session purge is unavailable during runtime maintenance.")
             return

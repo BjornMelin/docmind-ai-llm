@@ -17,7 +17,6 @@ from src.ui.router_session import (
     exchange_router_ownership,
     retire_all_session_routers,
 )
-from src.utils.storage import close_qdrant_clients
 
 _VECTOR_RESOURCE_KEY = "_vector_index_resource"
 _VECTOR_GENERATION_KEY = "_vector_runtime_generation"
@@ -35,6 +34,8 @@ _REGISTERED_RESOURCES: weakref.WeakValueDictionary[int, VectorIndexResource] = (
 def _close_vector_clients(client: Any | None, async_client: Any | None) -> None:
     """Best-effort close for both native Qdrant client owners."""
     try:
+        from src.utils.storage import close_qdrant_clients
+
         close_qdrant_clients(client, async_client)
     except Exception as exc:  # pragma: no cover - defensive cleanup boundary
         logger.debug(

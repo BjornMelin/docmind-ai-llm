@@ -18,44 +18,16 @@ from langgraph.store.sqlite import SqliteStore
 from loguru import logger
 from opentelemetry import trace
 
-from src.agents.coordinator import MultiAgentCoordinator
-from src.agents.tools.memory import (
-    MemoryCapacityError,
-    MemoryWrite,
-    advance_memory_namespace_generation,
-    delete_memory,
-    memory_namespace_lock,
-    save_memory,
-)
 from src.analysis.models import AnalysisResult, DocumentRef
 from src.analysis.service import (
     AnalysisCancelledError,
     discover_uploaded_documents,
     run_analysis,
 )
-from src.config import setup_llamaindex
 from src.config.settings import settings
 from src.persistence.artifacts import ArtifactRef, ArtifactStore
 from src.persistence.chat_db import touch_session
 from src.persistence.checkpoint_identity import memory_namespace
-from src.persistence.langchain_embeddings import LlamaIndexEmbeddingsAdapter
-from src.persistence.memory_store import close_memory_store, open_memory_store
-from src.persistence.snapshot import (
-    latest_snapshot_dir,
-    load_manifest,
-    load_property_graph_index,
-    load_vector_index,
-)
-from src.persistence.snapshot_utils import (
-    collect_corpus_paths as _collect_corpus_paths,
-)
-from src.persistence.snapshot_utils import (
-    compute_staleness,
-)
-from src.persistence.snapshot_utils import (
-    current_config_dict as _current_config_dict,
-)
-from src.retrieval.router_factory import build_router_engine
 from src.telemetry.opentelemetry import configure_observability
 from src.ui.artifacts import render_artifact_image
 from src.ui.background_jobs import (
@@ -67,7 +39,10 @@ from src.ui.background_jobs import (
     get_job_manager,
     get_or_create_owner_id,
 )
-from src.ui.chat_runtime import get_coordinator as get_chat_coordinator
+from src.ui.chat_runtime import (
+    ChatModelReadiness,
+    ChatModelUnavailableError,
+)
 from src.ui.chat_sessions import (
     ChatSelection,
     get_chat_db_conn,
@@ -112,6 +87,7 @@ _ANALYSIS_TERMINAL_NOTICE_KEY = "analysis_terminal_notice"
 _ANALYSIS_COMPLETED_JOB_KEY = "analysis_job_completed_id"
 
 if TYPE_CHECKING:
+    from src.agents.coordinator import MultiAgentCoordinator
     from src.retrieval.multimodal_fusion import ImageSiglipRetriever
 
 
@@ -141,6 +117,17 @@ class _ChatHistoryLoadResult:
     fingerprint: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _SnapshotStatus:
+    """Immutable local snapshot state captured for one Chat rerun."""
+
+    snapshot_id: str | None
+    snapshot_dir: Path | None
+    manifest_present: bool
+    is_stale: bool | None
+    error: bool = False
+
+
 def _run_memory_operation[ValueT](
     operation: Callable[[], ValueT],
     *,
@@ -150,6 +137,8 @@ def _run_memory_operation[ValueT](
     rejected_message: str | None = None,
 ) -> _MemoryOperationResult[ValueT]:
     """Run one memory operation behind the sidebar's error boundary."""
+    from src.agents.tools.memory import MemoryCapacityError
+
     try:
         value = operation()
     except MemoryCapacityError:
@@ -175,6 +164,8 @@ def _run_memory_operation[ValueT](
 
 def _close_memory_store(store: SqliteStore) -> None:
     """Close the memory store."""
+    from src.persistence.memory_store import close_memory_store
+
     with contextlib.suppress(Exception):
         close_memory_store(store)
 
@@ -186,7 +177,25 @@ def _get_memory_store() -> SqliteStore:
     Returns:
         Configured native LangGraph SQLite store.
     """
-    setup_llamaindex()
+    from src.config import setup_llamaindex
+    from src.config.integrations import (
+        EmbeddingModelInitializationError,
+        EmbeddingModelUnavailableError,
+    )
+    from src.persistence.langchain_embeddings import LlamaIndexEmbeddingsAdapter
+    from src.persistence.memory_store import open_memory_store
+
+    try:
+        setup_llamaindex()
+    except EmbeddingModelUnavailableError as exc:
+        status: Literal["cache_missing", "local_path_incomplete"] = (
+            "local_path_incomplete"
+            if settings.embedding.local_model_path is not None
+            else "cache_missing"
+        )
+        raise ChatModelUnavailableError(status) from exc
+    except EmbeddingModelInitializationError as exc:
+        raise ChatModelUnavailableError("initialization_failed") from exc
     return open_memory_store(
         settings.chat.sqlite_path,
         index={
@@ -204,10 +213,27 @@ def _get_coordinator() -> MultiAgentCoordinator:
     Returns:
         MultiAgentCoordinator: Configured coordinator instance.
     """
-    return get_chat_coordinator(
+    from src.ui.chat_runtime import get_coordinator
+
+    return get_coordinator(
         cache_version=settings.cache_version,
         checkpointer_path=settings.chat.sqlite_path,
         store=_get_memory_store(),
+    )
+
+
+def _check_chat_model_artifacts() -> ChatModelReadiness:
+    """Check configured embedding artifacts without loading the model stack."""
+    from src.ui.chat_runtime import check_model_artifacts
+
+    configured_local_path = settings.embedding.local_model_path
+    return check_model_artifacts(
+        model_name=str(settings.embedding.model_name),
+        model_revision=settings.embedding.model_revision,
+        cache_folder=Path(settings.embedding.cache_folder),
+        local_model_path=(
+            Path(configured_local_path) if configured_local_path is not None else None
+        ),
     )
 
 
@@ -298,44 +324,86 @@ def main() -> None:  # pragma: no cover - Streamlit page
     configure_observability(settings)
     st.title("Chat")
     provider_badge(settings)
+    snapshot_status = _compute_snapshot_status()
+    model_readiness = _check_chat_model_artifacts()
 
     owner_id = get_or_create_owner_id()
     try:
         with _chat_session_activity() as conn:
             selection = render_session_sidebar(
                 conn,
-                hard_purge=lambda thread_id, user_id: _purge_chat_session(
-                    thread_id=thread_id,
-                    user_id=user_id,
+                hard_purge=(
+                    (
+                        lambda thread_id, user_id: _purge_chat_session(
+                            thread_id=thread_id,
+                            user_id=user_id,
+                        )
+                    )
+                    if model_readiness.status == "ready"
+                    else None
                 ),
             )
-            try:
-                checkpoints = _list_chat_checkpoints(selection, limit=20)
-            except JobAdmissionPausedError:
-                checkpoints = []
-                st.caption("Time travel is unavailable during runtime maintenance.")
-            render_time_travel_sidebar(
-                fork_from_checkpoint=_fork_chat_checkpoint,
-                conn=conn,
-                thread_id=selection.thread_id,
-                user_id=selection.user_id,
-                checkpoints=checkpoints,
-            )
+            _render_staleness_badge(snapshot_status)
+            if model_readiness.status == "ready":
+                checkpoints: list[dict[str, object]] = []
+                try:
+                    checkpoints = _list_chat_checkpoints(selection, limit=20)
+                except ChatModelUnavailableError as exc:
+                    model_readiness = ChatModelReadiness(status=exc.status)
+                except JobAdmissionPausedError:
+                    checkpoints = []
+                    st.caption("Time travel is unavailable during runtime maintenance.")
+                if model_readiness.status == "ready":
+                    render_time_travel_sidebar(
+                        fork_from_checkpoint=_fork_chat_checkpoint,
+                        conn=conn,
+                        thread_id=selection.thread_id,
+                        user_id=selection.user_id,
+                        checkpoints=checkpoints,
+                    )
     except JobAdmissionPausedError:
         st.info("Chat sessions are unavailable during runtime maintenance.")
         return
+    if model_readiness.status != "ready":
+        if _snapshot_runtime_present():
+            _clear_snapshot_runtime()
+        _render_chat_runtime_unavailable(model_readiness)
+        return
     _render_memory_sidebar(selection.user_id, selection.thread_id)
     _render_visual_search_sidebar()
-    _ensure_router_engine()
+    _ensure_router_engine(snapshot_status)
     _render_analysis_sidebar(owner_id=owner_id)
     _render_analysis_job_panel(owner_id=owner_id)
     _render_analysis_terminal_notice()
     _render_analysis_results()
-    _render_staleness_badge()
     history = _load_chat_messages(selection)
     if not _render_chat_history_result(history):
         return
     _handle_chat_prompt(selection)
+
+
+def _render_chat_runtime_unavailable(readiness: ChatModelReadiness) -> None:
+    """Render sanitized setup guidance for unavailable local model artifacts."""
+    if readiness.status == "local_path_incomplete":
+        st.warning(
+            "Chat is unavailable because the configured local model is incomplete."
+        )
+        st.caption(
+            "Install a complete SentenceTransformers snapshot at the configured "
+            "location, or remove DOCMIND_EMBEDDING__LOCAL_MODEL_PATH from your "
+            "environment or .env."
+        )
+    elif readiness.status == "cache_missing":
+        st.warning(
+            "Chat is unavailable because its local model artifacts are not installed."
+        )
+        st.code("uv run python tools/models/pull.py --all --parser-defaults")
+    else:
+        st.warning("Chat is unavailable because its embedding could not initialize.")
+        st.caption(
+            "Verify the configured embedding model and device settings, then restart."
+        )
+    st.caption("Sessions and local snapshot status remain available.")
 
 
 # ---- Page helpers ----
@@ -433,6 +501,8 @@ def _render_memory_add(store: SqliteStore, ns: tuple[str, ...]) -> None:
         store: The memory store instance.
         ns: The storage namespace.
     """
+    from src.agents.tools.memory import MemoryWrite, save_memory
+
     add = st.text_input("Add memory", key="memory_add")
     st.session_state.pop("_memory_last_saved", None)
     if st.button("Save memory", key="memory_save") and add.strip():
@@ -468,6 +538,8 @@ def _render_memory_results(store: SqliteStore, ns: tuple[str, ...]) -> None:
         store: The memory store instance.
         ns: The storage namespace.
     """
+    from src.agents.tools.memory import delete_memory
+
     q = st.text_input("Search", key="memory_search").strip()
     search_result = _run_memory_operation(
         lambda: store.search(ns, query=q or None, limit=10),
@@ -530,6 +602,12 @@ def _purge_memory_namespace(
     Returns:
         Verified deletion count, failure count, and completion state.
     """
+    from src.agents.tools.memory import (
+        advance_memory_namespace_generation,
+        delete_memory,
+        memory_namespace_lock,
+    )
+
     purged = 0
     max_batches = 100
     total_failures = 0
@@ -681,10 +759,12 @@ def _render_memory_sidebar(user_id: str, thread_id: str) -> None:
             st.info("Memories are unavailable during runtime maintenance.")
 
 
-def _ensure_router_engine() -> None:
+def _ensure_router_engine(status: _SnapshotStatus) -> None:
     """Ensure a router engine is available in session state."""
     try:
-        _load_latest_snapshot_into_session()
+        if status.error:
+            st.caption("Autoload skipped.")
+        _load_latest_snapshot_into_session(status)
     except Exception as exc:
         redaction = build_pii_log_entry(str(exc), key_id="chat.autoload_snapshot")
         logger.debug(
@@ -710,7 +790,8 @@ def _clear_snapshot_runtime() -> bool:
     """Close snapshot resources only after acquiring runtime quiescence."""
     try:
         with get_job_manager().admission_quiescence():
-            _clear_snapshot_runtime_quiesced()
+            if _snapshot_runtime_present():
+                _clear_snapshot_runtime_quiesced()
     except (JobAdmissionPausedError, JobConflictError) as exc:
         _report_snapshot_refresh_conflict(exc)
         return False
@@ -725,39 +806,34 @@ def _clear_snapshot_runtime_quiesced() -> None:
     )
 
 
-def _render_staleness_badge() -> None:
-    """Render snapshot staleness status in the UI."""
+def _compute_snapshot_status() -> _SnapshotStatus:
+    """Capture local snapshot identity and freshness for this rerun."""
+    latest: Path | None = None
     try:
+        from src.persistence.snapshot import latest_snapshot_dir, load_manifest
+        from src.persistence.snapshot_utils import (
+            collect_corpus_paths,
+            compute_staleness,
+            current_config_dict,
+        )
+
         storage_dir = settings.data_dir / "storage"
         if not storage_dir.exists():
-            return
+            return _SnapshotStatus(None, None, False, None)
         latest = latest_snapshot_dir(storage_dir)
         if latest is None:
-            return
+            return _SnapshotStatus(None, None, False, None)
         with _TRACER.start_as_current_span("chat.staleness_check") as span:
             span.set_attribute("snapshot.id", latest.name)
             manifest_data = load_manifest(latest)
             if not manifest_data:
-                return
+                return _SnapshotStatus(latest.name, latest, False, None)
             uploads_dir = settings.data_dir / "uploads"
-            corpus_paths = _collect_corpus_paths(uploads_dir)
-            cfg = _current_config_dict()
+            corpus_paths = collect_corpus_paths(uploads_dir)
+            cfg = current_config_dict()
             is_stale = compute_staleness(manifest_data, corpus_paths, cfg)
             span.set_attribute("snapshot.is_stale", bool(is_stale))
-            if is_stale:
-                st.warning(STALE_TOOLTIP)
-                with st.sidebar:
-                    st.caption("Snapshot stale: content or config changed.")
-                with contextlib.suppress(Exception):
-                    log_jsonl(
-                        {
-                            "snapshot_stale_detected": True,
-                            "snapshot_id": latest.name,
-                            "reason": "digest_mismatch",
-                        }
-                    )
-            else:
-                st.caption(f"Snapshot up-to-date: {latest.name}")
+            return _SnapshotStatus(latest.name, latest, True, bool(is_stale))
     except Exception as exc:
         redaction = build_pii_log_entry(str(exc), key_id="chat.staleness_check")
         logger.debug(
@@ -765,7 +841,36 @@ def _render_staleness_badge() -> None:
             type(exc).__name__,
             redaction.redacted,
         )
+        return _SnapshotStatus(
+            latest.name if latest is not None else None,
+            latest,
+            False,
+            None,
+            error=True,
+        )
+
+
+def _render_staleness_badge(status: _SnapshotStatus) -> None:
+    """Render one already-computed snapshot freshness result."""
+    if status.error:
         st.caption("Staleness check unavailable.")
+        return
+    if not status.manifest_present or status.snapshot_id is None:
+        return
+    if status.is_stale:
+        st.warning(STALE_TOOLTIP)
+        with st.sidebar:
+            st.caption("Snapshot stale: content or config changed.")
+        with contextlib.suppress(Exception):
+            log_jsonl(
+                {
+                    "snapshot_stale_detected": True,
+                    "snapshot_id": status.snapshot_id,
+                    "reason": "digest_mismatch",
+                }
+            )
+        return
+    st.caption(f"Snapshot up-to-date: {status.snapshot_id}")
 
 
 def _load_chat_messages(selection: ChatSelection) -> _ChatHistoryLoadResult:
@@ -1381,13 +1486,11 @@ def _render_visual_search_sidebar() -> None:
 def _snapshot_runtime_present() -> bool:
     """Return whether session state owns any snapshot runtime state."""
     return any(
-        key in st.session_state
+        st.session_state.get(key) is not None
         for key in (
             "_vector_index_resource",
-            "_vector_runtime_generation",
             "vector_index",
             "router_engine",
-            "_router_runtime_generation",
             "graphrag_index",
             "_snapshot_loaded_id",
             "_snapshot_collections",
@@ -1410,18 +1513,13 @@ def _snapshot_runtime_is_current(snapshot_id: str) -> bool:
     )
 
 
-def _snapshot_autoload_action() -> tuple[str, Path | None]:
+def _snapshot_autoload_action(status: _SnapshotStatus) -> tuple[str, Path | None]:
     """Plan a no-op, clear, or hydrate action without mutating runtime state."""
     policy = getattr(settings.graphrag_cfg, "autoload_policy", "latest_non_stale")
-    snap_dir = latest_snapshot_dir()
-    manifest = load_manifest(snap_dir) if snap_dir is not None else None
-    if snap_dir is None or not manifest:
+    snap_dir = status.snapshot_dir
+    if status.error or snap_dir is None or not status.manifest_present:
         return ("clear", None) if _snapshot_runtime_present() else ("none", None)
-
-    uploads_dir = settings.data_dir / "uploads"
-    corpus_paths = _collect_corpus_paths(uploads_dir)
-    cfg = _current_config_dict()
-    if compute_staleness(manifest, corpus_paths, cfg):
+    if status.is_stale:
         return ("clear", None) if _snapshot_runtime_present() else ("none", None)
 
     if policy == "ignore":
@@ -1440,14 +1538,14 @@ def _snapshot_autoload_action() -> tuple[str, Path | None]:
     return "hydrate", snap_dir
 
 
-def _load_latest_snapshot_into_session() -> bool:
+def _load_latest_snapshot_into_session(status: _SnapshotStatus) -> bool:
     """Autoload the latest snapshot into session_state per policy.
 
     Policies:
     - latest_non_stale (default): Load when manifest not stale.
     - ignore: Do not autohydrate, but invalidate stale snapshot-owned runtime.
     """
-    action, snap_dir = _snapshot_autoload_action()
+    action, snap_dir = _snapshot_autoload_action(status)
     if action == "none":
         return True
     try:
@@ -1455,7 +1553,8 @@ def _load_latest_snapshot_into_session() -> bool:
             # The first read keeps the common current-runtime path lease-free. The
             # second makes the check and mutation one quiesced transaction.
             try:
-                action, snap_dir = _snapshot_autoload_action()
+                fresh_status = _compute_snapshot_status()
+                action, snap_dir = _snapshot_autoload_action(fresh_status)
                 if action == "clear":
                     _clear_snapshot_runtime_quiesced()
                 elif action == "hydrate" and snap_dir is not None:
@@ -1494,6 +1593,13 @@ def _hydrate_router_from_snapshot(snap_dir: Path) -> bool:
 
 def _hydrate_router_from_snapshot_quiesced(snap_dir: Path) -> None:
     """Hydrate and publish a snapshot while runtime quiescence is held."""
+    from src.persistence.snapshot import (
+        load_manifest,
+        load_property_graph_index,
+        load_vector_index,
+    )
+    from src.retrieval.router_factory import build_router_engine
+
     current_id = str(getattr(snap_dir, "name", snap_dir))
     if _snapshot_runtime_is_current(current_id):
         return

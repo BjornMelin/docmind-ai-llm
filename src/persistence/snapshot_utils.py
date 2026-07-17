@@ -18,12 +18,7 @@ from src.config.embedding_defaults import (
 from src.config.settings import settings as default_settings
 from src.persistence.hashing import compute_config_hash, compute_corpus_hash
 from src.persistence.upload_journal import reconstruct_precommit_corpus_hash
-from src.retrieval.sparse_query import SPARSE_ENCODING_CONTRACT
-from src.utils.storage import (
-    DENSE_VECTOR_NAME,
-    SPARSE_VECTOR_NAME,
-    sparse_retrieval_enabled,
-)
+from src.retrieval import vector_contract
 
 __all__ = [
     "activation_config_dict",
@@ -116,13 +111,13 @@ def current_config_dict(settings_obj: Any | None = None) -> dict[str, Any]:
         "qdrant": {
             "text_collection": s.database.qdrant_collection,
             "image_collection": s.database.qdrant_image_collection,
-            "dense_vector": DENSE_VECTOR_NAME,
-            "sparse_vector": SPARSE_VECTOR_NAME,
-            "sparse_enabled": sparse_retrieval_enabled(s),
+            "dense_vector": vector_contract.DENSE_VECTOR_NAME,
+            "sparse_vector": vector_contract.SPARSE_VECTOR_NAME,
+            "sparse_enabled": vector_contract.sparse_retrieval_enabled(s),
             "sparse_model": DEFAULT_BM42_MODEL_ID,
             "sparse_source_repo": DEFAULT_BM42_SOURCE_REPO,
             "sparse_source_revision": DEFAULT_BM42_SOURCE_REVISION,
-            "sparse_encoding_contract": SPARSE_ENCODING_CONTRACT,
+            "sparse_encoding_contract": vector_contract.SPARSE_ENCODING_CONTRACT,
         },
     }
 

@@ -134,7 +134,22 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
 ## Streamlit UI
 
-- Keep import-time work minimal (pages rerun).
+- Keep page imports light. `src.app`, Chat, and Documents must pass
+  `scripts/check_ui_import_boundary.py` without loading `torch`, `transformers`,
+  `llama_index`, or `qdrant_client`. Import those implementations only inside
+  their recovery, status, cached-resource, or user-action seam; use
+  `TYPE_CHECKING` for
+  annotations and patch canonical owners in tests instead of page aliases.
+- Compute Chat snapshot status once on steady reruns. Clear/hydrate mutations
+  re-read once inside `admission_quiescence()` before changing runtime owners;
+  do not add a freshness TTL.
+- Keep Chat model readiness local-only and typed. Missing cache, incomplete
+  local overrides, and initialization failures have distinct sanitized states;
+  never turn model readiness into an implicit download or relabel unexpected
+  Chat DB/persistence failures.
+- Treat GraphRAG package metadata as `installed`, not `ready`. Validate
+  `PropertyGraphIndex` only at the Settings/action seam before claiming runtime
+  capability.
 - Use `st.cache_resource` for long-lived objects (DB connections, checkpointers, clients).
 - Give every closeable `st.cache_resource` a typed `on_release` callback. Acquire
   its current value inside `JobManager.foreground_runtime_activity()` and retain

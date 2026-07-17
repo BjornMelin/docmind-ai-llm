@@ -34,15 +34,14 @@ from src.persistence.deployment_identity import (
     get_or_create_deployment_id,
     read_deployment_id,
 )
-from src.retrieval.sparse_query import SPARSE_ENCODING_CONTRACT, sparse_callbacks
+from src.retrieval import vector_contract
+from src.retrieval.sparse_query import sparse_callbacks
 from src.utils.log_safety import build_pii_log_entry, safe_url_for_log
 from src.utils.qdrant_exceptions import (
     QDRANT_SCHEMA_EXCEPTIONS,
 )
 from src.utils.qdrant_utils import get_collection_params
 
-DENSE_VECTOR_NAME = "text-dense"
-SPARSE_VECTOR_NAME = "text-sparse"
 QDRANT_UPSERT_BATCH_SIZE = 20
 TEXT_COLLECTION_SCHEMA_VERSION = "2"
 
@@ -126,11 +125,6 @@ class QdrantCollectionIncompatibleError(Exception):
         )
 
 
-def sparse_retrieval_enabled(cfg: DocMindSettings = settings) -> bool:
-    """Return whether this build must persist canonical sparse vectors."""
-    return bool(cfg.retrieval.enable_server_hybrid or cfg.retrieval.enable_keyword_tool)
-
-
 def canonical_text_collection_metadata(
     *,
     dense_dim: int,
@@ -180,7 +174,7 @@ def _text_collection_metadata(
         "sparse_model": DEFAULT_BM42_MODEL_ID,
         "sparse_source_repo": DEFAULT_BM42_SOURCE_REPO,
         "sparse_source_revision": DEFAULT_BM42_SOURCE_REVISION,
-        "sparse_encoding_contract": SPARSE_ENCODING_CONTRACT,
+        "sparse_encoding_contract": vector_contract.SPARSE_ENCODING_CONTRACT,
     }
 
 
@@ -195,13 +189,13 @@ def _create_hybrid_collection(
     client.create_collection(
         collection_name=name,
         vectors_config={
-            DENSE_VECTOR_NAME: VectorParams(
+            vector_contract.DENSE_VECTOR_NAME: VectorParams(
                 size=dense_dim,
                 distance=Distance.COSINE,
             ),
         },
         sparse_vectors_config={
-            SPARSE_VECTOR_NAME: SparseVectorParams(
+            vector_contract.SPARSE_VECTOR_NAME: SparseVectorParams(
                 index=SparseIndexParams(on_disk=False),
                 modifier=qmodels.Modifier.IDF,
             ),
@@ -240,7 +234,7 @@ def check_hybrid_collection(
                 reason="collection_missing",
             )
         effective_sparse = (
-            sparse_retrieval_enabled()
+            vector_contract.sparse_retrieval_enabled()
             if sparse_enabled is None
             else bool(sparse_enabled)
         )
@@ -295,11 +289,14 @@ def _hybrid_collection_incompatibility(  # noqa: PLR0911
     """Return the first canonical hybrid-schema incompatibility, if any."""
     if not isinstance(dense_cfg, dict):
         return "legacy_unnamed_dense_vector"
-    if DENSE_VECTOR_NAME not in dense_cfg:
+    if vector_contract.DENSE_VECTOR_NAME not in dense_cfg:
         return "text_dense_head_missing"
-    if not isinstance(sparse_cfg, dict) or SPARSE_VECTOR_NAME not in sparse_cfg:
+    if (
+        not isinstance(sparse_cfg, dict)
+        or vector_contract.SPARSE_VECTOR_NAME not in sparse_cfg
+    ):
         return "text_sparse_head_missing"
-    dense_vector = dense_cfg[DENSE_VECTOR_NAME]
+    dense_vector = dense_cfg[vector_contract.DENSE_VECTOR_NAME]
     dense_incompatibility = (
         "text_dense_dimension_mismatch"
         if int(dense_vector.size) != dense_dim
@@ -310,7 +307,7 @@ def _hybrid_collection_incompatibility(  # noqa: PLR0911
     if dense_incompatibility is not None:
         return dense_incompatibility
     if (
-        getattr(sparse_cfg[SPARSE_VECTOR_NAME], "modifier", None)
+        getattr(sparse_cfg[vector_contract.SPARSE_VECTOR_NAME], "modifier", None)
         != qmodels.Modifier.IDF
     ):
         return "text_sparse_idf_missing"
@@ -347,7 +344,9 @@ def ensure_hybrid_collection(
         CollectionCompatibilityResult: Compatibility evidence and performed action.
     """
     effective_sparse = (
-        sparse_retrieval_enabled() if sparse_enabled is None else bool(sparse_enabled)
+        vector_contract.sparse_retrieval_enabled()
+        if sparse_enabled is None
+        else bool(sparse_enabled)
     )
     result = check_hybrid_collection(
         client,
@@ -398,7 +397,7 @@ def rebuild_empty_hybrid_collection(
     Collection writers must be stopped by the operator. Qdrant does not
     atomically lock the exact-count/delete sequence.
     """
-    effective_sparse = sparse_retrieval_enabled()
+    effective_sparse = vector_contract.sparse_retrieval_enabled()
     result = check_hybrid_collection(
         client,
         collection_name,
@@ -629,7 +628,9 @@ def create_vector_store(
     client_config = get_client_config()
     client = QdrantClient(**client_config)
     effective_sparse = (
-        sparse_retrieval_enabled() if enable_hybrid is None else bool(enable_hybrid)
+        vector_contract.sparse_retrieval_enabled()
+        if enable_hybrid is None
+        else bool(enable_hybrid)
     )
     # QdrantVectorStore uses the named dense vector by default even when sparse
     # hybrid search is disabled, so the schema must exist for both modes.
@@ -657,8 +658,8 @@ def create_vector_store(
             collection_name=collection_name,
             enable_hybrid=effective_sparse,
             batch_size=QDRANT_UPSERT_BATCH_SIZE,
-            dense_vector_name=DENSE_VECTOR_NAME,
-            sparse_vector_name=SPARSE_VECTOR_NAME,
+            dense_vector_name=vector_contract.DENSE_VECTOR_NAME,
+            sparse_vector_name=vector_contract.SPARSE_VECTOR_NAME,
             sparse_doc_fn=sparse_doc_fn,
             sparse_query_fn=sparse_query_fn,
         )
@@ -677,7 +678,9 @@ def connect_vector_store(
     client_config = get_client_config()
     client = QdrantClient(**client_config)
     effective_sparse = (
-        sparse_retrieval_enabled() if enable_hybrid is None else bool(enable_hybrid)
+        vector_contract.sparse_retrieval_enabled()
+        if enable_hybrid is None
+        else bool(enable_hybrid)
     )
     compatibility = check_hybrid_collection(
         client,
@@ -702,8 +705,8 @@ def connect_vector_store(
             collection_name=collection_name,
             enable_hybrid=effective_sparse,
             batch_size=QDRANT_UPSERT_BATCH_SIZE,
-            dense_vector_name=DENSE_VECTOR_NAME,
-            sparse_vector_name=SPARSE_VECTOR_NAME,
+            dense_vector_name=vector_contract.DENSE_VECTOR_NAME,
+            sparse_vector_name=vector_contract.SPARSE_VECTOR_NAME,
             sparse_doc_fn=sparse_doc_fn,
             sparse_query_fn=sparse_query_fn,
         )
