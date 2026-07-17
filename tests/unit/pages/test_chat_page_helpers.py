@@ -15,12 +15,6 @@ import pytest
 from src.ui.router_session import replace_session_router
 
 
-def test_chunked_stream_splits_text():  # type: ignore[no-untyped-def]
-    mod = importlib.import_module("src.pages.01_chat")
-    chunks = list(mod._chunked_stream("abcdefghij", chunk_size=3))
-    assert chunks == ["abc", "def", "ghi", "j"]
-
-
 def test_get_settings_override_builds_from_session(monkeypatch):  # type: ignore[no-untyped-def]
     mod = importlib.import_module("src.pages.01_chat")
 

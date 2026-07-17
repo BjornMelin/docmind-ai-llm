@@ -57,7 +57,6 @@ def clean_streamlit_session(monkeypatch):
         "markdown": [],
         "images": [],
         "chat_roles": [],
-        "write_stream": [],
         "reruns": 0,
         "rerun_scopes": [],
     }
@@ -123,13 +122,13 @@ def clean_streamlit_session(monkeypatch):
     )
     monkeypatch.setattr(st, "chat_message", _chat_message, raising=False)
     monkeypatch.setattr(st, "chat_input", lambda *_a, **_k: None, raising=False)
-    monkeypatch.setattr(st, "divider", lambda *_a, **_k: None, raising=False)
     monkeypatch.setattr(
         st,
-        "write_stream",
-        lambda gen: captures["write_stream"].append("".join(list(gen))),  # type: ignore[index]
+        "spinner",
+        lambda *_a, **_k: contextlib.nullcontext(),
         raising=False,
     )
+    monkeypatch.setattr(st, "divider", lambda *_a, **_k: None, raising=False)
     monkeypatch.setattr(st, "write", lambda *_a, **_k: None, raising=False)
     monkeypatch.setattr(st, "selectbox", lambda *_a, **_k: "session", raising=False)
     monkeypatch.setattr(st, "text_input", lambda *_a, **_k: "", raising=False)
@@ -143,25 +142,6 @@ def clean_streamlit_session(monkeypatch):
 
     monkeypatch.setattr(st, "rerun", _rerun, raising=False)
     return captures
-
-
-@pytest.mark.unit
-def test_chunked_stream_edges():
-    import importlib
-
-    page = importlib.import_module("src.pages.01_chat")
-
-    # Empty
-    assert list(page._chunked_stream("")) == []
-    # Exact multiple
-    s = "a" * 96
-    out = list(page._chunked_stream(s, chunk_size=48))
-    assert len(out) == 2
-    assert "".join(out) == s
-    # Remainder
-    s = "abcde"
-    out = list(page._chunked_stream(s, chunk_size=2))
-    assert out == ["ab", "cd", "e"]
 
 
 @pytest.mark.unit
@@ -1190,14 +1170,42 @@ def test_render_staleness_badge_warns_and_logs(
 
 
 @pytest.mark.unit
-def test_render_chat_history_and_handle_prompt(monkeypatch):
+def test_render_staleness_badge_sanitizes_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    clean_streamlit_session: dict[str, list[str] | int],
+) -> None:
+    import importlib
+
+    from src.config.settings import settings
+
+    page = importlib.import_module("src.pages.01_chat")
+    monkeypatch.setattr(settings, "data_dir", tmp_path, raising=False)
+    (tmp_path / "storage").mkdir()
+    monkeypatch.setattr(
+        page,
+        "latest_snapshot_dir",
+        lambda *_a, **_k: (_ for _ in ()).throw(
+            RuntimeError("staleness leaked-secret")
+        ),
+    )
+
+    page._render_staleness_badge()
+
+    assert clean_streamlit_session["captions"] == ["Staleness check unavailable."]
+    assert "leaked-secret" not in str(clean_streamlit_session["captions"])
+
+
+@pytest.mark.unit
+def test_render_chat_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import importlib
 
     import streamlit as st  # type: ignore
     from langchain_core.messages import AIMessage, HumanMessage
 
     page = importlib.import_module("src.pages.01_chat")
-
     roles: list[str] = []
 
     def _chat_message(role: str):  # type: ignore[no-untyped-def]
@@ -1205,29 +1213,39 @@ def test_render_chat_history_and_handle_prompt(monkeypatch):
         return contextlib.nullcontext()
 
     monkeypatch.setattr(st, "chat_message", _chat_message, raising=False)
-    monkeypatch.setattr(st, "markdown", lambda *_a, **_k: None, raising=False)
     page._render_chat_history(
-        [
-            HumanMessage(content="hi"),
-            AIMessage(content="yo"),
-            object(),
-        ]
+        [HumanMessage(content="hi"), AIMessage(content="yo"), object()]
     )
+
     assert roles == ["user", "assistant"]
 
-    # Prompt flow
+
+@pytest.mark.unit
+def test_handle_prompt_preserves_status_persistence_and_sources(
+    monkeypatch: pytest.MonkeyPatch,
+    clean_streamlit_session: dict[str, list[str] | int],
+) -> None:
+    import importlib
+
+    import streamlit as st  # type: ignore
+
+    page = importlib.import_module("src.pages.01_chat")
     monkeypatch.setattr(st, "chat_input", lambda *_a, **_k: "Q", raising=False)
 
-    touched: list[tuple] = []
+    events, touched, query_kwargs = [], [], []
 
     def _touch_session(*args: object, **kwargs: object) -> None:
         assert manager.active
+        events.append("touch")
         touched.append((args, kwargs))
 
     monkeypatch.setattr(page, "touch_session", _touch_session)
-    monkeypatch.setattr(page, "_render_sources_fragment", lambda: None)
 
-    query_kwargs: list[dict[str, object]] = []
+    def _render_sources() -> None:
+        assert not manager.active
+        events.append("sources")
+
+    monkeypatch.setattr(page, "_render_sources_fragment", _render_sources)
 
     class _Manager:
         active = False
@@ -1240,19 +1258,19 @@ def test_render_chat_history_and_handle_prompt(monkeypatch):
             finally:
                 self.active = False
 
-    manager = _Manager()
-
     class _Coord:
         def process_query(self, **kwargs: object) -> SimpleNamespace:
             assert manager.active
+            events.append("process")
             query_kwargs.append(kwargs)
             return SimpleNamespace(content="A", sources=[{"content": "src"}])
 
         def list_checkpoints(self, **_k):  # type: ignore[no-untyped-def]
             assert manager.active
+            events.append("checkpoints")
             return [{"checkpoint_id": "cp"}]
 
-    coord = _Coord()
+    manager, coord = _Manager(), _Coord()
     monkeypatch.setattr(page, "get_job_manager", lambda: manager)
 
     def _current_coord():  # type: ignore[no-untyped-def]
@@ -1260,6 +1278,18 @@ def test_render_chat_history_and_handle_prompt(monkeypatch):
         return coord
 
     monkeypatch.setattr(page, "_get_coordinator", _current_coord)
+
+    @contextlib.contextmanager
+    def _spinner(message: str, *, show_time: bool = False):  # type: ignore[no-untyped-def]
+        assert message == "Generating response…"
+        assert show_time is True
+        events.append("spinner-enter")
+        try:
+            yield
+        finally:
+            events.append("spinner-exit")
+
+    monkeypatch.setattr(st, "spinner", _spinner, raising=False)
     monkeypatch.setattr(
         page,
         "_get_settings_override",
@@ -1288,6 +1318,22 @@ def test_render_chat_history_and_handle_prompt(monkeypatch):
             "user_id": "u",
         }
     ]
+    assert events == [
+        "spinner-enter",
+        "process",
+        "spinner-exit",
+        "checkpoints",
+        "touch",
+        "sources",
+    ]
+    assert touched == [
+        (
+            (conn,),
+            {"thread_id": "t", "last_checkpoint_id": "cp"},
+        )
+    ]
+    assert "A" in cast(list[str], clean_streamlit_session["markdown"])
+    assert st.session_state["last_sources"] == [{"content": "src"}]
     assert not manager.active
 
 
@@ -1614,18 +1660,147 @@ def test_visual_search_sidebar_reports_maintenance(
 
 
 @pytest.mark.unit
-def test_load_chat_messages_handles_exception(monkeypatch) -> None:
+def test_load_chat_messages_returns_ready_empty_without_rendering(
+    monkeypatch: pytest.MonkeyPatch,
+    clean_streamlit_session: dict[str, list[str] | int],
+) -> None:
     import importlib
 
     page = importlib.import_module("src.pages.01_chat")
 
     class _Coord:
         def get_state_values(self, **_k):  # type: ignore[no-untyped-def]
-            raise RuntimeError("boom")
+            return {"messages": []}
 
-    monkeypatch.setattr(page, "_get_coordinator", _Coord)
-    selection = SimpleNamespace(thread_id="t", user_id="u")
-    assert page._load_chat_messages(selection) == []
+    @contextlib.contextmanager
+    def _activity():  # type: ignore[no-untyped-def]
+        yield _Coord()
+
+    monkeypatch.setattr(page, "_coordinator_activity", _activity)
+    result = page._load_chat_messages(SimpleNamespace(thread_id="t", user_id="u"))
+
+    assert result == page._ChatHistoryLoadResult(messages=(), status="ready")
+    assert clean_streamlit_session["captions"] == []
+    assert clean_streamlit_session["infos"] == []
+    assert clean_streamlit_session["errors"] == []
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "state",
+    [None, {"messages": None}, {"messages": "not-a-message-list"}],
+)
+def test_load_chat_messages_malformed_state_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    state: object,
+) -> None:
+    import importlib
+
+    page = importlib.import_module("src.pages.01_chat")
+
+    class _Coord:
+        def get_state_values(self, **_k):  # type: ignore[no-untyped-def]
+            return state
+
+    @contextlib.contextmanager
+    def _activity():  # type: ignore[no-untyped-def]
+        yield _Coord()
+
+    monkeypatch.setattr(page, "_coordinator_activity", _activity)
+    result = page._load_chat_messages(
+        SimpleNamespace(thread_id="thread", user_id="user")
+    )
+
+    assert result.status == "failed"
+    assert result.messages == ()
+    assert result.fingerprint
+
+
+@pytest.mark.unit
+def test_load_chat_messages_returns_maintenance_without_rendering(
+    monkeypatch: pytest.MonkeyPatch,
+    clean_streamlit_session: dict[str, list[str] | int],
+) -> None:
+    import importlib
+
+    page = importlib.import_module("src.pages.01_chat")
+
+    @contextlib.contextmanager
+    def _activity():  # type: ignore[no-untyped-def]
+        raise page.JobAdmissionPausedError("maintenance")
+        yield
+
+    monkeypatch.setattr(page, "_coordinator_activity", _activity)
+    result = page._load_chat_messages(SimpleNamespace(thread_id="t", user_id="u"))
+
+    assert result == page._ChatHistoryLoadResult(messages=(), status="maintenance")
+    assert clean_streamlit_session["captions"] == []
+    assert clean_streamlit_session["infos"] == []
+    assert clean_streamlit_session["errors"] == []
+
+
+@pytest.mark.unit
+def test_load_chat_messages_failure_is_sanitized_and_retryable(
+    monkeypatch: pytest.MonkeyPatch,
+    clean_streamlit_session: dict[str, list[str] | int],
+) -> None:
+    import importlib
+
+    page = importlib.import_module("src.pages.01_chat")
+
+    @contextlib.contextmanager
+    def _activity():  # type: ignore[no-untyped-def]
+        raise RuntimeError("database leaked-secret")
+        yield
+
+    monkeypatch.setattr(page, "_coordinator_activity", _activity)
+    selection = SimpleNamespace(
+        thread_id="raw-thread-identifier", user_id="raw-user-identifier"
+    )
+    result = page._load_chat_messages(selection)
+
+    assert result.messages == ()
+    assert result.status == "failed"
+    assert result.fingerprint
+    assert "leaked-secret" not in result.fingerprint
+    assert "raw-thread" not in result.fingerprint
+    assert clean_streamlit_session["errors"] == []
+
+    monkeypatch.setattr(page.st, "button", lambda *_a, **_k: True)
+    assert page._render_chat_history_result(result) is False
+    visible = " ".join(
+        str(item)
+        for key in ("errors", "captions", "infos")
+        for item in clean_streamlit_session[key]  # type: ignore[index]
+    )
+    assert "Chat history could not be loaded. Please retry." in visible
+    assert "leaked-secret" not in visible
+    assert "raw-thread-identifier" not in visible
+    assert "raw-user-identifier" not in visible
+    assert clean_streamlit_session["reruns"] == 1
+
+
+@pytest.mark.unit
+def test_render_chat_history_result_distinguishes_empty_and_maintenance(
+    clean_streamlit_session: dict[str, list[str] | int],
+) -> None:
+    import importlib
+
+    page = importlib.import_module("src.pages.01_chat")
+
+    assert page._render_chat_history_result(
+        page._ChatHistoryLoadResult(messages=(), status="ready")
+    )
+    assert clean_streamlit_session["captions"] == [
+        "No messages yet. Ask a question to start this chat."
+    ]
+
+    assert not page._render_chat_history_result(
+        page._ChatHistoryLoadResult(messages=(), status="maintenance")
+    )
+    assert clean_streamlit_session["infos"] == [
+        "Chat history is unavailable during runtime maintenance."
+    ]
 
 
 @pytest.mark.unit

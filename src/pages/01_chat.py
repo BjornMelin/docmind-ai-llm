@@ -1,10 +1,4 @@
-"""Streamlit Chat page.
-
-This page renders a simple chat UI backed by the multi-agent coordinator.
-
-The coordinator does not expose a streaming interface; we simulate streaming by
-writing the response in small chunks to the UI for better perceived latency.
-"""
+"""Streamlit Chat page backed by the multi-agent coordinator."""
 
 from __future__ import annotations
 
@@ -12,11 +6,11 @@ import contextlib
 import functools
 import sqlite3
 import threading
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import streamlit as st
 from langchain_core.messages import AIMessage, HumanMessage
@@ -136,6 +130,15 @@ class _MemoryOperationResult[ValueT]:
 
     value: ValueT | None
     error: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _ChatHistoryLoadResult:
+    """Immutable, UI-safe outcome of loading one Chat history."""
+
+    messages: tuple[Any, ...]
+    status: Literal["ready", "maintenance", "failed"]
+    fingerprint: str | None = None
 
 
 def _run_memory_operation[ValueT](
@@ -269,20 +272,6 @@ def _fork_chat_checkpoint(
         )
 
 
-def _chunked_stream(text: str, chunk_size: int = 48) -> Iterable[str]:
-    """Yield text in fixed-size chunks.
-
-    Args:
-        text: Full text to emit.
-        chunk_size: Maximum size of each emitted chunk.
-
-    Yields:
-        Chunks of ``text`` up to ``chunk_size`` characters.
-    """
-    for i in range(0, len(text), chunk_size):
-        yield text[i : i + chunk_size]
-
-
 def _get_settings_override() -> dict[str, Any] | None:
     """Return settings_override for the coordinator, if available.
 
@@ -343,8 +332,9 @@ def main() -> None:  # pragma: no cover - Streamlit page
     _render_analysis_terminal_notice()
     _render_analysis_results()
     _render_staleness_badge()
-    messages = _load_chat_messages(selection)
-    _render_chat_history(messages)
+    history = _load_chat_messages(selection)
+    if not _render_chat_history_result(history):
+        return
     _handle_chat_prompt(selection)
 
 
@@ -769,20 +759,33 @@ def _render_staleness_badge() -> None:
             else:
                 st.caption(f"Snapshot up-to-date: {latest.name}")
     except Exception as exc:
-        st.caption(f"Staleness check skipped: {exc}")
+        redaction = build_pii_log_entry(str(exc), key_id="chat.staleness_check")
+        logger.debug(
+            "Staleness check skipped (error_type={} error={})",
+            type(exc).__name__,
+            redaction.redacted,
+        )
+        st.caption("Staleness check unavailable.")
 
 
-def _load_chat_messages(selection: ChatSelection) -> list[Any]:
-    """Load persisted chat messages from the coordinator."""
+def _load_chat_messages(selection: ChatSelection) -> _ChatHistoryLoadResult:
+    """Return a sanitized, render-free result for persisted Chat messages."""
     try:
         with _coordinator_activity() as coord:
             state = coord.get_state_values(
                 thread_id=selection.thread_id, user_id=selection.user_id
             )
-        return state.get("messages", []) if isinstance(state, dict) else []
+        if not isinstance(state, dict):
+            raise TypeError("invalid Chat history state")
+        messages = state.get("messages", [])
+        if not isinstance(messages, list | tuple):
+            raise TypeError("invalid Chat history messages")
+        return _ChatHistoryLoadResult(
+            messages=tuple(messages),
+            status="ready",
+        )
     except JobAdmissionPausedError:
-        st.caption("Chat history is unavailable during runtime maintenance.")
-        return []
+        return _ChatHistoryLoadResult(messages=(), status="maintenance")
     except Exception as exc:
         thread_redacted = build_pii_log_entry(
             str(selection.thread_id), key_id="chat.thread_id"
@@ -799,10 +802,34 @@ def _load_chat_messages(selection: ChatSelection) -> list[Any]:
             type(exc).__name__,
             err_redaction.redacted,
         )
-        return []
+        return _ChatHistoryLoadResult(
+            messages=(),
+            status="failed",
+            fingerprint=err_redaction.fingerprint[:12],
+        )
 
 
-def _render_chat_history(messages: list[Any]) -> None:
+def _render_chat_history_result(result: _ChatHistoryLoadResult) -> bool:
+    """Render one history result and report whether Chat input is safe to show."""
+    if result.status == "ready":
+        if not result.messages:
+            st.caption("No messages yet. Ask a question to start this chat.")
+        _render_chat_history(result.messages)
+        return True
+
+    if result.status == "maintenance":
+        st.info("Chat history is unavailable during runtime maintenance.")
+    else:
+        st.error("Chat history could not be loaded. Please retry.")
+        if result.fingerprint:
+            st.caption(f"Error id: {result.fingerprint}")
+
+    if st.button("Retry chat history", key="chat_history_retry"):
+        st.rerun()
+    return False
+
+
+def _render_chat_history(messages: tuple[Any, ...] | list[Any]) -> None:
     """Render historical chat messages."""
     for msg in messages:
         role = None
@@ -829,12 +856,13 @@ def _handle_chat_prompt(selection: ChatSelection) -> None:
         with _coordinator_activity() as coord:
             conn = get_chat_db_conn()
             overrides = _get_settings_override()
-            resp = coord.process_query(
-                query=prompt,
-                settings_override=overrides,
-                thread_id=selection.thread_id,
-                user_id=selection.user_id,
-            )
+            with st.spinner("Generating response…", show_time=True):
+                resp = coord.process_query(
+                    query=prompt,
+                    settings_override=overrides,
+                    thread_id=selection.thread_id,
+                    user_id=selection.user_id,
+                )
             try:
                 checkpoints = coord.list_checkpoints(
                     thread_id=selection.thread_id,
@@ -873,7 +901,7 @@ def _handle_chat_prompt(selection: ChatSelection) -> None:
     sources = getattr(resp, "sources", []) if resp is not None else []
 
     with st.chat_message("assistant"):
-        st.write_stream(_chunked_stream(answer))
+        st.markdown(answer)
         if isinstance(sources, list) and sources:
             _set_last_sources_for_render(sources, thread_id=selection.thread_id)
             _render_sources_fragment()

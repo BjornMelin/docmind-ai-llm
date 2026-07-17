@@ -19,6 +19,9 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Fixed
 
+- Chat now distinguishes a new conversation from unavailable history, offers a
+  sanitized retry path, shows native status only during synchronous generation,
+  and renders completed answers without simulated post-completion streaming.
 - Serialized live runtime readers and writers across Chat, Documents, Settings,
   cache maintenance, and background jobs; late shutdown completions can no longer
   replace cancellation, and failed Settings publication restores every

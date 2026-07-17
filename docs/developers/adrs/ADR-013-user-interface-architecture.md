@@ -2,8 +2,8 @@
 ADR: 013
 Title: User Interface Architecture (Streamlit Multipage)
 Status: Accepted (Amended)
-Version: 3.2
-Date: 2025-09-09
+Version: 3.3
+Date: 2026-07-16
 Supersedes:
 Superseded-by:
 Related: 001, 003, 004, 009, 016, 019, 021, 032, 036, 038
@@ -18,7 +18,10 @@ References:
 
 ## Description
 
-Adopt a Streamlit-based, programmatic multipage UI that favors native components, native caching/state, and native streaming. Provide chat, documents, analytics, and settings pages with a consistent, simple architecture integrated with agentic retrieval, document processing, and local metrics.
+Adopt a Streamlit-based, programmatic multipage UI that favors native
+components, native caching/state, and truthful response status. Provide Chat,
+Documents, Analytics, and Settings pages with a consistent, simple architecture
+integrated with agentic retrieval, document processing, and local metrics.
 
 ## Context
 
@@ -27,7 +30,7 @@ The UI must surface agentic RAG (ADR‑001), multimodal processing (ADR‑009), 
 ## Decision Drivers
 
 - Simplicity and maintainability (KISS, library‑first)
-- Native Streamlit features for state, caching, and streaming
+- Native Streamlit features for state, caching, and status
 - Programmatic multipage navigation without custom routing
 - Smooth integration with state (ADR‑016) and settings (ADR‑024)
 - Fast local performance and low setup friction
@@ -50,7 +53,13 @@ The UI must surface agentic RAG (ADR‑001), multimodal processing (ADR‑009), 
 
 ## Decision
 
-We adopt Streamlit’s programmatic multipage pattern with native components and caching. Pages: Chat (native streaming), Documents (sortable/filterable table; prefer `st.dataframe`, allow AgGrid only when necessary), Analytics (Plotly charts), and Settings (forms). Reranking remains always-on with internal guardrails (ADR‑024/SPEC‑005); v1 avoids advanced reranker controls in the UI. State uses `st.session_state`; caching uses `st.cache_data` and `st.cache_resource`.
+We adopt Streamlit’s programmatic multipage pattern with native components and
+caching. Pages: Chat (native synchronous status and terminal response),
+Documents (sortable/filterable table; prefer `st.dataframe`, allow AgGrid only
+when necessary), Analytics (Plotly charts), and Settings (forms). Reranking
+remains always-on with internal guardrails (ADR‑024/SPEC‑005); v1 avoids advanced
+reranker controls in the UI. State uses `st.session_state`; caching uses
+`st.cache_data` and `st.cache_resource`.
 
 ### GraphRAG UI Controls (Amendment)
 
@@ -87,7 +96,9 @@ graph TD
 
 - FR‑1: Multipage navigation via `st.Page`/`st.navigation`
 - FR‑2: Document table with sorting/filtering (prefer `st.dataframe`; AgGrid optional)
-- FR‑3: Chat page streams token output natively
+- FR‑3: Chat shows native status around the synchronous coordinator call,
+  renders its completed response normally, and never animates completed text as
+  simulated streaming
 - FR‑4: Analytics dashboard with charts (Plotly)
 - FR‑5: Settings forms for model and feature flags
 - FR‑6: Cross‑page session state and chat history
@@ -100,7 +111,9 @@ graph TD
 
 ### Performance Requirements
 
-- PR‑1: Chat streaming updates at >10 tokens/sec for small responses
+- PR‑1: Chat benchmarks report end-to-end response latency with hardware, model,
+  and corpus identified; no time-to-first-token target applies without a public
+  incremental coordinator API
 - PR‑2: Analytics charts render <300ms with cached data
 
 ### Integration Requirements
@@ -165,7 +178,7 @@ gatherUsageStats = false
 
 ## Testing
 
-Use pytest with lightweight smoke tests and streaming checks.
+Use pytest with lightweight smoke tests and truthful status/terminal-output checks.
 
 ```python
 import pytest
@@ -197,11 +210,14 @@ def test_session_state_shared_keys(app_runner):
     app_runner.run("src/pages/02_documents.py")
     assert st.session_state.get("docmind_shared_key") == "ok"
 
-@pytest.mark.asyncio
-async def test_streaming_generator(mock_llm):
-    async for token in mock_llm.astream("hi"):
-        assert isinstance(token, str)
-        break
+def test_generation_spinner_wraps_only_coordinator_call(chat_page):
+    assert chat_page.generation_events == [
+        "spinner-enter",
+        "process-query",
+        "spinner-exit",
+        "checkpoint",
+        "touch-session",
+    ]
 ```
 
 ## Consequences
@@ -232,6 +248,9 @@ async def test_streaming_generator(mock_llm):
 
 ## Changelog
 
+- **3.3 (2026-07-16)**: Replaced simulated post-completion streaming with
+  truthful native synchronous status and terminal rendering; real incremental
+  streaming requires a public coordinator event API and end-to-end proof.
 - **3.2 (2025-09-09)**: Added GraphRAG toggle, exports, and staleness badge integration; linked to ADR‑038/019
 - **3.1 (2025-09-03)**: DOCS - Added related-decision reference to ADR-036 (now superseded)
 - **3.0 (2025-08-17)**: Accepted version reflecting premium Streamlit multipage UI and modern patterns

@@ -2,8 +2,8 @@
 ADR: 011
 Title: Agent Orchestration with LangGraph StateGraph
 Status: Accepted (Amended)
-Version: 7.5
-Date: 2026-07-13
+Version: 7.6
+Date: 2026-07-16
 Supersedes:
 Superseded-by:
 Related: 001, 003, 004, 010, 015, 016, 024, 066
@@ -220,6 +220,9 @@ def test_supervisor_boots_with_agents(supervisor_app):
 
 ## Changelog
 
+- 7.6 (2026-07-16): Replaced the post-completion chunked streaming fallback
+  contract with truthful native status around the synchronous public coordinator
+  call; real streaming now requires a separate public event API and parity proof.
 - 7.5 (2026-07-13): Hard-cut supervisor navigation to one atomic
   `dispatch_agents` tool and remove competing parent-navigation tools.
 - 7.4 (2026-07-13): Remove the obsolete shared-client toggle and brittle lockfile
@@ -245,9 +248,15 @@ def test_supervisor_boots_with_agents(supervisor_app):
 
 ## Performance & Timeouts
 
-- Coordinators SHOULD enforce elapsed‑time guards around streaming and tool execution; publish sane defaults and document override points.
+- Coordinators SHOULD enforce elapsed-time guards around query and tool
+  execution; publish sane defaults and document override points.
 
-## Streaming Fallback & Analytics
+## Chat Response Status & Analytics
 
-- The Chat UI MUST implement streaming fallback using chunked `write_stream`.
+- The current public coordinator API returns one completed `AgentResponse`.
+  Chat MUST show native synchronous generation status and render that completed
+  response normally. It MUST NOT simulate streaming by chunking completed text.
+- Real incremental streaming requires a separate public coordinator event API
+  with cancellation, checkpoint, source, and failure parity plus an end-to-end
+  test proving output arrives before completion.
 - Analytics MUST be best‑effort and non‑blocking; failures MUST NOT impact the user experience.

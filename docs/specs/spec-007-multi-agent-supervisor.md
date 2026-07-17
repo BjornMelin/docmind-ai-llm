@@ -1,8 +1,8 @@
 ---
 spec: SPEC-007
 title: LangGraph Supervisor Orchestrator with Deterministic JSON-Schema Outputs
-version: 1.2.0
-date: 2026-05-01
+version: 1.2.1
+date: 2026-07-16
 owners: ["ai-arch"]
 status: Revised
 related_requirements:
@@ -45,13 +45,15 @@ from src.retrieval.router_factory import build_router_engine
 
 - `src/agents/supervisor_graph.py`: repo-local supervisor graph builder with one
   atomic multi-worker dispatch tool.
-- `src/agents/coordinator.py`: coordinator wiring + compilation with checkpointer/store + streaming.
+- `src/agents/coordinator.py`: coordinator wiring and compilation with the
+  checkpointer/store; the public query API returns one completed response.
 - Agent tools live under `src/agents/tools/` and are registered through
   `src/agents/registry/tool_registry.py`.
 
 ### UPDATE
 
-- `src/app.py` and `src/pages/01_chat.py`: send queries via the coordinator; stream responses.
+- `src/app.py` and `src/pages/01_chat.py`: send synchronous queries through the
+  coordinator, show truthful native status, and render completed responses.
 
 ## Runtime Replacement Non-Goals
 
@@ -95,3 +97,9 @@ Feature: Supervisor routing
 - LangGraph supervisor official tutorials and repo.
 - [ADR-066](../developers/adrs/ADR-066-llamaindex-workflows-orchestration-evaluation.md)
 - [SPEC-043](./spec-043-ollama-native-capabilities.md) (Ollama native SDK integration and capability gating).
+
+## Changelog
+
+- 1.2.1 (2026-07-16): Clarified that the public coordinator returns a completed
+  response; Chat uses truthful synchronous status, while future incremental
+  streaming requires a separate public event contract.
