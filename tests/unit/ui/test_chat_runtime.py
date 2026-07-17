@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -82,6 +83,37 @@ def test_local_model_readiness_accepts_complete_sharded_weights(
                 }
             }
         ),
+        encoding="utf-8",
+    )
+
+    readiness = chat_runtime.check_model_artifacts(
+        model_name="unused",
+        model_revision=None,
+        cache_folder=tmp_path / "cache",
+        local_model_path=model_path,
+    )
+
+    assert readiness == chat_runtime.ChatModelReadiness(status="ready")
+
+
+def test_local_model_readiness_accepts_shard_symlink_within_model_root(
+    tmp_path: Path,
+) -> None:
+    model_path = tmp_path / "embedding"
+    transformer = model_path / "0_Transformer"
+    shared = model_path / "shared"
+    transformer.mkdir(parents=True)
+    shared.mkdir()
+    (model_path / "config.json").write_text('{"model_type": "bert"}', encoding="utf-8")
+    target = shared / "shard.safetensors"
+    target.write_bytes(b"model shard")
+    shard = transformer / "model-00001-of-00001.safetensors"
+    try:
+        shard.symlink_to(Path(os.path.relpath(target, start=transformer)))
+    except OSError as exc:
+        pytest.skip(f"symlinks unavailable: {type(exc).__name__}")
+    (transformer / "model.safetensors.index.json").write_text(
+        json.dumps({"weight_map": {"layer": shard.name}}),
         encoding="utf-8",
     )
 
@@ -265,6 +297,49 @@ def test_cached_model_readiness_validates_returned_snapshot(
         }
     ]
     assert snapshot_download is not _download
+
+
+@pytest.mark.parametrize("shard_location", ["cache", "outside"])
+def test_cached_model_readiness_contains_snapshot_shard_symlinks(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    shard_location: str,
+) -> None:
+    cache_root = tmp_path / "cache"
+    model_cache = cache_root / "models--org--model"
+    snapshot = model_cache / "snapshots" / "revision"
+    blobs = model_cache / "blobs"
+    snapshot.mkdir(parents=True)
+    blobs.mkdir()
+    (snapshot / "config.json").write_text('{"model_type": "bert"}', encoding="utf-8")
+    inside_blob = blobs / "shard-hash"
+    inside_blob.write_bytes(b"cached shard")
+    outside_blob = tmp_path / "outside-shard"
+    outside_blob.write_bytes(b"outside shard")
+    target = inside_blob if shard_location == "cache" else outside_blob
+    shard = snapshot / "model-00001-of-00001.safetensors"
+    try:
+        shard.symlink_to(Path(os.path.relpath(target, start=snapshot)))
+    except OSError as exc:
+        pytest.skip(f"symlinks unavailable: {type(exc).__name__}")
+    (snapshot / "model.safetensors.index.json").write_text(
+        json.dumps({"weight_map": {"layer": shard.name}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "huggingface_hub.snapshot_download",
+        lambda **_kwargs: str(snapshot),
+    )
+
+    readiness = chat_runtime.check_model_artifacts(
+        model_name="org/model",
+        model_revision="revision",
+        cache_folder=cache_root,
+        local_model_path=None,
+    )
+
+    expected = "ready" if shard_location == "cache" else "cache_missing"
+    assert readiness == chat_runtime.ChatModelReadiness(status=expected)
 
 
 def test_cached_model_readiness_sanitizes_invalid_model_id(tmp_path: Path) -> None:

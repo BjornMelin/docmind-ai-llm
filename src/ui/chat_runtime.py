@@ -52,8 +52,13 @@ def _nonempty_regular_file(path: Path) -> bool:
         return False
 
 
-def _resolve_model_shard(manifest_parent: Path, shard_name: object) -> Path | None:
-    """Resolve one safe shard path beneath its manifest directory."""
+def _resolve_model_shard(
+    manifest_parent: Path,
+    shard_name: object,
+    *,
+    containment_root: Path,
+) -> Path | None:
+    """Resolve one lexical child shard beneath its allowed storage root."""
     if not isinstance(shard_name, str) or not shard_name.strip():
         return None
     posix_path = PurePosixPath(shard_name)
@@ -67,13 +72,13 @@ def _resolve_model_shard(manifest_parent: Path, shard_name: object) -> Path | No
         return None
     try:
         shard = (manifest_parent / Path(shard_name)).resolve(strict=True)
-        shard.relative_to(manifest_parent)
+        shard.relative_to(containment_root)
     except (OSError, RuntimeError, ValueError):
         return None
     return shard
 
 
-def _sharded_weights_ready(index_path: Path) -> bool:
+def _sharded_weights_ready(index_path: Path, *, containment_root: Path) -> bool:
     """Validate every unique shard named by a Transformers weight index."""
     try:
         manifest = json.loads(index_path.read_text(encoding="utf-8"))
@@ -87,11 +92,17 @@ def _sharded_weights_ready(index_path: Path) -> bool:
 
     try:
         manifest_parent = index_path.parent.resolve(strict=True)
-    except (OSError, RuntimeError):
+        resolved_containment_root = containment_root.resolve(strict=True)
+        manifest_parent.relative_to(resolved_containment_root)
+    except (OSError, RuntimeError, ValueError):
         return False
     shards: set[Path] = set()
     for shard_name in weight_map.values():
-        shard = _resolve_model_shard(manifest_parent, shard_name)
+        shard = _resolve_model_shard(
+            manifest_parent,
+            shard_name,
+            containment_root=resolved_containment_root,
+        )
         if shard is None:
             return False
         shards.add(shard)
@@ -99,9 +110,14 @@ def _sharded_weights_ready(index_path: Path) -> bool:
     return all(_nonempty_regular_file(shard) for shard in shards)
 
 
-def _local_model_artifacts_ready(model_path: Path) -> bool:
+def _local_model_artifacts_ready(
+    model_path: Path,
+    *,
+    shard_containment_root: Path | None = None,
+) -> bool:
     """Return whether a local SentenceTransformers directory has core assets."""
     roots = (model_path, model_path / "0_Transformer")
+    containment_root = shard_containment_root or model_path
     has_config = False
     for root in roots:
         config_path = root / "config.json"
@@ -119,7 +135,13 @@ def _local_model_artifacts_ready(model_path: Path) -> bool:
         if any(_nonempty_regular_file(root / name) for name in direct_weight_names):
             has_weights = True
             break
-        if any(_sharded_weights_ready(root / name) for name in index_names):
+        if any(
+            _sharded_weights_ready(
+                root / name,
+                containment_root=containment_root,
+            )
+            for name in index_names
+        ):
             has_weights = True
             break
     return has_config and has_weights
@@ -152,7 +174,10 @@ def check_model_artifacts(
         return ChatModelReadiness(status="cache_missing")
     except (HFValidationError, OSError):
         return ChatModelReadiness(status="initialization_failed")
-    if not _local_model_artifacts_ready(Path(snapshot_path)):
+    if not _local_model_artifacts_ready(
+        Path(snapshot_path),
+        shard_containment_root=cache_folder.expanduser(),
+    ):
         return ChatModelReadiness(status="cache_missing")
     return ChatModelReadiness(status="ready")
 
