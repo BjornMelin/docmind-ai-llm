@@ -172,7 +172,11 @@ class _CoordinatorStub:
 
 
 @pytest.fixture
-def chat_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[AppTest]:
+def chat_app(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _reset_router_and_graph_modules: pytest.MonkeyPatch,
+) -> Iterator[AppTest]:
     """Create an AppTest instance for the Chat page with a coordinator stub."""
     from src.config.settings import settings as _settings  # local import
 
@@ -189,7 +193,7 @@ def chat_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[AppTes
 
     mod = ModuleType("src.agents.coordinator")
     mod.MultiAgentCoordinator = _CoordinatorStub  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "src.agents.coordinator", mod)
+    _reset_router_and_graph_modules.setitem(sys.modules, "src.agents.coordinator", mod)
 
     root = Path(__file__).resolve().parents[3]
     page_path = root / "src" / "pages" / "01_chat.py"

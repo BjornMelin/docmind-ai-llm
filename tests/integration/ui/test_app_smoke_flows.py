@@ -94,7 +94,9 @@ def test_app_entrypoint_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def chat_app_smoke(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _reset_router_and_graph_modules: pytest.MonkeyPatch,
 ) -> Generator[AppTest, None, None]:
     """AppTest harness for Chat page with a stub coordinator.
 
@@ -120,7 +122,7 @@ def chat_app_smoke(
 
     mod = ModuleType("src.agents.coordinator")
     mod.MultiAgentCoordinator = _CoordinatorStub  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "src.agents.coordinator", mod)
+    _reset_router_and_graph_modules.setitem(sys.modules, "src.agents.coordinator", mod)
 
     root = Path(__file__).resolve().parents[3]
     page_path = root / "src" / "pages" / "01_chat.py"

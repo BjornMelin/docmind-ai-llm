@@ -26,6 +26,7 @@ pytestmark = pytest.mark.integration
 def chat_analysis_app_test(  # noqa: PLR0915 - complete AppTest boundary fixture
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    _reset_router_and_graph_modules: pytest.MonkeyPatch,
     fake_job_manager,
     fake_job_owner_id,
 ) -> Iterator[AppTest]:
@@ -78,7 +79,9 @@ def chat_analysis_app_test(  # noqa: PLR0915 - complete AppTest boundary fixture
     coord_mod.MultiAgentCoordinator = (  # type: ignore[attr-defined]
         lambda *_, **__: _CoordStub()
     )
-    monkeypatch.setitem(sys.modules, "src.agents.coordinator", coord_mod)
+    _reset_router_and_graph_modules.setitem(
+        sys.modules, "src.agents.coordinator", coord_mod
+    )
 
     @dataclass(frozen=True, slots=True)
     class _ChatSelection:
@@ -92,7 +95,9 @@ def chat_analysis_app_test(  # noqa: PLR0915 - complete AppTest boundary fixture
         thread_id="t", user_id="local"
     )
     chat_sessions_mod.render_time_travel_sidebar = lambda *_, **__: None
-    monkeypatch.setitem(sys.modules, "src.ui.chat_sessions", chat_sessions_mod)
+    _reset_router_and_graph_modules.setitem(
+        sys.modules, "src.ui.chat_sessions", chat_sessions_mod
+    )
 
     # Stub analysis service to keep UI test deterministic and fast under CI+cov.
     import src.analysis.service as analysis_service
