@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import argparse
+import builtins
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,6 +20,7 @@ from src.config.embedding_defaults import (
 from tools.models.pull import (
     _BGE_M3_IGNORE_PATTERNS,
     _SIGLIP_TRANSFORMERS_FILES,
+    _resolve_cache_dirs,
     main,
     pull,
     pull_bge_m3_snapshot,
@@ -26,6 +29,58 @@ from tools.models.pull import (
     pull_siglip_snapshot,
     resolve_bm42_snapshot,
 )
+
+
+def test_explicit_active_cache_does_not_import_settings_for_unused_cache(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Keep Docker's partial-source prefetch layers independent of settings."""
+    real_import = builtins.__import__
+
+    def _reject_settings_import(
+        name: str,
+        globals_arg=None,
+        locals_arg=None,
+        fromlist=(),
+        level: int = 0,
+    ):
+        if name == "src.config.settings":
+            raise AssertionError("unused cache imported application settings")
+        return real_import(name, globals_arg, locals_arg, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", _reject_settings_import)
+    model_cache = tmp_path / "models"
+    parser_cache = tmp_path / "parser"
+    common = {
+        "bge_m3": False,
+        "bge_reranker": False,
+        "bm42": False,
+        "add": None,
+        "docling_layout": False,
+    }
+
+    resolved_model, _ = _resolve_cache_dirs(
+        argparse.Namespace(
+            **common,
+            all=True,
+            parser_defaults=False,
+            cache_dir=str(model_cache),
+            parser_cache_dir=None,
+        )
+    )
+    _, resolved_parser = _resolve_cache_dirs(
+        argparse.Namespace(
+            **common,
+            all=False,
+            parser_defaults=True,
+            cache_dir=None,
+            parser_cache_dir=str(parser_cache),
+        )
+    )
+
+    assert resolved_model == model_cache.resolve()
+    assert resolved_parser == parser_cache.resolve()
 
 
 def test_all_prefetches_complete_pinned_snapshots(

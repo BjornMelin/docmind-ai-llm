@@ -172,19 +172,19 @@ def _resolve_cache_dirs(args: argparse.Namespace) -> tuple[Path, Path]:
 
         bootstrap_settings()
 
-    if args.cache_dir is None:
+    if needs_model_cache and args.cache_dir is None:
         from src.config.settings import settings
 
         configured_cache_dir = settings.embedding.cache_folder
     else:
-        configured_cache_dir = Path(args.cache_dir)
+        configured_cache_dir = Path(args.cache_dir or ".")
 
-    if args.parser_cache_dir is None:
+    if needs_parser_cache and args.parser_cache_dir is None:
         from src.config.settings import settings
 
         configured_parser_cache_dir = settings.parsing.model_cache_dir
     else:
-        configured_parser_cache_dir = Path(args.parser_cache_dir)
+        configured_parser_cache_dir = Path(args.parser_cache_dir or ".")
     return (
         configured_cache_dir.expanduser().resolve(),
         configured_parser_cache_dir.expanduser().resolve(),
