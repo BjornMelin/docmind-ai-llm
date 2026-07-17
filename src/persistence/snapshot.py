@@ -8,6 +8,7 @@ owned by Qdrant backups.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -55,6 +56,8 @@ _SNAPSHOT_VERSION_RE = re.compile(r"\A\d{8}T\d{6}-[0-9a-f]{8}\Z")
 _SHA256_RE = re.compile(r"\A[0-9a-f]{64}\Z")
 _ACTIVATION_JOURNAL_NAME = ".activation-transaction.json"
 _ACTIVATION_JOURNAL_SCHEMA_VERSION = 1
+MANIFEST_EXPORT_FILENAME_MAX_LENGTH = 200
+MANIFEST_EXPORT_FORMAT_MAX_LENGTH = 32
 _PROPERTY_GRAPH_NATIVE_PATHS = frozenset(
     {
         "graph/default__vector_store.json",
@@ -94,6 +97,14 @@ class SnapshotPaths:
     base_dir: Path
     lock_file: Path
     current_file: Path
+
+
+@dataclass(frozen=True, slots=True)
+class FinalizedSnapshot:
+    """Verified immutable snapshot identity captured before writer release."""
+
+    path: Path
+    manifest: dict[str, Any]
 
 
 def _snapshot_paths(base_dir: Path | None = None) -> SnapshotPaths:
@@ -401,11 +412,10 @@ def _current_pointer_name(paths: SnapshotPaths) -> str | None:
 
 def _retire_committed_upload_journals_locked(
     paths: SnapshotPaths,
-    destination: Path,
+    manifest: dict[str, Any],
 ) -> None:
     """Resolve source journals only after the durable CURRENT commit point."""
-    manifest = _load_complete_manifest(destination)
-    collections = _manifest_collections(manifest) if manifest is not None else None
+    collections = _manifest_collections(manifest)
     if collections is None:
         raise SnapshotPersistenceError(
             "Committed snapshot has no physical collection identity"
@@ -466,13 +476,16 @@ def _garbage_collect(
         if not is_snapshot_version_name(current_name):
             logger.warning("Snapshot retention skipped because CURRENT is invalid")
             return
+    protected_resolved = {path.resolve() for path in protected_paths}
     versions = sorted(
         p
         for p in paths.base_dir.iterdir()
         if p.is_dir()
         and not p.is_symlink()
         and is_snapshot_version_name(p.name)
-        and _load_complete_manifest(p) is not None
+        and (
+            p.resolve() in protected_resolved or _load_complete_manifest(p) is not None
+        )
     )
     if len(versions) <= keep:
         return
@@ -524,7 +537,7 @@ def finalize_snapshot(  # noqa: PLR0915
     tmp_dir: Path,
     *,
     base_dir: Path | None = None,
-) -> Path:
+) -> FinalizedSnapshot:
     """Promote a workspace and commit activation by replacing ``CURRENT``.
 
     Args:
@@ -532,7 +545,7 @@ def finalize_snapshot(  # noqa: PLR0915
         base_dir: Optional snapshot storage root.
 
     Returns:
-        Path: Path to the finalized snapshot directory.
+        Finalized snapshot path and its verified manifest.
     """
     start = time.perf_counter()
     paths = _snapshot_paths(base_dir)
@@ -543,6 +556,7 @@ def finalize_snapshot(  # noqa: PLR0915
     version_name = _generate_version_name()
     destination = paths.base_dir / version_name
     committed = False
+    manifest: dict[str, Any] | None = None
     _pulse_lock()
     try:
         with _tracer.start_as_current_span("snapshot.finalize"):
@@ -552,13 +566,14 @@ def finalize_snapshot(  # noqa: PLR0915
             mark_manifest_complete(destination)
             _fsync_dir(destination)
             _fsync_dir(paths.base_dir)
-            if not verify_snapshot(destination):
+            manifest = _verified_manifest(destination)
+            if manifest is None:
                 raise SnapshotPromotionError(
                     "Finalized snapshot failed manifest and payload verification"
                 )
             _write_current_pointer(paths, version_name)
             committed = True
-            _retire_committed_upload_journals_locked(paths, destination)
+            _retire_committed_upload_journals_locked(paths, manifest)
             with suppress(Exception):
                 _clear_activation_journal(paths)
             with suppress(Exception):
@@ -573,24 +588,32 @@ def finalize_snapshot(  # noqa: PLR0915
                 )
                 _pulse_lock()
                 logger.info("Snapshot finalized at {}", destination.name)
-        return destination
+        return FinalizedSnapshot(path=destination, manifest=manifest)
     except Exception as exc:  # pragma: no cover - defensive transaction boundary
         if committed:
             logger.warning(
                 "Post-commit snapshot cleanup deferred (error_type={})",
                 type(exc).__name__,
             )
-            return destination
-        if (
-            _current_pointer_name(paths) == version_name
-            and _load_complete_manifest(destination) is not None
-        ):
+            if manifest is None:  # pragma: no cover - commit requires a manifest
+                raise SnapshotPromotionError(
+                    "Committed snapshot manifest was lost"
+                ) from exc
+            return FinalizedSnapshot(path=destination, manifest=manifest)
+        if _current_pointer_name(paths) == version_name:
             committed = True
+            if manifest is None:  # pragma: no cover - pointer follows verification
+                raise SnapshotPromotionError(
+                    "CURRENT names a snapshot whose verified manifest was lost"
+                ) from exc
             logger.warning(
                 "CURRENT names a verified snapshot but durability confirmation "
                 "failed; activation journals were retained for startup recovery"
             )
-            return destination
+            return FinalizedSnapshot(
+                path=destination,
+                manifest=manifest,
+            )
         try:
             if destination.is_symlink():
                 raise SnapshotPersistenceError(
@@ -638,16 +661,7 @@ def finalize_snapshot(  # noqa: PLR0915
 
 def _load_complete_manifest(snapshot_dir: Path) -> dict[str, Any] | None:
     """Load metadata only for a finalized, checksum-verified snapshot."""
-    meta_path = snapshot_dir / "manifest.meta.json"
-    try:
-        payload: object = json.loads(meta_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
-        return None
-    if not isinstance(payload, dict) or payload.get("complete") is not True:
-        return None
-    if not verify_snapshot(snapshot_dir):
-        return None
-    return cast(dict[str, Any], payload)
+    return _verified_manifest(snapshot_dir)
 
 
 def _manifest_collections(manifest: dict[str, Any]) -> dict[str, str] | None:
@@ -662,16 +676,67 @@ def _manifest_collections(manifest: dict[str, Any]) -> dict[str, str] | None:
     return {"text": text, "image": image}
 
 
+def _manifest_versions_valid(value: Any) -> bool:
+    """Return whether every version identity is presentation-safe."""
+    return isinstance(value, dict) and all(
+        isinstance(key, str)
+        and (
+            isinstance(version, str | bool | int)
+            or (isinstance(version, float) and math.isfinite(version))
+            or version is None
+        )
+        for key, version in value.items()
+    )
+
+
+def _manifest_export_identity(
+    value: Any,
+) -> tuple[str, int, str] | None:
+    """Return one canonical graph-export identity or reject its shape."""
+    if not isinstance(value, dict):
+        return None
+    filename = value.get("filename")
+    format_name = value.get("format")
+    size_bytes = value.get("size_bytes")
+    checksum = value.get("sha256")
+    if (
+        not isinstance(filename, str)
+        or not filename
+        or len(filename) > MANIFEST_EXPORT_FILENAME_MAX_LENGTH
+        or Path(filename).name != filename
+        or filename in {".", ".."}
+        or not isinstance(format_name, str)
+        or not format_name
+        or len(format_name) > MANIFEST_EXPORT_FORMAT_MAX_LENGTH
+        or not isinstance(size_bytes, int)
+        or isinstance(size_bytes, bool)
+        or size_bytes < 0
+        or not isinstance(checksum, str)
+        or _SHA256_RE.fullmatch(checksum) is None
+    ):
+        return None
+    return filename, size_bytes, checksum
+
+
 def _manifest_semantics_valid(
     manifest: dict[str, Any],
     entries: list[dict[str, Any]] | None = None,
 ) -> bool:
     """Validate the canonical snapshot metadata contract in one place."""
+    try:
+        hash_manifest(entries or [], manifest)
+    except (TypeError, ValueError):
+        strict_json = False
+    else:
+        strict_json = True
     activation_config = manifest.get("activation_config")
     activation_config_hash = manifest.get("activation_config_hash")
     graph_store_type = manifest.get("graph_store_type")
+    versions = manifest.get("versions")
+    graph_exports = manifest.get("graph_exports")
     if (
-        not isinstance(manifest.get("index_id"), str)
+        not strict_json
+        or not isinstance(manifest.get("index_id"), str)
         or not manifest["index_id"]
         or graph_store_type not in {"none", "property_graph"}
         or manifest.get("vector_store_type") != "qdrant"
@@ -680,14 +745,24 @@ def _manifest_semantics_valid(
         or _SHA256_RE.fullmatch(manifest["corpus_hash"]) is None
         or not isinstance(manifest.get("config_hash"), str)
         or _SHA256_RE.fullmatch(manifest["config_hash"]) is None
-        or not isinstance(manifest.get("versions"), dict)
-        or not isinstance(manifest.get("graph_exports"), list)
+        or not _manifest_versions_valid(versions)
+        or not isinstance(graph_exports, list)
         or not isinstance(manifest.get("collection_metadata"), dict)
         or not isinstance(activation_config, dict)
         or not isinstance(activation_config_hash, str)
         or _SHA256_RE.fullmatch(activation_config_hash) is None
         or compute_config_hash(activation_config) != activation_config_hash
     ):
+        return False
+    export_identities: list[tuple[str, int, str]] = []
+    export_filenames: set[str] = set()
+    for export in graph_exports:
+        identity = _manifest_export_identity(export)
+        if identity is None or identity[0] in export_filenames:
+            return False
+        export_identities.append(identity)
+        export_filenames.add(identity[0])
+    if graph_store_type == "none" and graph_exports:
         return False
     if entries is None:
         return True
@@ -698,26 +773,7 @@ def _manifest_semantics_valid(
     if graph_store_type == "property_graph":
         export_paths: set[str] = set()
         exports_valid = True
-        for export in manifest["graph_exports"]:
-            if not isinstance(export, dict):
-                exports_valid = False
-                break
-            filename = export.get("filename")
-            size_bytes = export.get("size_bytes")
-            checksum = export.get("sha256")
-            if (
-                not isinstance(filename, str)
-                or not filename
-                or Path(filename).name != filename
-                or filename in {".", ".."}
-                or not isinstance(size_bytes, int)
-                or isinstance(size_bytes, bool)
-                or size_bytes < 0
-                or not isinstance(checksum, str)
-                or _SHA256_RE.fullmatch(checksum) is None
-            ):
-                exports_valid = False
-                break
+        for filename, size_bytes, checksum in export_identities:
             path = f"graph/{filename}"
             entry = entry_by_path.get(path)
             if (
@@ -1073,20 +1129,20 @@ def _entries_valid(  # noqa: PLR0911
     return actual_paths == declared_paths
 
 
-def verify_snapshot(snapshot_dir: Path) -> bool:  # noqa: PLR0911
-    """Verify manifest hashes and payload integrity for a snapshot directory."""
+def _verified_manifest(snapshot_dir: Path) -> dict[str, Any] | None:  # noqa: PLR0911
+    """Return parsed manifest after hashes, payloads, and semantics verify."""
     manifest_path = _manifest_path(snapshot_dir)
     checksum_path = _manifest_checksum_path(snapshot_dir)
     meta_path = snapshot_dir / "manifest.meta.json"
     manifest_artifacts = (manifest_path, checksum_path, meta_path)
     if any(path.is_symlink() or not path.is_file() for path in manifest_artifacts):
-        return False
+        return None
 
     try:
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
         checksum_payload = json.loads(checksum_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError):
-        return False
+        return None
     if (
         not isinstance(meta, dict)
         or meta.get("complete") is not True
@@ -1096,25 +1152,34 @@ def verify_snapshot(snapshot_dir: Path) -> bool:  # noqa: PLR0911
         or not isinstance(checksum_payload, dict)
         or checksum_payload.get("schema_version") != MANIFEST_SCHEMA_VERSION
     ):
-        return False
+        return None
 
     try:
         entries = load_manifest_entries(snapshot_dir)
     except (OSError, UnicodeError, TypeError, ValueError):
-        return False
+        return None
     expected = checksum_payload.get("manifest_sha256")
     if not isinstance(expected, str) or len(expected) != 64:
-        return False
+        return None
 
     if not _entries_valid(snapshot_dir, entries):
-        return False
+        return None
     if not _manifest_semantics_valid(meta, entries):
-        return False
+        return None
+    if hash_manifest(entries, meta) != expected:
+        return None
+    return cast(dict[str, Any], meta)
 
-    return hash_manifest(entries, meta) == expected
+
+def verify_snapshot(snapshot_dir: Path) -> bool:
+    """Verify manifest hashes and payload integrity for a snapshot directory."""
+    return _verified_manifest(snapshot_dir) is not None
 
 
 __all__ = [
+    "MANIFEST_EXPORT_FILENAME_MAX_LENGTH",
+    "MANIFEST_EXPORT_FORMAT_MAX_LENGTH",
+    "FinalizedSnapshot",
     "SnapshotLock",
     "SnapshotLockTimeout",
     "SnapshotLockTimeoutError",
@@ -1256,14 +1321,14 @@ class SnapshotManager:
     def finalize_snapshot(
         self,
         tmp_dir: Path,
-    ) -> Path:
+    ) -> FinalizedSnapshot:
         """Promote the workspace to an immutable snapshot directory.
 
         Args:
             tmp_dir: Temporary snapshot workspace directory.
 
         Returns:
-            Path: Path to the finalized snapshot directory.
+            Finalized snapshot path and its verified manifest.
         """
         return finalize_snapshot(
             tmp_dir,

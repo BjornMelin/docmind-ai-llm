@@ -58,7 +58,7 @@ def chat_app_autoload(tmp_path: Path, monkeypatch) -> AppTest:
         config_hash=cfg_hash,
         versions={"app": _settings.app_version},
     )
-    final = mgr.finalize_snapshot(tmp)
+    final = mgr.finalize_snapshot(tmp).path
     assert final.exists()
 
     # Stub the coordinator and chat session helpers; this test only validates

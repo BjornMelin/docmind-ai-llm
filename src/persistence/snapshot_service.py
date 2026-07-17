@@ -19,7 +19,11 @@ from typing import Any, Protocol
 from loguru import logger
 
 from src.persistence.hashing import compute_config_hash, compute_corpus_hash
-from src.persistence.snapshot import SnapshotManager, SnapshotPersistenceError
+from src.persistence.snapshot import (
+    FinalizedSnapshot,
+    SnapshotManager,
+    SnapshotPersistenceError,
+)
 from src.persistence.snapshot_utils import (
     collect_corpus_paths,
     timestamped_export_path,
@@ -328,7 +332,7 @@ def rebuild_snapshot(
     embed_model: Any | None = None,
     log_export_event: Callable[[dict[str, Any]], None] | None = None,
     record_graph_export_metric: Callable[..., None] | None = None,
-) -> Path:
+) -> FinalizedSnapshot:
     """Rebuild snapshot for current indices and return final path.
 
     Args:
@@ -346,7 +350,7 @@ def rebuild_snapshot(
         record_graph_export_metric: Optional callback for OpenTelemetry metrics.
 
     Returns:
-        Path: Finalized snapshot directory path.
+        Finalized snapshot path and its verified manifest.
     """
     log_export_event, record_graph_export_metric = _init_callbacks(
         log_export_event, record_graph_export_metric

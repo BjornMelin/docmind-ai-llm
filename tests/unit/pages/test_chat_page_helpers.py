@@ -12,6 +12,8 @@ from unittest.mock import Mock
 
 import pytest
 
+from src.ui.router_session import replace_session_router
+
 
 def test_chunked_stream_splits_text():  # type: ignore[no-untyped-def]
     mod = importlib.import_module("src.pages.01_chat")
@@ -26,7 +28,7 @@ def test_get_settings_override_builds_from_session(monkeypatch):  # type: ignore
         pass
 
     fake_state = _FakeSession()
-    mod.replace_session_router(
+    replace_session_router(
         fake_state,
         object(),
         runtime_generation=mod.settings.cache_version,

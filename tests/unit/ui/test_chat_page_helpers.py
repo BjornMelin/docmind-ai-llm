@@ -4,16 +4,37 @@ from __future__ import annotations
 
 import contextlib
 import sqlite3
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
 import pytest
 
+from src.ui.router_session import replace_session_router
+
 _PHYSICAL_COLLECTIONS = {
     "text": "physical-text-v2",
     "image": "physical-image-v2",
 }
+
+
+class _AppRerunRequestedError(RuntimeError):
+    """Model Streamlit's rerun as immediate control-flow interruption."""
+
+
+def _interrupt_on_app_rerun(
+    monkeypatch: pytest.MonkeyPatch,
+    captures: dict[str, list[str] | int],
+) -> None:
+    import streamlit as st  # type: ignore
+
+    def _rerun(*, scope: str | None = None) -> None:
+        captures["reruns"] = cast(int, captures["reruns"]) + 1
+        cast(list[str], captures["rerun_scopes"]).append(scope or "default")
+        raise _AppRerunRequestedError
+
+    monkeypatch.setattr(st, "rerun", _rerun, raising=False)
 
 
 def _snapshot_manifest() -> dict[str, object]:
@@ -29,12 +50,16 @@ def clean_streamlit_session(monkeypatch):
     st.session_state.clear()
     captures: dict[str, list[str] | int] = {
         "captions": [],
+        "infos": [],
         "warnings": [],
+        "successes": [],
+        "errors": [],
         "markdown": [],
         "images": [],
         "chat_roles": [],
         "write_stream": [],
         "reruns": 0,
+        "rerun_scopes": [],
     }
 
     def _chat_message(role: str):  # type: ignore[no-untyped-def]
@@ -49,8 +74,26 @@ def clean_streamlit_session(monkeypatch):
     )
     monkeypatch.setattr(
         st,
+        "info",
+        lambda msg: captures["infos"].append(str(msg)),  # type: ignore[index]
+        raising=False,
+    )
+    monkeypatch.setattr(
+        st,
         "warning",
         lambda msg: captures["warnings"].append(str(msg)),  # type: ignore[index]
+        raising=False,
+    )
+    monkeypatch.setattr(
+        st,
+        "success",
+        lambda msg: captures["successes"].append(str(msg)),  # type: ignore[index]
+        raising=False,
+    )
+    monkeypatch.setattr(
+        st,
+        "error",
+        lambda msg: captures["errors"].append(str(msg)),  # type: ignore[index]
         raising=False,
     )
     monkeypatch.setattr(
@@ -70,6 +113,7 @@ def clean_streamlit_session(monkeypatch):
     )
     monkeypatch.setattr(st, "sidebar", contextlib.nullcontext(), raising=False)
     monkeypatch.setattr(st, "subheader", lambda *_a, **_k: None, raising=False)
+    monkeypatch.setattr(st, "progress", lambda *_a, **_k: None, raising=False)
     monkeypatch.setattr(st, "slider", lambda *_a, **_k: 1, raising=False)
     monkeypatch.setattr(
         st,
@@ -92,12 +136,12 @@ def clean_streamlit_session(monkeypatch):
     monkeypatch.setattr(st, "button", lambda *_a, **_k: False, raising=False)
     monkeypatch.setattr(st, "checkbox", lambda *_a, **_k: False, raising=False)
     monkeypatch.setattr(st, "file_uploader", lambda *_a, **_k: None, raising=False)
-    monkeypatch.setattr(
-        st,
-        "rerun",
-        lambda: captures.__setitem__("reruns", cast(int, captures["reruns"]) + 1),
-        raising=False,
-    )
+
+    def _rerun(*, scope: str | None = None) -> None:
+        captures["reruns"] = cast(int, captures["reruns"]) + 1
+        cast(list[str], captures["rerun_scopes"]).append(scope or "default")
+
+    monkeypatch.setattr(st, "rerun", _rerun, raising=False)
     return captures
 
 
@@ -130,7 +174,7 @@ def test_get_settings_override_forwarding(monkeypatch):
     st.session_state.clear()
     assert page._get_settings_override() is None
 
-    page.replace_session_router(
+    replace_session_router(
         st.session_state,
         object(),
         runtime_generation=page.settings.cache_version,
@@ -242,6 +286,73 @@ def test_hydrate_required_graph_failure_clears_runtime(monkeypatch):
 
 
 @pytest.mark.unit
+def test_hydrate_publication_failure_clears_old_and_staged_runtime(monkeypatch):
+    import importlib
+
+    import streamlit as st  # type: ignore
+
+    page = importlib.import_module("src.pages.01_chat")
+    vector_session = importlib.import_module("src.ui.vector_session")
+
+    class _Client:
+        def __init__(self) -> None:
+            self.close_calls = 0
+
+        def close(self) -> None:
+            self.close_calls += 1
+
+    class _Router:
+        def __init__(self) -> None:
+            self.close_calls = 0
+
+        def close(self) -> None:
+            self.close_calls += 1
+
+    old_client = _Client()
+    old_router = _Router()
+    old_resource = page.VectorIndexResource("old", client=old_client)
+    vector_session.replace_session_runtime(
+        st.session_state,
+        old_resource,
+        old_router,
+        runtime_generation=page.settings.cache_version,
+        state_updates={"_snapshot_loaded_id": "old-snapshot"},
+    )
+
+    class _FailingState(dict[str, object]):
+        armed = True
+
+        def __setitem__(self, key: str, value: object) -> None:
+            super().__setitem__(key, value)
+            if self.armed and key == "router_engine":
+                self.armed = False
+                raise RuntimeError("publication failed")
+
+    state = _FailingState(st.session_state)
+    monkeypatch.setattr(page.st, "session_state", state)
+    new_client = _Client()
+    vector_store = SimpleNamespace(client=new_client)
+    vector_index = SimpleNamespace(vector_store=vector_store)
+    new_router = _Router()
+    monkeypatch.setattr(page, "load_manifest", lambda _path: _snapshot_manifest())
+    monkeypatch.setattr(page, "load_vector_index", lambda _path: vector_index)
+    monkeypatch.setattr(page, "load_property_graph_index", lambda _path: None)
+    monkeypatch.setattr(page, "build_router_engine", lambda *_a, **_k: new_router)
+    with pytest.raises(
+        RuntimeError, match="Activated snapshot router construction failed"
+    ):
+        page._hydrate_router_from_snapshot(Path("/tmp/new-snapshot"))
+
+    assert old_client.close_calls == 1
+    assert old_router.close_calls == 1
+    assert new_client.close_calls == 1
+    assert new_router.close_calls == 1
+    assert state["vector_index"] is None
+    assert state["router_engine"] is None
+    assert "_snapshot_loaded_id" not in state
+
+
+@pytest.mark.unit
 def test_load_latest_snapshot_policies(monkeypatch, tmp_path):
     import importlib
 
@@ -271,7 +382,7 @@ def test_load_latest_snapshot_policies(monkeypatch, tmp_path):
     # Ensure hydrate path callable but side effects minimal
     monkeypatch.setattr(
         page,
-        "_hydrate_router_from_snapshot",
+        "_hydrate_router_from_snapshot_quiesced",
         lambda p: st.session_state.__setitem__("router_engine", "R"),
     )
     page._load_latest_snapshot_into_session()
@@ -304,6 +415,8 @@ def test_close_memory_store_delegates_to_native_helper(monkeypatch):
     monkeypatch.setattr(page, "close_memory_store", closed.append)
     page._close_memory_store(store)
     assert closed == [store]
+    info = page._get_memory_store._info  # type: ignore[attr-defined]
+    assert info.on_release is page._close_memory_store
 
 
 @pytest.mark.unit
@@ -338,6 +451,141 @@ def test_memory_store_initializes_embedding_before_opening_index(monkeypatch):
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("resource_kind", ["chat_session", "memory_store"])
+def test_cached_live_reader_blocks_release_until_lease_exits(
+    monkeypatch: pytest.MonkeyPatch,
+    resource_kind: str,
+) -> None:
+    """Cache release cannot close a DB/store held by a foreground reader."""
+    import importlib
+
+    page = importlib.import_module("src.pages.01_chat")
+    chat_sessions = importlib.import_module("src.ui.chat_sessions")
+    background_jobs = importlib.import_module("src.ui.background_jobs")
+    manager = background_jobs.JobManager()
+    entered = threading.Event()
+    release_reader = threading.Event()
+    errors: list[BaseException] = []
+
+    class _Resource:
+        closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    resource = _Resource()
+    monkeypatch.setattr(page, "get_job_manager", lambda: manager)
+    if resource_kind == "chat_session":
+        monkeypatch.setattr(page, "get_chat_db_conn", lambda: resource)
+        activity = page._chat_session_activity
+        release_callback = chat_sessions._close_chat_db_conn
+    else:
+        monkeypatch.setattr(page, "_get_memory_store", lambda: resource)
+        monkeypatch.setattr(page, "close_memory_store", lambda store: store.close())
+        activity = page._memory_store_activity
+        release_callback = page._close_memory_store
+
+    def _reader() -> None:
+        try:
+            with activity() as current:
+                assert current is resource
+                assert not resource.closed
+                entered.set()
+                assert release_reader.wait(5)
+                assert not resource.closed
+        except BaseException as exc:  # pragma: no cover - surfaced in caller
+            errors.append(exc)
+
+    thread = threading.Thread(target=_reader, daemon=True)
+    thread.start()
+    try:
+        assert entered.wait(2)
+        with (
+            pytest.raises(background_jobs.ForegroundRuntimeConflictError),
+            manager.admission_quiescence(),
+        ):
+            pytest.fail("maintenance entered while a cached resource was leased")
+        assert not resource.closed
+        release_reader.set()
+        thread.join(timeout=2)
+        assert not thread.is_alive()
+        assert errors == []
+
+        with manager.admission_quiescence():
+            release_callback(resource)
+        assert resource.closed
+    finally:
+        release_reader.set()
+        thread.join(timeout=2)
+        manager.shutdown()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("resource_kind", ["chat_session", "memory_store"])
+def test_cached_live_resource_rejects_reader_during_maintenance_and_releases_lease(
+    monkeypatch: pytest.MonkeyPatch,
+    resource_kind: str,
+) -> None:
+    """Maintenance wins cleanly and reader exceptions release their lease."""
+    import importlib
+
+    page = importlib.import_module("src.pages.01_chat")
+    chat_sessions = importlib.import_module("src.ui.chat_sessions")
+    background_jobs = importlib.import_module("src.ui.background_jobs")
+    manager = background_jobs.JobManager()
+    acquisitions = 0
+
+    class _Resource:
+        closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    old_resource = _Resource()
+    current_resource = _Resource()
+
+    def _get_current() -> _Resource:
+        nonlocal acquisitions
+        acquisitions += 1
+        return current_resource
+
+    monkeypatch.setattr(page, "get_job_manager", lambda: manager)
+    if resource_kind == "chat_session":
+        monkeypatch.setattr(page, "get_chat_db_conn", _get_current)
+        activity = page._chat_session_activity
+        release_callback = chat_sessions._close_chat_db_conn
+    else:
+        monkeypatch.setattr(page, "_get_memory_store", _get_current)
+        monkeypatch.setattr(page, "close_memory_store", lambda store: store.close())
+        activity = page._memory_store_activity
+        release_callback = page._close_memory_store
+
+    def _read_and_fail() -> None:
+        with activity() as current:
+            assert current is current_resource
+            raise RuntimeError("reader failed")
+
+    try:
+        with manager.admission_quiescence():
+            release_callback(old_resource)
+            with pytest.raises(background_jobs.JobAdmissionPausedError), activity():
+                pytest.fail("reader acquired a cache resource during maintenance")
+        assert old_resource.closed
+        assert acquisitions == 0
+
+        with pytest.raises(RuntimeError, match="reader failed"):
+            _read_and_fail()
+        assert acquisitions == 1
+        assert not manager.activity_snapshot().foreground_runtime_active
+
+        with manager.admission_quiescence():
+            release_callback(current_resource)
+        assert current_resource.closed
+    finally:
+        manager.shutdown()
+
+
+@pytest.mark.unit
 def test_coordinator_owns_async_checkpointer_lifecycle(monkeypatch):
     """Chat delegates deterministic coordinator lifecycle to the runtime owner."""
     import importlib
@@ -368,6 +616,401 @@ def test_coordinator_owns_async_checkpointer_lifecycle(monkeypatch):
     assert closed == []
     runtime.invalidate_coordinator()
     assert closed == [coordinator]
+
+
+@pytest.mark.unit
+def test_analysis_sidebar_disables_run_during_maintenance(
+    monkeypatch: pytest.MonkeyPatch,
+    clean_streamlit_session: dict[str, list[str] | int],
+) -> None:
+    import importlib
+
+    page = importlib.import_module("src.pages.01_chat")
+    disabled: dict[str, bool] = {}
+
+    class _Column:
+        def button(self, label: str, **kwargs: object) -> bool:
+            disabled[label] = bool(kwargs.get("disabled"))
+            return False
+
+    manager = SimpleNamespace(
+        activity_snapshot=lambda: SimpleNamespace(maintenance_active=True)
+    )
+    monkeypatch.setattr(page, "get_job_manager", lambda: manager)
+    monkeypatch.setattr(
+        page,
+        "_get_analysis_sidebar_inputs",
+        lambda: ("combined", [], "question"),
+    )
+    monkeypatch.setattr(page.st, "columns", lambda _count: [_Column(), _Column()])
+
+    page._render_analysis_sidebar(owner_id="owner")
+
+    assert disabled == {"Run analysis": True, "Cancel": True}
+    assert clean_streamlit_session["infos"] == [
+        "Runtime maintenance is in progress. Analysis is unavailable."
+    ]
+
+
+@pytest.mark.unit
+def test_analysis_sidebar_handles_maintenance_admission_race(
+    monkeypatch: pytest.MonkeyPatch,
+    clean_streamlit_session: dict[str, list[str] | int],
+) -> None:
+    import importlib
+
+    import streamlit as st  # type: ignore
+
+    page = importlib.import_module("src.pages.01_chat")
+
+    class _Column:
+        def __init__(self, clicked: bool) -> None:
+            self._clicked = clicked
+
+        def button(self, _label: str, **_kwargs: object) -> bool:
+            return self._clicked
+
+    class _Manager:
+        activity_snapshot = staticmethod(
+            lambda: SimpleNamespace(maintenance_active=False)
+        )
+
+        @contextlib.contextmanager
+        def foreground_runtime_activity(self):  # type: ignore[no-untyped-def]
+            raise page.JobAdmissionPausedError("maintenance won")
+            yield
+
+        def start_job(self, **_kwargs: object) -> str:
+            pytest.fail("job submission ran without a foreground lease")
+
+    monkeypatch.setattr(page, "get_job_manager", _Manager)
+    monkeypatch.setattr(
+        page,
+        "_get_analysis_sidebar_inputs",
+        lambda: ("combined", [], "question"),
+    )
+    monkeypatch.setattr(
+        page.st,
+        "columns",
+        lambda _count: [_Column(True), _Column(False)],
+    )
+    st.session_state["vector_index"] = object()
+
+    page._render_analysis_sidebar(owner_id="owner")
+
+    assert "analysis_job_id" not in st.session_state
+    assert clean_streamlit_session["warnings"] == [
+        "Runtime maintenance is in progress. Try analysis again shortly."
+    ]
+
+
+@pytest.mark.unit
+def test_analysis_runtime_capture_transitions_atomically_to_background_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import importlib
+
+    import streamlit as st  # type: ignore
+
+    page = importlib.import_module("src.pages.01_chat")
+    background_jobs = importlib.import_module("src.ui.background_jobs")
+    manager = background_jobs.JobManager(max_workers=1)
+    started = threading.Event()
+    release = threading.Event()
+
+    class _Column:
+        def __init__(self, clicked: bool) -> None:
+            self._clicked = clicked
+
+        def button(self, _label: str, **_kwargs: object) -> bool:
+            return self._clicked
+
+    def _work(*_args: object, **_kwargs: object) -> object:
+        started.set()
+        release.wait(timeout=5)
+        return object()
+
+    monkeypatch.setattr(page, "get_job_manager", lambda: manager)
+    monkeypatch.setattr(
+        page,
+        "_get_analysis_sidebar_inputs",
+        lambda: ("combined", [], "question"),
+    )
+    monkeypatch.setattr(
+        page.st,
+        "columns",
+        lambda _count: [_Column(True), _Column(False)],
+    )
+    monkeypatch.setattr(page, "_run_analysis_job_work", _work)
+    st.session_state["vector_index"] = object()
+
+    try:
+        page._render_analysis_sidebar(owner_id="owner")
+        assert started.wait(timeout=2)
+        with (
+            pytest.raises(background_jobs.JobConflictError),
+            manager.admission_quiescence(),
+        ):
+            pytest.fail("maintenance overlapped the captured analysis runtime")
+    finally:
+        release.set()
+        job_id = st.session_state.get("analysis_job_id")
+        if isinstance(job_id, str):
+            assert manager.wait_for_completion(job_id, owner_id="owner") == "succeeded"
+        manager.shutdown()
+
+
+@pytest.mark.unit
+def test_analysis_success_transfers_result_then_releases_manager_owners(
+    monkeypatch: pytest.MonkeyPatch,
+    clean_streamlit_session: dict[str, list[str] | int],
+) -> None:
+    import importlib
+
+    import streamlit as st  # type: ignore
+
+    from src.analysis.models import AnalysisResult
+    from src.ui.background_jobs import JobManager
+
+    page = importlib.import_module("src.pages.01_chat")
+    manager = JobManager(max_workers=1)
+    result = AnalysisResult(
+        mode="combined",
+        per_doc=[],
+        combined="answer",
+        reduce=None,
+        warnings=[],
+        auto_decision_reason=None,
+    )
+    job_id = manager.start_job(
+        owner_id="owner",
+        fn=lambda _cancel, _report: result,
+    )
+    monkeypatch.setattr(page, "get_job_manager", lambda: manager)
+    _interrupt_on_app_rerun(monkeypatch, clean_streamlit_session)
+
+    try:
+        assert manager.wait_for_completion(job_id, owner_id="owner") == "succeeded"
+        st.session_state["analysis_job_id"] = job_id
+
+        with pytest.raises(_AppRerunRequestedError):
+            page._render_analysis_job_panel.__wrapped__(owner_id="owner")
+
+        assert st.session_state["analysis_last_result"] is result
+        assert st.session_state[page._ANALYSIS_COMPLETED_JOB_KEY] == job_id
+        assert st.session_state[page._ANALYSIS_TERMINAL_NOTICE_KEY] == {
+            "status": "succeeded",
+            "message": "Analysis completed.",
+        }
+        assert "analysis_job_id" not in st.session_state
+        assert manager.get(job_id, owner_id="owner") is None
+        assert job_id not in manager._jobs
+        assert job_id not in manager._futures
+        assert clean_streamlit_session["successes"] == []
+        assert clean_streamlit_session["reruns"] == 1
+        assert clean_streamlit_session["rerun_scopes"] == ["app"]
+
+        page._render_analysis_job_panel.__wrapped__(owner_id="owner")
+        page._render_analysis_terminal_notice()
+        page._render_analysis_terminal_notice()
+
+        assert clean_streamlit_session["successes"] == ["Analysis completed."]
+    finally:
+        manager.shutdown()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("status", "capture_key", "message"),
+    [
+        ("failed", "errors", "Analysis failed."),
+        ("canceled", "warnings", "Analysis canceled."),
+    ],
+)
+def test_analysis_terminal_failure_and_cancel_are_visible_once(
+    monkeypatch: pytest.MonkeyPatch,
+    clean_streamlit_session: dict[str, list[str] | int],
+    status: str,
+    capture_key: str,
+    message: str,
+) -> None:
+    import importlib
+
+    import streamlit as st  # type: ignore
+
+    page = importlib.import_module("src.pages.01_chat")
+    job_id = f"job-{status}"
+
+    class _Manager:
+        def get(self, _job_id: str, *, owner_id: str) -> SimpleNamespace:
+            assert (_job_id, owner_id) == (job_id, "owner")
+            return SimpleNamespace(status=status, result=None, error="redacted")
+
+        def drain_progress(self, _job_id: str, *, owner_id: str) -> list[object]:
+            assert (_job_id, owner_id) == (job_id, "owner")
+            return []
+
+        def consume_terminal(self, _job_id: str, *, owner_id: str) -> bool:
+            assert (_job_id, owner_id) == (job_id, "owner")
+            return True
+
+    monkeypatch.setattr(page, "get_job_manager", _Manager)
+    _interrupt_on_app_rerun(monkeypatch, clean_streamlit_session)
+    st.session_state["analysis_job_id"] = job_id
+
+    with pytest.raises(_AppRerunRequestedError):
+        page._render_analysis_job_panel.__wrapped__(owner_id="owner")
+
+    assert clean_streamlit_session[capture_key] == []
+    assert clean_streamlit_session["rerun_scopes"] == ["app"]
+    assert st.session_state[page._ANALYSIS_TERMINAL_NOTICE_KEY] == {
+        "status": status,
+        "message": message,
+    }
+
+    page._render_analysis_job_panel.__wrapped__(owner_id="owner")
+    page._render_analysis_terminal_notice()
+    page._render_analysis_terminal_notice()
+
+    assert clean_streamlit_session[capture_key] == [message]
+    assert "analysis_job_id" not in st.session_state
+
+
+@pytest.mark.unit
+def test_analysis_consume_retry_does_not_republish_result_or_notice(
+    monkeypatch: pytest.MonkeyPatch,
+    clean_streamlit_session: dict[str, list[str] | int],
+) -> None:
+    import importlib
+
+    import streamlit as st  # type: ignore
+
+    from src.analysis.models import AnalysisResult
+
+    page = importlib.import_module("src.pages.01_chat")
+    result = AnalysisResult(
+        mode="combined",
+        per_doc=[],
+        combined="answer",
+        reduce=None,
+        warnings=[],
+        auto_decision_reason=None,
+    )
+    job_id = "job-pending-consume"
+
+    class _Manager:
+        def __init__(self) -> None:
+            self.consume_results = iter((False, False, True))
+            self.drain_calls = 0
+
+        def get(self, _job_id: str, *, owner_id: str) -> SimpleNamespace:
+            assert (_job_id, owner_id) == (job_id, "owner")
+            return SimpleNamespace(status="succeeded", result=result, error=None)
+
+        def drain_progress(self, _job_id: str, *, owner_id: str) -> list[object]:
+            assert (_job_id, owner_id) == (job_id, "owner")
+            self.drain_calls += 1
+            return []
+
+        def consume_terminal(self, _job_id: str, *, owner_id: str) -> bool:
+            assert (_job_id, owner_id) == (job_id, "owner")
+            return next(self.consume_results)
+
+    manager = _Manager()
+    monkeypatch.setattr(page, "get_job_manager", lambda: manager)
+    _interrupt_on_app_rerun(monkeypatch, clean_streamlit_session)
+    st.session_state["analysis_job_id"] = job_id
+
+    with pytest.raises(_AppRerunRequestedError):
+        page._render_analysis_job_panel.__wrapped__(owner_id="owner")
+
+    assert st.session_state["analysis_job_id"] == job_id
+    assert st.session_state["analysis_last_result"] is result
+    assert clean_streamlit_session["successes"] == []
+    assert clean_streamlit_session["rerun_scopes"] == ["app"]
+
+    page._render_analysis_job_panel.__wrapped__(owner_id="owner")
+    page._render_analysis_terminal_notice()
+
+    assert clean_streamlit_session["successes"] == ["Analysis completed."]
+
+    with pytest.raises(_AppRerunRequestedError):
+        page._render_analysis_job_panel.__wrapped__(owner_id="owner")
+
+    assert "analysis_job_id" not in st.session_state
+    assert st.session_state["analysis_last_result"] is result
+    assert manager.drain_calls == 1
+    assert clean_streamlit_session["successes"] == ["Analysis completed."]
+    assert clean_streamlit_session["rerun_scopes"] == ["app", "app"]
+    assert page._ANALYSIS_TERMINAL_NOTICE_KEY not in st.session_state
+
+    page._render_analysis_job_panel.__wrapped__(owner_id="owner")
+    page._render_analysis_terminal_notice()
+    assert clean_streamlit_session["successes"] == ["Analysis completed."]
+
+
+@pytest.mark.unit
+def test_analysis_missing_state_clears_tracking_and_reenables_run_control(
+    monkeypatch: pytest.MonkeyPatch,
+    clean_streamlit_session: dict[str, list[str] | int],
+) -> None:
+    import importlib
+
+    import streamlit as st  # type: ignore
+
+    page = importlib.import_module("src.pages.01_chat")
+    disabled: dict[str, bool] = {}
+
+    class _Column:
+        def button(self, label: str, **kwargs: object) -> bool:
+            disabled[label] = bool(kwargs.get("disabled"))
+            return False
+
+    class _Manager:
+        def get(self, _job_id: str, *, owner_id: str) -> None:
+            assert (_job_id, owner_id) == ("missing-job", "owner")
+            return None
+
+        @staticmethod
+        def activity_snapshot() -> SimpleNamespace:
+            return SimpleNamespace(maintenance_active=False)
+
+    manager = _Manager()
+    monkeypatch.setattr(page, "get_job_manager", lambda: manager)
+    _interrupt_on_app_rerun(monkeypatch, clean_streamlit_session)
+    monkeypatch.setattr(
+        page,
+        "_get_analysis_sidebar_inputs",
+        lambda: ("combined", [], "question"),
+    )
+    monkeypatch.setattr(page.st, "columns", lambda _count: [_Column(), _Column()])
+    st.session_state["analysis_job_id"] = "missing-job"
+    st.session_state["analysis_cancel_requested_id"] = "missing-job"
+    durable_result = object()
+    st.session_state["analysis_last_result"] = durable_result
+    st.session_state[page._ANALYSIS_COMPLETED_JOB_KEY] = "missing-job"
+    st.session_state[page._ANALYSIS_TERMINAL_NOTICE_KEY] = {
+        "status": "failed",
+        "message": "Analysis failed.",
+    }
+
+    with pytest.raises(_AppRerunRequestedError):
+        page._render_analysis_job_panel.__wrapped__(owner_id="owner")
+
+    assert "analysis_job_id" not in st.session_state
+    assert "analysis_cancel_requested_id" not in st.session_state
+    assert clean_streamlit_session["rerun_scopes"] == ["app"]
+    assert st.session_state["analysis_last_result"] is durable_result
+    assert st.session_state[page._ANALYSIS_COMPLETED_JOB_KEY] == "missing-job"
+
+    page._render_analysis_job_panel.__wrapped__(owner_id="owner")
+    page._render_analysis_terminal_notice()
+
+    assert clean_streamlit_session["errors"] == ["Analysis failed."]
+
+    page._render_analysis_sidebar(owner_id="owner")
+
+    assert disabled == {"Run analysis": False, "Cancel": True}
 
 
 @pytest.mark.unit
@@ -498,7 +1141,7 @@ def test_ensure_router_engine_sets_none_and_hydrates(
     monkeypatch.setattr(
         page,
         "_load_latest_snapshot_into_session",
-        lambda: page.replace_session_router(
+        lambda: replace_session_router(
             st.session_state,
             "R",
             runtime_generation=page.settings.cache_version,
@@ -576,25 +1219,64 @@ def test_render_chat_history_and_handle_prompt(monkeypatch):
     monkeypatch.setattr(st, "chat_input", lambda *_a, **_k: "Q", raising=False)
 
     touched: list[tuple] = []
-    monkeypatch.setattr(
-        page, "touch_session", lambda *_a, **_k: touched.append((_a, _k))
-    )
+
+    def _touch_session(*args: object, **kwargs: object) -> None:
+        assert manager.active
+        touched.append((args, kwargs))
+
+    monkeypatch.setattr(page, "touch_session", _touch_session)
     monkeypatch.setattr(page, "_render_sources_fragment", lambda: None)
 
     query_kwargs: list[dict[str, object]] = []
 
+    class _Manager:
+        active = False
+
+        @contextlib.contextmanager
+        def foreground_runtime_activity(self):  # type: ignore[no-untyped-def]
+            self.active = True
+            try:
+                yield
+            finally:
+                self.active = False
+
+    manager = _Manager()
+
     class _Coord:
         def process_query(self, **kwargs: object) -> SimpleNamespace:
+            assert manager.active
             query_kwargs.append(kwargs)
             return SimpleNamespace(content="A", sources=[{"content": "src"}])
 
         def list_checkpoints(self, **_k):  # type: ignore[no-untyped-def]
+            assert manager.active
             return [{"checkpoint_id": "cp"}]
 
+    coord = _Coord()
+    monkeypatch.setattr(page, "get_job_manager", lambda: manager)
+
+    def _current_coord():  # type: ignore[no-untyped-def]
+        assert manager.active
+        return coord
+
+    monkeypatch.setattr(page, "_get_coordinator", _current_coord)
+    monkeypatch.setattr(
+        page,
+        "_get_settings_override",
+        lambda: (
+            None if manager.active else pytest.fail("override acquired before lease")
+        ),
+    )
     conn = sqlite3.connect(":memory:")
     try:
+
+        def _current_conn() -> sqlite3.Connection:
+            assert manager.active
+            return conn
+
+        monkeypatch.setattr(page, "get_chat_db_conn", _current_conn)
         selection = SimpleNamespace(thread_id="t", user_id="u")
-        page._handle_chat_prompt(_Coord(), selection, conn)
+        page._handle_chat_prompt(selection)
     finally:
         conn.close()
     assert touched
@@ -606,6 +1288,66 @@ def test_render_chat_history_and_handle_prompt(monkeypatch):
             "user_id": "u",
         }
     ]
+    assert not manager.active
+
+
+@pytest.mark.unit
+def test_coordinator_callbacks_reacquire_current_runtime(monkeypatch) -> None:
+    import importlib
+
+    page = importlib.import_module("src.pages.01_chat")
+    active = False
+    acquisitions: list[str] = []
+
+    class _Manager:
+        @contextlib.contextmanager
+        def foreground_runtime_activity(self):  # type: ignore[no-untyped-def]
+            nonlocal active
+            active = True
+            try:
+                yield
+            finally:
+                active = False
+
+    class _Coord:
+        def __init__(self, identity: str) -> None:
+            self.identity = identity
+
+        def purge_session(self, **_kwargs: object) -> bool:
+            assert active
+            acquisitions.append(f"purge:{self.identity}")
+            return True
+
+        def fork_from_checkpoint(self, **_kwargs: object) -> str:
+            assert active
+            acquisitions.append(f"fork:{self.identity}")
+            return self.identity
+
+    coordinators = iter((_Coord("first"), _Coord("second")))
+
+    def _current_coord() -> _Coord:
+        assert active
+        return next(coordinators)
+
+    monkeypatch.setattr(page, "get_job_manager", _Manager)
+    monkeypatch.setattr(page, "_get_coordinator", _current_coord)
+    conn = sqlite3.connect(":memory:")
+    try:
+
+        def _current_conn() -> sqlite3.Connection:
+            assert active
+            return conn
+
+        monkeypatch.setattr(page, "get_chat_db_conn", _current_conn)
+        assert page._purge_chat_session(thread_id="t", user_id="u")
+        assert (
+            page._fork_chat_checkpoint(thread_id="t", user_id="u", checkpoint_id="c")
+            == "second"
+        )
+    finally:
+        conn.close()
+    assert acquisitions == ["purge:first", "fork:second"]
+    assert not active
 
 
 @pytest.mark.unit
@@ -703,7 +1445,176 @@ def test_visual_search_helpers(monkeypatch, clean_streamlit_session):
 
 
 @pytest.mark.unit
-def test_load_chat_messages_handles_exception() -> None:
+def test_visual_retriever_reader_blocks_release_until_lease_exits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A visual query owns the foreground lease through retriever use."""
+    import importlib
+
+    import streamlit as st  # type: ignore
+
+    page = importlib.import_module("src.pages.01_chat")
+    background_jobs = importlib.import_module("src.ui.background_jobs")
+    manager = background_jobs.JobManager()
+    entered = threading.Event()
+    release_reader = threading.Event()
+    errors: list[BaseException] = []
+
+    class _Retriever:
+        closed = False
+
+        def retrieve_by_image(self, *_args: object, **_kwargs: object) -> list[object]:
+            assert not self.closed
+            entered.set()
+            assert release_reader.wait(5)
+            assert not self.closed
+            return []
+
+        def close(self) -> None:
+            self.closed = True
+
+    retriever = _Retriever()
+    monkeypatch.setattr(page, "get_job_manager", lambda: manager)
+    monkeypatch.setattr(page, "_get_image_siglip_retriever", lambda *_a: retriever)
+    monkeypatch.setattr(
+        "src.utils.images.open_untrusted_image", lambda _upload: object()
+    )
+    st.session_state["_snapshot_collections"] = dict(_PHYSICAL_COLLECTIONS)
+
+    def _reader() -> None:
+        try:
+            page._query_visual_search(object(), top_k=1)
+        except BaseException as exc:  # pragma: no cover - surfaced in caller
+            errors.append(exc)
+
+    thread = threading.Thread(target=_reader, daemon=True)
+    thread.start()
+    try:
+        assert entered.wait(2)
+        with (
+            pytest.raises(background_jobs.ForegroundRuntimeConflictError),
+            manager.admission_quiescence(),
+        ):
+            pytest.fail("maintenance entered during visual retrieval")
+        assert not retriever.closed
+        release_reader.set()
+        thread.join(timeout=2)
+        assert not thread.is_alive()
+        assert errors == []
+
+        with manager.admission_quiescence():
+            page._close_image_siglip_retriever(retriever)
+        assert retriever.closed
+    finally:
+        release_reader.set()
+        thread.join(timeout=2)
+        manager.shutdown()
+
+
+@pytest.mark.unit
+def test_visual_retriever_rejects_reader_during_maintenance_and_releases_lease(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Visual retrieval does not acquire stale resources during maintenance."""
+    import importlib
+
+    import streamlit as st  # type: ignore
+
+    page = importlib.import_module("src.pages.01_chat")
+    background_jobs = importlib.import_module("src.ui.background_jobs")
+    manager = background_jobs.JobManager()
+    acquisitions = 0
+
+    class _Retriever:
+        def __init__(self) -> None:
+            self.closed = False
+            self.fail = False
+
+        def retrieve_by_image(self, *_args: object, **_kwargs: object) -> list[object]:
+            if self.fail:
+                raise RuntimeError("visual query failed")
+            return []
+
+        def close(self) -> None:
+            self.closed = True
+
+    old_retriever = _Retriever()
+    current_retriever = _Retriever()
+
+    def _get_retriever(*_args: object) -> _Retriever:
+        nonlocal acquisitions
+        acquisitions += 1
+        return current_retriever
+
+    monkeypatch.setattr(page, "get_job_manager", lambda: manager)
+    monkeypatch.setattr(page, "_get_image_siglip_retriever", _get_retriever)
+    monkeypatch.setattr(
+        "src.utils.images.open_untrusted_image", lambda _upload: object()
+    )
+    st.session_state["_snapshot_collections"] = dict(_PHYSICAL_COLLECTIONS)
+
+    try:
+        with manager.admission_quiescence():
+            page._close_image_siglip_retriever(old_retriever)
+            with pytest.raises(background_jobs.JobAdmissionPausedError):
+                page._query_visual_search(object(), top_k=1)
+        assert old_retriever.closed
+        assert acquisitions == 0
+
+        current_retriever.fail = True
+        with pytest.raises(RuntimeError, match="visual query failed"):
+            page._query_visual_search(object(), top_k=1)
+        assert acquisitions == 1
+        assert not manager.activity_snapshot().foreground_runtime_active
+
+        with manager.admission_quiescence():
+            page._close_image_siglip_retriever(current_retriever)
+        assert current_retriever.closed
+    finally:
+        manager.shutdown()
+
+
+@pytest.mark.unit
+def test_visual_retriever_cache_registers_release_callback() -> None:
+    import importlib
+
+    page = importlib.import_module("src.pages.01_chat")
+    info = page._get_image_siglip_retriever._info  # type: ignore[attr-defined]
+
+    assert info.on_release is page._close_image_siglip_retriever
+
+
+@pytest.mark.unit
+def test_visual_search_sidebar_reports_maintenance(
+    monkeypatch: pytest.MonkeyPatch,
+    clean_streamlit_session: dict[str, list[str] | int],
+) -> None:
+    import importlib
+
+    page = importlib.import_module("src.pages.01_chat")
+    monkeypatch.setattr(page, "_visual_search_inputs", lambda: (object(), 1, True))
+    monkeypatch.setattr(
+        page,
+        "_query_visual_search",
+        lambda *_a, **_k: (_ for _ in ()).throw(
+            page.JobAdmissionPausedError("maintenance")
+        ),
+    )
+    monkeypatch.setattr(
+        page,
+        "_render_visual_results",
+        lambda *_a, **_k: pytest.fail("maintenance result rendered"),
+    )
+
+    page._render_visual_search_sidebar()
+
+    assert clean_streamlit_session["warnings"] == [
+        "Visual search is unavailable during runtime maintenance."
+    ]
+
+
+@pytest.mark.unit
+def test_load_chat_messages_handles_exception(monkeypatch) -> None:
     import importlib
 
     page = importlib.import_module("src.pages.01_chat")
@@ -712,8 +1623,9 @@ def test_load_chat_messages_handles_exception() -> None:
         def get_state_values(self, **_k):  # type: ignore[no-untyped-def]
             raise RuntimeError("boom")
 
+    monkeypatch.setattr(page, "_get_coordinator", _Coord)
     selection = SimpleNamespace(thread_id="t", user_id="u")
-    assert page._load_chat_messages(_Coord(), selection) == []
+    assert page._load_chat_messages(selection) == []
 
 
 @pytest.mark.unit
@@ -758,6 +1670,33 @@ def test_render_memory_sidebar_delete_flow(monkeypatch, clean_streamlit_session)
 
 
 @pytest.mark.unit
+def test_render_memory_sidebar_reports_maintenance_without_acquiring_store(
+    monkeypatch: pytest.MonkeyPatch,
+    clean_streamlit_session: dict[str, list[str] | int],
+) -> None:
+    import importlib
+
+    page = importlib.import_module("src.pages.01_chat")
+    background_jobs = importlib.import_module("src.ui.background_jobs")
+    manager = background_jobs.JobManager()
+    monkeypatch.setattr(page, "get_job_manager", lambda: manager)
+    monkeypatch.setattr(
+        page,
+        "_get_memory_store",
+        lambda: pytest.fail("store acquired during runtime maintenance"),
+    )
+
+    try:
+        with manager.admission_quiescence():
+            page._render_memory_sidebar("u1", "t1")
+        assert clean_streamlit_session["infos"] == [
+            "Memories are unavailable during runtime maintenance."
+        ]
+    finally:
+        manager.shutdown()
+
+
+@pytest.mark.unit
 def test_hydrate_router_from_snapshot_skips_when_already_loaded(monkeypatch):
     import importlib
 
@@ -767,10 +1706,13 @@ def test_hydrate_router_from_snapshot_skips_when_already_loaded(monkeypatch):
 
     st.session_state.clear()
     st.session_state["_snapshot_loaded_id"] = "sid"
-    page.replace_session_router(
+    resource = page.VectorIndexResource(object())
+    page.replace_session_runtime(
         st.session_state,
+        resource,
         object(),
         runtime_generation=page.settings.cache_version,
+        state_updates={"_snapshot_loaded_id": "sid"},
     )
 
     monkeypatch.setattr(
@@ -800,7 +1742,7 @@ def test_hydrate_router_from_snapshot_replaces_old_router(monkeypatch):
     new = object()
     st.session_state.clear()
     st.session_state["_snapshot_loaded_id"] = "sid"
-    page.replace_session_router(
+    replace_session_router(
         st.session_state,
         old,
         runtime_generation=page.settings.cache_version - 1,
@@ -892,3 +1834,137 @@ def test_load_latest_snapshot_without_snapshot_returns(monkeypatch):
     )
     monkeypatch.setattr(page, "latest_snapshot_dir", lambda: None)
     page._load_latest_snapshot_into_session()
+
+
+@pytest.mark.unit
+def test_snapshot_autoload_preserves_runtime_during_active_job(
+    monkeypatch, tmp_path: Path, clean_streamlit_session
+) -> None:
+    import importlib
+
+    import streamlit as st  # type: ignore
+
+    page = importlib.import_module("src.pages.01_chat")
+    background_jobs = importlib.import_module("src.ui.background_jobs")
+    manager = background_jobs.JobManager(max_workers=1)
+    started = threading.Event()
+    release = threading.Event()
+
+    def _worker(_cancel, _progress):  # type: ignore[no-untyped-def]
+        started.set()
+        release.wait(timeout=5)
+
+    job_id = manager.start_job(owner_id="owner", fn=_worker)
+    assert started.wait(timeout=2)
+    monkeypatch.setattr(page, "get_job_manager", lambda: manager)
+
+    class _Client:
+        close_calls = 0
+
+        def close(self) -> None:
+            self.close_calls += 1
+
+    class _Router:
+        close_calls = 0
+
+        def close(self) -> None:
+            self.close_calls += 1
+
+    client = _Client()
+    router = _Router()
+    resource = page.VectorIndexResource("old-index", client=client)
+    page.replace_session_runtime(
+        st.session_state,
+        resource,
+        router,
+        runtime_generation=page.settings.cache_version,
+        state_updates={"_snapshot_loaded_id": "old"},
+    )
+    snapshot = tmp_path / "new"
+    monkeypatch.setattr(page, "latest_snapshot_dir", lambda: snapshot)
+    monkeypatch.setattr(page, "load_manifest", lambda _path: _snapshot_manifest())
+    monkeypatch.setattr(page, "compute_staleness", lambda *_a, **_k: False)
+    monkeypatch.setattr(
+        page,
+        "_hydrate_router_from_snapshot_quiesced",
+        lambda _path: pytest.fail("hydration must be deferred"),
+    )
+    try:
+        assert page._load_latest_snapshot_into_session() is False
+        assert st.session_state["router_engine"] is router
+        assert st.session_state["vector_index"] == "old-index"
+        assert client.close_calls == 0
+        assert router.close_calls == 0
+        assert clean_streamlit_session["captions"][-1] == page._SNAPSHOT_REFRESH_BUSY
+    finally:
+        release.set()
+        assert manager.wait_for_completion(job_id, owner_id="owner") == "succeeded"
+        manager.shutdown()
+
+
+@pytest.mark.unit
+def test_snapshot_clear_preserves_runtime_during_maintenance(
+    monkeypatch, clean_streamlit_session
+) -> None:
+    import importlib
+
+    import streamlit as st  # type: ignore
+
+    page = importlib.import_module("src.pages.01_chat")
+    background_jobs = importlib.import_module("src.ui.background_jobs")
+    manager = background_jobs.JobManager()
+    monkeypatch.setattr(page, "get_job_manager", lambda: manager)
+    router = object()
+    resource = page.VectorIndexResource("index")
+    page.replace_session_runtime(
+        st.session_state,
+        resource,
+        router,
+        runtime_generation=page.settings.cache_version,
+        state_updates={"_snapshot_loaded_id": "old"},
+    )
+    try:
+        with manager.admission_quiescence():
+            assert page._clear_snapshot_runtime() is False
+        assert st.session_state["router_engine"] is router
+        assert st.session_state["vector_index"] == "index"
+        assert not resource.closed
+        assert (
+            clean_streamlit_session["captions"][-1]
+            == page._SNAPSHOT_REFRESH_MAINTENANCE
+        )
+    finally:
+        manager.shutdown()
+
+
+@pytest.mark.unit
+def test_snapshot_clear_reports_foreground_runtime_conflict(
+    monkeypatch, clean_streamlit_session
+) -> None:
+    import importlib
+
+    import streamlit as st  # type: ignore
+
+    page = importlib.import_module("src.pages.01_chat")
+    background_jobs = importlib.import_module("src.ui.background_jobs")
+    manager = background_jobs.JobManager()
+    monkeypatch.setattr(page, "get_job_manager", lambda: manager)
+    router = object()
+    resource = page.VectorIndexResource("index")
+    page.replace_session_runtime(
+        st.session_state,
+        resource,
+        router,
+        runtime_generation=page.settings.cache_version,
+        state_updates={"_snapshot_loaded_id": "old"},
+    )
+    try:
+        with manager.foreground_runtime_activity():
+            assert page._clear_snapshot_runtime() is False
+        assert st.session_state["router_engine"] is router
+        assert not resource.closed
+        assert (
+            clean_streamlit_session["captions"][-1] == page._SNAPSHOT_REFRESH_FOREGROUND
+        )
+    finally:
+        manager.shutdown()

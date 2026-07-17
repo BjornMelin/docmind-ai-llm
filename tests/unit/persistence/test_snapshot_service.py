@@ -120,10 +120,13 @@ def test_rebuild_snapshot_success_writes_and_finalizes_manifest(
             assert target == workspace
             manifest.update(metadata)
 
-        def finalize_snapshot(self, target: Path) -> Path:
+        def finalize_snapshot(self, target: Path) -> svc.FinalizedSnapshot:
             calls.append("finalize")
             assert target == workspace
-            return final
+            return svc.FinalizedSnapshot(
+                path=final,
+                manifest={"corpus_hash": "corpus"},
+            )
 
         def cleanup_tmp(self, _target: Path) -> None:
             raise AssertionError("caller owns workspace cleanup")
@@ -177,7 +180,8 @@ def test_rebuild_snapshot_success_writes_and_finalizes_manifest(
         ),
     )
 
-    assert result == final
+    assert result.path == final
+    assert result.manifest == {"corpus_hash": "corpus"}
     assert calls == ["manifest", "finalize"]
     assert manifest == {
         "index_id": "docmind",
@@ -209,7 +213,7 @@ def test_rebuild_snapshot_leaves_failure_cleanup_to_caller(
         def cleanup_tmp(self, _workspace: Path) -> None:
             raise AssertionError("service must not clean caller-owned workspace")
 
-        def finalize_snapshot(self, _workspace: Path) -> Path:
+        def finalize_snapshot(self, _workspace: Path) -> svc.FinalizedSnapshot:
             raise AssertionError("failed payload must not finalize")
 
     monkeypatch.setattr(
@@ -260,9 +264,9 @@ def test_requested_graph_failure_never_promotes_snapshot(
         def cleanup_tmp(self, _workspace: Path) -> None:
             raise AssertionError("service must not clean caller-owned workspace")
 
-        def finalize_snapshot(self, workspace: Path) -> Path:
+        def finalize_snapshot(self, workspace: Path) -> svc.FinalizedSnapshot:
             finalized.append(workspace)
-            return workspace
+            return svc.FinalizedSnapshot(path=workspace, manifest={})
 
     settings_obj = SimpleNamespace(
         data_dir=tmp_path,

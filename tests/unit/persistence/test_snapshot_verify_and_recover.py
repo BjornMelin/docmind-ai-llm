@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -38,6 +39,21 @@ def _write_complete_manifest(snapshot_dir: Path) -> None:
         manifest_meta=_manifest_metadata(snapshot_dir.name),
     )
     writer.mark_manifest_complete(snapshot_dir)
+
+
+def test_manifest_writer_rejects_non_finite_metadata_before_artifacts(
+    tmp_path: Path,
+) -> None:
+    """The low-level writer never emits non-standard JSON constants."""
+    metadata = _manifest_metadata("invalid")
+    metadata["collection_metadata"] = {"probe": float("nan")}
+
+    with pytest.raises(ValueError, match="strict JSON"):
+        writer.write_manifest(tmp_path, manifest_meta=metadata)
+
+    assert not (tmp_path / "manifest.jsonl").exists()
+    assert not (tmp_path / "manifest.meta.json").exists()
+    assert not (tmp_path / "manifest.checksum").exists()
 
 
 def test_verify_snapshot_roundtrip_and_mismatch(tmp_path: Path) -> None:
@@ -269,6 +285,42 @@ def test_recovery_preserves_current_and_never_promotes_newer_snapshot(
     assert snap.latest_snapshot_dir(base) == current
     assert (base / "CURRENT").read_text(encoding="utf-8") == current.name
     assert unreferenced.is_dir()
+
+
+@pytest.mark.parametrize(
+    "invalid_version",
+    [
+        pytest.param(["not-scalar"], id="nested"),
+        pytest.param(float("nan"), id="nan"),
+        pytest.param(float("inf"), id="positive-infinity"),
+        pytest.param(float("-inf"), id="negative-infinity"),
+    ],
+)
+def test_recovery_keeps_last_valid_current_and_removes_invalid_newer_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    invalid_version: object,
+) -> None:
+    """Startup recovery retains CURRENT and rejects malformed final metadata."""
+    base = tmp_path / "storage"
+    base.mkdir()
+    current = base / "20250101T000000-aaaaaaaa"
+    invalid = base / "20250102T000000-bbbbbbbb"
+    current.mkdir()
+    invalid.mkdir()
+    _write_complete_manifest(current)
+    _write_complete_manifest(invalid)
+    invalid_meta_path = invalid / "manifest.meta.json"
+    invalid_metadata = json.loads(invalid_meta_path.read_text(encoding="utf-8"))
+    invalid_metadata["versions"] = {"app": invalid_version}
+    invalid_meta_path.write_text(json.dumps(invalid_metadata), encoding="utf-8")
+    (base / "CURRENT").write_text(current.name, encoding="utf-8")
+    monkeypatch.setattr(snap.settings.snapshots, "gc_grace_seconds", 0)
+
+    snap.recover_snapshots(base)
+
+    assert snap.latest_snapshot_dir(base) == current
+    assert not invalid.exists()
 
 
 def test_recovery_discards_journaled_uncommitted_destination(tmp_path: Path) -> None:

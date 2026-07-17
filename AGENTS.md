@@ -136,6 +136,33 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 
 - Keep import-time work minimal (pages rerun).
 - Use `st.cache_resource` for long-lived objects (DB connections, checkpointers, clients).
+- Give every closeable `st.cache_resource` a typed `on_release` callback. Acquire
+  its current value inside `JobManager.foreground_runtime_activity()` and retain
+  that counted lease through the resource's last use; nested foreground callbacks
+  are supported.
+- Keep the ADR-052 background `JobManager` process-owned behind its module lock;
+  do not put it in `st.cache_resource`, because cache clearing must not replace
+  active job or maintenance-lease ownership.
+- Keep mutable job records and progress queues manager-private. `get()` publishes
+  an immutable shallow view captured under the manager lock. Publish terminal
+  payload/error before terminal status, and only after the worker future is done
+  during normal completion. Owner consumption and TTL expiry must clear payload
+  references before removing registry and future ownership.
+- Acquire `JobManager.foreground_runtime_activity()` before obtaining any live
+  Chat coordinator/router handle or vector-backed export seed. Acquire
+  `admission_quiescence()` before every runtime ownership mutation, recheck state
+  inside the lease, and never nest a maintenance lease with a foreground lease.
+- A Chat analysis fragment persists result, one terminal notice, and its completed
+  marker before consumption, then requests `st.rerun(scope="app")`. Only the full
+  app renders and pops that notice, after the job panel transition. Deferred
+  consumption retries without republishing; successful or missing-state cleanup
+  also requests a full-app rerun so controls re-enable.
+- Manual GraphRAG export must revalidate the current session vector resource as
+  its first action inside the foreground lease, before borrowing graph or vector
+  indices, and retain that lease through the final file write.
+- Treat Settings Apply as one transaction: catch any ordinary `Exception`,
+  restore the exact settings and LlamaIndex globals, and let process-control
+  `BaseException` subclasses propagate.
 
 ## Ingestion / processing
 
@@ -155,6 +182,12 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
   alone owns direct UTF-8 loading; do not add an ingestion-facade text fallback.
 - Accept in-memory ingestion as `payload_text: str`; route every binary input
   through a source path and the parser boundary.
+- Snapshot finalization returns `FinalizedSnapshot(path, manifest)`, whose manifest
+  was verified and captured inside the writer-lock/retention boundary. Before an
+  ingestion worker returns, derive its bounded object-free presentation DTO from
+  that captured manifest. Do not reopen the worker's result snapshot. Terminal
+  handoff must persist its notice before owner-authorized consumption; retain
+  tracking when consumption races worker completion.
 - Reject duplicate document IDs before ingestion I/O. Derive file document IDs
   as `doc-<full lowercase SHA-256>` through `src/utils/hashing.py`.
 - Cache: DuckDB KV store (`DOCMIND_CACHE__DIR`, `DOCMIND_CACHE__FILENAME`).
@@ -217,8 +250,18 @@ Source of truth for exact pins: `pyproject.toml` + `uv.lock`.
 - `manifest.meta.json` includes physical `collections.text` and
   `collections.image` identities, optional collection metadata, hashes,
   versions, graph type, and optional `graph_exports`.
+- The canonical manifest validator owns presentation-safe metadata: every version
+  key is a string and every value is a string, finite number, boolean, or null;
+  every graph export has a unique basename of at most 200 characters, a nonempty
+  format of at most 32 characters, a nonnegative integer size, and a lowercase
+  SHA-256. Graph type `none` requires no exports. Reject invalid metadata before
+  moving `CURRENT`; canonical hash preflight rejects non-finite numbers across
+  the complete manifest before any artifact is written.
 - `CURRENT` is the sole activation boundary. Never infer an active snapshot from
   directory ordering or promote an unreferenced snapshot during recovery.
+- Result presentation must use the manifest captured by finalization. Canonical
+  readiness and recovery checks may resolve and verify `CURRENT`; that validation
+  is not a result-snapshot presentation reload.
 - `data/.deployment-id` is the stable ownership boundary for DocMind Qdrant
   collections. Bootstrap it atomically only before durable snapshots exist. A
   missing, invalid, or replaced identity with retained snapshot state fails closed.

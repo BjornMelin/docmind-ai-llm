@@ -17,6 +17,36 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## [Unreleased]
 
+### Fixed
+
+- Serialized live runtime readers and writers across Chat, Documents, Settings,
+  cache maintenance, and background jobs; late shutdown completions can no longer
+  replace cancellation, and failed Settings publication restores every
+  LlamaIndex runtime field and session owner.
+- Cache maintenance now waits for active Chat session, memory-store, and visual
+  retrieval readers before release callbacks close their current resources.
+- Ingestion workers now carry a validated manifest presentation through terminal
+  handoff, so superseded snapshots remain truthful even after retention removes
+  their files; displayed terminal jobs release manager-held payloads and futures.
+- Snapshot finalization now returns its lock-verified manifest directly, including
+  uncertain durability recovery after `CURRENT` replacement, so result rendering
+  never reopens the committed or superseded snapshot.
+- Background jobs now expose immutable state views, publish terminal status only
+  after payload completion, and share one reference-clearing consume/TTL release
+  path. Chat analysis retries pending consumption without duplicate results or
+  notices, and manual GraphRAG export remains leased through its final file write.
+- Chat analysis completion now transitions from fragment polling to a full-app
+  rerun before rendering its exactly-once notice, including deferred-consume and
+  missing-state cleanup. Manual graph export rejects a retired session resource
+  before borrowing either index.
+- Snapshot metadata now rejects non-scalar versions, non-finite numbers anywhere
+  in the manifest, and malformed graph-export identities before `CURRENT`, using
+  strict JSON serialization and shared persistence/UI bounds. The duplicate
+  ingestion render wrapper was removed in favor of the canonical prepare/render
+  stages.
+- Settings runtime publication now restores the complete prior runtime for every
+  ordinary exception, including failures outside the previous exception list.
+
 ## [1.0.0](https://github.com/BjornMelin/docmind-ai-llm/compare/v0.9.0...v1.0.0) (2026-07-11)
 
 

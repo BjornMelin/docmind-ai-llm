@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import pytest
@@ -68,6 +70,40 @@ class _FakeJobManager:
 
     def cancel(self, *_a, **_k):  # type: ignore[no-untyped-def]
         return True
+
+    def consume_terminal(self, job_id: str, *, owner_id: str) -> bool:
+        state = self._states.get(job_id)
+        if (
+            state is None
+            or state.owner_id != owner_id
+            or state.status not in ("succeeded", "failed", "canceled")
+        ):
+            return False
+        state.result = None
+        state.error = None
+        self._states.pop(job_id, None)
+        self._events.pop(job_id, None)
+        return True
+
+    def activity_snapshot(self) -> bg.JobActivitySnapshot:
+        return bg.JobActivitySnapshot(
+            has_active_jobs=False,
+            foreground_runtime_active=False,
+            maintenance_active=False,
+        )
+
+    def exclusivity_activity_snapshot(
+        self, _exclusivity_key: str
+    ) -> tuple[bool, bg.JobActivitySnapshot]:
+        return False, self.activity_snapshot()
+
+    @contextmanager
+    def foreground_runtime_activity(self) -> Iterator[None]:
+        yield
+
+    @contextmanager
+    def admission_quiescence(self) -> Iterator[None]:
+        yield
 
 
 @pytest.fixture

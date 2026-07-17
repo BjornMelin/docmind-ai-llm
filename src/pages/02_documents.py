@@ -23,8 +23,12 @@ from src.models.processing import (
 )
 from src.persistence.artifacts import ArtifactRef, ArtifactStore
 from src.persistence.snapshot import (
+    MANIFEST_EXPORT_FILENAME_MAX_LENGTH,
+    MANIFEST_EXPORT_FORMAT_MAX_LENGTH,
+    FinalizedSnapshot,
     SnapshotManager,
     is_snapshot_version_name,
+    latest_snapshot_dir,
     load_manifest,
 )
 from src.persistence.snapshot_service import SnapshotActivation, rebuild_snapshot
@@ -49,22 +53,55 @@ from src.telemetry.opentelemetry import (
 )
 from src.ui.artifacts import render_artifact_image
 from src.ui.background_jobs import (
+    ForegroundRuntimeConflictError,
+    JobAdmissionPausedError,
     JobCanceledError,
+    JobConflictError,
+    JobManager,
+    JobStateView,
     ProgressEvent,
     get_job_manager,
     get_or_create_owner_id,
 )
 from src.ui.ingest_adapter import ingest_inputs, save_uploaded_file
-from src.ui.router_session import replace_session_router
+from src.ui.router_session import session_router_is_current
 from src.ui.vector_session import (
     VectorIndexResource,
-    clear_stale_session_vector_resource,
-    replace_session_vector_resource,
+    clear_session_runtime,
+    replace_session_runtime,
+    session_vector_resource_is_current,
 )
 from src.utils.hashing import document_id_from_sha256, sha256_file
 
 ProgressReporter = Callable[[ProgressEvent], None]
 _PHYSICAL_COLLECTION_MAX_LENGTH = 200
+_CORPUS_MUTATION_KEY = "corpus-mutation"
+_CORPUS_ACTIVITY_OBSERVED_KEY = "corpus_activity_observed"
+_INGEST_TERMINAL_PRESENTATION_KEY = "ingest_job_terminal_notice"
+_INVALID_INGEST_RESULT_MESSAGE = (
+    "Ingestion finished with an invalid result. Please try again."
+)
+_INGEST_DISPLAY_FAILURE_MESSAGE = (
+    "Ingestion results could not be displayed. Please try again."
+)
+_TERMINAL_MAINTENANCE_WAIT_COPY = (
+    "Runtime maintenance is in progress. Live activation will retry automatically."
+)
+_TERMINAL_JOB_WAIT_COPY = (
+    "Other background work is active. Live activation will retry automatically."
+)
+_TERMINAL_FOREGROUND_WAIT_COPY = (
+    "The live runtime is in use. Live activation will retry automatically."
+)
+_NLP_ENTITY_PRESENTATION_LIMIT = 20
+_NLP_SENTENCE_PRESENTATION_LIMIT = 10
+_IMAGE_EXPORT_PRESENTATION_LIMIT = 128
+_PRESENTATION_TEXT_MAX_LENGTH = 500
+_PRESENTATION_ID_MAX_LENGTH = 200
+_ARTIFACT_SUFFIX_CHARACTERS = "abcdefghijklmnopqrstuvwxyz0123456789.-_"
+_MANIFEST_VERSION_PRESENTATION_LIMIT = 32
+_MANIFEST_EXPORT_PRESENTATION_LIMIT = 32
+ActiveIngestionJob = tuple[str, JobStateView]
 
 
 if TYPE_CHECKING:
@@ -112,41 +149,112 @@ def _get_spacy_service(
 def main() -> None:  # pragma: no cover - Streamlit page
     """Render the Documents page and handle ingestion form submissions."""
     configure_observability(settings)
-    clear_stale_session_vector_resource(
-        st.session_state,
-        runtime_generation=settings.cache_version,
-    )
+    _clear_stale_session_runtime()
     st.title("Documents")
+    _render_ingest_terminal_notice()
 
     owner_id = get_or_create_owner_id()
     _render_latest_snapshot_summary()
+    _render_ingest_job_panel(owner_id=owner_id)
 
+    active_job, mutation_active, maintenance_active = _resolve_corpus_mutation_activity(
+        owner_id=owner_id
+    )
     files, use_graphrag, encrypt_images, parsing_overrides, submitted = (
-        _render_ingest_form()
+        _render_ingest_form(
+            active_job=active_job,
+            mutation_active=mutation_active,
+            maintenance_active=maintenance_active,
+        )
     )
     if submitted:
-        _handle_ingest_submission(
+        started = _handle_ingest_submission(
             files,
             use_graphrag,
             encrypt_images,
             parsing_overrides,
             owner_id=owner_id,
         )
-    _render_ingest_job_panel(owner_id=owner_id)
+        if started:
+            st.rerun()
 
-    _render_maintenance_controls(owner_id=owner_id)
+    active_job, mutation_active, maintenance_active = _resolve_corpus_mutation_activity(
+        owner_id=owner_id
+    )
+    _render_maintenance_controls(
+        owner_id=owner_id,
+        active_job=active_job,
+        mutation_active=mutation_active,
+        maintenance_active=maintenance_active,
+    )
 
     # Snapshot utilities and manual exports are driven by session_state indices.
     _render_export_controls()
 
 
-def _render_ingest_form() -> tuple[
-    list[Any] | None, bool, bool, ParsingOverrides, bool
-]:
+def _clear_stale_session_runtime() -> bool:
+    """Clear an obsolete session runtime only while mutation is quiesced."""
+    runtime_keys = (
+        "_vector_index_resource",
+        "_vector_runtime_generation",
+        "vector_index",
+        "router_engine",
+        "_router_runtime_generation",
+        "graphrag_index",
+        "_snapshot_collections",
+        "_snapshot_loaded_id",
+    )
+
+    def _mutation_needed() -> bool:
+        runtime_present = any(key in st.session_state for key in runtime_keys)
+        return runtime_present and not (
+            session_vector_resource_is_current(
+                st.session_state,
+                runtime_generation=settings.cache_version,
+            )
+            and session_router_is_current(
+                st.session_state,
+                runtime_generation=settings.cache_version,
+            )
+        )
+
+    if not _mutation_needed():
+        return True
+    try:
+        with get_job_manager().admission_quiescence():
+            if _mutation_needed():
+                clear_session_runtime(
+                    st.session_state,
+                    runtime_generation=settings.cache_version,
+                )
+    except JobAdmissionPausedError:
+        st.caption("Stale runtime cleanup deferred during runtime maintenance.")
+        return False
+    except ForegroundRuntimeConflictError:
+        st.caption("Stale runtime cleanup deferred while the live runtime is in use.")
+        return False
+    except JobConflictError:
+        st.caption("Stale runtime cleanup deferred while background work is active.")
+        return False
+    return True
+
+
+def _render_ingest_form(
+    *,
+    active_job: ActiveIngestionJob | None,
+    mutation_active: bool,
+    maintenance_active: bool,
+) -> tuple[list[Any] | None, bool, bool, ParsingOverrides, bool]:
     """Render the ingestion form and return submitted values."""
     # Keep dependent parser controls outside the form so changing the global
     # defaults toggle reruns immediately and enables overrides before submit.
     parsing_overrides = _render_parsing_overrides()
+    if maintenance_active:
+        st.info(
+            "Runtime maintenance is in progress. Ingestion is temporarily disabled."
+        )
+    elif mutation_active:
+        st.info(_corpus_mutation_copy(active_job))
     with st.form("ingest_form", clear_on_submit=False):
         files = st.file_uploader("Add files", type=None, accept_multiple_files=True)
         col_opts = st.columns(2)
@@ -175,7 +283,10 @@ def _render_ingest_form() -> tuple[
                 },
                 expanded=False,
             )
-        submitted = st.form_submit_button("Ingest")
+        submitted = st.form_submit_button(
+            "Ingest",
+            disabled=mutation_active or maintenance_active,
+        )
     return files, use_graphrag, encrypt_images, parsing_overrides, submitted
 
 
@@ -208,7 +319,7 @@ def _handle_ingest_submission(
     parsing_overrides: ParsingOverrides,
     *,
     owner_id: str,
-) -> None:
+) -> bool:
     """Handle ingestion submission by starting a background job.
 
     Args:
@@ -220,9 +331,11 @@ def _handle_ingest_submission(
     """
     if not files:
         st.warning("No files selected.")
-        return
+        return False
+    if _reject_active_corpus_mutation(owner_id=owner_id):
+        return False
     if not _pdf_uploads_are_ready(files):
-        return
+        return False
     try:
         _require_unique_upload_document_ids(files)
         nlp_service = _load_optional_spacy_service()
@@ -233,8 +346,8 @@ def _handle_ingest_submission(
         )
         if not saved_inputs:
             st.warning("No valid files to ingest.")
-            return
-        _start_ingestion_job(
+            return False
+        return _start_ingestion_job(
             saved_inputs,
             use_graphrag=use_graphrag,
             encrypt_images=encrypt_images,
@@ -257,6 +370,7 @@ def _handle_ingest_submission(
         )
         st.error(f"Failed to start ingestion job ({type(exc).__name__}).")
         st.caption(f"Error reference: {redaction.redacted}")
+        return False
 
 
 def _require_unique_upload_document_ids(files: list[Any]) -> None:
@@ -397,11 +511,15 @@ def _start_ingestion_job(
     rollback_source_paths: tuple[Path, ...] = (),
     excluded_source_paths: tuple[Path, ...] = (),
     quarantine_source: Path | None = None,
-) -> None:
+) -> bool:
     """Start one background ingestion job and persist its UI state."""
     try:
         require_unique_document_ids(saved_inputs)
-        job_manager = get_job_manager(settings.cache_version)
+        if _reject_active_corpus_mutation(owner_id=owner_id):
+            _delete_rollback_sources(rollback_source_paths)
+            return False
+        job_manager = get_job_manager()
+        submission_runtime_generation = int(settings.cache_version)
 
         def _work(
             cancel_event: threading.Event, report: ProgressReporter
@@ -416,16 +534,32 @@ def _start_ingestion_job(
                 rollback_source_paths=rollback_source_paths,
                 excluded_source_paths=excluded_source_paths,
                 quarantine_source=quarantine_source,
+                runtime_generation=submission_runtime_generation,
             )
 
-        job_id = job_manager.start_job(owner_id=owner_id, fn=_work)
+        job_id = job_manager.start_job(
+            owner_id=owner_id,
+            fn=_work,
+            exclusivity_key=_CORPUS_MUTATION_KEY,
+        )
+    except JobAdmissionPausedError:
+        _delete_rollback_sources(rollback_source_paths)
+        st.warning("Runtime maintenance is in progress. Try ingestion again shortly.")
+        return False
+    except JobConflictError:
+        _delete_rollback_sources(rollback_source_paths)
+        st.warning("Another corpus change is already running.")
+        return False
     except Exception:
         _delete_rollback_sources(rollback_source_paths)
         raise
     st.session_state["ingest_job_id"] = job_id
+    st.session_state.pop("ingest_job_last_event", None)
+    st.session_state.pop("ingest_job_cancel_requested_id", None)
     st.session_state["ingest_job_use_graphrag"] = bool(use_graphrag)
     st.session_state["ingest_job_encrypt_images"] = bool(encrypt_images)
     st.toast("Ingestion started", icon="⏳")
+    return True
 
 
 def _run_ingest_job(
@@ -439,6 +573,7 @@ def _run_ingest_job(
     rollback_source_paths: tuple[Path, ...] = (),
     excluded_source_paths: tuple[Path, ...] = (),
     quarantine_source: Path | None = None,
+    runtime_generation: int,
 ) -> dict[str, Any]:
     """Worker entrypoint for ingestion + snapshot rebuild (no Streamlit APIs).
 
@@ -452,6 +587,7 @@ def _run_ingest_job(
         rollback_source_paths: Newly persisted uploads removed if activation fails.
         excluded_source_paths: Exact upload paths omitted from the new generation.
         quarantine_source: Existing upload moved out of the corpus before commit.
+        runtime_generation: Live runtime generation captured before job submission.
 
     Returns:
         dict[str, Any]: Mapping of document IDs to their respective results.
@@ -507,20 +643,23 @@ def _run_ingest_job(
             "snapshot",
             "Activating the verified corpus generation",
         )
-        final = _activate_ingest_generation(
+        finalized = _activate_ingest_generation(
             transaction,
             ingest_result,
             use_graphrag=use_graphrag,
             quarantine_source=quarantine_source,
         )
-        _emit_ingest_progress(report_progress, 100, "done", "Done")
-
+        final = finalized.path
         ingest_result["snapshot_id"] = final.name
+        manifest = _bounded_manifest_presentation(finalized.manifest)
         payload = {
             "ingest": ingest_result,
             "snapshot_dir": str(final),
+            "manifest": manifest,
             "use_graphrag": bool(use_graphrag),
+            "runtime_generation": int(runtime_generation),
         }
+        _emit_ingest_progress(report_progress, 100, "done", "Done")
         transaction.transferred = True
         return payload
     finally:
@@ -595,7 +734,7 @@ def _activate_ingest_generation(
     *,
     use_graphrag: bool,
     quarantine_source: Path | None,
-) -> Path:
+) -> FinalizedSnapshot:
     """Validate and atomically activate one completed ingestion generation."""
     resource = transaction.resource
     if resource is None:
@@ -854,6 +993,78 @@ def _plan_pending_inputs(
     return planned_inputs, tuple(moves)
 
 
+def _resolve_active_ingestion_job(*, owner_id: str) -> ActiveIngestionJob | None:
+    """Return the current owner's queued or running corpus mutation."""
+    job_id = st.session_state.get("ingest_job_id")
+    if not isinstance(job_id, str) or not job_id:
+        _clear_ingest_job_tracking()
+        return None
+
+    state = get_job_manager().get(job_id, owner_id=owner_id)
+    if state is None:
+        _clear_ingest_job_tracking()
+        return None
+    if state.status in ("queued", "running"):
+        return job_id, state
+    return None
+
+
+def _resolve_corpus_mutation_activity(
+    *, owner_id: str
+) -> tuple[ActiveIngestionJob | None, bool, bool]:
+    """Return current-session state and process-wide corpus occupancy."""
+    active_job = _resolve_active_ingestion_job(owner_id=owner_id)
+    manager = get_job_manager()
+    process_mutation_active, activity = manager.exclusivity_activity_snapshot(
+        _CORPUS_MUTATION_KEY
+    )
+    mutation_active = active_job is not None or process_mutation_active
+    st.session_state[_CORPUS_ACTIVITY_OBSERVED_KEY] = (
+        mutation_active,
+        activity.maintenance_active,
+    )
+    return active_job, mutation_active, activity.maintenance_active
+
+
+def _clear_ingest_job_tracking() -> None:
+    """Clear session-local state for a job that is no longer pollable."""
+    st.session_state.pop("ingest_job_id", None)
+    st.session_state.pop("ingest_job_last_event", None)
+    st.session_state.pop("ingest_job_cancel_requested_id", None)
+
+
+def _active_ingestion_copy(active_job: ActiveIngestionJob) -> str:
+    """Return concise progress copy for an active corpus mutation."""
+    _, state = active_job
+    last = st.session_state.get("ingest_job_last_event")
+    if isinstance(last, ProgressEvent):
+        return f"Corpus change in progress: {last.phase} · {last.percent}%."
+    if state.status == "queued":
+        return "Corpus change queued. Mutation controls are temporarily disabled."
+    return "Corpus change in progress. Mutation controls are temporarily disabled."
+
+
+def _corpus_mutation_copy(active_job: ActiveIngestionJob | None) -> str:
+    """Return activity copy without exposing another session's job details."""
+    if active_job is not None:
+        return _active_ingestion_copy(active_job)
+    return "Another session is changing the corpus. Mutation controls are disabled."
+
+
+def _reject_active_corpus_mutation(*, owner_id: str) -> bool:
+    """Warn and reject prework when any corpus mutation is already active."""
+    active_job, mutation_active, maintenance_active = _resolve_corpus_mutation_activity(
+        owner_id=owner_id
+    )
+    if maintenance_active:
+        st.warning("Runtime maintenance is in progress. Try this action again shortly.")
+        return True
+    if not mutation_active:
+        return False
+    st.warning(_corpus_mutation_copy(active_job))
+    return True
+
+
 @st.fragment(run_every=float(settings.ui.progress_poll_interval_sec))
 def _render_ingest_job_panel(*, owner_id: str) -> None:
     """Render background ingestion job progress (auto-refresh).
@@ -862,13 +1073,27 @@ def _render_ingest_job_panel(*, owner_id: str) -> None:
         owner_id: Unique identifier for the job owner.
     """
     job_id = st.session_state.get("ingest_job_id")
+    job_manager = get_job_manager()
+    mutation_active, activity = job_manager.exclusivity_activity_snapshot(
+        _CORPUS_MUTATION_KEY
+    )
+    observed = (mutation_active, activity.maintenance_active)
+    previously_observed = st.session_state.get(_CORPUS_ACTIVITY_OBSERVED_KEY)
+    st.session_state[_CORPUS_ACTIVITY_OBSERVED_KEY] = observed
+    if (
+        isinstance(previously_observed, tuple)
+        and len(previously_observed) == 2
+        and previously_observed != observed
+    ):
+        st.rerun(scope="app")
+        return
     if not isinstance(job_id, str) or not job_id:
         return
 
-    job_manager = get_job_manager(settings.cache_version)
     state = job_manager.get(job_id, owner_id=owner_id)
     if state is None:
-        st.session_state.pop("ingest_job_id", None)
+        _clear_ingest_job_tracking()
+        st.rerun(scope="app")
         return
 
     events = job_manager.drain_progress(job_id, owner_id=owner_id)
@@ -901,128 +1126,732 @@ def _render_ingest_job_panel(*, owner_id: str) -> None:
             st.warning("Cancellation requested. Waiting for a safe stopping point.")
 
     else:
-        # Terminal states: render result once, then clear job id.
+        # Terminal states are captured once, then presented on a full-app run.
         completed_key = "ingest_job_completed_id"
-        if st.session_state.get(completed_key) != job_id:
-            _render_ingest_terminal_state(
-                state, job_id=job_id, completed_key=completed_key
-            )
+        if st.session_state.get(completed_key) == job_id:
+            if job_manager.consume_terminal(job_id, owner_id=owner_id):
+                _clear_ingest_job_tracking()
+                st.session_state[_CORPUS_ACTIVITY_OBSERVED_KEY] = (False, False)
+            else:
+                logger.warning(
+                    "Terminal ingestion job consumption deferred; retaining job state"
+                )
+        elif _capture_ingest_terminal_state(
+            state,
+            owner_id=owner_id,
+            job_id=job_id,
+            completed_key=completed_key,
+        ):
+            st.rerun(scope="app")
 
 
-def _render_ingest_terminal_state(
-    state: Any, *, job_id: str, completed_key: str
-) -> None:
-    """Render the results of a terminal ingestion job and clear session state.
+def _render_ingest_terminal_notice() -> None:
+    """Render and consume one terminal outcome after a full-app rerun."""
+    if _INGEST_TERMINAL_PRESENTATION_KEY not in st.session_state:
+        return
+    notice = st.session_state.get(_INGEST_TERMINAL_PRESENTATION_KEY)
+    try:
+        if not isinstance(notice, dict):
+            raise TypeError("Terminal presentation must be a dictionary")
+        status = notice.get("status")
+        message = notice.get("message")
+        if not isinstance(message, str):
+            raise TypeError("Terminal presentation message must be a string")
+        if status == "succeeded":
+            _render_ingest_success_notice(notice, message=message)
+        elif status == "failed":
+            st.error(message)
+        elif status == "canceled":
+            st.warning(message)
+        else:
+            raise ValueError("Unknown terminal presentation status")
+        detail = notice.get("detail")
+        if isinstance(detail, str) and detail:
+            st.caption(detail)
+    except Exception as exc:
+        _log_ingest_boundary_failure("display", exc)
+        st.error(_INGEST_DISPLAY_FAILURE_MESSAGE)
+    finally:
+        if st.session_state.get(_INGEST_TERMINAL_PRESENTATION_KEY) is notice:
+            st.session_state.pop(_INGEST_TERMINAL_PRESENTATION_KEY, None)
+
+
+def _render_ingest_success_notice(notice: dict[str, Any], *, message: str) -> None:
+    """Render durable success with readiness checked against live ownership."""
+    presentation = notice.get("presentation")
+    manifest = notice.get("manifest")
+    if not isinstance(presentation, dict) or not isinstance(manifest, dict):
+        raise TypeError("Success presentation must be a dictionary")
+    final = _validated_snapshot_path(notice.get("snapshot_dir"))
+    runtime_ready, graph_ready, snapshot_authoritative = _terminal_runtime_readiness(
+        notice, final
+    )
+    _render_ingest_presentation(presentation)
+    displayed_manifest = (
+        manifest if runtime_ready else {**manifest, "graph_exports": []}
+    )
+    _render_manifest_details(displayed_manifest, final)
+    if snapshot_authoritative:
+        st.session_state["latest_manifest"] = manifest
+    st.success(message)
+    if runtime_ready:
+        st.info("Router engine is ready for Chat.")
+        if graph_ready:
+            st.info("GraphRAG index is available.")
+    elif snapshot_authoritative:
+        st.info(
+            "Snapshot completed, but the live runtime changed. Chat will reload the "
+            "active snapshot."
+        )
+    else:
+        st.info("Snapshot completed, but a newer corpus activation is current.")
+    st.toast("Ingestion complete", icon="✅")
+
+
+def _capture_ingest_terminal_state(
+    state: Any, *, owner_id: str, job_id: str, completed_key: str
+) -> bool:
+    """Capture one terminal result for presentation on a full-app rerun.
 
     Args:
         state: Terminal job state.
+        owner_id: Owner identifier authorized to consume the job.
         job_id: Unique identifier for the job.
         completed_key: Session state key to track job completion.
     """
-    st.session_state.pop("ingest_job_cancel_requested_id", None)
-    if state.status == "succeeded" and isinstance(state.result, dict):
-        st.session_state[completed_key] = job_id
-        st.session_state.pop("ingest_job_id", None)
-        payload = state.result
-        ingest_result = payload.get("ingest")
-        snapshot_dir = payload.get("snapshot_dir")
-        use_graphrag = bool(payload.get("use_graphrag", False))
-
-        if isinstance(ingest_result, dict):
-            _render_ingest_results(ingest_result, use_graphrag)
-        if isinstance(snapshot_dir, str) and snapshot_dir:
-            final = Path(snapshot_dir)
-            manifest = load_manifest(final)
-            _render_manifest_details(manifest, final)
-            st.session_state["latest_manifest"] = manifest
-            st.success(f"Snapshot created: {final.name}")
-        st.toast("Ingestion complete", icon="✅")
-
-    elif state.status == "failed":
-        st.session_state[completed_key] = job_id
-        st.session_state.pop("ingest_job_id", None)
+    job_manager = get_job_manager()
+    status = getattr(state, "status", None)
+    result = getattr(state, "result", None)
+    if status == "succeeded":
+        try:
+            with job_manager.admission_quiescence():
+                try:
+                    notice = _prepare_ingest_success_notice(result)
+                except Exception as exc:
+                    _log_ingest_boundary_failure("prepare", exc)
+                    notice = {
+                        "status": "failed",
+                        "message": _INVALID_INGEST_RESULT_MESSAGE,
+                    }
+                _store_ingest_terminal_notice(
+                    notice,
+                    job_manager=job_manager,
+                    owner_id=owner_id,
+                    job_id=job_id,
+                    completed_key=completed_key,
+                )
+            return True
+        except JobAdmissionPausedError:
+            st.info(_TERMINAL_MAINTENANCE_WAIT_COPY)
+            return False
+        except ForegroundRuntimeConflictError:
+            st.info(_TERMINAL_FOREGROUND_WAIT_COPY)
+            return False
+        except JobConflictError:
+            st.info(_TERMINAL_JOB_WAIT_COPY)
+            return False
+    elif status == "failed":
         from src.utils.log_safety import build_pii_log_entry
 
-        err_msg = str(state.error) if state.error else "unknown error"
+        error = getattr(state, "error", None)
+        err_msg = str(error) if error else "unknown error"
         redaction = build_pii_log_entry(err_msg, key_id="documents.ingest_failed")
         logger.error(
             "Ingestion failed (error_type={} error={})",
-            type(state.error).__name__ if state.error else "Error",
+            type(error).__name__ if error else "Error",
             redaction.redacted,
         )
-        st.error("Ingestion failed. Please try again.")
-        st.caption(f"Error reference: {redaction.redacted}")
-
-    elif state.status == "canceled":
-        st.session_state[completed_key] = job_id
-        st.session_state.pop("ingest_job_id", None)
-        st.warning("Ingestion cancelled.")
-
-
-def _render_ingest_results(result: dict[str, Any], use_graphrag: bool) -> None:
-    """Render ingestion results and hydrate session state indices.
-
-    Args:
-        result: Dictionary of document ingestion results.
-        use_graphrag: Whether GraphRAG was enabled for this run.
-    """
-    count = int(result.get("count", 0))
-    st.write(f"Ingested {count} documents.")
-    _render_nlp_preview(result.get("nlp_preview") or {}, result.get("metadata") or {})
-    _render_image_exports(result.get("exports") or [])
-
-    resource = result.get("vector_resource")
-    if not isinstance(resource, VectorIndexResource):
-        raise RuntimeError("Completed ingestion has no owned vector resource")
-    pg_index = result.get("pg_index") if use_graphrag else None
-    vector_index = resource.index
-    collections = result.get("collections")
-    if not isinstance(collections, dict):
-        resource.close()
-        raise RuntimeError("Completed ingestion has no physical collection identity")
-    text_collection = collections.get("text")
-    image_collection = collections.get("image")
-    if not isinstance(text_collection, str) or not isinstance(image_collection, str):
-        resource.close()
-        raise RuntimeError("Completed ingestion has invalid collection identities")
-
-    replace_session_vector_resource(
-        st.session_state,
-        resource,
-        runtime_generation=settings.cache_version,
-    )
-    if pg_index is not None:
-        st.session_state["graphrag_index"] = pg_index
+        notice = {
+            "status": "failed",
+            "message": "Ingestion failed. Please try again.",
+            "detail": f"Error reference: {redaction.redacted}",
+        }
+    elif status == "canceled":
+        notice = {
+            "status": "canceled",
+            "message": "Ingestion cancelled.",
+        }
     else:
-        st.session_state.pop("graphrag_index", None)
+        notice = {
+            "status": "failed",
+            "message": "Ingestion ended in an unexpected state. Please try again.",
+        }
 
+    _store_ingest_terminal_notice(
+        notice,
+        job_manager=job_manager,
+        owner_id=owner_id,
+        job_id=job_id,
+        completed_key=completed_key,
+    )
+    return True
+
+
+def _store_ingest_terminal_notice(
+    notice: dict[str, Any],
+    *,
+    job_manager: JobManager,
+    owner_id: str,
+    job_id: str,
+    completed_key: str,
+) -> None:
+    """Consume one terminal job after its notice is ready for a full rerun."""
+    st.session_state[_INGEST_TERMINAL_PRESENTATION_KEY] = notice
+    st.session_state[completed_key] = job_id
+    if job_manager.consume_terminal(job_id, owner_id=owner_id):
+        _clear_ingest_job_tracking()
+        st.session_state[_CORPUS_ACTIVITY_OBSERVED_KEY] = (False, False)
+    else:
+        logger.warning(
+            "Terminal ingestion job consumption deferred; retaining job state"
+        )
+
+
+def _prepare_ingest_success_notice(result: Any) -> dict[str, Any]:
+    """Validate a worker result, transfer runtime ownership, and build its DTO."""
+    resource: VectorIndexResource | None = None
+    try:
+        if not isinstance(result, dict):
+            raise TypeError("Completed ingestion result must be a dictionary")
+        ingest_result = result.get("ingest")
+        if not isinstance(ingest_result, dict):
+            raise TypeError("Completed ingestion payload must be a dictionary")
+        candidate = ingest_result.get("vector_resource")
+        resource = candidate if isinstance(candidate, VectorIndexResource) else None
+        final = _validated_snapshot_path(result.get("snapshot_dir"))
+        manifest = _bounded_manifest_presentation(result.get("manifest"))
+        runtime_result = {**ingest_result, "snapshot_id": final.name}
+        runtime_generation = _require_nonnegative_int(
+            result.get("runtime_generation"),
+            "runtime_generation",
+        )
+        use_graphrag = result.get("use_graphrag", False)
+        if not isinstance(use_graphrag, bool):
+            raise TypeError("GraphRAG presentation flag must be a boolean")
+        authoritative = latest_snapshot_dir(Path(settings.data_dir) / "storage")
+        generation_current = runtime_generation == int(settings.cache_version)
+        snapshot_current = (
+            authoritative is not None and authoritative.resolve() == final
+        )
+        if generation_current and snapshot_current:
+            presentation, graph_enabled = _prepare_ingest_runtime(
+                runtime_result,
+                use_graphrag,
+            )
+            publication = "published"
+        else:
+            (
+                resource,
+                pg_index,
+                _text_collection,
+                _image_collection,
+                _snapshot_id,
+                presentation,
+            ) = _validated_ingest_runtime(runtime_result, use_graphrag)
+            graph_enabled = pg_index is not None
+            resource.close()
+            publication = "superseded"
+        return {
+            "status": "succeeded",
+            "message": f"Snapshot created: {final.name}",
+            "presentation": presentation,
+            "manifest": manifest,
+            "snapshot_dir": str(final),
+            "runtime_identity": {
+                "generation": runtime_generation,
+                "snapshot_id": final.name,
+                "graph_enabled": graph_enabled,
+            },
+            "runtime_publication": publication,
+        }
+    except Exception:
+        if resource is not None:
+            resource.close()
+        raise
+
+
+def _validated_snapshot_path(value: Any) -> Path:
+    """Return a normalized snapshot path confined to configured storage."""
+    if not isinstance(value, str) or not value or len(value) > 4096:
+        raise TypeError("Completed ingestion has an invalid snapshot path")
+    root = (Path(settings.data_dir) / "storage").resolve()
+    snapshot = Path(value).resolve()
+    if snapshot == root or not snapshot.is_relative_to(root):
+        raise ValueError("Completed ingestion snapshot escaped storage")
+    return snapshot
+
+
+def _terminal_runtime_readiness(
+    notice: dict[str, Any], snapshot_dir: Path
+) -> tuple[bool, bool, bool]:
+    """Revalidate terminal runtime ownership at the moment it is rendered."""
+    identity = notice.get("runtime_identity")
+    publication = notice.get("runtime_publication")
+    if not isinstance(identity, dict) or publication not in {
+        "published",
+        "superseded",
+    }:
+        raise TypeError("Terminal runtime identity is invalid")
+    generation = _require_nonnegative_int(
+        identity.get("generation"),
+        "terminal runtime generation",
+    )
+    snapshot_id = identity.get("snapshot_id")
+    graph_enabled = identity.get("graph_enabled")
+    if (
+        not isinstance(snapshot_id, str)
+        or not snapshot_id
+        or Path(snapshot_id).name != snapshot_id
+        or not isinstance(graph_enabled, bool)
+    ):
+        raise TypeError("Terminal snapshot identity is invalid")
+    authoritative = latest_snapshot_dir(Path(settings.data_dir) / "storage")
+    snapshot_authoritative = (
+        authoritative is not None and authoritative.resolve() == snapshot_dir
+    )
+    graph_ready = graph_enabled and st.session_state.get("graphrag_index") is not None
+    runtime_ready = (
+        publication == "published"
+        and generation == int(settings.cache_version)
+        and snapshot_authoritative
+        and st.session_state.get("_snapshot_loaded_id") == snapshot_id
+        and session_vector_resource_is_current(
+            st.session_state,
+            runtime_generation=generation,
+        )
+        and session_router_is_current(
+            st.session_state,
+            runtime_generation=generation,
+        )
+        and (not graph_enabled or graph_ready)
+    )
+    return runtime_ready, graph_ready, snapshot_authoritative
+
+
+def _bounded_manifest_presentation(value: Any) -> dict[str, Any]:
+    """Validate a finalized manifest and return only bounded display fields."""
+    if not isinstance(value, dict):
+        raise TypeError("Completed ingestion has no finalized manifest")
+    corpus_hash = _validated_sha256(value.get("corpus_hash"), "corpus_hash")
+    config_hash = _validated_sha256(value.get("config_hash"), "config_hash")
+    versions = value.get("versions")
+    if not isinstance(versions, dict):
+        raise TypeError("Finalized manifest versions must be a dictionary")
+    bounded_versions: dict[str, str] = {}
+    for key in sorted(versions):
+        if not isinstance(key, str):
+            raise TypeError("Finalized manifest version keys must be strings")
+        version = versions[key]
+        if not isinstance(version, str | int | float | bool) and version is not None:
+            raise TypeError("Finalized manifest version values must be scalar")
+        bounded_versions[key[:_PRESENTATION_ID_MAX_LENGTH]] = str(version)[
+            :_PRESENTATION_ID_MAX_LENGTH
+        ]
+        if len(bounded_versions) >= _MANIFEST_VERSION_PRESENTATION_LIMIT:
+            break
+    graph_exports = value.get("graph_exports")
+    if not isinstance(graph_exports, list):
+        raise TypeError("Finalized manifest graph exports must be a list")
+    bounded_exports = [
+        _bounded_manifest_export(item)
+        for item in graph_exports[:_MANIFEST_EXPORT_PRESENTATION_LIMIT]
+    ]
+    return {
+        "corpus_hash": corpus_hash,
+        "config_hash": config_hash,
+        "versions": bounded_versions,
+        "graph_exports": bounded_exports,
+    }
+
+
+def _validated_sha256(value: Any, field: str) -> str:
+    """Return one lowercase SHA-256 manifest identity."""
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise TypeError(f"Finalized manifest {field} is invalid")
+    return value
+
+
+def _bounded_manifest_export(value: Any) -> dict[str, Any]:
+    """Validate one graph-export row needed by snapshot presentation."""
+    if not isinstance(value, dict):
+        raise TypeError("Finalized manifest export entries must be dictionaries")
+    filename = value.get("filename") or value.get("path")
+    format_name = value.get("format")
+    size_bytes = value.get("size_bytes")
+    if (
+        not isinstance(filename, str)
+        or not filename
+        or len(filename) > MANIFEST_EXPORT_FILENAME_MAX_LENGTH
+        or Path(filename).name != filename
+        or not isinstance(format_name, str)
+        or not format_name
+        or len(format_name) > MANIFEST_EXPORT_FORMAT_MAX_LENGTH
+    ):
+        raise TypeError("Finalized manifest export identity is invalid")
+    return {
+        "filename": filename,
+        "format": format_name,
+        "size_bytes": _require_nonnegative_int(size_bytes, "graph export size"),
+    }
+
+
+def _prepare_ingest_runtime(
+    result: dict[str, Any], use_graphrag: bool
+) -> tuple[dict[str, Any], bool]:
+    """Validate ingestion output and transfer its live runtime resources."""
+    (
+        resource,
+        pg_index,
+        text_collection,
+        image_collection,
+        snapshot_id,
+        presentation,
+    ) = _validated_ingest_runtime(result, use_graphrag)
+    runtime_generation = settings.cache_version
     try:
         router = build_router_engine(
-            vector_index,
+            resource.index,
             pg_index,
             settings,
             text_collection=text_collection,
             image_collection=image_collection,
         )
     except Exception:
-        replace_session_vector_resource(
-            st.session_state,
-            None,
-            runtime_generation=settings.cache_version,
-        )
+        resource.close()
         raise
-    replace_session_router(
-        st.session_state,
-        router,
-        runtime_generation=settings.cache_version,
-    )
-    st.session_state["_snapshot_collections"] = dict(collections)
-    snapshot_id = result.get("snapshot_id")
-    if isinstance(snapshot_id, str) and snapshot_id:
-        st.session_state["_snapshot_loaded_id"] = snapshot_id
-    st.info("Router engine is ready for Chat.")
+    state_updates: dict[str, Any] = {
+        "_snapshot_collections": {
+            "text": text_collection,
+            "image": image_collection,
+        },
+    }
+    state_removals: list[str] = []
     if pg_index is not None:
-        st.info("GraphRAG index is available.")
+        state_updates["graphrag_index"] = pg_index
+    else:
+        state_removals.append("graphrag_index")
+    if snapshot_id is not None:
+        state_updates["_snapshot_loaded_id"] = snapshot_id
+    else:
+        state_removals.append("_snapshot_loaded_id")
+    replace_session_runtime(
+        st.session_state,
+        resource,
+        router,
+        runtime_generation=runtime_generation,
+        state_updates=state_updates,
+        state_removals=state_removals,
+    )
+    return presentation, pg_index is not None
+
+
+def _validated_ingest_runtime(
+    result: dict[str, Any], use_graphrag: bool
+) -> tuple[VectorIndexResource, Any | None, str, str, str | None, dict[str, Any]]:
+    """Validate live runtime inputs and build their object-free presentation."""
+    candidate = result.get("vector_resource")
+    resource = candidate if isinstance(candidate, VectorIndexResource) else None
+    try:
+        if resource is None or resource.closed:
+            raise TypeError("Completed ingestion has no live owned vector resource")
+        count = _require_nonnegative_int(result.get("count"), "count")
+        metadata = _bounded_nlp_metadata(result.get("metadata"))
+        preview = _bounded_nlp_preview(result.get("nlp_preview"))
+        exports, image_preview_summary = _bounded_image_exports(result.get("exports"))
+        collections = result.get("collections")
+        if not isinstance(collections, dict):
+            raise TypeError("Completed ingestion has no physical collection identity")
+        text_collection = collections.get("text")
+        image_collection = collections.get("image")
+        if (
+            not isinstance(text_collection, str)
+            or not text_collection
+            or not isinstance(image_collection, str)
+            or not image_collection
+        ):
+            raise TypeError("Completed ingestion has invalid collection identities")
+        snapshot_id = result.get("snapshot_id")
+        if snapshot_id is not None and (
+            not isinstance(snapshot_id, str)
+            or not snapshot_id
+            or len(snapshot_id) > _PRESENTATION_ID_MAX_LENGTH
+            or Path(snapshot_id).name != snapshot_id
+        ):
+            raise TypeError("Completed ingestion has an invalid snapshot identity")
+        pg_index = result.get("pg_index") if use_graphrag else None
+        presentation = {
+            "count": count,
+            "metadata": metadata,
+            "nlp_preview": preview,
+            "exports": exports,
+            "image_preview_summary": image_preview_summary,
+        }
+        return (
+            resource,
+            pg_index,
+            text_collection,
+            image_collection,
+            snapshot_id,
+            presentation,
+        )
+    except Exception:
+        if resource is not None:
+            resource.close()
+        raise
+
+
+def _render_ingest_presentation(presentation: dict[str, Any]) -> None:
+    """Render a validated, object-free ingestion presentation DTO."""
+    count = _require_nonnegative_int(presentation.get("count"), "count")
+    metadata = presentation.get("metadata")
+    preview = presentation.get("nlp_preview")
+    exports = presentation.get("exports")
+    image_preview_summary = presentation.get("image_preview_summary")
+    if (
+        not isinstance(metadata, dict)
+        or not isinstance(preview, dict)
+        or not isinstance(exports, list)
+        or not isinstance(image_preview_summary, dict)
+    ):
+        raise TypeError("Ingestion presentation has an invalid shape")
+    selected_artifacts = _require_nonnegative_int(
+        image_preview_summary.get("selected_artifacts"),
+        "selected image artifacts",
+    )
+    total_artifacts = _require_nonnegative_int(
+        image_preview_summary.get("total_artifacts"),
+        "total image artifacts",
+    )
+    total_documents = _require_nonnegative_int(
+        image_preview_summary.get("total_documents"),
+        "total image documents",
+    )
+    omitted_artifacts = _require_nonnegative_int(
+        image_preview_summary.get("omitted_artifacts"),
+        "omitted image artifacts",
+    )
+    omitted_documents = _require_nonnegative_int(
+        image_preview_summary.get("omitted_documents"),
+        "omitted image documents",
+    )
+    if (
+        selected_artifacts != len(exports)
+        or total_artifacts != selected_artifacts + omitted_artifacts
+        or omitted_documents > total_documents
+    ):
+        raise TypeError("Image preview summary does not match its exports")
+    st.write(f"Ingested {count} documents.")
+    _render_nlp_preview(preview, metadata)
+    _render_image_exports(exports)
+    if omitted_documents:
+        st.caption(
+            f"Preview omits {omitted_artifacts} images, including all images "
+            f"from {omitted_documents} documents."
+        )
+    elif omitted_artifacts:
+        st.caption(
+            f"Preview omits {omitted_artifacts} images; every document remains "
+            "represented."
+        )
+
+
+def _require_nonnegative_int(value: Any, field: str) -> int:
+    """Return an exact nonnegative integer or reject the worker payload."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise TypeError(f"{field} must be a nonnegative integer")
+    return value
+
+
+def _bounded_nlp_metadata(value: Any) -> dict[str, Any]:
+    """Return only validated NLP counters rendered by the Documents page."""
+    if value is None:
+        value = {}
+    if not isinstance(value, dict):
+        raise TypeError("NLP metadata must be a dictionary")
+    enabled = value.get("nlp.enabled", False)
+    if not isinstance(enabled, bool):
+        raise TypeError("NLP enabled metadata must be a boolean")
+    return {
+        "nlp.enabled": enabled,
+        "nlp.enriched_nodes": _require_nonnegative_int(
+            value.get("nlp.enriched_nodes", 0), "nlp.enriched_nodes"
+        ),
+        "nlp.entity_count": _require_nonnegative_int(
+            value.get("nlp.entity_count", 0), "nlp.entity_count"
+        ),
+    }
+
+
+def _bounded_nlp_preview(value: Any) -> dict[str, list[dict[str, str]]]:
+    """Return capped, string-bounded NLP entities and sentences."""
+    if value is None:
+        value = {}
+    if not isinstance(value, dict):
+        raise TypeError("NLP preview must be a dictionary")
+    raw_entities = value.get("entities") or []
+    raw_sentences = value.get("sentences") or []
+    if not isinstance(raw_entities, list) or not isinstance(raw_sentences, list):
+        raise TypeError("NLP preview collections must be lists")
+    entities: list[dict[str, str]] = []
+    for entity in raw_entities[:_NLP_ENTITY_PRESENTATION_LIMIT]:
+        if not isinstance(entity, dict):
+            continue
+        label = entity.get("label")
+        text = entity.get("text")
+        if isinstance(label, str) and isinstance(text, str):
+            entities.append(
+                {
+                    "label": label[:_PRESENTATION_ID_MAX_LENGTH],
+                    "text": text[:_PRESENTATION_TEXT_MAX_LENGTH],
+                }
+            )
+    sentences: list[dict[str, str]] = []
+    for sentence in raw_sentences[:_NLP_SENTENCE_PRESENTATION_LIMIT]:
+        if not isinstance(sentence, dict):
+            continue
+        text = sentence.get("text")
+        if isinstance(text, str):
+            sentences.append({"text": text[:_PRESENTATION_TEXT_MAX_LENGTH]})
+    return {"entities": entities, "sentences": sentences}
+
+
+def _bounded_image_exports(
+    value: Any,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Return a fair, capped image preview and its omission summary."""
+    if value is None:
+        value = []
+    if not isinstance(value, list):
+        raise TypeError("Image exports must be a list")
+    exports_by_document: dict[str, list[dict[str, Any]]] = {}
+    for export in value:
+        if not isinstance(export, dict):
+            raise TypeError("Image export entries must be dictionaries")
+        content_type = export.get("content_type")
+        if not isinstance(content_type, str):
+            raise TypeError("Image export content type must be a string")
+        if not content_type.startswith("image/"):
+            continue
+        metadata = export.get("metadata")
+        if metadata is None:
+            metadata = {}
+        if not isinstance(metadata, dict):
+            raise TypeError("Image export metadata must be a dictionary")
+        raw_document_id = metadata.get("doc_id") or metadata.get("document_id")
+        bounded_metadata = _bounded_image_export_metadata(metadata)
+        document_id = (
+            raw_document_id
+            if isinstance(raw_document_id, str) and raw_document_id
+            else "-"
+        )
+        exports_by_document.setdefault(document_id, []).append(
+            {
+                "content_type": content_type[:100],
+                "metadata": bounded_metadata,
+            }
+        )
+
+    document_ids = sorted(exports_by_document)
+    for document_id in document_ids:
+        exports_by_document[document_id].sort(
+            key=lambda item: (
+                _page_no(item["metadata"]),
+                str(item["metadata"].get("thumbnail_artifact_id", "")),
+                str(item["metadata"].get("image_artifact_id", "")),
+            )
+        )
+    offsets = dict.fromkeys(document_ids, 0)
+    selected: list[dict[str, Any]] = []
+    selected_documents: set[str] = set()
+    while len(selected) < _IMAGE_EXPORT_PRESENTATION_LIMIT:
+        added = False
+        for document_id in document_ids:
+            items = exports_by_document[document_id]
+            offset = offsets[document_id]
+            if offset >= len(items):
+                continue
+            selected.append(items[offset])
+            selected_documents.add(document_id)
+            offsets[document_id] = offset + 1
+            added = True
+            if len(selected) >= _IMAGE_EXPORT_PRESENTATION_LIMIT:
+                break
+        if not added:
+            break
+
+    total_artifacts = sum(len(items) for items in exports_by_document.values())
+    return selected, {
+        "selected_artifacts": len(selected),
+        "total_artifacts": total_artifacts,
+        "total_documents": len(document_ids),
+        "omitted_artifacts": total_artifacts - len(selected),
+        "omitted_documents": len(set(document_ids) - selected_documents),
+    }
+
+
+def _bounded_image_export_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Return only bounded metadata fields consumed by image preview rendering."""
+    bounded: dict[str, Any] = {}
+    document_id = metadata.get("doc_id") or metadata.get("document_id")
+    if document_id is not None:
+        if not isinstance(document_id, str):
+            raise TypeError("Image export document id must be a string")
+        bounded["doc_id"] = document_id[:_PRESENTATION_ID_MAX_LENGTH]
+    page = metadata.get("page_no")
+    if page is None:
+        page = metadata.get("page")
+    if page is None:
+        page = metadata.get("page_number")
+    if page is not None:
+        bounded["page_no"] = _require_nonnegative_int(page, "image export page")
+    for prefix in ("thumbnail", "image"):
+        bounded.update(_bounded_artifact_metadata(metadata, prefix))
+    return bounded
+
+
+def _bounded_artifact_metadata(metadata: dict[str, Any], prefix: str) -> dict[str, str]:
+    """Validate one optional content-addressed artifact reference."""
+    artifact_id = metadata.get(f"{prefix}_artifact_id")
+    if artifact_id is None:
+        return {}
+    if (
+        not isinstance(artifact_id, str)
+        or len(artifact_id) != 64
+        or any(character not in "0123456789abcdef" for character in artifact_id)
+    ):
+        raise TypeError("Image export artifact id is invalid")
+    suffix = metadata.get(f"{prefix}_artifact_suffix") or ""
+    if (
+        not isinstance(suffix, str)
+        or len(suffix) > 16
+        or (suffix and not suffix.startswith("."))
+        or any(separator in suffix for separator in ("/", "\\"))
+        or any(
+            character.lower() not in _ARTIFACT_SUFFIX_CHARACTERS for character in suffix
+        )
+    ):
+        raise TypeError("Image export artifact suffix is invalid")
+    return {
+        f"{prefix}_artifact_id": artifact_id,
+        f"{prefix}_artifact_suffix": suffix,
+    }
+
+
+def _log_ingest_boundary_failure(stage: str, exc: Exception) -> None:
+    """Log a redacted ingestion-boundary diagnostic without exposing payloads."""
+    from src.utils.log_safety import build_pii_log_entry
+
+    redaction = build_pii_log_entry(str(exc), key_id=f"documents.ingest_{stage}")
+    logger.error(
+        "Ingestion terminal boundary failed (stage={} error_type={} error={})",
+        stage,
+        type(exc).__name__,
+        redaction.redacted,
+    )
 
 
 def _render_nlp_preview(preview: dict[str, Any], meta: dict[str, Any]) -> None:
@@ -1074,11 +1903,10 @@ def _render_image_exports(exports: list[dict[str, Any]]) -> None:
         st.caption(
             "Previews are loaded from local artifacts (no base64 stored in Qdrant)."
         )
-        preview_limit = _preview_limit(by_doc)
         for doc_id, items in sorted(by_doc.items(), key=lambda t: t[0]):
             st.subheader(f"Document: {doc_id}")
             ordered = sorted(items, key=lambda x: _page_no(x.get("metadata") or {}))
-            _render_export_images(ordered, preview_limit)
+            _render_export_images(ordered, _IMAGE_EXPORT_PRESENTATION_LIMIT)
 
 
 def _filter_image_exports(exports: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1159,33 +1987,6 @@ def _group_exports_by_doc(
     return by_doc
 
 
-def _preview_limit(by_doc: dict[str, list[dict[str, Any]]]) -> int:
-    """Render slider widget for preview limit and return selected value.
-
-    Displays an interactive slider to control how many images are shown per document.
-    Max value is capped at 128 to prevent UI slowdowns with large exports.
-    Defaults to 32 images when no documents present.
-
-    Args:
-        by_doc: Dict mapping document IDs to lists of exports.
-
-    Returns:
-        Selected preview limit as int, or default 32 if no exports.
-    """
-    max_preview = min(128, max((len(items) for items in by_doc.values()), default=0))
-    if not max_preview:
-        return 32
-    return int(
-        st.slider(
-            "Preview per document",
-            min_value=1,
-            max_value=max_preview,
-            value=min(32, max_preview),
-            key="doc_preview_limit",
-        )
-    )
-
-
 def _render_export_images(items: list[dict[str, Any]], preview_limit: int) -> None:
     """Render page image thumbnails for a document in a 4-column grid.
 
@@ -1229,7 +2030,13 @@ def _render_export_images(items: list[dict[str, Any]], preview_limit: int) -> No
             )
 
 
-def _render_maintenance_controls(*, owner_id: str) -> None:
+def _render_maintenance_controls(
+    *,
+    owner_id: str,
+    active_job: ActiveIngestionJob | None,
+    mutation_active: bool,
+    maintenance_active: bool,
+) -> None:
     """Render generation-safe corpus rebuild and deletion controls."""
     uploads_dir = settings.data_dir / "uploads"
     uploads_dir.mkdir(parents=True, exist_ok=True)
@@ -1239,6 +2046,13 @@ def _render_maintenance_controls(*, owner_id: str) -> None:
             "Every maintenance action builds and verifies a complete isolated search "
             "generation before it becomes active."
         )
+        if maintenance_active:
+            st.info(
+                "Runtime maintenance is in progress. Corpus actions are temporarily "
+                "disabled."
+            )
+        elif mutation_active:
+            st.info(_corpus_mutation_copy(active_job))
 
         st.subheader("Rebuild search index")
         st.caption(
@@ -1252,12 +2066,16 @@ def _render_maintenance_controls(*, owner_id: str) -> None:
             value=bool(settings.processing.encrypt_page_images),
             key="rebuild_encrypt_images",
         )
-        if cols[1].button("Rebuild", use_container_width=True):
-            _start_existing_corpus_rebuild(
-                uploads_dir=uploads_dir,
-                encrypt=bool(encrypt),
-                owner_id=owner_id,
-            )
+        if cols[1].button(
+            "Rebuild",
+            use_container_width=True,
+            disabled=mutation_active or maintenance_active,
+        ) and _start_existing_corpus_rebuild(
+            uploads_dir=uploads_dir,
+            encrypt=bool(encrypt),
+            owner_id=owner_id,
+        ):
+            st.rerun()
 
         st.subheader("Delete uploaded document")
         files = sorted(
@@ -1279,17 +2097,22 @@ def _render_maintenance_controls(*, owner_id: str) -> None:
             "evidence remains renderable."
         )
         confirm = st.checkbox(
-            "I understand this cannot be undone",
+            f'I understand deleting "{selection}" cannot be undone',
             value=False,
-            key="delete_upload_confirm",
+            key=f"delete_upload_confirm::{selection}",
         )
-        if st.button("Delete", disabled=not confirm, type="secondary"):
+        if st.button(
+            f'Delete "{selection}"',
+            disabled=not confirm or mutation_active or maintenance_active,
+            type="secondary",
+        ):
             target = uploads_dir / str(selection)
-            _start_upload_deletion(
+            if _start_upload_deletion(
                 target=target,
                 encrypt=bool(encrypt),
                 owner_id=owner_id,
-            )
+            ):
+                st.rerun()
 
 
 def _doc_id_for_upload(path: Path) -> str:
@@ -1328,13 +2151,15 @@ def _start_existing_corpus_rebuild(
     uploads_dir: Path,
     encrypt: bool,
     owner_id: str,
-) -> None:
+) -> bool:
     """Start a complete generation rebuild without owning existing sources."""
+    if _reject_active_corpus_mutation(owner_id=owner_id):
+        return False
     inputs = _existing_corpus_inputs(uploads_dir, encrypt=encrypt)
     if not inputs:
         st.info("Add a document before rebuilding the search index.")
-        return
-    _start_ingestion_job(
+        return False
+    return _start_ingestion_job(
         inputs,
         use_graphrag=bool(settings.graphrag_cfg.enabled),
         encrypt_images=encrypt,
@@ -1348,21 +2173,23 @@ def _start_upload_deletion(
     target: Path,
     encrypt: bool,
     owner_id: str,
-) -> None:
+) -> bool:
     """Schedule source removal as a full staged corpus generation."""
+    if _reject_active_corpus_mutation(owner_id=owner_id):
+        return False
     uploads_dir = (settings.data_dir / "uploads").resolve()
     if target.is_symlink() or target.parent.resolve() != uploads_dir:
         st.error("Refusing to delete a path outside the uploads directory.")
-        return
+        return False
     if not target.is_file():
         st.warning("File not found.")
-        return
+        return False
     inputs = _existing_corpus_inputs(
         uploads_dir,
         encrypt=encrypt,
         excluded_path=target,
     )
-    _start_ingestion_job(
+    started = _start_ingestion_job(
         inputs,
         use_graphrag=bool(settings.graphrag_cfg.enabled),
         encrypt_images=encrypt,
@@ -1371,9 +2198,12 @@ def _start_upload_deletion(
         excluded_source_paths=(target,),
         quarantine_source=target,
     )
-    st.info(
-        "Deletion scheduled. The active corpus remains unchanged until verification."
-    )
+    if started:
+        st.info(
+            "Deletion scheduled. The active corpus remains unchanged until "
+            "verification."
+        )
+    return started
 
 
 def _render_latest_snapshot_summary() -> None:
@@ -1435,25 +2265,36 @@ def _render_export_controls() -> None:
 def _handle_manual_export(out_dir: Path, extension: str) -> None:
     """Handle manual graph export actions."""
     try:
-        pg_index = st.session_state["graphrag_index"]
-        vector_index = st.session_state.get("vector_index")
-        cap = int(getattr(settings.graphrag_cfg, "export_seed_cap", 32))
-        seeds = get_export_seed_ids(pg_index, vector_index, cap=cap)
-        out = timestamped_export_path(out_dir, extension, prefix="graph_export-manual")
-        start = time.perf_counter()
-        if extension == "jsonl":
-            export_graph_jsonl(
-                property_graph_index=pg_index,
-                output_path=out,
-                seed_node_ids=seeds,
+        with get_job_manager().foreground_runtime_activity():
+            if not session_vector_resource_is_current(
+                st.session_state,
+                runtime_generation=int(settings.cache_version),
+            ):
+                st.warning("Graph export deferred because the runtime changed. Retry.")
+                return
+            pg_index = st.session_state["graphrag_index"]
+            vector_index = st.session_state.get("vector_index")
+            cap = int(getattr(settings.graphrag_cfg, "export_seed_cap", 32))
+            seeds = get_export_seed_ids(pg_index, vector_index, cap=cap)
+            out = timestamped_export_path(
+                out_dir,
+                extension,
+                prefix="graph_export-manual",
             )
-        else:
-            export_graph_parquet(
-                property_graph_index=pg_index,
-                output_path=out,
-                seed_node_ids=seeds,
-            )
-        duration_ms = (time.perf_counter() - start) * 1000.0
+            start = time.perf_counter()
+            if extension == "jsonl":
+                export_graph_jsonl(
+                    property_graph_index=pg_index,
+                    output_path=out,
+                    seed_node_ids=seeds,
+                )
+            else:
+                export_graph_parquet(
+                    property_graph_index=pg_index,
+                    output_path=out,
+                    seed_node_ids=seeds,
+                )
+            duration_ms = (time.perf_counter() - start) * 1000.0
         st.success(f"Exported {extension.upper()} to {out}")
         _log_export_event(
             {
@@ -1473,6 +2314,8 @@ def _handle_manual_export(out_dir: Path, extension: str) -> None:
             size_bytes=size_bytes,
             context="manual",
         )
+    except JobAdmissionPausedError:
+        st.warning("Graph export is unavailable during runtime maintenance.")
     except Exception as exc:  # pragma: no cover - UX best effort
         from src.utils.log_safety import build_pii_log_entry
 

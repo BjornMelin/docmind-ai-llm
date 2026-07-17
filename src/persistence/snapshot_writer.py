@@ -82,6 +82,12 @@ def write_manifest(workspace_path: Path, manifest_meta: dict[str, Any]) -> None:
     Args:
         workspace_path: Workspace directory containing payload files.
         manifest_meta: Metadata describing the snapshot (versions, hashes, etc.).
+
+    Returns:
+        None.
+
+    Raises:
+        ValueError: If a payload is unsupported or metadata is not strict JSON.
     """
     _fsync_payload_tree(workspace_path)
     entries: list[dict[str, Any]] = []
@@ -96,16 +102,6 @@ def write_manifest(workspace_path: Path, manifest_meta: dict[str, Any]) -> None:
             }
         )
 
-    manifest_path = workspace_path / "manifest.jsonl"
-    serialized_lines = (
-        json.dumps(entry, ensure_ascii=False, separators=(",", ":"))
-        for entry in entries
-    )
-    serialized = "\n".join(serialized_lines)
-    if serialized:
-        serialized += "\n"
-    _write_text_atomic(manifest_path, serialized)
-
     meta_payload = {
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "persist_format_version": MANIFEST_FORMAT_VERSION,
@@ -113,12 +109,32 @@ def write_manifest(workspace_path: Path, manifest_meta: dict[str, Any]) -> None:
     }
     meta_payload.update(manifest_meta)
     meta_payload.setdefault("created_at", datetime.now(UTC).isoformat())
+    try:
+        manifest_sha256 = hash_manifest(entries, meta_payload)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Snapshot manifest must use strict JSON values") from exc
+
+    manifest_path = workspace_path / "manifest.jsonl"
+    serialized_lines = (
+        json.dumps(
+            entry,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        )
+        for entry in entries
+    )
+    serialized = "\n".join(serialized_lines)
+    if serialized:
+        serialized += "\n"
+    _write_text_atomic(manifest_path, serialized)
+
     meta_path = workspace_path / "manifest.meta.json"
     _write_json_atomic(meta_path, meta_payload)
 
     checksum_payload = {
         "schema_version": MANIFEST_SCHEMA_VERSION,
-        "manifest_sha256": hash_manifest(entries, meta_payload),
+        "manifest_sha256": manifest_sha256,
         "created_at": datetime.now(UTC).isoformat(),
     }
     checksum_path = workspace_path / "manifest.checksum"
@@ -127,7 +143,18 @@ def write_manifest(workspace_path: Path, manifest_meta: dict[str, Any]) -> None:
 
 
 def mark_manifest_complete(snapshot_dir: Path) -> None:
-    """Mark manifest metadata as complete and refresh checksum."""
+    """Mark manifest metadata as complete and refresh checksum.
+
+    Args:
+        snapshot_dir: Snapshot directory containing the incomplete manifest.
+
+    Returns:
+        None.
+
+    Raises:
+        FileNotFoundError: If manifest metadata is missing.
+        ValueError: If manifest artifacts are unreadable or not strict JSON.
+    """
     meta_path = snapshot_dir / "manifest.meta.json"
     if not meta_path.is_file() or meta_path.is_symlink():
         raise FileNotFoundError("Snapshot manifest metadata is missing")
@@ -140,11 +167,15 @@ def mark_manifest_complete(snapshot_dir: Path) -> None:
     if payload.get("complete") is True:
         return
     payload["complete"] = True
-    _write_json_atomic(meta_path, payload)
     entries = load_manifest_entries(snapshot_dir)
+    try:
+        manifest_sha256 = hash_manifest(entries, payload)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Snapshot manifest must use strict JSON values") from exc
+    _write_json_atomic(meta_path, payload)
     checksum_payload = {
         "schema_version": MANIFEST_SCHEMA_VERSION,
-        "manifest_sha256": hash_manifest(entries, payload),
+        "manifest_sha256": manifest_sha256,
         "created_at": datetime.now(UTC).isoformat(),
     }
     _write_json_atomic(snapshot_dir / "manifest.checksum", checksum_payload)
@@ -181,20 +212,38 @@ def _sha256(path: Path) -> str:
 
 
 def hash_manifest(entries: list[dict[str, Any]], manifest_meta: dict[str, Any]) -> str:
-    """Hash every manifest entry field and the canonical metadata object."""
+    """Hash every manifest entry field and the canonical metadata object.
+
+    Args:
+        entries: Manifest payload-entry objects in emitted order.
+        manifest_meta: Complete manifest metadata object.
+
+    Returns:
+        Lowercase SHA-256 digest of the canonical manifest content.
+
+    Raises:
+        TypeError: If a manifest value is not JSON serializable.
+        ValueError: If a manifest value is not valid strict JSON.
+    """
     hasher = hashlib.sha256()
     for entry in entries:
         hasher.update(
             json.dumps(
                 entry,
                 ensure_ascii=False,
+                allow_nan=False,
                 sort_keys=True,
                 separators=(",", ":"),
             ).encode("utf-8")
         )
         hasher.update(b"\n")
     hasher.update(
-        json.dumps(manifest_meta, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        json.dumps(
+            manifest_meta,
+            ensure_ascii=False,
+            allow_nan=False,
+            sort_keys=True,
+        ).encode("utf-8")
     )
     return hasher.hexdigest()
 
@@ -213,7 +262,12 @@ def _guess_content_type(path: Path) -> str:
 def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(
-        json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        ),
         encoding="utf-8",
     )
     _fsync_file(tmp)

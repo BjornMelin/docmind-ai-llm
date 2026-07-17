@@ -66,7 +66,7 @@ def _seed_active_snapshot(cfg) -> Path:  # type: ignore[no-untyped-def]
                 },
             },
         )
-        return manager.finalize_snapshot(workspace)
+        return manager.finalize_snapshot(workspace).path
     except BaseException:
         manager.cleanup_tmp(workspace)
         raise

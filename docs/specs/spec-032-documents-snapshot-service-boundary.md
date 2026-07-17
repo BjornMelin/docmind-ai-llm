@@ -1,8 +1,8 @@
 ---
 spec: SPEC-032
 title: Documents Snapshot Service Boundary (Snapshot Rebuild/Export Service)
-version: 2.1.0
-date: 2026-07-14
+version: 2.3.0
+date: 2026-07-16
 owners: ["ai-arch"]
 status: Implemented
 related_requirements:
@@ -51,21 +51,24 @@ The service never begins or cleans up a workspace.
 ### Service API (minimal)
 
 - `rebuild_snapshot(vector_index, pg_index, settings_obj, activation,
-  commit_source_changes=..., ...) -> Path`
+  commit_source_changes=..., ...) -> FinalizedSnapshot`
 - `SnapshotActivation(manager, workspace, text_collection, image_collection,
   expected_corpus_hash, expected_config_hash, activation_config,
   activation_config_hash, collection_metadata, graph_requested)`
 
-The return value is the committed snapshot directory. `text_collection` and
-`image_collection` are required physical identities; mutable settings names are
-not used as activation fallbacks. `manager` must hold the transaction lock and
-`workspace` must be the workspace opened before collection construction. The
-required `expected_corpus_hash` is the adapter's content-derived identity for the
-entire selected upload corpus, including the empty corpus. The service prepares
-graph payloads and the incomplete manifest before calling the durable late-source
-commit callback. It then recomputes the canonical uploads-relative identity and
-rejects any mismatch before finalization. Promotion, quarantine, and snapshot
-activation journals recover crashes without inferring a replacement `CURRENT`.
+The return value carries the committed snapshot directory and the manifest
+verified during finalization as `FinalizedSnapshot(path, manifest)`. Callers build
+result presentation from that manifest without reopening the result snapshot.
+`text_collection` and `image_collection` are required physical identities;
+mutable settings names are not used as activation fallbacks. `manager` must hold
+the transaction lock and `workspace` must be the workspace opened before
+collection construction. The required `expected_corpus_hash` is the adapter's
+content-derived identity for the entire selected upload corpus, including the
+empty corpus. The service prepares graph payloads and the incomplete manifest
+before calling the durable late-source commit callback. It then recomputes the
+canonical uploads-relative identity and rejects any mismatch before finalization.
+Promotion, quarantine, and snapshot activation journals recover crashes without
+inferring a replacement `CURRENT`.
 
 `expected_config_hash` identifies current global index-affecting settings for
 staleness. `activation_config` and `activation_config_hash` preserve exact build
@@ -84,11 +87,18 @@ The service must write manifest metadata with the following fields (matching `Sn
 `config_hash` identifies current global index-affecting settings.
 `activation_config_hash` covers the exact effective build provenance. All hashes
 use `src/persistence/hashing.py` and are lowercase 64-character SHA-256 values.
+`versions` uses string keys and scalar-or-null values. The canonical persistence
+validator rejects every other shape before snapshot publication.
 
 When present, `graph_exports` entries include export metadata such as:
 
 - `filename`, `format`, `seed_count`, `size_bytes`, `duration_ms`, `sha256`
 - `created_at` (ISO timestamp) when available
+
+Canonical export identity requires a unique basename `filename` of at most 200
+characters, a nonempty `format` of at most 32 characters, an exact nonnegative
+integer `size_bytes`, and a lowercase SHA-256. `graph_store_type=none` requires an
+empty export list. Property-graph exports must also match their payload entries.
 
 ### Documents page responsibilities
 
@@ -98,6 +108,9 @@ When present, `graph_exports` entries include export metadata such as:
 - caller-side snapshot transaction acquisition and failure cleanup
 - storing indices/router in `st.session_state`
 - calling `snapshot_service.rebuild_snapshot(…)` and rendering results
+- preparing runtime ownership with `_prepare_ingest_runtime` and rendering only
+  its object-free DTO with `_render_ingest_presentation`; no combined duplicate
+  helper is maintained
 
 Physical collection deletion is not a page or activation responsibility. The
 offline cleanup CLI requires a quiesced application, a dry-run review, verified

@@ -154,7 +154,15 @@ def test_worker_promotes_pending_upload_at_activation_boundary(
             active_collections=_COLLECTIONS,
         )
         events.append("commit")
-        return tmp_path / "storage" / "active"
+        return page.FinalizedSnapshot(
+            path=tmp_path / "storage" / "active",
+            manifest={
+                "corpus_hash": "c" * 64,
+                "config_hash": "f" * 64,
+                "versions": {},
+                "graph_exports": [],
+            },
+        )
 
     monkeypatch.setattr(page, "rebuild_snapshot", _rebuild)
 
@@ -166,15 +174,125 @@ def test_worker_promotes_pending_upload_at_activation_boundary(
         cancel_event=threading.Event(),
         report_progress=lambda _event: None,
         rollback_source_paths=(pending,),
+        runtime_generation=settings.cache_version,
     )
 
     assert events == ["begin", "ingest", "commit"]
     assert not pending.exists()
     assert result["snapshot_dir"].endswith("/active")
+    assert result["manifest"] == {
+        "corpus_hash": "c" * 64,
+        "config_hash": "f" * 64,
+        "versions": {},
+        "graph_exports": [],
+    }
     promoted = next((tmp_path / "uploads").iterdir())
     assert promoted.read_text(encoding="utf-8") == "content"
     assert not (tmp_path / ".upload-transactions").exists()
     resource.close()
+
+
+def test_corpus_exclusivity_covers_bounded_terminal_payload(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The corpus lease survives activation until the public DTO is complete."""
+    from src.config.settings import settings
+    from src.ui.background_jobs import JobConflictError, JobManager
+
+    page = _page()
+    monkeypatch.setattr(settings, "data_dir", tmp_path, raising=False)
+    pending = tmp_path / ".pending-uploads" / "tx" / "report.txt"
+    pending.parent.mkdir(parents=True)
+    pending.write_text("content", encoding="utf-8")
+    manager = _Manager(tmp_path / "storage" / "_tmp-build")
+    _patch_job_boundaries(monkeypatch, page, manager)
+    resource = VectorIndexResource(object())
+    job_manager = JobManager(max_workers=1)
+    presentation_started = threading.Event()
+    release_presentation = threading.Event()
+
+    monkeypatch.setattr(page, "_delete_staged_collections", lambda _names: None)
+
+    def _ingest(_inputs, **_kwargs):  # type: ignore[no-untyped-def]
+        return {
+            "count": 1,
+            "documents": [object()],
+            "activation_corpus_hash": "c" * 64,
+            "activation_config": {"x": 1},
+            "activation_config_hash": "f" * 64,
+            "snapshot_config_hash": "e" * 64,
+            "vector_resource": resource,
+            "pg_index": None,
+            "collections": dict(_COLLECTIONS),
+        }
+
+    def _rebuild(*_args, **kwargs):  # type: ignore[no-untyped-def]
+        kwargs["commit_source_changes"]()
+        return page.FinalizedSnapshot(
+            path=tmp_path / "storage" / "active",
+            manifest={
+                "corpus_hash": "c" * 64,
+                "config_hash": "f" * 64,
+                "versions": {},
+                "graph_exports": [],
+            },
+        )
+
+    bounded_presentation = page._bounded_manifest_presentation
+
+    def _block_presentation(manifest):  # type: ignore[no-untyped-def]
+        presentation_started.set()
+        assert release_presentation.wait(timeout=5)
+        return bounded_presentation(manifest)
+
+    monkeypatch.setattr(page, "ingest_inputs", _ingest)
+    monkeypatch.setattr(page, "rebuild_snapshot", _rebuild)
+    monkeypatch.setattr(page, "_bounded_manifest_presentation", _block_presentation)
+
+    def _work(cancel_event, report_progress):  # type: ignore[no-untyped-def]
+        return page._run_ingest_job(
+            [_input(pending)],
+            use_graphrag=False,
+            encrypt_images=False,
+            nlp_service=None,
+            cancel_event=cancel_event,
+            report_progress=report_progress,
+            rollback_source_paths=(pending,),
+            runtime_generation=settings.cache_version,
+        )
+
+    job_id = job_manager.start_job(
+        owner_id="owner",
+        fn=_work,
+        exclusivity_key="corpus-mutation",
+    )
+    try:
+        assert presentation_started.wait(timeout=2)
+        assert job_manager.is_exclusivity_active("corpus-mutation")
+        with pytest.raises(JobConflictError):
+            job_manager.start_job(
+                owner_id="other",
+                fn=lambda _cancel, _report: None,
+                exclusivity_key="corpus-mutation",
+            )
+
+        release_presentation.set()
+        assert job_manager.wait_for_completion(job_id, owner_id="owner") == "succeeded"
+        state = job_manager.get(job_id, owner_id="owner")
+        assert state is not None
+        assert state.result["manifest"] == {
+            "corpus_hash": "c" * 64,
+            "config_hash": "f" * 64,
+            "versions": {},
+            "graph_exports": [],
+        }
+        assert not job_manager.is_exclusivity_active("corpus-mutation")
+        assert job_manager.consume_terminal(job_id, owner_id="owner")
+    finally:
+        release_presentation.set()
+        resource.close()
+        job_manager.shutdown()
 
 
 def test_duplicate_content_is_rejected_and_pending_bytes_are_removed(
@@ -205,6 +323,7 @@ def test_duplicate_content_is_rejected_and_pending_bytes_are_removed(
             cancel_event=threading.Event(),
             report_progress=lambda _event: None,
             rollback_source_paths=(pending,),
+            runtime_generation=settings.cache_version,
         )
 
     assert existing.read_text(encoding="utf-8") == "same"
@@ -254,6 +373,7 @@ def test_failed_build_removes_promoted_source_before_releasing_transaction(
             cancel_event=threading.Event(),
             report_progress=lambda _event: None,
             rollback_source_paths=(pending,),
+            runtime_generation=settings.cache_version,
         )
 
     assert staged_cleanup == [_COLLECTIONS]
@@ -341,7 +461,15 @@ def test_final_document_deletion_commits_empty_generation_with_graphrag(
             active_collections=_COLLECTIONS,
         )
         rebuild_calls.append(args[3])
-        return tmp_path / "storage" / "active"
+        return page.FinalizedSnapshot(
+            path=tmp_path / "storage" / "active",
+            manifest={
+                "corpus_hash": "c" * 64,
+                "config_hash": "f" * 64,
+                "versions": {},
+                "graph_exports": [],
+            },
+        )
 
     monkeypatch.setattr(page, "ingest_inputs", _ingest)
     monkeypatch.setattr(page, "rebuild_snapshot", _rebuild)
@@ -355,6 +483,7 @@ def test_final_document_deletion_commits_empty_generation_with_graphrag(
         report_progress=lambda _event: None,
         excluded_source_paths=(target,),
         quarantine_source=target,
+        runtime_generation=settings.cache_version,
     )
 
     assert ingest_calls[0]["enable_graphrag"] is True

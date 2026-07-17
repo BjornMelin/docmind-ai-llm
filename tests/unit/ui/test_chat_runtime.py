@@ -157,3 +157,40 @@ def test_new_generation_retires_two_session_routers_before_old_coordinator(
     assert events[:3] == ["router-a", "router-b", "coordinator"]
     assert not session_router_is_current(first_state, runtime_generation=2)
     assert not session_router_is_current(second_state, runtime_generation=2)
+
+
+@pytest.mark.parametrize("failure_stage", ["retirement", "coordinator"])
+def test_invalidate_detaches_coordinator_when_cleanup_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    failure_stage: str,
+) -> None:
+    class _Coordinator:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def close(self) -> None:
+            if failure_stage == "coordinator":
+                raise RuntimeError("close failed")
+
+    monkeypatch.setattr(
+        chat_runtime.coordinator_module,
+        "MultiAgentCoordinator",
+        _Coordinator,
+    )
+    coordinator = chat_runtime.get_coordinator(
+        cache_version=1,
+        checkpointer_path=Path("chat.db"),
+        store=object(),
+    )
+    if failure_stage == "retirement":
+        monkeypatch.setattr(
+            chat_runtime,
+            "_retire_session_resources",
+            lambda: (_ for _ in ()).throw(RuntimeError("retirement failed")),
+        )
+
+    chat_runtime.invalidate_coordinator()
+
+    assert chat_runtime._COORDINATOR is None
+    assert chat_runtime._RESOURCE_KEY is None
+    assert coordinator is not chat_runtime._COORDINATOR

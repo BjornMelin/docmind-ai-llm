@@ -10,6 +10,8 @@ import importlib
 
 import streamlit as st
 
+from src.ui.router_session import replace_session_router
+
 # Accessing a private helper to validate override mapping is intentional here.
 
 
@@ -27,7 +29,7 @@ def test_chat_router_override_flag_roundtrip() -> None:
 
     # Insert a dummy router engine and expect a mapping
     dummy = object()
-    mod.replace_session_router(
+    replace_session_router(
         st.session_state,
         dummy,
         runtime_generation=mod.settings.cache_version,
@@ -47,7 +49,7 @@ def test_chat_override_ignores_raw_retrieval_components() -> None:
     assert mod._get_settings_override() is None
 
     router = object()
-    mod.replace_session_router(
+    replace_session_router(
         st.session_state,
         router,
         runtime_generation=mod.settings.cache_version,
