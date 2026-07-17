@@ -35,16 +35,14 @@ from src.processing.ingestion_pipeline import (
     embedding_allowed_for_ingestion,
     ingest_documents_sync,
 )
+from src.retrieval import vector_contract
 from src.telemetry.opentelemetry import configure_observability
 from src.ui.vector_session import VectorIndexResource
 from src.utils.hashing import document_id_from_sha256, sha256_file
 from src.utils.storage import (
-    DENSE_VECTOR_NAME,
-    SPARSE_VECTOR_NAME,
     close_vector_store_clients,
     create_vector_store,
     get_client_config,
-    sparse_retrieval_enabled,
 )
 
 try:
@@ -495,7 +493,7 @@ def _build_vector_index(
             vector_store,
             nodes=nodes,
             document_ids=document_ids,
-            sparse_enabled=sparse_retrieval_enabled(),
+            sparse_enabled=vector_contract.sparse_retrieval_enabled(),
         )
         return VectorIndexResource.from_vector_store(index, vector_store)
     except Exception:
@@ -538,9 +536,12 @@ def _verify_text_collection(
             if isinstance(document_id, str):
                 retrieved_document_ids.add(document_id)
             vectors = getattr(point, "vector", None)
-            if not isinstance(vectors, dict) or DENSE_VECTOR_NAME not in vectors:
+            if (
+                not isinstance(vectors, dict)
+                or vector_contract.DENSE_VECTOR_NAME not in vectors
+            ):
                 raise RuntimeError("Text collection point is missing its dense vector")
-            if sparse_enabled and SPARSE_VECTOR_NAME not in vectors:
+            if sparse_enabled and vector_contract.SPARSE_VECTOR_NAME not in vectors:
                 raise RuntimeError("Text collection point is missing its sparse vector")
     if retrieved_ids != expected_ids:
         raise RuntimeError("Text collection verification found missing point IDs")

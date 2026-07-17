@@ -2,7 +2,7 @@
 ADR: 013
 Title: User Interface Architecture (Streamlit Multipage)
 Status: Accepted (Amended)
-Version: 3.3
+Version: 3.4
 Date: 2026-07-16
 Supersedes:
 Superseded-by:
@@ -67,6 +67,28 @@ reranker controls in the UI. State uses `st.session_state`; caching uses
 - Chat page: when a snapshot exists, default strategy to Router (vector+graph); display a staleness badge when `corpus_hash`/`config_hash` from the latest manifest differ from the current environment; provide an action to rebuild.
 - Session state entries: `vector_index`, `pg_index`, `router_engine`, `snapshot_manifest` (see ADR‑016 and ADR‑038).
 
+### Import-light page shells (Amendment)
+
+`src.app`, Chat, and Documents are import-light shells. Heavy model, retrieval,
+snapshot, Qdrant, coordinator, and ingestion modules are imported only inside
+the recovery, status, cached-resource, or user-action seam that owns their work. The
+fixed startup boundary rejects `torch`, `transformers`, `llama_index`, and
+`qdrant_client` in fresh subprocesses. GraphRAG badges use package metadata at
+startup and label that state as installed with runtime validation deferred;
+the Settings/action path performs the real `PropertyGraphIndex` capability
+check.
+
+Chat renders title, provider installation status, session persistence, and one
+immutable local snapshot status before embedding construction. Missing cache or
+incomplete local-path artifacts produce distinct sanitized states with no
+implicit download. A post-preflight constructor failure is separately reported
+as initialization failure. Unexpected Chat DB or other persistence failures
+remain fail-closed.
+
+Snapshot status is read once on a steady rerun. Clear/hydrate paths perform one
+additional read inside `admission_quiescence()` so the freshness check and
+runtime ownership mutation are atomic; no TTL is permitted.
+
 ## High-Level Architecture
 
 ```mermaid
@@ -115,6 +137,10 @@ graph TD
   and corpus identified; no time-to-first-token target applies without a public
   incremental coordinator API
 - PR‑2: Analytics charts render <300ms with cached data
+- PR‑3: Fresh imports of `src.app`, Chat, and Documents MUST load none of the
+  fixed roots `torch`, `transformers`, `llama_index`, or `qdrant_client`.
+  Recorded Plan 003 imports on WSL2/Python 3.12.13 were 0.42 seconds/70,704 KiB,
+  0.68 seconds/95,800 KiB, and 0.50 seconds/75,124 KiB, respectively.
 
 ### Integration Requirements
 
@@ -248,6 +274,9 @@ def test_generation_spinner_wraps_only_coordinator_call(chat_page):
 
 ## Changelog
 
+- **3.4 (2026-07-16)**: Made app, Chat, and Documents startup import-light;
+  added honest offline embedding states, deferred GraphRAG runtime validation,
+  and atomic once-steady/twice-mutation snapshot freshness checks.
 - **3.3 (2026-07-16)**: Replaced simulated post-completion streaming with
   truthful native synchronous status and terminal rendering; real incremental
   streaming requires a public coordinator event API and end-to-end proof.

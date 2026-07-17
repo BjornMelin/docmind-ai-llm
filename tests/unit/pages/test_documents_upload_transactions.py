@@ -12,8 +12,12 @@ from typing import cast
 import pytest
 
 from src.models.processing import IngestionConfig, IngestionInput, ParsingOverrides
+from src.persistence import snapshot as snapshot_module
+from src.persistence import snapshot_service
+from src.persistence.snapshot import FinalizedSnapshot
 from src.persistence.snapshot_service import SnapshotActivation
 from src.persistence.upload_journal import recover_upload_quarantines
+from src.ui import ingest_adapter
 from src.ui.vector_session import VectorIndexResource
 from src.utils.hashing import document_id_from_sha256
 
@@ -58,7 +62,7 @@ def _patch_job_boundaries(
     page: object,
     manager: _Manager,
 ) -> None:
-    monkeypatch.setattr(page, "SnapshotManager", lambda _storage: manager)
+    monkeypatch.setattr(snapshot_module, "SnapshotManager", lambda _storage: manager)
     monkeypatch.setattr(
         page,
         "_physical_collection_names",
@@ -144,7 +148,7 @@ def test_worker_promotes_pending_upload_at_activation_boundary(
             "collections": dict(_COLLECTIONS),
         }
 
-    monkeypatch.setattr(page, "ingest_inputs", _ingest)
+    monkeypatch.setattr(ingest_adapter, "ingest_inputs", _ingest)
 
     def _rebuild(*_args, **kwargs):  # type: ignore[no-untyped-def]
         kwargs["commit_source_changes"]()
@@ -154,7 +158,7 @@ def test_worker_promotes_pending_upload_at_activation_boundary(
             active_collections=_COLLECTIONS,
         )
         events.append("commit")
-        return page.FinalizedSnapshot(
+        return FinalizedSnapshot(
             path=tmp_path / "storage" / "active",
             manifest={
                 "corpus_hash": "c" * 64,
@@ -164,7 +168,7 @@ def test_worker_promotes_pending_upload_at_activation_boundary(
             },
         )
 
-    monkeypatch.setattr(page, "rebuild_snapshot", _rebuild)
+    monkeypatch.setattr(snapshot_service, "rebuild_snapshot", _rebuild)
 
     result = page._run_ingest_job(  # type: ignore[attr-defined]
         [item],
@@ -229,7 +233,7 @@ def test_corpus_exclusivity_covers_bounded_terminal_payload(
 
     def _rebuild(*_args, **kwargs):  # type: ignore[no-untyped-def]
         kwargs["commit_source_changes"]()
-        return page.FinalizedSnapshot(
+        return FinalizedSnapshot(
             path=tmp_path / "storage" / "active",
             manifest={
                 "corpus_hash": "c" * 64,
@@ -246,8 +250,8 @@ def test_corpus_exclusivity_covers_bounded_terminal_payload(
         assert release_presentation.wait(timeout=5)
         return bounded_presentation(manifest)
 
-    monkeypatch.setattr(page, "ingest_inputs", _ingest)
-    monkeypatch.setattr(page, "rebuild_snapshot", _rebuild)
+    monkeypatch.setattr(ingest_adapter, "ingest_inputs", _ingest)
+    monkeypatch.setattr(snapshot_service, "rebuild_snapshot", _rebuild)
     monkeypatch.setattr(page, "_bounded_manifest_presentation", _block_presentation)
 
     def _work(cancel_event, report_progress):  # type: ignore[no-untyped-def]
@@ -361,7 +365,7 @@ def test_failed_build_removes_promoted_source_before_releasing_transaction(
         assert not any((tmp_path / "uploads").iterdir())
         staged_cleanup.append(dict(collections))
 
-    monkeypatch.setattr(page, "ingest_inputs", _fail_ingest)
+    monkeypatch.setattr(ingest_adapter, "ingest_inputs", _fail_ingest)
     monkeypatch.setattr(page, "_delete_staged_collections", _delete_staged)
 
     with pytest.raises(RuntimeError, match="build failed"):
@@ -461,7 +465,7 @@ def test_final_document_deletion_commits_empty_generation_with_graphrag(
             active_collections=_COLLECTIONS,
         )
         rebuild_calls.append(args[3])
-        return page.FinalizedSnapshot(
+        return FinalizedSnapshot(
             path=tmp_path / "storage" / "active",
             manifest={
                 "corpus_hash": "c" * 64,
@@ -471,8 +475,8 @@ def test_final_document_deletion_commits_empty_generation_with_graphrag(
             },
         )
 
-    monkeypatch.setattr(page, "ingest_inputs", _ingest)
-    monkeypatch.setattr(page, "rebuild_snapshot", _rebuild)
+    monkeypatch.setattr(ingest_adapter, "ingest_inputs", _ingest)
+    monkeypatch.setattr(snapshot_service, "rebuild_snapshot", _rebuild)
 
     result = page._run_ingest_job(  # type: ignore[attr-defined]
         [],

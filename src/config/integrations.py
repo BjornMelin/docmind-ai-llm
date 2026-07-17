@@ -46,6 +46,14 @@ _HF_EMBED_LOCK = threading.Lock()
 # Removed host-level checks; rely on centralized settings-side validation
 
 
+class EmbeddingModelUnavailableError(RuntimeError):
+    """Raised when configured embedding artifacts cannot be loaded."""
+
+
+class EmbeddingModelInitializationError(RuntimeError):
+    """Raised when present embedding artifacts fail during initialization."""
+
+
 def setup_llamaindex(*, force_llm: bool = False, force_embed: bool = False) -> None:
     """Configure global LlamaIndex settings based on DocMind configuration."""
     # Local-first defaults must be visible before any Hugging Face backed
@@ -161,6 +169,8 @@ def initialize_integrations(
 
 # Convenience exports
 __all__ = [
+    "EmbeddingModelInitializationError",
+    "EmbeddingModelUnavailableError",
     "get_settings_embed_model",
     "initialize_integrations",
     "is_embedding_ready",
@@ -264,8 +274,8 @@ def _configure_embeddings() -> None:
         if local_model_path is not None:
             local_path = Path(str(local_model_path)).expanduser()
             if not local_path.is_dir():
-                raise FileNotFoundError(
-                    f"Local embedding model directory not found: {local_path}"
+                raise EmbeddingModelUnavailableError(
+                    "Configured local embedding model artifacts are unavailable"
                 )
             model_name = str(local_path)
 
@@ -300,7 +310,21 @@ def _configure_embeddings() -> None:
         if local_model_path is None and model_revision is not None:
             embedding_kwargs["revision"] = str(model_revision)
 
-        embed_model = cast(Any, embedding_cls)(**embedding_kwargs)
+        try:
+            embed_model = cast(Any, embedding_cls)(**embedding_kwargs)
+        except (OSError, RuntimeError, ValueError) as exc:
+            from huggingface_hub.errors import LocalEntryNotFoundError
+
+            cause: BaseException | None = exc
+            while cause is not None and not isinstance(cause, LocalEntryNotFoundError):
+                cause = cause.__cause__
+            if cause is not None:
+                raise EmbeddingModelUnavailableError(
+                    "Configured embedding model artifacts could not be loaded"
+                ) from exc
+            raise EmbeddingModelInitializationError(
+                "Configured embedding model could not be initialized"
+            ) from exc
         Settings.embed_model = embed_model
         logger.info(
             "Embedding model configured: {} {} (device={})",

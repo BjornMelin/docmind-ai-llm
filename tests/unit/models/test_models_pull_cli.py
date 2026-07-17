@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import argparse
+import builtins
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,6 +20,7 @@ from src.config.embedding_defaults import (
 from tools.models.pull import (
     _BGE_M3_IGNORE_PATTERNS,
     _SIGLIP_TRANSFORMERS_FILES,
+    _resolve_cache_dirs,
     main,
     pull,
     pull_bge_m3_snapshot,
@@ -26,6 +29,58 @@ from tools.models.pull import (
     pull_siglip_snapshot,
     resolve_bm42_snapshot,
 )
+
+
+def test_explicit_active_cache_does_not_import_settings_for_unused_cache(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Keep Docker's partial-source prefetch layers independent of settings."""
+    real_import = builtins.__import__
+
+    def _reject_settings_import(
+        name: str,
+        globals_arg=None,
+        locals_arg=None,
+        fromlist=(),
+        level: int = 0,
+    ):
+        if name == "src.config.settings":
+            raise AssertionError("unused cache imported application settings")
+        return real_import(name, globals_arg, locals_arg, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", _reject_settings_import)
+    model_cache = tmp_path / "models"
+    parser_cache = tmp_path / "parser"
+    common = {
+        "bge_m3": False,
+        "bge_reranker": False,
+        "bm42": False,
+        "add": None,
+        "docling_layout": False,
+    }
+
+    resolved_model, _ = _resolve_cache_dirs(
+        argparse.Namespace(
+            **common,
+            all=True,
+            parser_defaults=False,
+            cache_dir=str(model_cache),
+            parser_cache_dir=None,
+        )
+    )
+    _, resolved_parser = _resolve_cache_dirs(
+        argparse.Namespace(
+            **common,
+            all=False,
+            parser_defaults=True,
+            cache_dir=None,
+            parser_cache_dir=str(parser_cache),
+        )
+    )
+
+    assert resolved_model == model_cache.resolve()
+    assert resolved_parser == parser_cache.resolve()
 
 
 def test_all_prefetches_complete_pinned_snapshots(
@@ -70,6 +125,88 @@ def test_all_prefetches_complete_pinned_snapshots(
         ("siglip", tmp_path),
     ]
     assert raw_pairs == []
+
+
+def test_cli_default_uses_configured_embedding_cache(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Omitted cache overrides follow bootstrapped canonical settings."""
+    from importlib import import_module
+
+    settings_module = import_module("src.config.settings")
+
+    configured_models = tmp_path / "configured-models"
+    configured_parser = tmp_path / "configured-parser"
+    (tmp_path / ".env").write_text(
+        "\n".join(
+            (
+                f"DOCMIND_EMBEDDING__CACHE_FOLDER={configured_models}",
+                f"DOCMIND_PARSING__MODEL_CACHE_DIR={configured_parser}",
+            )
+        ),
+        encoding="utf-8",
+    )
+    snapshots: list[Path] = []
+    parser_caches: list[Path] = []
+    monkeypatch.chdir(tmp_path)
+    settings_module.reset_bootstrap_state()
+    monkeypatch.setattr("sys.argv", ["pull.py", "--bge-m3", "--parser-defaults"])
+    monkeypatch.setattr("tools.models.pull.pull_bge_m3_snapshot", snapshots.append)
+    monkeypatch.setattr(
+        "tools.models.pull.pull_docling_layout",
+        lambda path, *, force=False: parser_caches.append(path),
+    )
+
+    try:
+        main()
+    finally:
+        settings_module.settings.__init__(_env_file=None)  # type: ignore[arg-type]
+        settings_module.reset_bootstrap_state()
+
+    assert snapshots == [configured_models.resolve()]
+    assert parser_caches == [configured_parser.resolve()]
+
+
+def test_explicit_cache_overrides_skip_settings_bootstrap(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Explicit model and parser destinations remain authoritative."""
+    from importlib import import_module
+    from unittest.mock import Mock
+
+    settings_module = import_module("src.config.settings")
+
+    bootstrap = Mock()
+    model_cache = tmp_path / "models"
+    parser_cache = tmp_path / "parser"
+    monkeypatch.setattr(settings_module, "bootstrap_settings", bootstrap)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "pull.py",
+            "--bge-m3",
+            "--cache_dir",
+            str(model_cache),
+            "--parser-defaults",
+            "--parser-cache-dir",
+            str(parser_cache),
+        ],
+    )
+    snapshots: list[Path] = []
+    parser_caches: list[Path] = []
+    monkeypatch.setattr("tools.models.pull.pull_bge_m3_snapshot", snapshots.append)
+    monkeypatch.setattr(
+        "tools.models.pull.pull_docling_layout",
+        lambda path, *, force=False: parser_caches.append(path),
+    )
+
+    main()
+
+    bootstrap.assert_not_called()
+    assert snapshots == [model_cache.resolve()]
+    assert parser_caches == [parser_cache.resolve()]
 
 
 def test_pull_mocks_hf(tmp_path: Path) -> None:

@@ -25,6 +25,7 @@ from loguru import logger
 from qdrant_client import AsyncQdrantClient, QdrantClient
 from qdrant_client.common.client_exceptions import ResourceExhaustedResponse
 
+from src.retrieval import vector_contract
 from src.retrieval.async_work import AsyncWorkCapacityError, AsyncWorkExecutor
 from src.retrieval.sparse_query import SparseEncodingError, encode_to_qdrant
 from src.utils.log_safety import build_pii_log_entry
@@ -43,7 +44,7 @@ class KeywordParams:
 
     collection: str
     top_k: int = 10
-    using: str = "text-sparse"
+    using: str = vector_contract.SPARSE_VECTOR_NAME
     with_payload: tuple[str, ...] = QDRANT_PAYLOAD_FIELDS
     rate_limit_retries: int = 2
     rate_limit_backoff_base_s: float = 0.5

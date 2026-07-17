@@ -45,11 +45,20 @@ def _restore_parent_attribute(
 
 
 @pytest.fixture(autouse=True)
-def _stub_chat_embedding_setup(monkeypatch: pytest.MonkeyPatch) -> None:
+def _stub_chat_embedding_setup(
+    monkeypatch: pytest.MonkeyPatch,
+    _reset_router_and_graph_modules: pytest.MonkeyPatch,
+) -> None:
     """Keep UI tests offline; embedding integration has dedicated tests."""
     import src.config as config
+    from src.ui import chat_runtime
 
     monkeypatch.setattr(config, "setup_llamaindex", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        chat_runtime,
+        "check_model_artifacts",
+        lambda **_kwargs: chat_runtime.ChatModelReadiness(status="ready"),
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -100,17 +109,22 @@ def _reset_router_and_graph_modules() -> Iterator[pytest.MonkeyPatch]:
 
 
 @pytest.fixture(autouse=True)
-def _stub_graphrag_health_badge(monkeypatch: pytest.MonkeyPatch) -> None:
+def _stub_graphrag_health_badge(
+    monkeypatch: pytest.MonkeyPatch,
+    _reset_router_and_graph_modules: pytest.MonkeyPatch,
+) -> None:
     """Avoid GraphRAG imports during AppTest UI runs.
 
     Dedicated unit tests cover the required LlamaIndex API health check.
     """
+    from src.retrieval import llama_index_adapter
+
     monkeypatch.setattr(
-        "src.retrieval.llama_index_adapter.get_graphrag_health",
-        lambda *, force_refresh=False: (
-            False,
-            "unavailable",
-            "GraphRAG disabled for AppTest",
+        llama_index_adapter,
+        "get_graphrag_health",
+        lambda *, force_refresh=False: llama_index_adapter.GraphRAGHealth(
+            status="unavailable",
+            adapter_name="unavailable",
+            hint="GraphRAG disabled for AppTest",
         ),
-        raising=False,
     )

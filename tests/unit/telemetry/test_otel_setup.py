@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
 from collections import defaultdict
+from types import SimpleNamespace
 
 from opentelemetry import metrics, trace
 from opentelemetry.sdk.metrics import MeterProvider
@@ -112,7 +114,14 @@ def test_configure_observability_instruments_llamaindex(monkeypatch) -> None:
         def shutdown(self) -> None:
             calls["shutdown"] += 1
 
-    monkeypatch.setattr(otel, "LlamaIndexOpenTelemetry", DummyInstrumentor)
+    real_import_module = importlib.import_module
+
+    def _import_module(name: str, package: str | None = None) -> object:
+        if name == "llama_index.observability.otel":
+            return SimpleNamespace(LlamaIndexOpenTelemetry=DummyInstrumentor)
+        return real_import_module(name, package)
+
+    monkeypatch.setattr(importlib, "import_module", _import_module)
     enabled_settings = settings.model_copy(
         update={
             "observability": settings.observability.model_copy(

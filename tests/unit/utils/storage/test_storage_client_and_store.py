@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from src.retrieval import vector_contract
 from tests.fixtures.test_settings import create_test_settings
 
 
@@ -83,8 +84,8 @@ def test_create_vector_store_dense_only_ensures_named_schema(monkeypatch) -> Non
     store = storage_mod.create_vector_store("col", enable_hybrid=False)
     assert isinstance(store, _DummyStore)
     assert store.enable_hybrid is False
-    assert store.dense_vector_name == storage_mod.DENSE_VECTOR_NAME
-    assert store.sparse_vector_name == storage_mod.SPARSE_VECTOR_NAME
+    assert store.dense_vector_name == vector_contract.DENSE_VECTOR_NAME
+    assert store.sparse_vector_name == vector_contract.SPARSE_VECTOR_NAME
     assert calls["ensure"] == 1
 
 

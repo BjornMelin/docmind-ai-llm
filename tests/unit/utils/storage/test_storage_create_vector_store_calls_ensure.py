@@ -6,6 +6,8 @@ import importlib
 
 import pytest
 
+from src.retrieval import vector_contract
+
 
 @pytest.mark.unit
 def test_create_vector_store_calls_ensure(monkeypatch):
@@ -61,7 +63,10 @@ def test_create_vector_store_calls_ensure(monkeypatch):
     out = mod.create_vector_store("col", enable_hybrid=True)
     assert isinstance(out, _Store)
     assert calls["ensure_hybrid"] == 1
-    assert out.args[5:7] == (mod.DENSE_VECTOR_NAME, mod.SPARSE_VECTOR_NAME)
+    assert out.args[5:7] == (
+        vector_contract.DENSE_VECTOR_NAME,
+        vector_contract.SPARSE_VECTOR_NAME,
+    )
 
 
 @pytest.mark.unit
@@ -146,6 +151,10 @@ def test_create_vector_store_closes_client_when_construction_fails(
         mod.create_vector_store("col")
 
     assert calls == 1
-    assert vector_names == [(mod.DENSE_VECTOR_NAME, mod.SPARSE_VECTOR_NAME)] * calls
+    assert (
+        vector_names
+        == [(vector_contract.DENSE_VECTOR_NAME, vector_contract.SPARSE_VECTOR_NAME)]
+        * calls
+    )
     assert client.closed is True
     assert async_client.closed is True

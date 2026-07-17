@@ -11,6 +11,10 @@ from typing import cast
 
 import pytest
 
+from src import config as config_module
+from src.persistence import langchain_embeddings, memory_store, snapshot_utils
+from src.persistence import snapshot as snapshot_module
+from src.retrieval import router_factory
 from src.ui.router_session import replace_session_router
 
 _PHYSICAL_COLLECTIONS = {
@@ -39,6 +43,23 @@ def _interrupt_on_app_rerun(
 
 def _snapshot_manifest() -> dict[str, object]:
     return {"collections": dict(_PHYSICAL_COLLECTIONS)}
+
+
+def _snapshot_status(
+    page: object,
+    snapshot_dir: Path | None = None,
+    *,
+    manifest_present: bool = True,
+    is_stale: bool | None = False,
+    error: bool = False,
+):  # type: ignore[no-untyped-def]
+    return page._SnapshotStatus(  # type: ignore[attr-defined]
+        snapshot_dir.name if snapshot_dir is not None else None,
+        snapshot_dir,
+        manifest_present if snapshot_dir is not None else False,
+        is_stale if snapshot_dir is not None else None,
+        error,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -178,16 +199,18 @@ def test_hydrate_router_from_snapshot(monkeypatch):
     # Patch loader helpers to deterministic stubs
     vector_store = SimpleNamespace(client=SimpleNamespace(close=lambda: None))
     vector_index = SimpleNamespace(vector_store=vector_store)
-    monkeypatch.setattr(page, "load_manifest", lambda _p: _snapshot_manifest())
-    monkeypatch.setattr(page, "load_vector_index", lambda _p: vector_index)
-    monkeypatch.setattr(page, "load_property_graph_index", lambda _p: "KG")
+    monkeypatch.setattr(
+        snapshot_module, "load_manifest", lambda _p: _snapshot_manifest()
+    )
+    monkeypatch.setattr(snapshot_module, "load_vector_index", lambda _p: vector_index)
+    monkeypatch.setattr(snapshot_module, "load_property_graph_index", lambda _p: "KG")
     router_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
 
     def _build_router(*args, **kwargs):  # type: ignore[no-untyped-def]
         router_calls.append((args, kwargs))
         return "ROUTER"
 
-    monkeypatch.setattr(page, "build_router_engine", _build_router)
+    monkeypatch.setattr(router_factory, "build_router_engine", _build_router)
 
     st.session_state.clear()
     page._hydrate_router_from_snapshot(Path("/tmp/snap"))
@@ -215,7 +238,7 @@ def test_hydrate_router_from_snapshot(monkeypatch):
     old = _OldRouter()
     # Error path: build_router_engine raises → clear the partial runtime.
     monkeypatch.setattr(
-        page,
+        router_factory,
         "build_router_engine",
         lambda *_, **__: (_ for _ in ()).throw(RuntimeError("x")),
     )
@@ -253,9 +276,9 @@ def test_hydrate_required_graph_failure_clears_runtime(monkeypatch):
     vector_index = SimpleNamespace(vector_store=vector_store)
     manifest = _snapshot_manifest()
     manifest["graph_store_type"] = "property_graph"
-    monkeypatch.setattr(page, "load_manifest", lambda _p: manifest)
-    monkeypatch.setattr(page, "load_vector_index", lambda _p: vector_index)
-    monkeypatch.setattr(page, "load_property_graph_index", lambda _p: None)
+    monkeypatch.setattr(snapshot_module, "load_manifest", lambda _p: manifest)
+    monkeypatch.setattr(snapshot_module, "load_vector_index", lambda _p: vector_index)
+    monkeypatch.setattr(snapshot_module, "load_property_graph_index", lambda _p: None)
 
     st.session_state["router_engine"] = object()
     with pytest.raises(RuntimeError, match="property graph is unavailable"):
@@ -314,10 +337,18 @@ def test_hydrate_publication_failure_clears_old_and_staged_runtime(monkeypatch):
     vector_store = SimpleNamespace(client=new_client)
     vector_index = SimpleNamespace(vector_store=vector_store)
     new_router = _Router()
-    monkeypatch.setattr(page, "load_manifest", lambda _path: _snapshot_manifest())
-    monkeypatch.setattr(page, "load_vector_index", lambda _path: vector_index)
-    monkeypatch.setattr(page, "load_property_graph_index", lambda _path: None)
-    monkeypatch.setattr(page, "build_router_engine", lambda *_a, **_k: new_router)
+    monkeypatch.setattr(
+        snapshot_module, "load_manifest", lambda _path: _snapshot_manifest()
+    )
+    monkeypatch.setattr(
+        snapshot_module, "load_vector_index", lambda _path: vector_index
+    )
+    monkeypatch.setattr(
+        snapshot_module, "load_property_graph_index", lambda _path: None
+    )
+    monkeypatch.setattr(
+        router_factory, "build_router_engine", lambda *_a, **_k: new_router
+    )
     with pytest.raises(
         RuntimeError, match="Activated snapshot router construction failed"
     ):
@@ -345,7 +376,7 @@ def test_load_latest_snapshot_policies(monkeypatch, tmp_path):
 
     # ignore policy → no action
     monkeypatch.setattr(settings.graphrag_cfg, "autoload_policy", "ignore")
-    page._load_latest_snapshot_into_session()
+    page._load_latest_snapshot_into_session(_snapshot_status(page))
     assert st.session_state.get("router_engine") is None
     assert st.session_state.get("vector_index") is None
     assert "_snapshot_loaded_id" not in st.session_state
@@ -355,9 +386,8 @@ def test_load_latest_snapshot_policies(monkeypatch, tmp_path):
     d.mkdir(parents=True)
     monkeypatch.setattr(settings.graphrag_cfg, "autoload_policy", "latest_non_stale")
     monkeypatch.setattr(settings, "data_dir", tmp_path)
-    monkeypatch.setattr(page, "latest_snapshot_dir", lambda: d)
-    monkeypatch.setattr(page, "load_manifest", lambda _p: _snapshot_manifest())
-    monkeypatch.setattr(page, "compute_staleness", lambda *_a, **_k: False)
+    ready = _snapshot_status(page, d)
+    monkeypatch.setattr(page, "_compute_snapshot_status", lambda: ready)
 
     # Ensure hydrate path callable but side effects minimal
     monkeypatch.setattr(
@@ -365,8 +395,8 @@ def test_load_latest_snapshot_policies(monkeypatch, tmp_path):
         "_hydrate_router_from_snapshot_quiesced",
         lambda p: st.session_state.__setitem__("router_engine", "R"),
     )
-    page._load_latest_snapshot_into_session()
-    page._load_latest_snapshot_into_session()
+    page._load_latest_snapshot_into_session(ready)
+    page._load_latest_snapshot_into_session(ready)
     assert st.session_state.get("router_engine") == "R"
 
     class _OldRouter:
@@ -378,10 +408,47 @@ def test_load_latest_snapshot_policies(monkeypatch, tmp_path):
 
     old = _OldRouter()
     st.session_state["router_engine"] = old
-    monkeypatch.setattr(page, "compute_staleness", lambda *_a, **_k: True)
-    page._load_latest_snapshot_into_session()
+    stale = _snapshot_status(page, d, is_stale=True)
+    monkeypatch.setattr(page, "_compute_snapshot_status", lambda: stale)
+    page._load_latest_snapshot_into_session(stale)
     assert old.closed == 1
     assert st.session_state["router_engine"] is None
+
+
+@pytest.mark.unit
+def test_snapshot_status_is_read_once_when_steady_and_twice_before_clear(
+    monkeypatch,
+):
+    import importlib
+
+    import streamlit as st  # type: ignore
+
+    page = importlib.import_module("src.pages.01_chat")
+    missing = _snapshot_status(page)
+    status_reads = 0
+
+    def _status():  # type: ignore[no-untyped-def]
+        nonlocal status_reads
+        status_reads += 1
+        return missing
+
+    monkeypatch.setattr(page, "_compute_snapshot_status", _status)
+
+    initial = _status()
+    assert page._load_latest_snapshot_into_session(initial) is True
+    assert status_reads == 1
+
+    st.session_state["router_engine"] = object()
+    status_reads = 0
+    initial = _status()
+    assert page._load_latest_snapshot_into_session(initial) is True
+    assert status_reads == 2
+    assert page._snapshot_runtime_present() is False
+
+    status_reads = 0
+    initial = _status()
+    assert page._load_latest_snapshot_into_session(initial) is True
+    assert status_reads == 1
 
 
 @pytest.mark.unit
@@ -392,7 +459,7 @@ def test_close_memory_store_delegates_to_native_helper(monkeypatch):
 
     store = object()
     closed: list[object] = []
-    monkeypatch.setattr(page, "close_memory_store", closed.append)
+    monkeypatch.setattr(memory_store, "close_memory_store", closed.append)
     page._close_memory_store(store)
     assert closed == [store]
     info = page._get_memory_store._info  # type: ignore[attr-defined]
@@ -408,7 +475,7 @@ def test_memory_store_initializes_embedding_before_opening_index(monkeypatch):
     expected_store = object()
 
     monkeypatch.setattr(
-        page,
+        config_module,
         "setup_llamaindex",
         lambda: events.append("setup"),
     )
@@ -421,13 +488,198 @@ def test_memory_store_initializes_embedding_before_opening_index(monkeypatch):
         events.append("open")
         return expected_store
 
-    monkeypatch.setattr(page, "LlamaIndexEmbeddingsAdapter", _adapter)
-    monkeypatch.setattr(page, "open_memory_store", _open)
+    monkeypatch.setattr(langchain_embeddings, "LlamaIndexEmbeddingsAdapter", _adapter)
+    monkeypatch.setattr(memory_store, "open_memory_store", _open)
 
     store = page._get_memory_store.__wrapped__()  # type: ignore[attr-defined]
 
     assert store is expected_store
     assert events == ["setup", "adapter", "open"]
+
+
+@pytest.mark.unit
+def test_memory_store_translates_only_typed_embedding_unavailability(monkeypatch):
+    import importlib
+
+    page = importlib.import_module("src.pages.01_chat")
+    integrations = importlib.import_module("src.config.integrations")
+    unavailable = integrations.EmbeddingModelUnavailableError("private model path")
+    monkeypatch.setattr(
+        config_module,
+        "setup_llamaindex",
+        lambda: (_ for _ in ()).throw(unavailable),
+    )
+
+    with pytest.raises(page.ChatModelUnavailableError) as exc_info:
+        page._get_memory_store.__wrapped__()  # type: ignore[attr-defined]
+
+    assert exc_info.value.__cause__ is unavailable
+    assert exc_info.value.status == "cache_missing"
+    assert "private model path" not in str(exc_info.value)
+
+
+@pytest.mark.unit
+def test_memory_store_preserves_typed_initialization_failure(monkeypatch):
+    import importlib
+
+    page = importlib.import_module("src.pages.01_chat")
+    integrations = importlib.import_module("src.config.integrations")
+    failure = integrations.EmbeddingModelInitializationError("private runtime")
+    monkeypatch.setattr(
+        config_module,
+        "setup_llamaindex",
+        lambda: (_ for _ in ()).throw(failure),
+    )
+
+    with pytest.raises(page.ChatModelUnavailableError) as exc_info:
+        page._get_memory_store.__wrapped__()  # type: ignore[attr-defined]
+
+    assert exc_info.value.__cause__ is failure
+    assert exc_info.value.status == "initialization_failed"
+    assert "private runtime" not in str(exc_info.value)
+
+
+@pytest.mark.unit
+def test_memory_store_does_not_relabel_unexpected_setup_failure(monkeypatch):
+    import importlib
+
+    page = importlib.import_module("src.pages.01_chat")
+    failure = OSError("provider configuration failed")
+    monkeypatch.setattr(
+        config_module,
+        "setup_llamaindex",
+        lambda: (_ for _ in ()).throw(failure),
+    )
+
+    with pytest.raises(OSError, match="provider configuration failed") as exc_info:
+        page._get_memory_store.__wrapped__()  # type: ignore[attr-defined]
+
+    assert exc_info.value is failure
+
+
+@pytest.mark.unit
+def test_main_computes_one_status_and_passes_same_value_to_consumers(monkeypatch):
+    import importlib
+
+    page = importlib.import_module("src.pages.01_chat")
+    status = page._SnapshotStatus("snapshot-v1", Path("snapshot-v1"), True, False)
+    status_reads = 0
+    consumers: list[tuple[str, object]] = []
+
+    def _status():  # type: ignore[no-untyped-def]
+        nonlocal status_reads
+        status_reads += 1
+        return status
+
+    selection = SimpleNamespace(thread_id="thread", user_id="user")
+    monkeypatch.setattr(page, "configure_observability", lambda _settings: None)
+    monkeypatch.setattr(page, "provider_badge", lambda _settings: None)
+    monkeypatch.setattr(page, "_compute_snapshot_status", _status)
+    monkeypatch.setattr(
+        page,
+        "_check_chat_model_artifacts",
+        lambda: page.ChatModelReadiness(status="ready"),
+    )
+    monkeypatch.setattr(page, "get_or_create_owner_id", lambda: "owner")
+    monkeypatch.setattr(
+        page, "_chat_session_activity", lambda: contextlib.nullcontext(object())
+    )
+    monkeypatch.setattr(page, "render_session_sidebar", lambda *_a, **_k: selection)
+    monkeypatch.setattr(
+        page,
+        "_render_staleness_badge",
+        lambda value: consumers.append(("badge", value)),
+    )
+    monkeypatch.setattr(page, "_list_chat_checkpoints", lambda *_a, **_k: [])
+    monkeypatch.setattr(page, "render_time_travel_sidebar", lambda **_kwargs: None)
+    monkeypatch.setattr(page, "_render_memory_sidebar", lambda *_a, **_k: None)
+    monkeypatch.setattr(page, "_render_visual_search_sidebar", lambda: None)
+    monkeypatch.setattr(
+        page,
+        "_ensure_router_engine",
+        lambda value: consumers.append(("autoload", value)),
+    )
+    monkeypatch.setattr(page, "_render_analysis_sidebar", lambda **_kwargs: None)
+    monkeypatch.setattr(page, "_render_analysis_job_panel", lambda **_kwargs: None)
+    monkeypatch.setattr(page, "_render_analysis_terminal_notice", lambda: None)
+    monkeypatch.setattr(page, "_render_analysis_results", lambda: None)
+    monkeypatch.setattr(
+        page,
+        "_load_chat_messages",
+        lambda _selection: page._ChatHistoryLoadResult((), "ready"),
+    )
+    monkeypatch.setattr(page, "_render_chat_history_result", lambda _value: True)
+    monkeypatch.setattr(page, "_handle_chat_prompt", lambda _selection: None)
+
+    page.main()
+
+    assert status_reads == 1
+    assert consumers == [("badge", status), ("autoload", status)]
+    assert consumers[0][1] is consumers[1][1]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("manifest", "stale", "expected_manifest", "expected_stale", "error"),
+    [
+        (None, None, False, None, False),
+        ({"corpus_hash": "current"}, False, True, False, False),
+        ({"corpus_hash": "stale"}, True, True, True, False),
+        ({"malformed": True}, ValueError("malformed manifest"), False, None, True),
+    ],
+    ids=["missing-manifest", "current", "stale", "malformed"],
+)
+def test_compute_snapshot_status_contract(
+    monkeypatch,
+    tmp_path: Path,
+    manifest: dict[str, object] | None,
+    stale: bool | Exception | None,
+    expected_manifest: bool,
+    expected_stale: bool | None,
+    error: bool,
+):
+    import importlib
+
+    page = importlib.import_module("src.pages.01_chat")
+    snapshot = tmp_path / "storage" / "snapshot-v1"
+    snapshot.mkdir(parents=True)
+    monkeypatch.setattr(page.settings, "data_dir", tmp_path)
+    monkeypatch.setattr(snapshot_module, "latest_snapshot_dir", lambda _path: snapshot)
+    monkeypatch.setattr(snapshot_module, "load_manifest", lambda _path: manifest)
+    monkeypatch.setattr(snapshot_utils, "collect_corpus_paths", lambda _path: [])
+    monkeypatch.setattr(snapshot_utils, "current_config_dict", lambda: {})
+
+    def _staleness(*_args):  # type: ignore[no-untyped-def]
+        if isinstance(stale, Exception):
+            raise stale
+        return stale
+
+    monkeypatch.setattr(snapshot_utils, "compute_staleness", _staleness)
+
+    status = page._compute_snapshot_status()
+
+    assert status == page._SnapshotStatus(
+        "snapshot-v1",
+        snapshot,
+        expected_manifest,
+        expected_stale,
+        error,
+    )
+
+
+@pytest.mark.unit
+def test_compute_snapshot_status_without_storage_is_missing(
+    monkeypatch,
+    tmp_path: Path,
+):
+    import importlib
+
+    page = importlib.import_module("src.pages.01_chat")
+    monkeypatch.setattr(page.settings, "data_dir", tmp_path)
+
+    assert page._compute_snapshot_status() == page._SnapshotStatus(
+        None, None, False, None
+    )
 
 
 @pytest.mark.unit
@@ -461,7 +713,9 @@ def test_cached_live_reader_blocks_release_until_lease_exits(
         release_callback = chat_sessions._close_chat_db_conn
     else:
         monkeypatch.setattr(page, "_get_memory_store", lambda: resource)
-        monkeypatch.setattr(page, "close_memory_store", lambda store: store.close())
+        monkeypatch.setattr(
+            memory_store, "close_memory_store", lambda store: store.close()
+        )
         activity = page._memory_store_activity
         release_callback = page._close_memory_store
 
@@ -536,7 +790,9 @@ def test_cached_live_resource_rejects_reader_during_maintenance_and_releases_lea
         release_callback = chat_sessions._close_chat_db_conn
     else:
         monkeypatch.setattr(page, "_get_memory_store", _get_current)
-        monkeypatch.setattr(page, "close_memory_store", lambda store: store.close())
+        monkeypatch.setattr(
+            memory_store, "close_memory_store", lambda store: store.close()
+        )
         activity = page._memory_store_activity
         release_callback = page._close_memory_store
 
@@ -1110,10 +1366,9 @@ def test_ensure_router_engine_sets_none_and_hydrates(
     monkeypatch.setattr(
         page,
         "_load_latest_snapshot_into_session",
-        lambda: (_ for _ in ()).throw(RuntimeError("x")),
+        lambda _status: (_ for _ in ()).throw(RuntimeError("x")),
     )
-    monkeypatch.setattr(page, "latest_snapshot_dir", lambda *_a, **_k: None)
-    page._ensure_router_engine()
+    page._ensure_router_engine(_snapshot_status(page))
     assert st.session_state.get("router_engine") is None
     assert any("Autoload skipped" in c for c in clean_streamlit_session["captions"])
 
@@ -1121,13 +1376,13 @@ def test_ensure_router_engine_sets_none_and_hydrates(
     monkeypatch.setattr(
         page,
         "_load_latest_snapshot_into_session",
-        lambda: replace_session_router(
+        lambda _status: replace_session_router(
             st.session_state,
             "R",
             runtime_generation=page.settings.cache_version,
         ),
     )
-    page._ensure_router_engine()
+    page._ensure_router_engine(_snapshot_status(page))
     assert st.session_state.get("router_engine") == "R"
 
 
@@ -1142,28 +1397,12 @@ def test_render_staleness_badge_warns_and_logs(
     page = importlib.import_module("src.pages.01_chat")
     monkeypatch.setattr(settings, "data_dir", tmp_path, raising=False)
 
-    storage = tmp_path / "storage"
-    storage.mkdir(parents=True, exist_ok=True)
-    snap = storage / "sid"
-    snap.mkdir()
+    snap = tmp_path / "storage" / "sid"
 
     events: list[dict] = []
-    monkeypatch.setattr(page, "latest_snapshot_dir", lambda *_a, **_k: snap)
-    monkeypatch.setattr(
-        page,
-        "load_manifest",
-        lambda _p: {
-            "corpus_hash": "c",
-            "config_hash": "d",
-            "collections": dict(_PHYSICAL_COLLECTIONS),
-        },
-    )
-    monkeypatch.setattr(page, "_collect_corpus_paths", lambda _p: [])
-    monkeypatch.setattr(page, "_current_config_dict", lambda: {})
-    monkeypatch.setattr(page, "compute_staleness", lambda *_a, **_k: True)
     monkeypatch.setattr(page, "log_jsonl", lambda ev: events.append(ev))
 
-    page._render_staleness_badge()
+    page._render_staleness_badge(_snapshot_status(page, snap, is_stale=True))
     assert page.STALE_TOOLTIP in clean_streamlit_session["warnings"]
     assert events
     assert events[-1].get("snapshot_stale_detected") is True
@@ -1181,16 +1420,7 @@ def test_render_staleness_badge_sanitizes_failure(
 
     page = importlib.import_module("src.pages.01_chat")
     monkeypatch.setattr(settings, "data_dir", tmp_path, raising=False)
-    (tmp_path / "storage").mkdir()
-    monkeypatch.setattr(
-        page,
-        "latest_snapshot_dir",
-        lambda *_a, **_k: (_ for _ in ()).throw(
-            RuntimeError("staleness leaked-secret")
-        ),
-    )
-
-    page._render_staleness_badge()
+    page._render_staleness_badge(_snapshot_status(page, error=True))
 
     assert clean_streamlit_session["captions"] == ["Staleness check unavailable."]
     assert "leaked-secret" not in str(clean_streamlit_session["captions"])
@@ -1891,7 +2121,7 @@ def test_hydrate_router_from_snapshot_skips_when_already_loaded(monkeypatch):
     )
 
     monkeypatch.setattr(
-        page,
+        snapshot_module,
         "load_vector_index",
         lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("should not load")),
     )
@@ -1925,10 +2155,16 @@ def test_hydrate_router_from_snapshot_replaces_old_router(monkeypatch):
 
     vector_store = SimpleNamespace(client=SimpleNamespace(close=lambda: None))
     vector_index = SimpleNamespace(vector_store=vector_store)
-    monkeypatch.setattr(page, "load_manifest", lambda _p: _snapshot_manifest())
-    monkeypatch.setattr(page, "load_vector_index", lambda *_a, **_k: vector_index)
-    monkeypatch.setattr(page, "load_property_graph_index", lambda *_a, **_k: None)
-    monkeypatch.setattr(page, "build_router_engine", lambda *_a, **_k: new)
+    monkeypatch.setattr(
+        snapshot_module, "load_manifest", lambda _p: _snapshot_manifest()
+    )
+    monkeypatch.setattr(
+        snapshot_module, "load_vector_index", lambda *_a, **_k: vector_index
+    )
+    monkeypatch.setattr(
+        snapshot_module, "load_property_graph_index", lambda *_a, **_k: None
+    )
+    monkeypatch.setattr(router_factory, "build_router_engine", lambda *_a, **_k: new)
 
     page._hydrate_router_from_snapshot(Path("sid"))
     assert old.closed == 1
@@ -1954,9 +2190,13 @@ def test_hydrate_router_from_snapshot_missing_vector_clears_old_router(monkeypat
     old = _Old()
     st.session_state.clear()
     st.session_state["router_engine"] = old
-    monkeypatch.setattr(page, "load_manifest", lambda _p: _snapshot_manifest())
-    monkeypatch.setattr(page, "load_vector_index", lambda *_a, **_k: None)
-    monkeypatch.setattr(page, "load_property_graph_index", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        snapshot_module, "load_manifest", lambda _p: _snapshot_manifest()
+    )
+    monkeypatch.setattr(snapshot_module, "load_vector_index", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        snapshot_module, "load_property_graph_index", lambda *_a, **_k: None
+    )
 
     with pytest.raises(RuntimeError, match="no vector index"):
         page._hydrate_router_from_snapshot(Path("sid"))
@@ -1983,9 +2223,11 @@ def test_hydrate_router_from_snapshot_load_failure_clears_old_router(monkeypatch
     old = _Old()
     st.session_state.clear()
     st.session_state["router_engine"] = old
-    monkeypatch.setattr(page, "load_manifest", lambda _p: _snapshot_manifest())
     monkeypatch.setattr(
-        page,
+        snapshot_module, "load_manifest", lambda _p: _snapshot_manifest()
+    )
+    monkeypatch.setattr(
+        snapshot_module,
         "load_vector_index",
         lambda *_a, **_k: (_ for _ in ()).throw(OSError("load failed")),
     )
@@ -2007,8 +2249,7 @@ def test_load_latest_snapshot_without_snapshot_returns(monkeypatch):
         "autoload_policy",
         "latest_non_stale",
     )
-    monkeypatch.setattr(page, "latest_snapshot_dir", lambda: None)
-    page._load_latest_snapshot_into_session()
+    page._load_latest_snapshot_into_session(_snapshot_status(page))
 
 
 @pytest.mark.unit
@@ -2056,16 +2297,14 @@ def test_snapshot_autoload_preserves_runtime_during_active_job(
         state_updates={"_snapshot_loaded_id": "old"},
     )
     snapshot = tmp_path / "new"
-    monkeypatch.setattr(page, "latest_snapshot_dir", lambda: snapshot)
-    monkeypatch.setattr(page, "load_manifest", lambda _path: _snapshot_manifest())
-    monkeypatch.setattr(page, "compute_staleness", lambda *_a, **_k: False)
+    ready = _snapshot_status(page, snapshot)
     monkeypatch.setattr(
         page,
         "_hydrate_router_from_snapshot_quiesced",
         lambda _path: pytest.fail("hydration must be deferred"),
     )
     try:
-        assert page._load_latest_snapshot_into_session() is False
+        assert page._load_latest_snapshot_into_session(ready) is False
         assert st.session_state["router_engine"] is router
         assert st.session_state["vector_index"] == "old-index"
         assert client.close_calls == 0

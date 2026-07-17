@@ -28,6 +28,7 @@ from loguru import logger
 from qdrant_client import AsyncQdrantClient, QdrantClient
 
 from src.config import settings
+from src.retrieval import vector_contract
 from src.retrieval.async_work import AsyncWorkExecutor
 from src.retrieval.hybrid import HybridParams, ServerHybridRetriever
 from src.retrieval.image_index import check_siglip_image_collection
@@ -35,7 +36,7 @@ from src.retrieval.rrf import rrf_merge
 from src.utils.log_safety import build_pii_log_entry
 from src.utils.qdrant_utils import nodes_from_query_result
 from src.utils.siglip_adapter import SiglipEmbedding
-from src.utils.storage import get_client_config, sparse_retrieval_enabled
+from src.utils.storage import get_client_config
 from src.utils.telemetry import log_jsonl
 
 if TYPE_CHECKING:
@@ -271,7 +272,7 @@ class MultimodalFusionRetriever(BaseRetriever):
         super().__init__()
         with contextlib.ExitStack() as acquired:
             if text_retriever is None:
-                if not sparse_retrieval_enabled():
+                if not vector_contract.sparse_retrieval_enabled():
                     raise ValueError(
                         "Dense multimodal fusion requires an injected text retriever"
                     )

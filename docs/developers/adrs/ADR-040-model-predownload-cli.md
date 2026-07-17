@@ -2,8 +2,8 @@
 ADR: 040
 Title: Model Pre-download CLI for Offline-First Operation
 Status: Accepted
-Version: 1.3
-Date: 2026-07-14
+Version: 1.4
+Date: 2026-07-16
 Supersedes:
 Superseded-by:
 Related: SPEC-013
@@ -55,6 +55,12 @@ SigLIP model. Include verified parser-model prefetch commands and an explicit
 root and immutable revisions. Do not advertise isolated weight files as
 runnable model snapshots.
 
+Omitted model or parser cache destinations are resolved from the same canonical
+settings used by runtime. The CLI explicitly bootstraps `.env` once, then reads
+`embedding.cache_folder` and `parsing.model_cache_dir`. Explicit
+`--cache_dir`/`--parser-cache-dir` values take precedence; when both requested
+destinations are explicit, cache resolution does not bootstrap settings.
+
 The repository MUST document offline flags:
 
 - `HF_HUB_OFFLINE=1`
@@ -88,6 +94,8 @@ flowchart TD
 
 ## Changelog
 
+- 1.4 (2026-07-16): Made omitted model/parser cache destinations bootstrap and
+  reuse canonical runtime settings; explicit CLI paths remain authoritative.
 - 1.3 (2026-07-14): Added the pinned BM42 source snapshot to the shared model cache.
 - 1.2 (2026-07-14): Added the pinned default BGE reranker and one runtime cache owner.
 - 1.0 (2026-01-09): Backfilled ADR to match SPEC-013 and existing tooling implementation.

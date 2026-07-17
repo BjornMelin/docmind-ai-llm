@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import json
+import os
+import sqlite3
+import subprocess
 import sys
+import textwrap
 from collections.abc import Generator
 from pathlib import Path
 from types import ModuleType
@@ -100,6 +105,179 @@ def test_app_entrypoint_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     assert [t for t in titles if t] == ["Chat", "Documents", "Analytics", "Settings"]
 
 
+@pytest.mark.integration
+def test_app_recovery_failure_stops_before_navigation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Persistence recovery failures remain sanitized and fail closed."""
+    from src.persistence import snapshot
+
+    navigated: list[bool] = []
+    monkeypatch.setattr(
+        snapshot,
+        "recover_snapshot_transactions",
+        lambda _path: (_ for _ in ()).throw(RuntimeError("private recovery detail")),
+    )
+    monkeypatch.setattr(
+        st,
+        "navigation",
+        lambda _pages: navigated.append(True),
+    )
+    st.cache_resource.clear()
+    root = Path(__file__).resolve().parents[3]
+    app = AppTest.from_file(str(root / "app.py"))
+    app.default_timeout = apptest_timeout_sec()
+    app = app.run()
+
+    errors = [str(getattr(item, "value", "")) for item in app.error]
+    assert errors == [
+        "DocMind could not safely recover local persistence. "
+        "Stop other writers and restart the app."
+    ]
+    assert "private recovery detail" not in str(app)
+    assert navigated == []
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "artifact_mode", ["empty-cache", "incomplete-local", "invalid-model-id"]
+)
+def test_chat_unavailable_model_renders_import_light_degraded_shell(
+    tmp_path: Path,
+    artifact_mode: str,
+) -> None:
+    """Real offline Chat renders degrade without model imports or network."""
+    root = Path(__file__).resolve().parents[3]
+    probe = textwrap.dedent(
+        """
+        import json
+        import socket
+        import sys
+        from pathlib import Path
+
+        from streamlit.testing.v1 import AppTest
+        from src.config.settings import settings
+
+        data_dir = Path(sys.argv[1])
+        settings.data_dir = data_dir
+        settings.chat.sqlite_path = data_dir / "chat.db"
+        settings.embedding.cache_folder = data_dir / "empty-cache"
+        settings.embedding.local_model_path = None
+        settings.embedding.model_name = "docmind-tests/model-not-in-cache"
+        settings.embedding.model_revision = "missing-revision"
+        if sys.argv[3] == "incomplete-local":
+            local_path = data_dir / "private-incomplete-model"
+            local_path.mkdir(parents=True)
+            (local_path / "config.json").write_text("{}", encoding="utf-8")
+            settings.embedding.local_model_path = local_path
+        elif sys.argv[3] == "invalid-model-id":
+            settings.embedding.model_name = sys.argv[4]
+        settings.graphrag_cfg.autoload_policy = "ignore"
+        network_calls = []
+
+        def _deny_network(*args, **kwargs):
+            network_calls.append((str(args), str(kwargs)))
+            raise AssertionError("network access attempted")
+
+        socket.socket.connect = _deny_network
+        socket.create_connection = _deny_network
+        page = Path(sys.argv[2]) / "src" / "pages" / "01_chat.py"
+        app = AppTest.from_file(str(page), default_timeout=8).run()
+        roots = {name.partition(".")[0] for name in sys.modules}
+        payload = {
+            "exceptions": [str(getattr(item, "value", "")) for item in app.exception],
+            "warnings": [str(getattr(item, "value", "")) for item in app.warning],
+            "captions": [str(getattr(item, "value", "")) for item in app.caption],
+            "code": [str(getattr(item, "value", "")) for item in app.code],
+            "titles": [str(getattr(item, "value", "")) for item in app.title],
+            "markdown": [str(getattr(item, "value", "")) for item in app.markdown],
+            "selectboxes": [str(getattr(item, "label", "")) for item in app.selectbox],
+            "buttons": [str(getattr(item, "label", "")) for item in app.button],
+            "text_inputs": [
+                str(getattr(item, "label", "")) for item in app.text_input
+            ],
+            "network_calls": network_calls,
+            "coordinator_loaded": "src.agents.coordinator" in sys.modules,
+            "prohibited_roots": sorted(
+                roots & {"torch", "transformers", "llama_index", "qdrant_client"}
+            ),
+        }
+        print(json.dumps(payload))
+        """
+    )
+    env = {
+        **os.environ,
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+    }
+    private_invalid_model_id = "private invalid model id"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            probe,
+            str(tmp_path),
+            str(root),
+            artifact_mode,
+            private_invalid_model_id,
+        ],
+        cwd=root,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout.strip().splitlines()[-1])
+    assert payload["exceptions"] == []
+    assert payload["network_calls"] == []
+    assert payload["coordinator_loaded"] is False
+    assert payload["prohibited_roots"] == []
+    expected_warnings = {
+        "empty-cache": (
+            "Chat is unavailable because its local model artifacts are not installed."
+        ),
+        "incomplete-local": (
+            "Chat is unavailable because the configured local model is incomplete."
+        ),
+        "invalid-model-id": (
+            "Chat is unavailable because its embedding could not initialize."
+        ),
+    }
+    expected_warning = expected_warnings[artifact_mode]
+    assert payload["warnings"] == [expected_warning]
+    assert payload["titles"] == ["Chat"]
+    assert any("Provider: ollama" in item for item in payload["markdown"])
+    assert "Session" in payload["selectboxes"]
+    assert {"New", "Delete"}.issubset(payload["buttons"])
+    assert "Rename" in payload["text_inputs"]
+    assert "Sessions and local snapshot status remain available." in payload["captions"]
+    if artifact_mode == "incomplete-local":
+        assert str(tmp_path) not in str(payload)
+        assert any(
+            "remove DOCMIND_EMBEDDING__LOCAL_MODEL_PATH" in caption
+            for caption in payload["captions"]
+        )
+        assert payload["code"] == []
+    elif artifact_mode == "empty-cache":
+        assert str(tmp_path) not in str(payload)
+        assert payload["code"] == [
+            "uv run python tools/models/pull.py --all --parser-defaults"
+        ]
+    else:
+        assert str(tmp_path) not in str(payload)
+        assert private_invalid_model_id not in str(payload)
+        assert private_invalid_model_id not in result.stdout
+        assert private_invalid_model_id not in result.stderr
+        assert any(
+            "Verify the configured embedding model and device settings" in caption
+            for caption in payload["captions"]
+        )
+        assert payload["code"] == []
+
+
 @pytest.fixture
 def chat_app_smoke(
     tmp_path: Path,
@@ -171,6 +349,47 @@ def test_chat_smoke_echo(chat_app_smoke: AppTest) -> None:
     assistant_texts = _chat_message_texts(app, avatar="assistant")
     assert any("hello" in text for text in user_texts)
     assert any("Echo: hello" in text for text in assistant_texts)
+
+
+@pytest.mark.integration
+def test_chat_corrupt_session_database_is_sanitized_without_model_guidance(
+    chat_app_smoke: AppTest,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """Corrupt session persistence renders one sanitized retry-safe error."""
+    from src.ui import chat_sessions
+
+    monkeypatch.setattr(
+        chat_sessions,
+        "get_chat_db_conn",
+        lambda: (_ for _ in ()).throw(sqlite3.DatabaseError("database is malformed")),
+    )
+
+    app = chat_app_smoke.run()
+
+    assert not app.exception
+    assert [str(getattr(item, "value", "")) for item in app.error] == [
+        "Chat persistence is unavailable. Please retry."
+    ]
+    assert "database is malformed" not in str(app)
+    captured = capfd.readouterr()
+    assert "database is malformed" not in captured.out
+    assert "database is malformed" not in captured.err
+    model_guidance = " ".join(
+        str(getattr(item, "value", ""))
+        for collection in (app.warning, app.caption, app.code)
+        for item in collection
+    )
+    assert all(
+        guidance not in model_guidance
+        for guidance in (
+            "local model artifacts",
+            "configured local model",
+            "embedding could not initialize",
+            "tools/models/pull.py",
+        )
+    )
 
 
 @pytest.mark.integration

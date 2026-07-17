@@ -23,6 +23,7 @@ from qdrant_client import models as qmodels
 
 from src.config import settings
 from src.config.integrations import get_settings_embed_model
+from src.retrieval import vector_contract
 from src.retrieval.async_work import AsyncWorkCapacityError, AsyncWorkExecutor
 from src.retrieval.sparse_query import SparseEncodingError
 from src.retrieval.sparse_query import encode_to_qdrant as _encode_sparse_query
@@ -225,7 +226,7 @@ class ServerHybridRetriever(BaseRetriever):
             prefetch.append(
                 qmodels.Prefetch(
                     query=sparse_vec,
-                    using="text-sparse",
+                    using=vector_contract.SPARSE_VECTOR_NAME,
                     limit=self.params.prefetch_sparse,
                 )
             )
@@ -236,7 +237,7 @@ class ServerHybridRetriever(BaseRetriever):
         prefetch.append(
             qmodels.Prefetch(
                 query=d_query,  # type: ignore[arg-type]
-                using="text-dense",
+                using=vector_contract.DENSE_VECTOR_NAME,
                 limit=self.params.prefetch_dense,
             )
         )

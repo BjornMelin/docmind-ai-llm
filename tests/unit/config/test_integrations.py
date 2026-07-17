@@ -7,6 +7,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.config.integrations import (
+    EmbeddingModelInitializationError,
+    EmbeddingModelUnavailableError,
     _configure_context_settings,
     _configure_embeddings,
     _configure_llm,
@@ -157,7 +159,7 @@ def test_configure_embeddings_handles_failure(monkeypatch, fake_settings):
         side_effect=RuntimeError("embed error"),
     ):
         try:
-            with pytest.raises(RuntimeError, match="embed error"):
+            with pytest.raises(EmbeddingModelInitializationError):
                 _configure_embeddings()
         finally:
             loguru_logger.remove(sink_id)
@@ -234,11 +236,63 @@ def test_embedding_failure_preserves_real_backing_slot(monkeypatch):
         MockEmbedding(embed_dim=1),
     )
 
-    with pytest.raises(OSError, match="model missing"):
+    with pytest.raises(EmbeddingModelInitializationError):
         integ._configure_embeddings()
 
     assert isinstance(LlamaIndexSettings._embed_model, MockEmbedding)
     assert not integ.is_embedding_ready()
+
+
+@pytest.mark.unit
+def test_local_embedding_constructor_failure_is_initialization_failure(
+    monkeypatch,
+    fake_settings,
+    tmp_path,
+) -> None:
+    """Local snapshot load failures map to the narrow unavailable contract."""
+    from src.config import integrations as integ
+
+    config_owner = DocMindSettings(
+        enable_gpu_acceleration=False,
+        embedding={"local_model_path": tmp_path},
+        _env_file=None,  # type: ignore[arg-type]
+    )
+    monkeypatch.setattr(integ, "settings", config_owner)
+    monkeypatch.setattr(
+        integ,
+        "HuggingFaceEmbedding",
+        MagicMock(side_effect=OSError("corrupt private path")),
+    )
+
+    with pytest.raises(EmbeddingModelInitializationError) as exc_info:
+        integ._configure_embeddings()
+
+    assert "corrupt private path" not in str(exc_info.value)
+    assert fake_settings.embed_model is None
+
+
+@pytest.mark.unit
+def test_huggingface_cache_miss_is_typed_unavailable(
+    monkeypatch,
+    fake_settings,
+) -> None:
+    from huggingface_hub.errors import LocalEntryNotFoundError
+
+    from src.config import integrations as integ
+
+    failure = OSError("wrapper")
+    failure.__cause__ = LocalEntryNotFoundError("private cache path")
+    monkeypatch.setattr(
+        integ,
+        "HuggingFaceEmbedding",
+        MagicMock(side_effect=failure),
+    )
+
+    with pytest.raises(EmbeddingModelUnavailableError) as exc_info:
+        integ._configure_embeddings()
+
+    assert "private cache path" not in str(exc_info.value)
+    assert fake_settings.embed_model is None
 
 
 @pytest.mark.unit

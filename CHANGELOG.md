@@ -19,6 +19,16 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Fixed
 
+- App, Chat, and Documents now keep Torch, Transformers, LlamaIndex, and Qdrant
+  behind recovery/resource/action seams. Chat reuses one typed snapshot status
+  on steady reruns and performs a second read only inside quiesced mutations.
+- Offline Chat startup now distinguishes missing cache, incomplete local model,
+  and post-preflight initialization failures without implicit downloads or
+  relabeling corrupt persistence. The model pull CLI bootstraps canonical model
+  and parser cache defaults when explicit destinations are omitted.
+- GraphRAG startup health now reports package installation with runtime
+  validation deferred; Settings/action-time checks validate the real
+  `PropertyGraphIndex` capability before reporting it ready.
 - Chat now distinguishes a new conversation from unavailable history, offers a
   sanitized retry path, shows native status only during synchronous generation,
   and renders completed answers without simulated post-completion streaming.

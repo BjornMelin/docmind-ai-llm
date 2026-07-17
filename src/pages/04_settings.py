@@ -20,7 +20,7 @@ from src.config.env_persistence import persist_env
 from src.config.llm_runtime_probe import probe_openai_compatible_runtime
 from src.config.settings import DocMindSettings, settings
 from src.config.settings_utils import ensure_v1
-from src.retrieval.llama_index_adapter import get_graphrag_health
+from src.retrieval.llama_index_adapter import GraphRAGHealth, get_graphrag_health
 from src.ui.background_jobs import (
     ForegroundRuntimeConflictError,
     JobAdmissionPausedError,
@@ -219,7 +219,7 @@ def main() -> None:
     st.title("Settings · LLM Runtime")
 
     # Show badge
-    graphrag_health = get_graphrag_health()
+    graphrag_health = get_graphrag_health(force_refresh=True)
     provider_badge(settings, graphrag_health=graphrag_health)
     provider = _render_provider_section()
     (
@@ -836,26 +836,25 @@ def _render_retrieval_section() -> tuple[int, int, int, int]:
 
 
 def _render_graphrag_section(
-    graphrag_health: tuple[bool, str, str] | None = None,
+    graphrag_health: GraphRAGHealth | None = None,
 ) -> None:
     """Render GraphRAG status section.
 
     Args:
-        graphrag_health: Optional tuple containing `(supports, adapter_name,
-            hint)` for GraphRAG health. If None, it will be fetched.
+        graphrag_health: Optional typed GraphRAG health state. If None, the
+            action-time capability check runs before rendering.
     """
     st.subheader("GraphRAG")
     if graphrag_health is None:
-        graphrag_health = get_graphrag_health()
-    supports, adapter_name, hint = graphrag_health
-    st.text_input("Adapter", value=adapter_name, disabled=True)
+        graphrag_health = get_graphrag_health(force_refresh=True)
+    st.text_input("Adapter", value=graphrag_health.adapter_name, disabled=True)
     st.text_input(
         "GraphRAG status",
-        value="available" if supports else "unavailable",
+        value=graphrag_health.status,
         disabled=True,
     )
-    if not supports:
-        st.info(hint)
+    if graphrag_health.status != "ready":
+        st.info(graphrag_health.hint)
 
 
 def _validate_llamacpp_inputs(

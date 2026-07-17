@@ -10,6 +10,7 @@ import streamlit as st
 
 import src.ui.components.provider_badge as provider_badge_module
 from src.config.settings import DocMindSettings
+from src.retrieval.llama_index_adapter import GraphRAGHealth
 from src.ui.components.provider_badge import provider_badge
 
 
@@ -62,10 +63,29 @@ def test_provider_badge_uses_config_values(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(st, "caption", _caption)
 
     settings = DocMindSettings()
-    provider_badge(settings)
+    provider_badge(
+        settings,
+        graphrag_health=GraphRAGHealth(
+            status="installed",
+            adapter_name="llama_index",
+            hint="Runtime validation deferred.",
+        ),
+    )
 
     assert any(
         isinstance(entry, tuple) and entry[0] == f"Provider: {settings.llm_backend}"
         for entry in calls["badge"]
     )
     assert f"Model: {settings.effective_model}" in calls["caption"]
+    graph_badges = [
+        entry
+        for entry in calls["badge"]
+        if isinstance(entry, tuple) and str(entry[0]).startswith("GraphRAG:")
+    ]
+    assert graph_badges == [
+        (
+            "GraphRAG: installed (validation deferred) (llama_index)",
+            {"icon": ":material/info:", "help": "Runtime validation deferred."},
+        )
+    ]
+    assert "enabled" not in str(graph_badges)

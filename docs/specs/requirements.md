@@ -1,6 +1,6 @@
 # DocMind AI software requirements specification
 
-Version: 2.0.1 • Date: 2026-07-16 • Owner: Eng/Arch
+Version: 2.0.2 • Date: 2026-07-16 • Owner: Eng/Arch
 Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking, GraphRAG, and multi-provider LLM runtimes.
 
 ## 0. Front-matter
@@ -52,7 +52,7 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 | **FR-009.5** | The system **shall** validate export paths as non‑egress, sanitize file names, and block symlink targets. | SPEC‑011 | AC‑FR‑009‑SEC |
 | **FR-009.6** | The system **shall** emit OpenTelemetry router-construction and graph-export signals plus local JSONL retrieval backend/outcome, staleness, and export events. Per-query route and traversal-depth JSONL are not implemented. | SPEC‑012 | AC‑FR‑OBS‑001 |
 | **FR-010** | The system **shall** provide a multipage Streamlit UI using `st.Page`/`st.navigation` with Chat, Documents, Analytics, Settings. | ADR‑013/SPEC‑008 | AC‑FR‑010 |
-| **FR-011** | The system **shall** use native `st.chat_message` and `st.chat_input`, show a native spinner only around the synchronous coordinator call, render the completed answer normally, distinguish the coordinator's successful empty state from raised history reads and runtime maintenance, and **shall not** simulate streaming by chunking completed text. Real incremental streaming requires a public coordinator event API and proof that output arrives before completion. | ADR‑013/SPEC‑008 | AC‑FR‑011 |
+| **FR-011** | The system **shall** use native `st.chat_message` and `st.chat_input`, show a native spinner only around the synchronous coordinator call, render the completed answer normally, distinguish successful empty history from raised reads and maintenance, and render sanitized cache-missing, incomplete-local-model, and initialization-failed states before constructing embedding-dependent capabilities. Expected model unavailability **shall not** trigger implicit downloads or hide unexpected persistence failures. The UI **shall not** simulate streaming by chunking completed text. | ADR‑013/SPEC‑008 | AC‑FR‑011 |
 | **FR-012** | The system **shall** allow users to select an LLM provider among llama.cpp, vLLM, Ollama, LM Studio, and choose the model at runtime in UI and settings. | ADR‑009 | AC‑FR‑012 |
 | **FR-013** | The system **shall** provide OpenAI‑compatible client wiring for vLLM, Ollama, LM Studio, and llama.cpp server modes. | ADR‑009 | AC‑FR‑013 |
 | **FR-014** | The system **shall** run a LangGraph‑supervised multi‑agent flow with deterministic JSON‑schema outputs when available. | ADR‑001 | AC‑FR‑014 |
@@ -85,6 +85,7 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 | **Performance efficiency** | **NFR‑PERF‑001** | Chat benchmarks **shall** report p50 end-to-end latency with the hardware, model, and corpus identified. | test |
 | **Performance efficiency** | **NFR‑PERF‑002** | Rerank benchmarks **shall** report text and SigLIP stage latency with the hardware identified. | test |
 | **Performance efficiency** | **NFR‑PERF‑003** | Qdrant benchmarks **shall** report local hybrid-query p50 with collection size and `fused_top_k` identified. | test |
+| **Performance efficiency** | **NFR-PERF-005** | Fresh imports of the app, Chat, and Documents shells **shall not** load `torch`, `transformers`, `llama_index`, or `qdrant_client`; heavy implementations belong behind recovery, status, resource, or action seams. | fixed-root subprocess gate |
 | **Usability** | **NFR‑USE‑001** | Streamlit UI navigable with keyboard; forms avoid unnecessary reruns. | inspection |
 | **Observability** | **NFR‑OBS‑001** | The app **shall** emit structured, local-first telemetry events (JSONL) for retrieval outcomes, staleness detection, exports, and job lifecycle with sampling/rotation controls. | test |
 | **Observability** | **NFR‑OBS‑002** | The app **shall** support optional OpenTelemetry tracing and metrics export when explicitly enabled; disabled by default and safe for offline operation. | test |
@@ -195,6 +196,32 @@ Scenario: An unavailable history fails closed
   Then the UI SHALL show the distinct unavailable state and a retry action
   And Chat history and input SHALL NOT render
   And raw errors, provider secrets, thread IDs, and user IDs SHALL NOT render
+
+Scenario: An empty offline model cache degrades safely
+  Given HF_HUB_OFFLINE=1 and TRANSFORMERS_OFFLINE=1
+  And the configured embedding snapshot is absent from an isolated cache
+  When Chat renders
+  Then sessions and local snapshot status SHALL remain available
+  And embedding-dependent controls SHALL be disabled with sanitized setup guidance
+  And no network request or implicit download SHALL occur
+
+Scenario: A local model override is incomplete
+  Given the configured local embedding directory lacks a complete snapshot
+  When Chat renders
+  Then the UI SHALL distinguish that state from a cache miss
+  And SHALL explain how to repair or remove the override without exposing its path
+
+Scenario: Embedding initialization fails after artifact preflight
+  Given the configured artifacts pass the import-light preflight
+  But the embedding constructor fails
+  When Chat renders
+  Then the UI SHALL show a sanitized initialization-failed state
+  And SHALL NOT claim that downloading the cache alone will repair it
+
+Scenario: Unexpected Chat persistence failure remains fail-closed
+  Given the Chat session database is corrupt or unavailable
+  When Chat renders
+  Then the persistence failure SHALL NOT be relabeled as model unavailability
 
 Scenario: Synchronous generation is represented truthfully
   Given the public coordinator returns one completed AgentResponse

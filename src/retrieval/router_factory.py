@@ -34,13 +34,13 @@ from loguru import logger
 
 from src.config.settings import DocMindSettings
 from src.config.settings import settings as default_settings
+from src.retrieval import vector_contract
 from src.retrieval.async_work import AsyncWorkExecutor
 from src.retrieval.graph_config import build_graph_query_engine
 from src.retrieval.image_index import ImageCollectionIncompatibleError
 from src.retrieval.reranking import get_postprocessors
 from src.telemetry.opentelemetry import record_router_selection, router_build_span
 from src.utils.log_safety import build_pii_log_entry
-from src.utils.storage import sparse_retrieval_enabled
 
 _WARNED_TOOLS: set[str] = set()
 _ROUTER_CLOSE_GRACE_S = 5.0
@@ -346,7 +346,7 @@ def _maybe_add_multimodal_tool(
         from src.retrieval.multimodal_fusion import MultimodalFusionRetriever
 
         text_retriever: BaseRetriever | None = None
-        if not sparse_retrieval_enabled(settings):
+        if not vector_contract.sparse_retrieval_enabled(settings):
             native_retriever = vector_index.as_retriever(
                 similarity_top_k=settings.retrieval.top_k
             )
@@ -478,7 +478,7 @@ def _maybe_add_keyword_tool(
         params = KeywordParams(
             collection=text_collection,
             top_k=settings.retrieval.top_k,
-            using="text-sparse",
+            using=vector_contract.SPARSE_VECTOR_NAME,
         )
         retriever = KeywordSparseRetriever(params)
         managed_retrievers.append(retriever)

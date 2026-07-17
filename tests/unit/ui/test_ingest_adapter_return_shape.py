@@ -15,6 +15,7 @@ from src.models.processing import (
     ManifestSummary,
 )
 from src.persistence.hashing import compute_corpus_hash
+from src.retrieval import vector_contract
 from src.ui import ingest_adapter as adapter
 
 
@@ -242,7 +243,7 @@ def test_build_vector_index_uses_fresh_physical_collection(
         "VectorStoreIndex",
         lambda _nodes, **_kwargs: "vector-index",
     )
-    monkeypatch.setattr(adapter, "sparse_retrieval_enabled", lambda: True)
+    monkeypatch.setattr(vector_contract, "sparse_retrieval_enabled", lambda: True)
     monkeypatch.setattr(
         adapter,
         "_verify_text_collection",
@@ -278,7 +279,7 @@ def test_build_vector_index_allows_verified_empty_generation(
         SimpleNamespace(from_defaults=lambda **_kwargs: SimpleNamespace()),
     )
     monkeypatch.setattr(adapter, "VectorStoreIndex", index_api)
-    monkeypatch.setattr(adapter, "sparse_retrieval_enabled", lambda: False)
+    monkeypatch.setattr(vector_contract, "sparse_retrieval_enabled", lambda: False)
     monkeypatch.setattr(adapter, "_verify_text_collection", _noop)
 
     resource = adapter._build_vector_index(

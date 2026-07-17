@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
 
-from llama_index.core.graph_stores.types import DEFAULT_PG_PERSIST_FNAME
 from loguru import logger
 from opentelemetry import trace
 
@@ -33,6 +32,7 @@ from src.persistence.lockfile import (
     SnapshotLockError,
     SnapshotLockTimeoutError,
 )
+from src.persistence.snapshot_contract import PROPERTY_GRAPH_NATIVE_PATHS
 from src.persistence.snapshot_writer import (
     MANIFEST_SCHEMA_VERSION,
     hash_manifest,
@@ -58,16 +58,6 @@ _ACTIVATION_JOURNAL_NAME = ".activation-transaction.json"
 _ACTIVATION_JOURNAL_SCHEMA_VERSION = 1
 MANIFEST_EXPORT_FILENAME_MAX_LENGTH = 200
 MANIFEST_EXPORT_FORMAT_MAX_LENGTH = 32
-_PROPERTY_GRAPH_NATIVE_PATHS = frozenset(
-    {
-        "graph/default__vector_store.json",
-        "graph/docstore.json",
-        "graph/graph_store.json",
-        "graph/image__vector_store.json",
-        "graph/index_store.json",
-        f"graph/{DEFAULT_PG_PERSIST_FNAME}",
-    }
-)
 
 
 class SnapshotError(RuntimeError):
@@ -778,7 +768,7 @@ def _manifest_semantics_valid(
             entry = entry_by_path.get(path)
             if (
                 path in export_paths
-                or path in _PROPERTY_GRAPH_NATIVE_PATHS
+                or path in PROPERTY_GRAPH_NATIVE_PATHS
                 or entry is None
                 or entry.get("size_bytes") != size_bytes
                 or entry.get("sha256") != checksum
@@ -787,7 +777,7 @@ def _manifest_semantics_valid(
                 break
             export_paths.add(path)
         return exports_valid and graph_paths == (
-            _PROPERTY_GRAPH_NATIVE_PATHS | export_paths
+            PROPERTY_GRAPH_NATIVE_PATHS | export_paths
         )
     return not graph_paths and not manifest["graph_exports"]
 
@@ -845,7 +835,7 @@ def persist_graph_storage_context(storage_context: Any, out_dir: Path) -> None:
                 for path in out_dir.iterdir()
                 if path.is_file() and not path.is_symlink()
             }
-            if native_paths != _PROPERTY_GRAPH_NATIVE_PATHS:
+            if native_paths != PROPERTY_GRAPH_NATIVE_PATHS:
                 raise ValueError(
                     "Persisted graph context has an unexpected native shape"
                 )
@@ -892,10 +882,10 @@ def load_vector_index(snapshot_dir: Path | None = None) -> Any | None:
     try:
         from llama_index.core import VectorStoreIndex
 
+        from src.retrieval import vector_contract
         from src.utils.storage import (
             close_vector_store_clients,
             connect_vector_store,
-            sparse_retrieval_enabled,
         )
     except (ImportError, ModuleNotFoundError, AttributeError):  # pragma: no cover
         return None
@@ -905,7 +895,7 @@ def load_vector_index(snapshot_dir: Path | None = None) -> Any | None:
         vector_store = connect_vector_store(
             collections["text"],
             _dense_embedding_size=settings.embedding.dimension,
-            enable_hybrid=sparse_retrieval_enabled(settings),
+            enable_hybrid=vector_contract.sparse_retrieval_enabled(settings),
         )
         return VectorStoreIndex.from_vector_store(cast(Any, vector_store))
     except Exception as exc:  # pragma: no cover - external storage boundary
