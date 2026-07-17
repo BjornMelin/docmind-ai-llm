@@ -139,8 +139,10 @@ def test_app_recovery_failure_stops_before_navigation(
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("artifact_mode", ["empty-cache", "incomplete-local"])
-def test_chat_missing_artifacts_render_import_light_degraded_shell(
+@pytest.mark.parametrize(
+    "artifact_mode", ["empty-cache", "incomplete-local", "invalid-model-id"]
+)
+def test_chat_unavailable_model_renders_import_light_degraded_shell(
     tmp_path: Path,
     artifact_mode: str,
 ) -> None:
@@ -168,6 +170,8 @@ def test_chat_missing_artifacts_render_import_light_degraded_shell(
             local_path.mkdir(parents=True)
             (local_path / "config.json").write_text("{}", encoding="utf-8")
             settings.embedding.local_model_path = local_path
+        elif sys.argv[3] == "invalid-model-id":
+            settings.embedding.model_name = sys.argv[4]
         settings.graphrag_cfg.autoload_policy = "ignore"
         network_calls = []
 
@@ -206,8 +210,17 @@ def test_chat_missing_artifacts_render_import_light_degraded_shell(
         "HF_HUB_OFFLINE": "1",
         "TRANSFORMERS_OFFLINE": "1",
     }
+    private_invalid_model_id = "private invalid model id"
     result = subprocess.run(
-        [sys.executable, "-c", probe, str(tmp_path), str(root), artifact_mode],
+        [
+            sys.executable,
+            "-c",
+            probe,
+            str(tmp_path),
+            str(root),
+            artifact_mode,
+            private_invalid_model_id,
+        ],
         cwd=root,
         env=env,
         check=False,
@@ -222,11 +235,18 @@ def test_chat_missing_artifacts_render_import_light_degraded_shell(
     assert payload["network_calls"] == []
     assert payload["coordinator_loaded"] is False
     assert payload["prohibited_roots"] == []
-    expected_warning = (
-        "Chat is unavailable because the configured local model is incomplete."
-        if artifact_mode == "incomplete-local"
-        else "Chat is unavailable because its local model artifacts are not installed."
-    )
+    expected_warnings = {
+        "empty-cache": (
+            "Chat is unavailable because its local model artifacts are not installed."
+        ),
+        "incomplete-local": (
+            "Chat is unavailable because the configured local model is incomplete."
+        ),
+        "invalid-model-id": (
+            "Chat is unavailable because its embedding could not initialize."
+        ),
+    }
+    expected_warning = expected_warnings[artifact_mode]
     assert payload["warnings"] == [expected_warning]
     assert payload["titles"] == ["Chat"]
     assert any("Provider: ollama" in item for item in payload["markdown"])
@@ -241,11 +261,21 @@ def test_chat_missing_artifacts_render_import_light_degraded_shell(
             for caption in payload["captions"]
         )
         assert payload["code"] == []
-    else:
+    elif artifact_mode == "empty-cache":
         assert str(tmp_path) not in str(payload)
         assert payload["code"] == [
             "uv run python tools/models/pull.py --all --parser-defaults"
         ]
+    else:
+        assert str(tmp_path) not in str(payload)
+        assert private_invalid_model_id not in str(payload)
+        assert private_invalid_model_id not in result.stdout
+        assert private_invalid_model_id not in result.stderr
+        assert any(
+            "Verify the configured embedding model and device settings" in caption
+            for caption in payload["captions"]
+        )
+        assert payload["code"] == []
 
 
 @pytest.fixture

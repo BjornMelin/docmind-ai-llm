@@ -85,7 +85,7 @@ Scope: Local-first, multimodal Agentic RAG app with hybrid retrieval, reranking,
 | **Performance efficiency** | **NFR‑PERF‑001** | Chat benchmarks **shall** report p50 end-to-end latency with the hardware, model, and corpus identified. | test |
 | **Performance efficiency** | **NFR‑PERF‑002** | Rerank benchmarks **shall** report text and SigLIP stage latency with the hardware identified. | test |
 | **Performance efficiency** | **NFR‑PERF‑003** | Qdrant benchmarks **shall** report local hybrid-query p50 with collection size and `fused_top_k` identified. | test |
-| **Performance efficiency** | **NFR-PERF-004** | Fresh imports of the app, Chat, and Documents shells **shall not** load `torch`, `transformers`, `llama_index`, or `qdrant_client`; heavy implementations belong behind recovery, status, resource, or action seams. | fixed-root subprocess gate |
+| **Performance efficiency** | **NFR-PERF-005** | Fresh imports of the app, Chat, and Documents shells **shall not** load `torch`, `transformers`, `llama_index`, or `qdrant_client`; heavy implementations belong behind recovery, status, resource, or action seams. | fixed-root subprocess gate |
 | **Usability** | **NFR‑USE‑001** | Streamlit UI navigable with keyboard; forms avoid unnecessary reruns. | inspection |
 | **Observability** | **NFR‑OBS‑001** | The app **shall** emit structured, local-first telemetry events (JSONL) for retrieval outcomes, staleness detection, exports, and job lifecycle with sampling/rotation controls. | test |
 | **Observability** | **NFR‑OBS‑002** | The app **shall** support optional OpenTelemetry tracing and metrics export when explicitly enabled; disabled by default and safe for offline operation. | test |

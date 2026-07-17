@@ -10,6 +10,7 @@ related_requirements:
   - FR-011: Truthful native Chat status and terminal rendering.
   - FR-012: Multi-provider settings in UI.
   - FR-001: Backend document ingestion through the CPU-safe parser boundary.
+  - NFR-PERF-005: Keep app, Chat, and Documents shells import-light.
 related_adrs: ["ADR-013","ADR-016","ADR-041","ADR-052","ADR-057","ADR-009","ADR-002"]
 ---
 

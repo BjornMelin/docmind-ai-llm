@@ -119,6 +119,54 @@ def test_cached_model_readiness_validates_returned_snapshot(
     assert snapshot_download is not _download
 
 
+def test_cached_model_readiness_sanitizes_invalid_model_id(tmp_path: Path) -> None:
+    readiness = chat_runtime.check_model_artifacts(
+        model_name="private invalid model id",
+        model_revision=None,
+        cache_folder=tmp_path / "cache",
+        local_model_path=None,
+    )
+
+    assert readiness == chat_runtime.ChatModelReadiness(status="initialization_failed")
+
+
+def test_cached_model_readiness_sanitizes_cache_access_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def _fail_cache_access(**_kwargs: object) -> str:
+        raise PermissionError("private cache path")
+
+    monkeypatch.setattr("huggingface_hub.snapshot_download", _fail_cache_access)
+
+    readiness = chat_runtime.check_model_artifacts(
+        model_name="org/model",
+        model_revision=None,
+        cache_folder=tmp_path / "private-cache",
+        local_model_path=None,
+    )
+
+    assert readiness == chat_runtime.ChatModelReadiness(status="initialization_failed")
+
+
+def test_cached_model_readiness_propagates_unexpected_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def _fail_unexpectedly(**_kwargs: object) -> str:
+        raise RuntimeError("programmer failure")
+
+    monkeypatch.setattr("huggingface_hub.snapshot_download", _fail_unexpectedly)
+
+    with pytest.raises(RuntimeError, match="programmer failure"):
+        chat_runtime.check_model_artifacts(
+            model_name="org/model",
+            model_revision=None,
+            cache_folder=tmp_path / "cache",
+            local_model_path=None,
+        )
+
+
 def test_same_generation_reuses_one_coordinator(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

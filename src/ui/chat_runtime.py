@@ -92,7 +92,7 @@ def check_model_artifacts(
         return ChatModelReadiness(status="local_path_incomplete")
 
     from huggingface_hub import snapshot_download
-    from huggingface_hub.errors import LocalEntryNotFoundError
+    from huggingface_hub.errors import HFValidationError, LocalEntryNotFoundError
 
     try:
         snapshot_path = snapshot_download(
@@ -103,6 +103,8 @@ def check_model_artifacts(
         )
     except LocalEntryNotFoundError:
         return ChatModelReadiness(status="cache_missing")
+    except (HFValidationError, OSError):
+        return ChatModelReadiness(status="initialization_failed")
     if not _local_model_artifacts_ready(Path(snapshot_path)):
         return ChatModelReadiness(status="cache_missing")
     return ChatModelReadiness(status="ready")

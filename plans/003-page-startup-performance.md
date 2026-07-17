@@ -148,9 +148,11 @@ uv run python -X importtime -c "import importlib; importlib.import_module('src.p
 uv run python -X importtime -c "import importlib; importlib.import_module('src.pages.02_documents')" 2>/tmp/docmind-documents-importtime.log
 ```
 
-The machine-checkable gate is `scripts/check_ui_import_boundary.py`; timing and
-RSS are comparative evidence because shared-runner timing is not stable. Keep
-the logs under `/tmp` and record only totals and environment in the PR.
+The machine-checkable NFR-PERF-005 gate is
+`scripts/check_ui_import_boundary.py`, enforced by
+`tests/unit/scripts/test_ui_import_boundary.py`; timing and RSS are comparative
+evidence because shared-runner timing is not stable. Keep the logs under `/tmp`
+and record only totals and environment in the PR.
 
 ### Recorded evidence
 
@@ -183,8 +185,9 @@ module import boundaries. Preserve all AppTest flows and full tests.
 - [x] Empty offline caches render a sanitized degraded Chat state without an
   implicit model download or weakened persistence failure.
 - [x] No TTL can hide local file/config changes across reruns.
-- [x] `scripts/check_ui_import_boundary.py` passes with the fixed prohibited
-  roots, and before/after evidence is recorded with environment details.
+- [x] The NFR-PERF-005 pytest gate runs
+  `scripts/check_ui_import_boundary.py` with the fixed prohibited roots, and
+  before/after evidence is recorded with environment details.
 - [x] Focused, Ruff, Pyright, and full tests pass.
 
 ## STOP conditions

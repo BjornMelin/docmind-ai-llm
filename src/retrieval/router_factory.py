@@ -478,7 +478,7 @@ def _maybe_add_keyword_tool(
         params = KeywordParams(
             collection=text_collection,
             top_k=settings.retrieval.top_k,
-            using="text-sparse",
+            using=vector_contract.SPARSE_VECTOR_NAME,
         )
         retriever = KeywordSparseRetriever(params)
         managed_retrievers.append(retriever)
