@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
 
+## [2.0.1](https://github.com/BjornMelin/docmind-ai-llm/compare/v2.0.0...v2.0.1) (2026-07-17)
+
+
+### Bug Fixes
+
+* **operations:** harden v2 cleanup boundaries ([#162](https://github.com/BjornMelin/docmind-ai-llm/issues/162)) ([9accab1](https://github.com/BjornMelin/docmind-ai-llm/commit/9accab1233275297b5c98ff22391544128ad7e7f))
+* **ui:** make chat states truthful ([#168](https://github.com/BjornMelin/docmind-ai-llm/issues/168)) ([8b728e7](https://github.com/BjornMelin/docmind-ai-llm/commit/8b728e7163f6b2ae868c93c29f9522c7e3c08068))
+* **ui:** serialize runtime ownership ([#164](https://github.com/BjornMelin/docmind-ai-llm/issues/164)) ([a6709da](https://github.com/BjornMelin/docmind-ai-llm/commit/a6709da3620da09370bbfb4cc6e75ac72f0847a8))
+
+
+### Performance Improvements
+
+* **ui:** defer heavy page imports ([#169](https://github.com/BjornMelin/docmind-ai-llm/issues/169)) ([4ebaf83](https://github.com/BjornMelin/docmind-ai-llm/commit/4ebaf83aa6c7bdec82df73a705b19de53c58c8bd))
+
 ## [2.0.0](https://github.com/BjornMelin/docmind-ai-llm/compare/v1.0.0...v2.0.0) (2026-07-14)
 
 
