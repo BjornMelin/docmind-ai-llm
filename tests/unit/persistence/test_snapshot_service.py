@@ -82,11 +82,13 @@ def test_export_graphs_handles_missing_output_and_failures(
 
 
 def test_build_versions_falls_back_to_unknown_embed_model(
-    monkeypatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    llamaindex_module_registry: pytest.MonkeyPatch,
 ) -> None:
     li_core = ModuleType("llama_index.core")
     li_core.Settings = SimpleNamespace(embed_model=None)  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "llama_index.core", li_core)
+    llamaindex_module_registry.setitem(sys.modules, "llama_index.core", li_core)
     monkeypatch.setattr(svc, "get_version", lambda: "x")
     monkeypatch.setattr(svc.metadata, "version", lambda _dist: "0.14.21")
 

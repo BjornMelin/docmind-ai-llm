@@ -391,6 +391,7 @@ def test_persist_graph_storage_context_uses_native_file_contract(
 
 def test_loaders_return_none_when_snapshot_missing(
     monkeypatch: pytest.MonkeyPatch,
+    llamaindex_module_registry: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
         snap, "latest_snapshot_dir", lambda *_a, **_k: None, raising=True
@@ -402,13 +403,17 @@ def test_loaders_return_none_when_snapshot_missing(
     graph_mod = ModuleType("llama_index.core.graph_stores")
     core_mod.PropertyGraphIndex = object()  # type: ignore[attr-defined]
     graph_mod.SimplePropertyGraphStore = object()  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "llama_index.core", core_mod)
-    monkeypatch.setitem(sys.modules, "llama_index.core.graph_stores", graph_mod)
+    llamaindex_module_registry.setitem(sys.modules, "llama_index.core", core_mod)
+    llamaindex_module_registry.setitem(
+        sys.modules, "llama_index.core.graph_stores", graph_mod
+    )
     assert snap.load_property_graph_index(None) is None
 
 
 def test_loaders_return_none_when_payload_dirs_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    llamaindex_module_registry: pytest.MonkeyPatch,
 ) -> None:
     snapshot_dir = tmp_path / "snap"
     snapshot_dir.mkdir()
@@ -423,13 +428,17 @@ def test_loaders_return_none_when_payload_dirs_missing(
     graph_mod = ModuleType("llama_index.core.graph_stores")
     core_mod.PropertyGraphIndex = object()  # type: ignore[attr-defined]
     graph_mod.SimplePropertyGraphStore = object()  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "llama_index.core", core_mod)
-    monkeypatch.setitem(sys.modules, "llama_index.core.graph_stores", graph_mod)
+    llamaindex_module_registry.setitem(sys.modules, "llama_index.core", core_mod)
+    llamaindex_module_registry.setitem(
+        sys.modules, "llama_index.core.graph_stores", graph_mod
+    )
     assert snap.load_property_graph_index(None) is None
 
 
 def test_index_loaders_ignore_explicit_incomplete_snapshot(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    llamaindex_module_registry: pytest.MonkeyPatch,
 ) -> None:
     """Explicit index loads cannot bypass the complete-manifest gate."""
     snapshot_dir = tmp_path / "snap"
@@ -456,8 +465,10 @@ def test_index_loaders_ignore_explicit_incomplete_snapshot(
     core_mod.load_index_from_storage = object()  # type: ignore[attr-defined]
     core_mod.PropertyGraphIndex = object()  # type: ignore[attr-defined]
     graph_mod.SimplePropertyGraphStore = _UnexpectedGraphStore  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "llama_index.core", core_mod)
-    monkeypatch.setitem(sys.modules, "llama_index.core.graph_stores", graph_mod)
+    llamaindex_module_registry.setitem(sys.modules, "llama_index.core", core_mod)
+    llamaindex_module_registry.setitem(
+        sys.modules, "llama_index.core.graph_stores", graph_mod
+    )
 
     assert snap.load_vector_index(snapshot_dir) is None
     assert snap.load_property_graph_index(snapshot_dir) is None

@@ -4,22 +4,25 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Iterator
+from types import ModuleType
 
 import pytest
 
 
 @pytest.fixture(autouse=True)
-def _clear_llamaindex_modules() -> Iterator[None]:
-    """Ensure LlamaIndex modules are not cached before tests patch them."""
-    targets = [
-        "llama_index.core",
-        "llama_index.core.graph_stores",
-    ]
-    for name in targets:
-        sys.modules.pop(name, None)
+def llamaindex_module_registry() -> Iterator[pytest.MonkeyPatch]:
+    """Isolate LlamaIndex registry entries and restore exact package identity."""
+    registry = pytest.MonkeyPatch()
+    llama_index = sys.modules.get("llama_index")
+    core = sys.modules.get("llama_index.core")
+
+    if isinstance(core, ModuleType):
+        registry.delattr(core, "graph_stores", raising=False)
+    if isinstance(llama_index, ModuleType):
+        registry.delattr(llama_index, "core", raising=False)
+    registry.delitem(sys.modules, "llama_index.core.graph_stores", raising=False)
+    registry.delitem(sys.modules, "llama_index.core", raising=False)
     try:
-        yield
+        yield registry
     finally:
-        # Leave cleared to avoid leaking state across tests
-        for name in targets:
-            sys.modules.pop(name, None)
+        registry.undo()

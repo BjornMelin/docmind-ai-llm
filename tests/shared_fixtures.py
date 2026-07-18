@@ -30,6 +30,7 @@ from llama_index.core.embeddings import MockEmbedding
 from llama_index.core.llms.llm import LLM
 from llama_index.core.llms.mock import MockLLM
 from llama_index.core.schema import NodeWithScore, TextNode
+from opentelemetry import metrics, trace
 from opentelemetry.sdk.metrics.export import ConsoleMetricExporter
 from opentelemetry.sdk.trace.export import ConsoleSpanExporter
 
@@ -98,6 +99,8 @@ def configured_observability_console(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         otel, "_create_metric_exporter", lambda _obs: ConsoleMetricExporter()
     )
+    monkeypatch.setattr(trace, "set_tracer_provider", lambda _provider: None)
+    monkeypatch.setattr(metrics, "set_meter_provider", lambda _provider: None)
     otel.configure_observability(app_settings)
     try:
         yield app_settings

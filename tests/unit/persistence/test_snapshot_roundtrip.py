@@ -46,6 +46,7 @@ def _isolate_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 def test_snapshot_roundtrip_with_stubs(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    llamaindex_module_registry: pytest.MonkeyPatch,
 ) -> None:
     from src.config.settings import settings
 
@@ -82,7 +83,7 @@ def test_snapshot_roundtrip_with_stubs(
     # sys.modules so subsequent imports within snapshot helpers resolve to these
     # stubs regardless of prior imports elsewhere in the suite.
     core_mod = ModuleType("llama_index.core")
-    monkeypatch.setitem(sys.modules, "llama_index.core", core_mod)
+    llamaindex_module_registry.setitem(sys.modules, "llama_index.core", core_mod)
 
     vector_store = SimpleNamespace(client=SimpleNamespace(close=lambda: None))
 
@@ -204,6 +205,7 @@ def test_property_graph_vector_retrieval_survives_snapshot_restart(
 def test_vector_activation_failure_closes_both_qdrant_clients(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    llamaindex_module_registry: pytest.MonkeyPatch,
 ) -> None:
     """A failed index wrapper construction releases both live-Qdrant clients."""
     mgr = SnapshotManager(tmp_path / "storage")
@@ -222,7 +224,7 @@ def test_vector_activation_failure_closes_both_qdrant_clients(
     final = mgr.finalize_snapshot(tmp).path
 
     core_mod = ModuleType("llama_index.core")
-    monkeypatch.setitem(sys.modules, "llama_index.core", core_mod)
+    llamaindex_module_registry.setitem(sys.modules, "llama_index.core", core_mod)
 
     class _VectorStoreIndex:
         @staticmethod
