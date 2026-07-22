@@ -25,7 +25,7 @@ dependencies = [
     "streamlit>=1.52.2,<2.0.0",
     # Document Processing & NLP
     "docling>=2.111,<3",                 # Local multiformat document conversion
-    "pypdfium2>=5.7,<6",                 # PDF inspection and rasterization
+    "pypdfium2>=5.12.1,<6",                 # PDF inspection and rasterization
     "rapidocr>=3.8,<4",                  # CPU-safe local OCR
     "onnxruntime>=1.23,<2",              # RapidOCR CPU inference backend
     "pillow>=12.2.0,<13.0.0",            # Image handling
