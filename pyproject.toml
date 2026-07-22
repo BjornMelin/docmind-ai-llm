@@ -22,7 +22,7 @@ dependencies = [
     "pydantic-settings==2.14.2",
     "cryptography>=46.0.7",              # Image encryption at rest (ADR-058)
     # UI / App Framework
-    "streamlit>=1.52.2,<2.0.0",
+    "streamlit>=1.60.0,<2.0.0",
     # Document Processing & NLP
     "docling>=2.111,<3",                 # Local multiformat document conversion
     "pypdfium2>=5.7,<6",                 # PDF inspection and rasterization
