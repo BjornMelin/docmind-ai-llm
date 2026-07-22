@@ -64,7 +64,7 @@ dependencies = [
     "plotly>=6.7.0,<7.0.0",
     # Observability
     "opentelemetry-sdk>=1.41.1,<2.0.0",     # OTEL tracing/metrics SDK
-    "opentelemetry-exporter-otlp-proto-http>=1.41.1,<2.0.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.44.0,<2.0.0",
     "opentelemetry-exporter-otlp-proto-grpc>=1.41.1,<2.0.0",
     "portalocker>=3.2.0,<4.0.0",            # Cross-platform snapshot locking
 ]
