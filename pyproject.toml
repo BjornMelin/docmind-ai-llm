@@ -20,7 +20,7 @@ dependencies = [
     "loguru>=0.7.3,<1.0.0",
     "pydantic==2.13.4",
     "pydantic-settings==2.14.2",
-    "cryptography>=46.0.7",              # Image encryption at rest (ADR-058)
+    "cryptography>=50.0.0",              # Image encryption at rest (ADR-058)
     # UI / App Framework
     "streamlit>=1.52.2,<2.0.0",
     # Document Processing & NLP
