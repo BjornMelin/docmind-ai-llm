@@ -118,7 +118,7 @@ constraint-dependencies = [
     "lxml>=6.1.0",
     "nltk>=3.9.4",
     "orjson>=3.11.8",
-    "pypdf>=6.10.2,<7.0.0",
+    "pypdf>=6.15.0,<7.0.0",
     "python-multipart>=0.0.26",
 ]
 
@@ -305,7 +305,7 @@ dev = [
     "pytest-cov>=7.1.0,<8.0.0",
     "pytest-mock>=3.14.1",
     "responses>=0.26.0",
-    "pypdf>=6.10.2,<7.0.0",
+    "pypdf>=6.15.0,<7.0.0",
 ]
 test = [
     "pytest>=9.0.3,<10.0.0",
